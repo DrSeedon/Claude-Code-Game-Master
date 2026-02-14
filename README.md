@@ -1,3 +1,5 @@
+[🇷🇺 Читать на русском](README.ru.md)
+
 # DM Claude — Enhanced Fork
 
 > **Fork of [Sstobo/Claude-Code-Game-Master](https://github.com/Sstobo/Claude-Code-Game-Master)** with custom character stats, time effects, random encounters, coordinate navigation, and ASCII/GUI maps.
