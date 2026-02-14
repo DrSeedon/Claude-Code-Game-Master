@@ -70,6 +70,33 @@ Cyrillic names, non-English attitudes, and Unicode identifiers work out of the b
 
 ---
 
+## Campaign Ideas
+
+The system is universal — not just fantasy. Here are some campaigns we've designed:
+
+| Campaign | You play as... |
+|----------|---------------|
+| **S.T.A.L.K.E.R.** | A stalker in the Chernobyl Zone. Radiation, anomalies, mutants, rival factions. Hunger and thirst tick in real time. |
+| **Fallout** | A vault dweller emerging into a post-nuclear wasteland. SPECIAL stats, bottlecaps, power armor. |
+| **Metro 2033** | A survivor in Moscow's metro tunnels. Factions at war, mutants on the surface, bullets as currency. |
+| **Civilization** | An immortal ruler guiding a civilization from stone age to space age. Strategic decisions across millennia. |
+| **SCP: Infinite IKEA** | Trapped inside SCP-3008 — an infinite IKEA. Friendly by day, predatory staff by night. No exit. |
+| **Star Wars: Clone Wars** | A clone trooper squad leader or Jedi on tactical missions during the Clone Wars. |
+| **Warhammer 40K** | An Imperial Guard soldier in the grim far future. Everything wants to kill you. Everything will. |
+| **RimWorld** | A colony manager on a frontier world. Raids, mental breaks, questionable survival ethics. |
+| **Space Station 13** | A crewmember on a space station where everything goes wrong every 15 minutes. |
+| **Pac-Man RPG** | A trapped soul in an endless maze, hunted by four ghosts with unique personalities. Yes, really. |
+| **Ants vs Termites** | An ant commander leading colony wars across a backyard battlefield. Microscopic scale, epic stakes. |
+| **Plague Inc (Reverse)** | An epidemiologist racing to stop a mutating pandemic while fighting bureaucracy and public denial. |
+| **Inside a Computer** | A digital process inside a Russian server OS. Navigate file systems, fight viruses, avoid the kernel reaper. |
+| **Medieval Child** | An orphaned child in war-torn medieval Europe. No combat stats — just stealth, cunning, and cold. |
+| **Pirates of the Caribbean** | A pirate captain in the 1700s. Treasure, naval battles, supernatural curses. |
+| **Barotrauma** | A submarine crew on an alien ocean moon. Pressure, monsters, and things going very wrong with the hull. |
+
+All campaigns use the same engine. Custom stats, time effects, and encounters adapt to any setting.
+
+---
+
 ## In Action — Dungeon Crawler Carl
 
 A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the skin off a Terror Clown, forces Carl to wear it as a disguise, then performs a sasquatch mating dance to distract Grimaldi while Donut frees the dragon.
