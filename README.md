@@ -1,20 +1,76 @@
-# DM Claude
+# DM Claude — Enhanced Fork
 
-**Drop any book into it. Play inside the story.**
+> **Fork of [Sstobo/Claude-Code-Game-Master](https://github.com/Sstobo/Claude-Code-Game-Master)** with custom character stats, time effects, random encounters, coordinate navigation, and ASCII/GUI maps.
 
-Got a favorite fantasy novel? A classic adventure module? A weird obscure sci-fi book from the 70s? Drop the PDF in, and DM Claude extracts every character, location, item, and plot thread, then drops you into that world as whoever you want to be.
+**Drop any book into it. Play inside the story.** Got a favorite fantasy novel? A STALKER fanfic? A weird sci-fi book from the 70s? Drop the PDF in, and DM Claude extracts every character, location, item, and plot thread, then drops you into that world as whoever you want to be.
 
-Be a character from the book, someone original, or just yourself walking into the story. Every round, the AI queries the actual source material — NPCs talk like they do in the book, locations look like the author described them, and plot points unfold the way they should... until your choices change things.
+D&D 5e rules give the story stakes and consequences. You don't need to know D&D — just say what you want to do.
 
-The [Internet Archive](https://archive.org/) is a goldmine for this. Thousands of free books, adventure modules, and old pulp novels. Jump into *IT* and help the bad guys. Drop into *Lord of the Rings* and play from Gollum's perspective. It's your call.
+---
 
-D&D 5e rules aren't really the point — they're just there to give the story stakes and consequences. You don't need to know D&D at all, just say what you want to do.
+## What's New in This Fork
+
+### Custom Character Stats
+Define **any** stats for your campaign — hunger, thirst, radiation, morale, sanity, reputation — whatever fits your world. Fully universal, zero hardcoded stat names.
+
+```bash
+bash tools/dm-player.sh custom-stat hunger +15
+bash tools/dm-player.sh custom-stat radiation -5
+```
+
+### Time Effects Engine
+Stats change automatically as game time passes. Define rates per hour in your campaign config, and the system handles the rest.
+
+```
+Time updated to: Evening (18:30), Day 3
+Custom Stats:
+  hunger: 80 → 68 (-12)
+  thirst: 70 → 52 (-18)
+```
+
+### Auto Movement Time
+Move between locations and travel time is calculated automatically from distance and character speed. Custom stats tick during travel.
+
+```bash
+bash tools/dm-session.sh move "Ruins"
+# Auto-calculates: 2000m at 4 km/h = 30 minutes
+# Auto-applies time effects to hunger, thirst, etc.
+```
+
+### Timed Consequences
+Schedule events that trigger after elapsed game time, not just on story beats.
+
+```bash
+bash tools/dm-consequence.sh add "Trader arrives at camp" "in 24 hours" --hours 24
+```
+
+### Random Encounter System
+Configurable random encounters during travel — frequency scales with distance, time of day, and character stats. Encounters create waypoints on the map where you can fight, talk, or explore before continuing.
+
+```bash
+bash tools/dm-encounter.sh check "Village" "Ruins" 2000 open
+```
+
+### Coordinate Navigation & Maps
+Locations have real coordinates. A* pathfinding finds routes. View your world as ASCII maps or a GUI window.
+
+```bash
+bash tools/dm-map.sh              # Full ASCII map
+bash tools/dm-map.sh --minimap    # Tactical minimap
+
+# Add locations by bearing and distance
+bash tools/dm-location.sh add "Outpost" "Abandoned outpost" \
+  --from "Village" --bearing 90 --distance 2500 --terrain forest
+```
+
+### i18n Support
+Cyrillic names, non-English attitudes, and Unicode identifiers work out of the box. Build campaigns in any language.
 
 ---
 
 ## In Action — Dungeon Crawler Carl
 
-A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the skin off a Terror Clown, forces Carl to wear it as a disguise, then performs a sasquatch mating dance to distract Grimaldi while Donut frees the dragon. Standard Tuesday.
+A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the skin off a Terror Clown, forces Carl to wear it as a disguise, then performs a sasquatch mating dance to distract Grimaldi while Donut frees the dragon.
 
 ![Tandy acquires Terror Clown skin disguise for Carl](public/622422010_1572097020675669_3114747955156903860_n.png)
 
@@ -29,12 +85,10 @@ A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the sk
 **Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ```bash
-git clone https://github.com/Sstobo/Claude-Code-Game-Master.git
+git clone https://github.com/DrSeedon/Claude-Code-Game-Master.git
 cd Claude-Code-Game-Master
 ./install.sh
 ```
-
-The setup script installs everything you need — Python, uv, jq, and all project dependencies. It works on macOS and Linux with zero prior setup. You can also run it from inside Claude Code by asking the agent to set things up.
 
 Once installed:
 
@@ -42,47 +96,19 @@ Once installed:
 2. Run `claude` to launch Claude Code
 3. Run `/dm` and let the agent guide you
 
-That's it. The AI handles world extraction, character creation, and gameplay.
+---
+
+## How It Works
+
+When you import a document, the system vectorizes it with ChromaDB and spawns extraction agents that pull the book apart into structured data. During gameplay, every scene gets grounded in real passages from your source material.
+
+Everything persists. NPCs remember what you said last session. Consequences fire days later in-game time. Locations change as events unfold. Save and restore at any point.
+
+Specialist agents spin up on the fly — monster stats, spell mechanics, loot tables, equipment databases. The player sees only the story. It uses the [D&D 5e API](https://www.dnd5eapi.co/) for official rules, spellbooks, monsters, and equipment.
 
 ---
 
-## What Happens Under the Hood
-
-When you import a document, the system vectorizes it locally with ChromaDB and spawns extraction agents that pull the book apart into structured data. During gameplay, every scene gets grounded in real passages from your source material — the AI isn't making things up, it's drawing from the text.
-
-Everything persists. NPCs remember what you said last session. Piss off a shopkeeper? That's tracked. The system schedules consequences that fire days later in-game time. Locations change as events unfold. Plot threads track your progress. Save and restore at any point.
-
-Specialist agents spin up on the fly. A fight starts and the monster-manual agent grabs real stat blocks. Cast a spell and the spell-caster agent looks up actual mechanics. Shopping? The gear-master has 237+ equipment items and 362+ magic items. The player never sees any of this — they just see the story — but you can always pull up the hood and see what's going on.
-
-It uses the [D&D 5e API](https://www.dnd5eapi.co/) for official rules, spellbooks, monsters, and equipment. This grounds everything in real mechanics and keeps Claude from just picking numbers.
-
----
-
-## Advanced
-
-Everything below is handled automatically by the `/dm` command, but you can call these directly if you want manual control.
-
-### Dependencies
-
-Installed automatically during setup via [uv](https://docs.astral.sh/uv/):
-
-**Core:**
-| Package | Purpose |
-|---------|---------|
-| `anthropic` | Claude API client |
-| `pdfplumber` | PDF text extraction |
-| `pypdf2` | PDF parsing |
-| `python-docx` | Word document support |
-| `python-dotenv` | Environment variable loading |
-| `requests` | HTTP requests (D&D 5e API) |
-
-**RAG (for document import):**
-| Package | Purpose |
-|---------|---------|
-| `sentence-transformers` | Text embeddings for semantic search |
-| `chromadb` | Vector database for RAG retrieval |
-
-### Slash Commands
+## Commands
 
 | Command | What it does |
 |---------|--------------|
@@ -92,38 +118,34 @@ Installed automatically during setup via [uv](https://docs.astral.sh/uv/):
 | `/dm overview` | See the world state |
 | `/new-game` | Create a world from scratch |
 | `/create-character` | Build your character |
-| `/import` | Import a PDF/document as a new campaign |
-| `/enhance` | Enrich entities with source material via RAG |
-| `/world-check` | Validate campaign consistency |
-| `/reset` | Clear campaign state |
-| `/setup` | Verify/fix installation |
+| `/import` | Import a PDF/document as a campaign |
+| `/enhance` | Enrich entities with source material |
 | `/help` | Full command reference |
 
-### Bash Tools
-
-All tools follow the pattern: `bash tools/dm-<tool>.sh <command> [args]`
+## Tools
 
 | Tool | Purpose |
 |------|---------|
-| `dm-campaign.sh` | Create, list, switch, and delete campaigns |
-| `dm-session.sh` | Session lifecycle, party movement, save/restore |
-| `dm-player.sh` | Player stats — HP, XP, gold, inventory, conditions |
-| `dm-npc.sh` | NPC creation, updates, party member management |
-| `dm-location.sh` | Location creation and connections |
+| `dm-campaign.sh` | Create, list, switch campaigns |
+| `dm-session.sh` | Session lifecycle, movement, save/restore |
+| `dm-player.sh` | HP, XP, gold, inventory, **custom stats** |
+| `dm-npc.sh` | NPC creation, updates, party management |
+| `dm-location.sh` | Locations, connections, **coordinates, navigation** |
+| `dm-time.sh` | Advance time, **time effects, precise time** |
+| `dm-consequence.sh` | Event scheduling, **timed triggers** |
+| `dm-encounter.sh` | **Random encounter checks** |
+| `dm-map.sh` | **ASCII maps, minimap, GUI** |
+| `dm-path.sh` | **A* pathfinding between locations** |
 | `dm-plot.sh` | Quest and storyline tracking |
-| `dm-search.sh` | Search world state and/or source material |
+| `dm-search.sh` | Search world state and source material |
 | `dm-enhance.sh` | RAG-powered entity enrichment |
-| `dm-extract.sh` | Document import and extraction pipeline |
-| `dm-consequence.sh` | Future event scheduling and triggers |
-| `dm-condition.sh` | Player condition tracking (poisoned, stunned, etc.) |
-| `dm-note.sh` | Record world facts by category |
-| `dm-time.sh` | Advance in-game time |
-| `dm-overview.sh` | Quick world state summary |
-| `dm-reset.sh` | Reset campaign data |
+| `dm-extract.sh` | Document import pipeline |
+| `dm-note.sh` | Record world facts |
+| `dm-overview.sh` | World state summary |
 
-### Specialist Agents
+**Bold** = new in this fork.
 
-These spawn automatically during gameplay when context demands it:
+## Specialist Agents
 
 | Agent | Triggered by |
 |-------|--------------|
@@ -145,4 +167,6 @@ This work is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licens
 
 ---
 
-Built by [Sean Stobo](https://www.linkedin.com/in/sean-stobo/). Your story awaits. Run `/dm` to begin.
+Original project by [Sean Stobo](https://www.linkedin.com/in/sean-stobo/). Fork enhanced by [DrSeedon](https://github.com/DrSeedon).
+
+Your story awaits. Run `/dm` to begin.
