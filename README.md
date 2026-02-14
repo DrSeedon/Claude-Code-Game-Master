@@ -161,6 +161,20 @@ Specialist agents spin up on the fly — monster stats, spell mechanics, loot ta
 
 ---
 
+## Roadmap
+
+Features planned for future releases:
+
+- **Nested Sub-Maps** — locations can contain their own internal maps. Enter a castle and explore its floors. Board a spaceship and navigate its decks. Dive into a cave system with branching tunnels. Each sub-map connects back to the parent world map seamlessly.
+- **Multi-Floor Dungeons** — vertical dungeon navigation with stairs, elevators, ladders between floors. Each floor is its own sub-map with independent room states.
+- **Vehicle Interiors** — ships, airships, space stations as explorable sub-maps that move on the world map. The vehicle travels between locations while you explore inside it.
+- **Campaign Templates** — pre-built campaign configs for popular genres (post-apocalyptic, space exploration, medieval, urban horror) with ready-to-use custom stats, time effects, and encounter tables.
+- **Visual Map Export** — export ASCII maps to PNG/SVG for sharing outside the terminal.
+
+Got ideas? [Open an issue](https://github.com/DrSeedon/Claude-Code-Game-Master/issues) or submit a PR.
+
+---
+
 ## License
 
 This work is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — free to share and adapt for non-commercial use. See [LICENSE](LICENSE) for details.
