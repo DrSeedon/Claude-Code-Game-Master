@@ -167,6 +167,6 @@ This work is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licens
 
 ---
 
-Original project by [Sean Stobo](https://www.linkedin.com/in/sean-stobo/). Fork enhanced by [DrSeedon](https://github.com/DrSeedon).
+Original project by [Sean Stobo](https://www.linkedin.com/in/sean-stobo/). Fork enhanced by [Maxim Astrakhantsev](https://www.linkedin.com/in/maxim-astrakhantsev-13a9391b9/).
 
 Your story awaits. Run `/dm` to begin.
