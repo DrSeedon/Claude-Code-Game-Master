@@ -2,6 +2,25 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [1.3.0] - 2026-02-16
+
+### Added
+- `--sleeping` flag for `dm-time.sh` — inverts sleep stat drain to restoration during rest (configurable `sleep_restore_per_hour`, default 12.5/hr)
+- Conditional time effects — rules in `time_effects.rules[]` now support a `condition` field (e.g. `"hp < max"`, `"stat:hunger > 0"`) that gates whether the effect applies
+- Condition parser supports: `hp`, `stat:<name>`, operators `< <= > >= == !=`, values or `max` keyword
+- Auto-split paths — adding a location with coordinates now automatically splits existing paths that geometrically pass through the new point
+- `TODO.md` — development roadmap with planned inventory weight/slots system
+
+### Changed
+- **Time effects use per-hour tick simulation** — instead of batch-multiplying `per_hour × elapsed`, the engine now simulates hour-by-hour, re-evaluating conditions each tick. This means conditional effects (like artifact healing) correctly stop mid-period when their condition becomes false
+- `_apply_time_effects()` refactored: snapshot → simulate on deepcopy → apply deltas to real character in one batch
+- `CLAUDE.md` — added process rules section (changelog/commit hygiene)
+
+### Fixed
+- Sleep stat draining during rest instead of restoring
+- Conditional effects evaluated once for entire period instead of per-tick (artifact would radiate for full 8 hours even after HP reached max on hour 4)
+- Effects within same tick no longer affect each other's conditions (snapshot-per-tick isolation)
+
 ## [1.2.0] - 2026-02-16
 
 ### Added

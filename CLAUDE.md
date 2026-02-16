@@ -1205,3 +1205,9 @@ For non-standard campaigns (STALKER, Civilization, etc.) with custom stats, time
 
 *Ready to play? Run `/dm` to continue or `/new-game` to create a new campaign!*
 
+---
+
+## PROCESS RULES
+
+- **CHANGELOG / commits**: Never mention private campaign data (campaign names, location names, character names, session counts). Changelogs and commit messages are public — describe only the feature/fix in generic terms.
+

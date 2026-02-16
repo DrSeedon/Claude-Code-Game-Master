@@ -27,7 +27,7 @@ class TimeManager:
 
             self.json_ops = JsonOperations(str(self.campaign_dir))
 
-    def update_time(self, time_of_day: str, date: str, elapsed_hours: float = 0, precise_time: str = None) -> bool:
+    def update_time(self, time_of_day: str, date: str, elapsed_hours: float = 0, precise_time: str = None, sleeping: bool = False) -> bool:
         """
         Update campaign time and optionally apply time effects.
 
@@ -81,7 +81,7 @@ class TimeManager:
 
             if time_effects.get('enabled'):
                 # Apply custom stat changes
-                stat_changes = self._apply_time_effects(elapsed_hours, time_effects)
+                stat_changes = self._apply_time_effects(elapsed_hours, time_effects, sleeping=sleeping)
                 results['custom_stats_changed'] = stat_changes
 
                 # Check stat consequences (hunger=0 → damage)
@@ -148,43 +148,127 @@ class TimeManager:
             'precise_time': data.get('precise_time')
         }
 
-    def _apply_time_effects(self, elapsed_hours: int, time_effects: dict) -> list:
+    def _apply_time_effects(self, elapsed_hours: int, time_effects: dict, sleeping: bool = False) -> list:
         """Apply custom stat changes based on time_effects rules"""
         from lib.player_manager import PlayerManager
 
-        # Check if we're in test mode (no campaign_mgr)
         if self.campaign_mgr is None:
             player_mgr = PlayerManager(str(self.campaign_dir), require_active_campaign=False)
         else:
             player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
 
-        # Load active character
         campaign = self.json_ops.load_json("campaign-overview.json")
         char_name = campaign.get('current_character')
 
         if not char_name:
             return []
 
-        changes = []
+        char = player_mgr.get_player(char_name)
+        if not char:
+            return []
+
         rules = time_effects.get('rules', [])
 
-        for rule in rules:
-            stat = rule['stat']
-            change_per_hour = rule.get('per_hour', 0)
-            total_change = change_per_hour * elapsed_hours
+        import copy
+        sim_char = copy.deepcopy(char)
 
-            if abs(total_change) > 0.001:
-                # Use keyword arguments to be explicit
-                result = player_mgr.modify_custom_stat(name=char_name, stat=stat, amount=total_change)
-                if result.get('success'):
-                    changes.append({
-                        'stat': stat,
-                        'old': result['old_value'],
-                        'new': result['new_value'],
-                        'change': total_change
-                    })
+        for _ in range(int(elapsed_hours)):
+            for rule in rules:
+                stat = rule['stat']
+                change_per_hour = rule.get('per_hour', 0)
+
+                if stat == 'sleep' and sleeping:
+                    change_per_hour = rule.get('sleep_restore_per_hour', 12.5)
+
+                condition = rule.get('condition')
+                if condition and not self._check_rule_condition(condition, sim_char):
+                    continue
+
+                if abs(change_per_hour) < 0.001:
+                    continue
+
+                if stat == 'hp':
+                    sim_char['hp']['current'] = max(0, min(
+                        sim_char['hp']['current'] + int(change_per_hour),
+                        sim_char['hp']['max']
+                    ))
+                else:
+                    cs = sim_char.get('custom_stats', {}).get(stat)
+                    if cs:
+                        new_val = cs['current'] + change_per_hour
+                        cs_max = cs.get('max')
+                        cs_min = cs.get('min', 0)
+                        if cs_max is not None:
+                            new_val = min(new_val, cs_max)
+                        if cs_min is not None:
+                            new_val = max(new_val, cs_min)
+                        cs['current'] = new_val
+
+        changes = []
+        for stat in set(t['stat'] for t in rules):
+            if stat == 'hp':
+                old_val = char['hp']['current']
+                new_val = sim_char['hp']['current']
+                int_change = new_val - old_val
+                if int_change != 0:
+                    player_mgr.modify_hp(char_name, int_change)
+                    char = player_mgr.get_player(char_name)
+                    changes.append({'stat': 'hp', 'old': old_val, 'new': char['hp']['current'], 'change': int_change})
+            else:
+                old_cs = char.get('custom_stats', {}).get(stat)
+                new_cs = sim_char.get('custom_stats', {}).get(stat)
+                if old_cs and new_cs:
+                    diff = new_cs['current'] - old_cs['current']
+                    if abs(diff) > 0.001:
+                        result = player_mgr.modify_custom_stat(name=char_name, stat=stat, amount=diff)
+                        if result and result.get('success'):
+                            changes.append({'stat': stat, 'old': result['old_value'], 'new': result['new_value'], 'change': diff})
 
         return changes
+
+    def _check_rule_condition(self, condition: str, char: dict) -> bool:
+        """Check if a rule condition is met. Supports: 'hp < max', 'hp > 0', 'stat:name < value'"""
+        try:
+            parts = condition.split()
+            if len(parts) != 3:
+                return True
+
+            target, operator, value_str = parts
+
+            if target == 'hp':
+                current = char['hp']['current']
+                if value_str == 'max':
+                    compare_to = char['hp']['max']
+                else:
+                    compare_to = float(value_str)
+            elif target.startswith('stat:'):
+                stat_name = target[5:]
+                custom_stats = char.get('custom_stats', {})
+                if stat_name not in custom_stats:
+                    return True
+                current = custom_stats[stat_name]['current']
+                if value_str == 'max':
+                    compare_to = custom_stats[stat_name].get('max', 999999)
+                else:
+                    compare_to = float(value_str)
+            else:
+                return True
+
+            if operator == '<':
+                return current < compare_to
+            elif operator == '<=':
+                return current <= compare_to
+            elif operator == '>':
+                return current > compare_to
+            elif operator == '>=':
+                return current >= compare_to
+            elif operator == '==':
+                return current == compare_to
+            elif operator == '!=':
+                return current != compare_to
+        except (ValueError, KeyError, TypeError):
+            pass
+        return True
 
     def _check_stat_consequences(self, elapsed_hours: int, time_effects: dict) -> list:
         """Check and apply stat-based consequences (e.g., hunger=0 → damage)"""
@@ -332,6 +416,7 @@ def main():
     update_parser.add_argument('date', help='Campaign date')
     update_parser.add_argument('--elapsed', type=int, default=0, help='Hours elapsed (manual)')
     update_parser.add_argument('--precise-time', help='Exact time HH:MM (auto-calculates elapsed)')
+    update_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping (sleep restores instead of drains)')
 
     # Get time
     subparsers.add_parser('get', help='Get current campaign time')
@@ -350,7 +435,8 @@ def main():
                 args.time_of_day,
                 args.date,
                 elapsed_hours=args.elapsed,
-                precise_time=args.precise_time
+                precise_time=args.precise_time,
+                sleeping=args.sleeping
             ):
                 sys.exit(1)
 

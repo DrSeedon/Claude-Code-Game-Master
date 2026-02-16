@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
 from path_manager import PathManager
-from connection_utils import get_connections as cu_get_connections, get_connection_between, add_canonical_connection
+from connection_utils import get_connections as cu_get_connections, get_connection_between, add_canonical_connection, remove_canonical_connection
 
 
 class LocationManager(EntityManager):
@@ -85,6 +85,7 @@ class LocationManager(EntityManager):
                 bearing=bearing,
                 terrain=terrain)
 
+            self._auto_split_paths(name, locations)
             self._save_entities(self.locations_file, locations)
 
             direction, abbr = pf.bearing_to_compass(bearing)
@@ -95,9 +96,29 @@ class LocationManager(EntityManager):
             return True
 
         if self._add_entity(self.locations_file, name, location_data):
+            locations = self._load_entities(self.locations_file)
+            if name in locations and locations[name].get('coordinates'):
+                self._auto_split_paths(name, locations)
+                self._save_entities(self.locations_file, locations)
             print(f"[SUCCESS] Added location: {name} ({position})")
             return True
         return False
+
+    def _auto_split_paths(self, new_loc: str, locations: dict):
+        """Split existing paths that pass through newly added location"""
+        from path_intersect import check_path_intersection
+        from connection_utils import get_unique_edges
+        for loc_a, loc_b, conn in get_unique_edges(locations):
+            if loc_a == new_loc or loc_b == new_loc:
+                continue
+            intersections = check_path_intersection(loc_a, loc_b, locations)
+            if new_loc in intersections:
+                terrain = conn.get('terrain', 'open')
+                print(f"[INFO] Path {loc_a} ↔ {loc_b} passes through {new_loc} — splitting")
+                remove_canonical_connection(loc_a, loc_b, locations)
+                from path_split import add_connection
+                add_connection(loc_a, new_loc, locations, terrain)
+                add_connection(new_loc, loc_b, locations, terrain)
 
     def connect_locations(self, from_loc: str, to_loc: str, path: str,
                          terrain: str = None, distance: float = None) -> bool:
