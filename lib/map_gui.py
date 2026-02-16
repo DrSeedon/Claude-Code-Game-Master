@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from json_ops import JsonOperations
 from path_intersect import check_path_intersection
+from connection_utils import get_unique_edges
 
 DEFAULT_TERRAIN_COLORS = {
     'open': [100, 200, 100],
@@ -177,25 +178,19 @@ class MapGUI:
         default_color = self.terrain_colors.get('default', (100, 150, 255))
 
         connection_lines = []
-        for loc_name, loc_data in self.locations.items():
-            coords = loc_data.get('coordinates')
-            if not coords:
+        for loc_a, loc_b, conn in get_unique_edges(self.locations):
+            coords_a = self.locations[loc_a].get('coordinates')
+            coords_b = self.locations.get(loc_b, {}).get('coordinates')
+            if not coords_a or not coords_b:
                 continue
-            for conn in loc_data.get('connections', []):
-                to_loc = conn.get('to')
-                if to_loc not in self.locations:
-                    continue
-                to_coords = self.locations[to_loc].get('coordinates')
-                if not to_coords:
-                    continue
-                terrain = conn.get('terrain', 'default')
-                color = self.terrain_colors.get(terrain, default_color)
-                bg_color = tuple(int(c * 0.15 + self.COLOR_BG[i] * 0.85) for i, c in enumerate(color))
-                connection_lines.append({
-                    'x1': coords['x'], 'y1': coords['y'],
-                    'x2': to_coords['x'], 'y2': to_coords['y'],
-                    'color': bg_color
-                })
+            terrain = conn.get('terrain', 'default')
+            color = self.terrain_colors.get(terrain, default_color)
+            bg_color = tuple(int(c * 0.15 + self.COLOR_BG[i] * 0.85) for i, c in enumerate(color))
+            connection_lines.append({
+                'x1': coords_a['x'], 'y1': coords_a['y'],
+                'x2': coords_b['x'], 'y2': coords_b['y'],
+                'color': bg_color
+            })
 
         FOG_DISTANCE = 1000
         sample = max(4, int(max_dim / 5000))
@@ -278,40 +273,35 @@ class MapGUI:
 
     def draw_connections(self):
         default_color = self.terrain_colors.get('default', (100, 150, 255))
-        for loc_name, loc_data in self.locations.items():
-            coords = loc_data.get('coordinates')
-            if not coords:
+        for loc_a, loc_b, conn in get_unique_edges(self.locations):
+            coords_a = self.locations[loc_a].get('coordinates')
+            coords_b = self.locations.get(loc_b, {}).get('coordinates')
+            if not coords_a or not coords_b:
                 continue
-            x1, y1 = self.world_to_screen(coords['x'], coords['y'])
-            for conn in loc_data.get('connections', []):
-                to_loc = conn.get('to')
-                if to_loc not in self.locations:
-                    continue
-                to_coords = self.locations[to_loc].get('coordinates')
-                if not to_coords:
-                    continue
-                x2, y2 = self.world_to_screen(to_coords['x'], to_coords['y'])
-                terrain = conn.get('terrain', 'default')
-                conn_color = self.terrain_colors.get(terrain, default_color)
-                pygame.draw.line(self.screen, conn_color, (x1, y1), (x2, y2), 3)
+            x1, y1 = self.world_to_screen(coords_a['x'], coords_a['y'])
+            x2, y2 = self.world_to_screen(coords_b['x'], coords_b['y'])
+            to_loc = loc_b
+            terrain = conn.get('terrain', 'default')
+            conn_color = self.terrain_colors.get(terrain, default_color)
+            pygame.draw.line(self.screen, conn_color, (x1, y1), (x2, y2), 3)
 
-                distance = conn.get('distance_meters', 0)
-                if distance > 0:
-                    dist_km = distance / 1000
-                    mid_x = (x1 + x2) // 2
-                    mid_y = (y1 + y2) // 2
-                    label = self.font.render(f"{dist_km:.1f}km", True, conn_color)
-                    label_rect = label.get_rect(center=(mid_x, mid_y - 20))
-                    bg_rect = label_rect.inflate(6, 4)
-                    pygame.draw.rect(self.screen, (20, 20, 30), bg_rect)
-                    pygame.draw.rect(self.screen, conn_color, bg_rect, 1)
-                    self.screen.blit(label, label_rect)
-                    terrain_label = self.font.render(terrain, True, conn_color)
-                    terrain_rect = terrain_label.get_rect(center=(mid_x, mid_y - 5))
-                    terrain_bg = terrain_rect.inflate(6, 4)
-                    pygame.draw.rect(self.screen, (20, 20, 30), terrain_bg)
-                    pygame.draw.rect(self.screen, conn_color, terrain_bg, 1)
-                    self.screen.blit(terrain_label, terrain_rect)
+            distance = conn.get('distance_meters', 0)
+            if distance > 0:
+                dist_km = distance / 1000
+                mid_x = (x1 + x2) // 2
+                mid_y = (y1 + y2) // 2
+                label = self.font.render(f"{dist_km:.1f}km", True, conn_color)
+                label_rect = label.get_rect(center=(mid_x, mid_y - 20))
+                bg_rect = label_rect.inflate(6, 4)
+                pygame.draw.rect(self.screen, (20, 20, 30), bg_rect)
+                pygame.draw.rect(self.screen, conn_color, bg_rect, 1)
+                self.screen.blit(label, label_rect)
+                terrain_label = self.font.render(terrain, True, conn_color)
+                terrain_rect = terrain_label.get_rect(center=(mid_x, mid_y - 5))
+                terrain_bg = terrain_rect.inflate(6, 4)
+                pygame.draw.rect(self.screen, (20, 20, 30), terrain_bg)
+                pygame.draw.rect(self.screen, conn_color, terrain_bg, 1)
+                self.screen.blit(terrain_label, terrain_rect)
 
     def draw_blocked_ranges(self, loc_name: str, loc_data: Dict):
         coords = loc_data.get('coordinates')

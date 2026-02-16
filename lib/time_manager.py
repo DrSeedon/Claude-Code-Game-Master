@@ -27,7 +27,7 @@ class TimeManager:
 
             self.json_ops = JsonOperations(str(self.campaign_dir))
 
-    def update_time(self, time_of_day: str, date: str, elapsed_hours: int = 0, precise_time: str = None) -> bool:
+    def update_time(self, time_of_day: str, date: str, elapsed_hours: float = 0, precise_time: str = None) -> bool:
         """
         Update campaign time and optionally apply time effects.
 
@@ -57,8 +57,8 @@ class TimeManager:
                     if elapsed_seconds < 0:
                         elapsed_seconds += 24 * 3600
 
-                    elapsed_hours = int(elapsed_seconds / 3600)
-                    print(f"[AUTO] Calculated elapsed time: {elapsed_hours}h ({old_precise_time} → {precise_time})")
+                    elapsed_hours = elapsed_seconds / 3600
+                    print(f"[AUTO] Calculated elapsed time: {elapsed_hours:.2f}h ({old_precise_time} → {precise_time})")
                 except ValueError:
                     print(f"[WARNING] Invalid time format, using manual elapsed")
 
@@ -171,9 +171,9 @@ class TimeManager:
         for rule in rules:
             stat = rule['stat']
             change_per_hour = rule.get('per_hour', 0)
-            total_change = int(change_per_hour * elapsed_hours)
+            total_change = change_per_hour * elapsed_hours
 
-            if total_change != 0:
+            if abs(total_change) > 0.001:
                 # Use keyword arguments to be explicit
                 result = player_mgr.modify_custom_stat(name=char_name, stat=stat, amount=total_change)
                 if result.get('success'):
@@ -304,15 +304,7 @@ class TimeManager:
 
         print(f"[SUCCESS] Time updated to: {time_str}, {date}")
 
-        # Custom stats changes
-        if results['custom_stats_changed']:
-            print("\nCustom Stats:")
-            for change in results['custom_stats_changed']:
-                stat = change['stat']
-                old = change['old']
-                new = change['new']
-                delta = change['change']
-                print(f"  {stat}: {old} → {new} ({delta:+d})")
+        # Custom stats changes (already printed by player_manager.modify_custom_stat)
 
         # Stat consequences (hunger=0 → damage)
         if results['stat_consequences']:

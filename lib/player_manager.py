@@ -647,7 +647,7 @@ class PlayerManager(EntityManager):
 
         return custom_stats[stat]
 
-    def modify_custom_stat(self, name: str = None, stat: str = None, amount: int = 0) -> Dict[str, Any]:
+    def modify_custom_stat(self, name: str = None, stat: str = None, amount: float = 0) -> Dict[str, Any]:
         """
         Modify custom stat (+/-)
         If name is None, uses active character
@@ -690,7 +690,10 @@ class PlayerManager(EntityManager):
             return {'success': False}
 
         char_name = char.get('name', name)
-        print(f"CUSTOM_STAT {char_name}: {stat} {old_value} → {new_value} ({amount:+d})")
+        display_old = int(round(old_value))
+        display_new = int(round(new_value))
+        if display_old != display_new:
+            print(f"CUSTOM_STAT {char_name}: {stat} {display_old} → {display_new} ({display_new - display_old:+d})")
 
         return {
             'success': True,
@@ -715,7 +718,7 @@ class PlayerManager(EntityManager):
 
         print(f"{char.get('name', name)} Custom Stats:")
         for stat, data in custom_stats.items():
-            current = data['current']
+            current = int(round(data['current']))
             max_val = data.get('max')
             if max_val is not None:
                 print(f"  {stat}: {current}/{max_val}")
@@ -859,7 +862,7 @@ def main():
     elif args.action == 'get':
         char = manager.get_player(args.name)
         if char:
-            print(json.dumps(char, indent=2))
+            print(json.dumps(char, indent=2, ensure_ascii=False))
         else:
             sys.exit(1)
 
@@ -904,7 +907,7 @@ def main():
             # Modify custom stat
             amount_str = args.amount.replace('+', '')
             try:
-                amount = int(amount_str)
+                amount = float(amount_str)
             except ValueError:
                 print(f"[ERROR] Invalid amount: {args.amount}")
                 sys.exit(1)
@@ -916,7 +919,7 @@ def main():
             # Show custom stat
             stat_data = manager.get_custom_stat(args.name, args.stat)
             if stat_data:
-                current = stat_data['current']
+                current = int(round(stat_data['current']))
                 max_val = stat_data.get('max')
                 if max_val is not None:
                     print(f"{args.stat}: {current}/{max_val}")

@@ -8,6 +8,7 @@ import json
 import math
 from typing import Dict, List, Tuple
 from pathlib import Path
+from connection_utils import get_connection_between, add_canonical_connection, remove_canonical_connection
 from path_intersect import check_path_intersection
 
 
@@ -26,23 +27,20 @@ def calculate_distance(x1: float, y1: float, x2: float, y2: float) -> float:
 
 
 def connection_exists(from_loc: str, to_loc: str, locations: Dict) -> bool:
-    """Check if connection already exists from_loc → to_loc"""
-    if from_loc not in locations:
-        return False
-
-    connections = locations[from_loc].get('connections', [])
-    return any(conn.get('to') == to_loc for conn in connections)
+    """Check if connection exists between from_loc and to_loc (either direction)"""
+    return get_connection_between(from_loc, to_loc, locations) is not None
 
 
 def add_connection(from_loc: str, to_loc: str, locations: Dict, terrain: str = 'open'):
-    """Add bidirectional connection between two locations if it doesn't exist"""
+    """Add canonical connection between two locations if it doesn't exist"""
     if from_loc not in locations or to_loc not in locations:
         return
 
-    from_coords = locations[from_loc]['coordinates']
-    to_coords = locations[to_loc]['coordinates']
+    from_coords = locations[from_loc].get('coordinates')
+    to_coords = locations[to_loc].get('coordinates')
+    if not from_coords or not to_coords:
+        return
 
-    # Calculate distance and bearing
     distance = calculate_distance(
         from_coords['x'], from_coords['y'],
         to_coords['x'], to_coords['y']
@@ -51,54 +49,20 @@ def add_connection(from_loc: str, to_loc: str, locations: Dict, terrain: str = '
         from_coords['x'], from_coords['y'],
         to_coords['x'], to_coords['y']
     )
-    bearing_backward = calculate_bearing(
-        to_coords['x'], to_coords['y'],
-        from_coords['x'], from_coords['y']
-    )
 
-    # Add forward connection if doesn't exist
-    if not connection_exists(from_loc, to_loc, locations):
-        if 'connections' not in locations[from_loc]:
-            locations[from_loc]['connections'] = []
-
-        locations[from_loc]['connections'].append({
-            'to': to_loc,
-            'path': f"{distance:.0f}m на {bearing_forward:.1f}°",
-            'distance_meters': int(distance),
-            'bearing': round(bearing_forward, 1),
-            'terrain': terrain
-        })
-        print(f"   ✓ Added: {from_loc} → {to_loc} ({distance:.0f}m, {bearing_forward:.1f}°, {terrain})")
-
-    # Add backward connection if doesn't exist
-    if not connection_exists(to_loc, from_loc, locations):
-        if 'connections' not in locations[to_loc]:
-            locations[to_loc]['connections'] = []
-
-        locations[to_loc]['connections'].append({
-            'to': from_loc,
-            'path': f"{distance:.0f}m на {bearing_backward:.1f}°",
-            'distance_meters': int(distance),
-            'bearing': round(bearing_backward, 1),
-            'terrain': terrain
-        })
-        print(f"   ✓ Added: {to_loc} → {from_loc} ({distance:.0f}m, {bearing_backward:.1f}°, {terrain})")
+    if not get_connection_between(from_loc, to_loc, locations):
+        add_canonical_connection(from_loc, to_loc, locations,
+            path=f"{distance:.0f}m на {bearing_forward:.1f}°",
+            distance_meters=int(distance),
+            bearing=round(bearing_forward, 1),
+            terrain=terrain)
+        print(f"   ✓ Added: {from_loc} ↔ {to_loc} ({distance:.0f}m, {bearing_forward:.1f}°, {terrain})")
 
 
 def remove_connection(from_loc: str, to_loc: str, locations: Dict):
-    """Remove connection from_loc → to_loc"""
-    if from_loc not in locations:
-        return
-
-    connections = locations[from_loc].get('connections', [])
-    original_len = len(connections)
-
-    locations[from_loc]['connections'] = [
-        conn for conn in connections if conn.get('to') != to_loc
-    ]
-
-    if len(locations[from_loc]['connections']) < original_len:
-        print(f"   ✗ Removed: {from_loc} → {to_loc}")
+    """Remove canonical connection between from_loc and to_loc"""
+    remove_canonical_connection(from_loc, to_loc, locations)
+    print(f"   ✗ Removed: {from_loc} ↔ {to_loc}")
 
 
 def split_intersecting_paths(locations: Dict, dry_run: bool = False) -> Dict:
@@ -140,9 +104,7 @@ def split_intersecting_paths(locations: Dict, dry_run: bool = False) -> Dict:
             print(f"   Passes through: {', '.join(intersections)}")
 
             if not dry_run:
-                # Remove original long path (bidirectional)
                 remove_connection(loc_name, to_loc, locations)
-                remove_connection(to_loc, loc_name, locations)
 
                 # Build route through waypoints
                 route = [loc_name] + intersections + [to_loc]

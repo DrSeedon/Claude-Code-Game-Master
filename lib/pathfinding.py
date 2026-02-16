@@ -7,6 +7,7 @@ Handles intelligent route finding, bearing calculations, and coordinate systems
 import math
 from typing import Dict, List, Optional, Tuple
 from collections import deque
+from connection_utils import get_connections as cu_get_connections
 
 
 class PathFinder:
@@ -166,7 +167,7 @@ class PathFinder:
             visited.add(current)
 
             # Explore connections
-            for conn in locations[current].get("connections", []):
+            for conn in cu_get_connections(current, locations):
                 next_loc = conn.get("to")
                 conn_distance = conn.get("distance_meters", 0)
 
@@ -260,7 +261,7 @@ class PathFinder:
                 continue
 
             # Explore connections
-            for conn in locations[current].get("connections", []):
+            for conn in cu_get_connections(current, locations):
                 next_loc = conn.get("to")
                 conn_distance = conn.get("distance_meters", 0)
 

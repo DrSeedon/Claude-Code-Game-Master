@@ -17,6 +17,7 @@ from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
 from lib.time_manager import TimeManager
 from lib.player_manager import PlayerManager
+from lib.connection_utils import add_canonical_connection
 
 
 class EncounterManager:
@@ -295,7 +296,6 @@ class EncounterManager:
         waypoint_distance_traveled = int(journey['total_distance_m'] * progress_ratio)
         waypoint_distance_remaining = journey['total_distance_m'] - waypoint_distance_traveled
 
-        # Create waypoint
         waypoint = {
             "is_waypoint": True,
             "original_journey": {
@@ -313,25 +313,23 @@ class EncounterManager:
             },
             "diameter_meters": 10,
             "description": f"Stopped midway between {from_loc} and {to_loc}",
-            "connections": [
-                {
-                    "to": from_loc,
-                    "path": "turn back",
-                    "distance_meters": waypoint_distance_traveled,
-                    "bearing": 180,
-                    "terrain": journey['terrain']
-                },
-                {
-                    "to": to_loc,
-                    "path": "continue forward",
-                    "distance_meters": waypoint_distance_remaining,
-                    "bearing": 0,
-                    "terrain": journey['terrain']
-                }
-            ]
+            "connections": []
         }
 
         locations[waypoint_name] = waypoint
+
+        add_canonical_connection(waypoint_name, from_loc, locations,
+            path="turn back",
+            distance_meters=waypoint_distance_traveled,
+            bearing=180,
+            terrain=journey['terrain'])
+
+        add_canonical_connection(waypoint_name, to_loc, locations,
+            path="continue forward",
+            distance_meters=waypoint_distance_remaining,
+            bearing=0,
+            terrain=journey['terrain'])
+
         self.json_ops.save_json("locations.json", locations)
 
         return waypoint_name

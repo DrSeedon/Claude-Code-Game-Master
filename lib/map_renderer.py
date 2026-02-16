@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from json_ops import JsonOperations
+from connection_utils import get_unique_edges
 
 
 class MapRenderer:
@@ -186,27 +187,17 @@ class MapRenderer:
             return gx, gy
 
         # Draw connections first (so they appear under locations)
-        for loc_name, loc_data in locations.items():
-            coords = loc_data.get('coordinates')
-            if not coords:
+        for loc_a, loc_b, conn in get_unique_edges(locations):
+            coords_a = locations[loc_a].get('coordinates')
+            coords_b = locations.get(loc_b, {}).get('coordinates')
+            if not coords_a or not coords_b:
                 continue
 
-            x1, y1 = scale_coord(coords['x'], coords['y'])
+            x1, y1 = scale_coord(coords_a['x'], coords_a['y'])
+            x2, y2 = scale_coord(coords_b['x'], coords_b['y'])
+            terrain = conn.get('terrain', 'default')
 
-            for conn in loc_data.get('connections', []):
-                to_loc = conn.get('to')
-                if to_loc not in locations:
-                    continue
-
-                to_coords = locations[to_loc].get('coordinates')
-                if not to_coords:
-                    continue
-
-                x2, y2 = scale_coord(to_coords['x'], to_coords['y'])
-                terrain = conn.get('terrain', 'default')
-
-                # Draw line between locations with terrain metadata
-                self._draw_line(grid, metadata_grid, x1, y1, x2, y2, terrain)
+            self._draw_line(grid, metadata_grid, x1, y1, x2, y2, terrain)
 
         # Draw locations
         location_positions = {}

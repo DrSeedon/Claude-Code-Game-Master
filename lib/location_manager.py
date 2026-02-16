@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
 from path_manager import PathManager
+from connection_utils import get_connections as cu_get_connections, get_connection_between, add_canonical_connection
 
 
 class LocationManager(EntityManager):
@@ -71,65 +72,46 @@ class LocationManager(EntityManager):
                 print(f"[ERROR] Origin location '{from_location}' has no coordinates")
                 return False
 
-            # Calculate destination coordinates
             from pathfinding import PathFinder
             pf = PathFinder()
             new_coords = pf.calculate_coordinates(from_coords, distance, bearing)
             location_data['coordinates'] = new_coords
 
-            # Auto-create bidirectional connection
-            reverse_bearing = pf.get_reverse_bearing(bearing)
+            locations[name] = location_data
 
-            # Add connection from origin to new location
-            if 'connections' not in locations[from_location]:
-                locations[from_location]['connections'] = []
+            add_canonical_connection(from_location, name, locations,
+                path=f"{distance}m на {bearing}°",
+                distance_meters=int(distance),
+                bearing=bearing,
+                terrain=terrain)
 
-            locations[from_location]['connections'].append({
-                'to': name,
-                'path': f"{distance}m на {bearing}°",
-                'distance_meters': int(distance),
-                'bearing': bearing,
-                'terrain': terrain
-            })
-
-            # Add reverse connection
-            location_data['connections'].append({
-                'to': from_location,
-                'path': f"{distance}m на {reverse_bearing}°",
-                'distance_meters': int(distance),
-                'bearing': reverse_bearing,
-                'terrain': terrain
-            })
-
-            # Save updated origin location
             self._save_entities(self.locations_file, locations)
 
             direction, abbr = pf.bearing_to_compass(bearing)
             print(f"[INFO] Calculated coordinates: {new_coords}")
             print(f"[INFO] Direction from {from_location}: {direction} ({abbr})")
-            print(f"[INFO] Auto-created bidirectional connection")
+            print(f"[INFO] Auto-created connection")
+            print(f"[SUCCESS] Added location: {name} ({position})")
+            return True
 
-        # Save new location
         if self._add_entity(self.locations_file, name, location_data):
             print(f"[SUCCESS] Added location: {name} ({position})")
             return True
         return False
 
-    def connect_locations(self, from_loc: str, to_loc: str, path: str) -> bool:
+    def connect_locations(self, from_loc: str, to_loc: str, path: str,
+                         terrain: str = None, distance: float = None) -> bool:
         """
-        Connect two locations bidirectionally
+        Connect two locations canonically
         """
-        # Validate names
         for loc in [from_loc, to_loc]:
             valid, error = self.validators.validate_name(loc)
             if not valid:
                 print(f"[ERROR] {error}")
                 return False
 
-        # Load locations
         locations = self._load_entities(self.locations_file)
 
-        # Check both locations exist
         if from_loc not in locations:
             print(f"[ERROR] Location '{from_loc}' not found")
             return False
@@ -137,26 +119,24 @@ class LocationManager(EntityManager):
             print(f"[ERROR] Location '{to_loc}' not found")
             return False
 
-        # Check if connection already exists
-        existing_connections = [c['to'] for c in locations[from_loc].get('connections', [])]
-        if to_loc in existing_connections:
+        if get_connection_between(from_loc, to_loc, locations) is not None:
             print(f"[ERROR] Connection already exists between '{from_loc}' and '{to_loc}'")
             return False
 
-        # Add bidirectional connection
-        if 'connections' not in locations[from_loc]:
-            locations[from_loc]['connections'] = []
-        if 'connections' not in locations[to_loc]:
-            locations[to_loc]['connections'] = []
+        kwargs = {'path': path}
+        if terrain:
+            kwargs['terrain'] = terrain
+        if distance:
+            kwargs['distance_meters'] = int(distance)
+            from_coords = locations[from_loc].get('coordinates')
+            to_coords = locations[to_loc].get('coordinates')
+            if from_coords and to_coords:
+                from pathfinding import PathFinder
+                pf = PathFinder()
+                bearing = pf.calculate_bearing(from_coords, to_coords)
+                kwargs['bearing'] = bearing
 
-        locations[from_loc]['connections'].append({
-            'to': to_loc,
-            'path': path
-        })
-        locations[to_loc]['connections'].append({
-            'to': from_loc,
-            'path': path
-        })
+        add_canonical_connection(from_loc, to_loc, locations, **kwargs)
 
         if self._save_entities(self.locations_file, locations):
             print(f"[SUCCESS] Connected {from_loc} <-> {to_loc} via {path}")
@@ -211,10 +191,8 @@ class LocationManager(EntityManager):
         """
         Get connections for a location
         """
-        location = self.get_location(name)
-        if location:
-            return location.get('connections', [])
-        return []
+        locations = self._load_entities(self.locations_file)
+        return cu_get_connections(name, locations)
 
     def decide_route(self, from_loc: str, to_loc: str) -> bool:
         """
@@ -484,10 +462,8 @@ class LocationManager(EntityManager):
             # Process connections if provided
             if loc_data.get('connections'):
                 for conn_name in loc_data['connections']:
-                    location_entry['connections'].append({
-                        'to': conn_name,
-                        'path': 'connected'
-                    })
+                    if conn_name in locations:
+                        add_canonical_connection(name, conn_name, locations, path='connected')
 
             # Add notes if provided
             if loc_data.get('notes'):
@@ -534,7 +510,9 @@ def main():
     connect_parser = subparsers.add_parser('connect', help='Connect two locations')
     connect_parser.add_argument('from_loc', help='From location')
     connect_parser.add_argument('to_loc', help='To location')
-    connect_parser.add_argument('path', help='Path description')
+    connect_parser.add_argument('path', nargs='?', default='connected', help='Path description')
+    connect_parser.add_argument('--terrain', help='Terrain type')
+    connect_parser.add_argument('--distance', type=float, help='Distance in meters')
 
     # Describe location
     describe_parser = subparsers.add_parser('describe', help='Set location description')
@@ -595,7 +573,8 @@ def main():
             sys.exit(1)
 
     elif args.action == 'connect':
-        if not manager.connect_locations(args.from_loc, args.to_loc, args.path):
+        if not manager.connect_locations(args.from_loc, args.to_loc, args.path,
+                                         terrain=args.terrain, distance=args.distance):
             sys.exit(1)
 
     elif args.action == 'describe':
@@ -605,7 +584,7 @@ def main():
     elif args.action == 'get':
         location = manager.get_location(args.name)
         if location:
-            print(json.dumps({args.name: location}, indent=2))
+            print(json.dumps({args.name: location}, indent=2, ensure_ascii=False))
         else:
             sys.exit(1)
 
@@ -620,7 +599,7 @@ def main():
     elif args.action == 'connections':
         connections = manager.get_connections(args.name)
         if connections:
-            print(json.dumps(connections, indent=2))
+            print(json.dumps(connections, indent=2, ensure_ascii=False))
         else:
             print("No connections found")
 

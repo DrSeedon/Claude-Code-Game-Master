@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from pathfinding import PathFinder
 from json_ops import JsonOperations
+from connection_utils import get_connection_between
 
 
 class PathManager:
@@ -178,7 +179,7 @@ class PathManager:
                     "message": "Идём напрямую (решение сохранено)"
                 }
 
-        # No cached decision - analyze and ask DM
+        # No cached decision - analyze options
         analysis = self.analyze_route_options(from_loc, to_loc)
 
         if analysis.get("error"):
@@ -187,7 +188,18 @@ class PathManager:
                 "message": analysis["error"]
             }
 
-        # Build decision options
+        locations = self.json_ops.load_json("locations.json")
+        conn = get_connection_between(from_loc, to_loc, locations)
+        if conn and conn.get('distance_meters'):
+            return {
+                "method": "direct",
+                "distance": conn['distance_meters'],
+                "bearing": conn.get('bearing'),
+                "terrain": conn.get('terrain', 'open'),
+                "message": f"Прямой путь: {conn['distance_meters']}м"
+            }
+
+        # No direct connection — need DM decision
         options = {}
 
         if not analysis["direct_blocked"] and analysis["direct_distance"]:

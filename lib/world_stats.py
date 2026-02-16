@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from json_ops import JsonOperations
 from campaign_manager import CampaignManager
+from connection_utils import get_connections as cu_get_connections
 
 
 class WorldStats:
@@ -149,7 +150,7 @@ class WorldStats:
         locations = self.json_ops.load_json("locations.json")
         if locations:
             details["locations"] = [
-                {"name": name, "connections": len(data.get("connections", []))}
+                {"name": name, "connections": len(cu_get_connections(name, locations))}
                 for name, data in sorted(locations.items())[:10]
             ]
             details["locations_total"] = len(locations)
@@ -294,7 +295,7 @@ def main():
         stats.print_counts()
     elif args.action == 'json':
         overview = stats.get_overview(args.detailed)
-        print(json.dumps(overview, indent=2))
+        print(json.dumps(overview, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,38 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [1.2.0] - 2026-02-16
+
+### Added
+- `lib/connection_utils.py` — canonical connection management module (single source of truth for all location edges)
+- `tools/migrate-connections.py` — migration script for deduplicating bidirectional connections (`--dry-run` / `--apply`)
+- `dm-location.sh connect` now accepts `--terrain` and `--distance` flags
+
+### Changed
+- **Connections are now stored once** — in the alphabetically-first location of the pair. All modules read edges through `connection_utils` helpers, which reconstruct reverse direction (bearing +180°) on the fly
+- `dm-session.sh move` **no longer auto-creates connections**. If no path exists between two known locations, it rejects the move and suggests `dm-location.sh connect`
+- Map renderers (`map_renderer.py`, `map_gui.py`) use `get_unique_edges()` — each line drawn exactly once
+- Pathfinding (`pathfinding.py`, `path_manager.py`) uses canonical connection API
+- `path_split.py` delegates to `add/remove_canonical_connection()`
+- `encounter_manager.py` waypoints use `add_canonical_connection()`
+- `world_stats.py` and `search.py` use `get_connections()` for accurate counts
+
+### Fixed
+- Double line rendering on maps (edges were drawn from both sides)
+- Connection data desync (one side had terrain/distance, reverse had bare `"traveled"`)
+- `ensure_ascii=False` added to all `json.dumps()` calls across 15+ files — Russian text no longer escaped as `\uXXXX`
+- Duplicate custom stats output in `time_manager._print_time_report()`
+
+### Migrated
+- 62 duplicate connection pairs removed across 4 campaigns (nostromo, quest-for-the-holy-ale, stalker-zone, test-fantasy)
+
+### Technical
+- `canonical_pair(a, b)` — alphabetical ordering determines storage location
+- `get_connections(loc, data)` — returns forward + reverse edges with auto-flipped bearing
+- `get_connection_between(a, b, data)` — O(n) lookup for specific edge
+- `get_unique_edges(data)` — deduplicated edge list for renderers
+- `add/remove_canonical_connection()` — single-point mutation API
+
 ## [1.1.0] - 2026-02-15
 
 ### Added

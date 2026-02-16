@@ -48,11 +48,11 @@ case "$ACTION" in
         ;;
 
     connect)
-        if [ "$#" -lt 3 ]; then
-            echo "Usage: dm-location.sh connect <from> <to> <path>"
+        if [ "$#" -lt 2 ]; then
+            echo "Usage: dm-location.sh connect <from> <to> [path] [--terrain <type>] [--distance <meters>]"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" connect "$1" "$2" "$3"
+        $PYTHON_CMD "$LIB_DIR/location_manager.py" connect "$@"
         ;;
 
     describe)

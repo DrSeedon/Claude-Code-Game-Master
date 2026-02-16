@@ -424,7 +424,7 @@ def main():
         info = manager.get_info(args.name)
         if not info:
             sys.exit(1)
-        print(json.dumps(info, indent=2))
+        print(json.dumps(info, indent=2, ensure_ascii=False))
 
     elif args.action == 'path':
         path = manager.get_campaign_path(args.name)
