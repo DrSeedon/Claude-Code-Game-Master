@@ -2,6 +2,44 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [1.5.0] - 2026-02-17
+
+### Added
+- **Module System** — optional campaign features extracted into self-contained modules in `.claude/modules/`
+  - `coordinate-navigation` — PathManager, PathFinder, path intersections, map rendering (ASCII & GUI)
+  - `encounter-system` — travel encounter checks with distance-based DC scaling
+  - `firearms-combat` — automated firearms resolver with fire modes, PEN/PROT, RPM
+  - `survival-stats` — time effects engine, per-tick simulation, conditional effects, sleep restoration
+- **Module Loader** (`lib/module_loader.py`) — discovers and validates installed modules
+- **Module CLI** (`tools/dm-module.sh`) — list, info, and status for installed modules
+- **Module Registry** (`.claude/modules/registry.json`) — central manifest of available modules
+- **Navigation Module CLI** (`dm-navigation.sh add`) — coordinate-based location creation with auto-connection and path splitting
+
+### Changed
+- **CORE decoupled from modules** — `lib/` has zero imports of module code (no PathManager, PathFinder, encounter_manager, combat_resolver)
+- `session_manager.py` — `move_party()` simplified to direct-connection lookup via `connection_utils`; removed PathManager routing, blocked/needs_decision handling
+- `location_manager.py` — `add_location()` simplified to CRUD; coordinate params (`--from/--bearing/--distance`) delegate to navigation module via `dm-location.sh`
+- `time_manager.py` — survival stats logic (`_apply_time_effects`, `_check_stat_consequences`, `sleeping` flag) moved to survival-stats module engine
+- `dm-location.sh` — `add --from` auto-delegates to navigation module; decide/routes/block/unblock delegate to `dm-navigation.sh`
+- `dm-combat.sh`, `dm-encounter.sh`, `dm-map.sh`, `dm-time.sh` — delegate to respective module wrappers
+
+### Removed
+- `lib/combat_resolver.py` — moved to `.claude/modules/firearms-combat/`
+- `lib/encounter_manager.py` — moved to `.claude/modules/encounter-system/`
+- `lib/path_manager.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/pathfinding.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/path_intersect.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/path_split.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/map_renderer.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/map_gui.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/location_manager.py.backup` — cleanup
+
+### Technical
+- CORE `lib/` reduced from 11 files to 3 changed files + 8 deleted (moved to modules)
+- Each module is self-contained: own `lib/`, `tools/`, `tests/`, `module.json`, `rules.md`
+- Modules import CORE utilities (`json_ops`, `connection_utils`); CORE never imports modules
+- 73 module tests passing across all 4 modules
+
 ## [1.4.0] - 2026-02-17
 
 ### Added

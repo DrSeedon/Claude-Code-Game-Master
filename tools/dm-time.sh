@@ -14,7 +14,6 @@ if [ -z "$1" ] || [ -z "$2" ]; then
     echo "Options:"
     echo "  --elapsed HOURS           Hours that passed (manual)"
     echo "  --precise-time HH:MM      Exact time (auto-calculates elapsed)"
-    echo "  --sleeping                Character is sleeping (sleep restores)"
     echo ""
     echo "Note: If both are given, --precise-time takes priority"
     exit 1
@@ -39,10 +38,6 @@ while [ "$#" -gt 0 ]; do
         --precise-time)
             ARGS+=("--precise-time" "$2")
             shift 2
-            ;;
-        --sleeping)
-            ARGS+=("--sleeping")
-            shift 1
             ;;
         *)
             echo "Unknown option: $1"

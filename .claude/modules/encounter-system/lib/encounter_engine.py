@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Encounter Manager - D&D-based random encounters with waypoints
+Encounter Engine — standalone module for random encounters with waypoints.
+
+Imports CORE's JsonOperations, dice, TimeManager, PlayerManager.
+CORE has zero knowledge of this module.
+DM (Claude) calls this via dm-encounter.sh during/after travel.
 """
 
 import sys
@@ -9,9 +13,8 @@ import math
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Add project root to path for imports
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
@@ -20,7 +23,7 @@ from lib.player_manager import PlayerManager
 from lib.connection_utils import add_canonical_connection
 
 
-class EncounterManager:
+class EncounterEngine:
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
         self.json_ops = JsonOperations(str(self.campaign_dir))
@@ -429,7 +432,7 @@ def main():
     import sys
 
     if len(sys.argv) < 4:
-        print("Usage: encounter_manager.py <from_loc> <to_loc> <distance_m> [terrain]")
+        print("Usage: encounter_engine.py <from_loc> <to_loc> <distance_m> [terrain]")
         sys.exit(1)
 
     # Get active campaign
@@ -446,14 +449,14 @@ def main():
     distance_m = float(sys.argv[3])
     terrain = sys.argv[4] if len(sys.argv) > 4 else "open"
 
-    manager = EncounterManager(campaign_dir)
+    engine = EncounterEngine(campaign_dir)
 
-    if not manager.is_enabled():
+    if not engine.is_enabled():
         print("[INFO] Encounter system is disabled")
         sys.exit(0)
 
-    journey = manager.check_journey(from_loc, to_loc, distance_m, terrain)
-    print(manager.format_journey_output(journey))
+    journey = engine.check_journey(from_loc, to_loc, distance_m, terrain)
+    print(engine.format_journey_output(journey))
 
 
 if __name__ == "__main__":

@@ -9,11 +9,11 @@ import math
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
-# Add lib directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from json_ops import JsonOperations
-from connection_utils import get_unique_edges
+from lib.json_ops import JsonOperations
+from lib.connection_utils import get_unique_edges
 
 
 class MapRenderer:

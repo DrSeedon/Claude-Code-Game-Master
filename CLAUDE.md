@@ -1435,6 +1435,12 @@ When creating new campaigns with specialized mechanics, use pre-built templates 
 
 For non-standard campaigns (STALKER, Civilization, etc.) with custom stats, time effects, encounter system, and coordinate navigation — see `.claude/rules/custom-campaigns.md`.
 
+## Modules
+
+At session start, if campaign has `campaign_rules.time_effects.enabled = true`, load `.claude/modules/survival-stats/rules.md` and follow its instructions throughout the session.
+
+Available modules: `bash tools/dm-module.sh list`
+
 ---
 
 ## Deep Dive Documentation
@@ -1445,6 +1451,7 @@ For non-standard campaigns (STALKER, Civilization, etc.) with custom stats, time
 | JSON Schema Reference | `docs/schema-reference.md` |
 | Class-Specific Intros | `.claude/workflows/class-intros.md` |
 | World Detail Management | `.claude/workflows/cognitive-rendering.md` |
+| Module System | `.claude/modules/README.md` |
 
 ---
 

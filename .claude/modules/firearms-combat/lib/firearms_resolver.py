@@ -1,48 +1,56 @@
 #!/usr/bin/env python3
 """
-Firearms Combat Resolver
-Automated combat resolution for modern/STALKER campaigns with firearms mechanics
+Firearms Combat Resolver — standalone module for modern/STALKER firearms mechanics.
+
+Imports CORE's PlayerManager. CORE has zero knowledge of this module.
+DM (Claude) calls this via dm-combat.sh for firearms combat resolution.
 """
 
+import argparse
 import json
 import random
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from lib.json_ops import JsonOperations
+from lib.player_manager import PlayerManager
+from lib.campaign_manager import CampaignManager
+
 
 class FirearmsCombatResolver:
     """Resolves firearms combat with automatic attack/damage calculation"""
 
-    def __init__(self, campaign_path: Path):
-        self.campaign_path = campaign_path
-        self.character = self._load_character()
+    def __init__(self, world_state_dir: str = "world-state"):
+        self.campaign_mgr = CampaignManager(world_state_dir)
+        self.campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+
+        if self.campaign_dir is None:
+            raise RuntimeError("No active campaign.")
+
+        self.json_ops = JsonOperations(str(self.campaign_dir))
+        self.player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
         self.campaign_rules = self._load_campaign_rules()
-
-    def _load_character(self) -> Dict:
-        """Load character.json"""
-        char_file = self.campaign_path / "character.json"
-        if not char_file.exists():
-            raise FileNotFoundError(f"Character file not found: {char_file}")
-
-        with open(char_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        self.character = self._load_character()
 
     def _load_campaign_rules(self) -> Dict:
-        """Load campaign-overview.json for rules"""
-        overview_file = self.campaign_path / "campaign-overview.json"
-        if not overview_file.exists():
-            raise FileNotFoundError(f"Campaign overview not found: {overview_file}")
+        """Load campaign rules from campaign-overview.json"""
+        overview = self.json_ops.load_json("campaign-overview.json")
+        return overview.get("campaign_rules", {})
 
-        with open(overview_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get("campaign_rules", {})
-
-    def _save_character(self):
-        """Save updated character.json"""
-        char_file = self.campaign_path / "character.json"
-        with open(char_file, 'w', encoding='utf-8') as f:
-            json.dump(self.character, f, indent=2, ensure_ascii=False)
+    def _load_character(self) -> Dict:
+        """Load active character"""
+        overview = self.json_ops.load_json("campaign-overview.json")
+        char_name = overview.get("current_character")
+        if not char_name:
+            raise RuntimeError("No active character")
+        char = self.player_mgr.get_player(char_name)
+        if not char:
+            raise RuntimeError(f"Character '{char_name}' not found")
+        return char
 
     def _get_weapon_stats(self, weapon_name: str) -> Dict:
         """Get weapon stats from campaign_rules"""
@@ -66,7 +74,6 @@ class FirearmsCombatResolver:
         dex_mod = (abilities.get("dex", 10) - 10) // 2
         prof_bonus = self.character.get("proficiency_bonus", 2)
 
-        # Check for Стрелок subclass bonus
         subclass_bonus = 0
         if self.character.get("subclass") == "Стрелок":
             subclass_bonus = 2
@@ -83,7 +90,6 @@ class FirearmsCombatResolver:
 
     def _roll_damage(self, damage_dice: str) -> int:
         """Roll damage dice (e.g., '2d8+3')"""
-        # Parse dice notation
         if '+' in damage_dice:
             dice_part, bonus = damage_dice.split('+')
             bonus = int(bonus)
@@ -94,12 +100,10 @@ class FirearmsCombatResolver:
             dice_part = damage_dice
             bonus = 0
 
-        # Parse NdX
         num_dice, die_size = dice_part.split('d')
         num_dice = int(num_dice)
         die_size = int(die_size)
 
-        # Roll
         total = sum(random.randint(1, die_size) for _ in range(num_dice))
         return total + bonus
 
@@ -111,11 +115,11 @@ class FirearmsCombatResolver:
     def _apply_pen_vs_prot(self, damage: int, pen: int, prot: int) -> int:
         """Apply penetration vs protection damage scaling"""
         if pen > prot:
-            return damage  # Full damage
+            return damage
         elif pen <= prot / 2:
-            return damage // 4  # Quarter damage
+            return damage // 4
         else:
-            return damage // 2  # Half damage
+            return damage // 2
 
     def resolve_full_auto(
         self,
@@ -137,34 +141,25 @@ class FirearmsCombatResolver:
         weapon = self._get_weapon_stats(weapon_name)
         fire_mode = self._get_fire_mode_config("full_auto")
 
-        # Calculate maximum rounds per D&D round
         max_rounds_per_round = self._calculate_rounds_per_dnd_round(weapon["rpm"])
-
-        # Determine actual shots fired
         shots_fired = min(ammo_available, max_rounds_per_round)
-
-        # Distribute shots evenly across targets
         shots_per_target = shots_fired // len(targets)
         if shots_per_target == 0:
-            shots_per_target = 1  # At least 1 shot per target
+            shots_per_target = 1
 
-        # Get attack bonus
         base_attack = self._get_attack_bonus()
-
-        # Penalty per shot
         is_sharpshooter = self._is_sharpshooter()
+
         if is_sharpshooter:
             penalty_per_shot = fire_mode.get("penalty_per_shot_sharpshooter", -1)
         else:
             penalty_per_shot = fire_mode.get("penalty_per_shot", -2)
 
-        # Results tracking
         results = []
         total_damage = 0
         enemies_killed = 0
         total_xp = 0
 
-        # Process each target
         for target_idx, target in enumerate(targets):
             target_result = {
                 "name": target["name"],
@@ -178,12 +173,10 @@ class FirearmsCombatResolver:
                 "killed": False
             }
 
-            # Fire shots at this target
             for shot_num in range(shots_per_target):
                 penalty = shot_num * penalty_per_shot
                 attack_mod = base_attack + penalty
 
-                # Roll attack
                 roll = self._roll_d20()
                 total = roll + attack_mod
 
@@ -198,7 +191,6 @@ class FirearmsCombatResolver:
                 elif total >= target["ac"]:
                     hit = True
 
-                # Record hit
                 target_result["hits"].append({
                     "shot_num": shot_num + 1,
                     "roll": roll,
@@ -208,12 +200,9 @@ class FirearmsCombatResolver:
                     "crit": crit
                 })
 
-                # Calculate damage if hit
                 if hit:
                     if crit:
-                        # Double dice on crit
                         damage_dice = weapon["damage"]
-                        # Parse to double dice count
                         if 'd' in damage_dice:
                             parts = damage_dice.split('d')
                             num_dice = int(parts[0])
@@ -232,7 +221,6 @@ class FirearmsCombatResolver:
                         raw_damage = self._roll_damage(weapon["damage"])
                         damage_dice_used = weapon["damage"]
 
-                    # Determine PEN vs PROT scaling
                     pen = weapon["pen"]
                     prot = target["prot"]
 
@@ -246,14 +234,12 @@ class FirearmsCombatResolver:
                         scaling = "HALF"
                         scaling_pct = 50
 
-                    # Apply PEN vs PROT
                     final_damage = self._apply_pen_vs_prot(raw_damage, pen, prot)
 
                     target_result["damage_dealt"] += final_damage
                     target["hp"] -= final_damage
                     total_damage += final_damage
 
-                    # Record detailed damage in hit
                     target_result["hits"][-1]["damage_dice"] = damage_dice_used
                     target_result["hits"][-1]["raw_damage"] = raw_damage
                     target_result["hits"][-1]["pen"] = pen
@@ -262,19 +248,15 @@ class FirearmsCombatResolver:
                     target_result["hits"][-1]["scaling_pct"] = scaling_pct
                     target_result["hits"][-1]["final_damage"] = final_damage
 
-            # Update final HP
             target_result["final_hp"] = target["hp"]
 
-            # Check if killed
             if target["hp"] <= 0:
                 target_result["killed"] = True
                 enemies_killed += 1
-                # XP based on CR (assume snorks are CR 1/8 = 25 XP)
-                total_xp += 25  # TODO: Make this configurable
+                total_xp += 25
 
             results.append(target_result)
 
-        # Calculate remaining ammo
         ammo_remaining = ammo_available - shots_fired
 
         return {
@@ -290,15 +272,12 @@ class FirearmsCombatResolver:
         }
 
     def update_character_after_combat(self, ammo_spent: int, xp_gained: int):
-        """Update character.json with ammo and XP changes"""
-        # Update XP
-        current_xp = self.character.get("xp", {}).get("current", 0)
-        self.character["xp"]["current"] = current_xp + xp_gained
+        """Update character.json with XP changes"""
+        char_name = self.character.get("name")
+        if not char_name:
+            raise RuntimeError("Character has no name")
 
-        # TODO: Update ammo in inventory (requires parsing inventory items)
-        # For now, we'll just note this needs to be done manually via dm-player.sh
-
-        self._save_character()
+        self.player_mgr.award_xp(char_name, xp_gained)
 
 
 def format_combat_output(result: Dict) -> str:
@@ -321,14 +300,12 @@ def format_combat_output(result: Dict) -> str:
         lines.append("")
         lines.append(f"{target['name']} (AC {target['ac']}, HP {target['initial_hp']}, PROT {target['prot']})")
 
-        # Show hit/miss summary
         hits = [h for h in target['hits'] if h['hit']]
         crits = [h for h in hits if h['crit']]
         lines.append(f"  Shots: {target['shots']} | Hits: {len(hits)} " +
                      (f"(including {len(crits)} CRITS!)" if crits else ""))
         lines.append("")
 
-        # Show each shot in detail
         for i, shot in enumerate(target['hits'], 1):
             roll_d20 = shot['roll']
             modifier = shot['modifier']
@@ -343,7 +320,6 @@ def format_combat_output(result: Dict) -> str:
 
             lines.append(f"  Shot #{i}: {result_str}")
 
-            # Show damage detail if hit
             if shot['hit'] and 'final_damage' in shot:
                 dmg_dice = shot.get('damage_dice', '?')
                 raw_dmg = shot.get('raw_damage', 0)
@@ -355,11 +331,9 @@ def format_combat_output(result: Dict) -> str:
                 lines.append(f"    Damage: {dmg_dice} = {raw_dmg} raw → PEN {pen} vs PROT {prot} = {scaling} → {final_dmg} HP")
 
         lines.append("")
-        # Show total damage
         if target['damage_dealt'] > 0:
             lines.append(f"  Total Damage Dealt: {target['damage_dealt']} HP")
 
-        # Show final status
         if target['killed']:
             overkill = abs(target['final_hp'])
             lines.append(f"  Status: 💀 KILLED (overkill: -{overkill})")
@@ -380,12 +354,9 @@ def format_combat_output(result: Dict) -> str:
 
 def main():
     """CLI interface"""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Firearms Combat Resolver")
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
-    # Resolve command
     resolve_parser = subparsers.add_parser('resolve', help='Resolve firearms combat')
     resolve_parser.add_argument('--attacker', required=True, help='Attacker name')
     resolve_parser.add_argument('--weapon', required=True, help='Weapon name')
@@ -402,65 +373,55 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # Get campaign path
-    active_campaign_file = Path("world-state/active-campaign.txt")
-    if not active_campaign_file.exists():
-        print("[ERROR] No active campaign found", file=sys.stderr)
+    try:
+        resolver = FirearmsCombatResolver()
+
+        targets = []
+        if args.targets:
+            for target_str in args.targets:
+                parts = target_str.split(':')
+                if len(parts) != 4:
+                    print(f"[ERROR] Invalid target format: {target_str}", file=sys.stderr)
+                    print("Expected: Name:AC:HP:PROT", file=sys.stderr)
+                    sys.exit(1)
+
+                targets.append({
+                    "name": parts[0],
+                    "ac": int(parts[1]),
+                    "hp": int(parts[2]),
+                    "prot": int(parts[3])
+                })
+        elif args.enemy_type and args.enemy_count:
+            print("[ERROR] --enemy-type not yet implemented", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print("[ERROR] Must specify either --targets or --enemy-type + --enemy-count", file=sys.stderr)
+            sys.exit(1)
+
+        if args.fire_mode == 'full_auto':
+            result = resolver.resolve_full_auto(args.weapon, args.ammo, targets)
+        else:
+            print(f"[ERROR] Fire mode '{args.fire_mode}' not yet implemented", file=sys.stderr)
+            sys.exit(1)
+
+        print(format_combat_output(result))
+
+        if args.test:
+            print("\n" + "=" * 68)
+            print("  🧪 TEST MODE - NO CHANGES APPLIED")
+            print("=" * 68)
+            print(f"Would update character XP: +{result['total_xp']}")
+            print(f"Would update ammo remaining: {result['ammo_remaining']}")
+            print("Use dm-inventory.sh to apply changes manually")
+        else:
+            resolver.update_character_after_combat(result['shots_fired'], result['total_xp'])
+            print(f"\n[AUTO-PERSIST] Updated character XP: +{result['total_xp']}")
+            print(f"[AUTO-PERSIST] Ammo remaining: {result['ammo_remaining']}")
+            print("NOTE: Update ammo manually with: bash tools/dm-player.sh inventory")
+
+    except RuntimeError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
-
-    campaign_name = active_campaign_file.read_text().strip()
-    campaign_path = Path(f"world-state/campaigns/{campaign_name}")
-
-    # Initialize resolver
-    resolver = FirearmsCombatResolver(campaign_path)
-
-    # Parse targets
-    targets = []
-    if args.targets:
-        for target_str in args.targets:
-            parts = target_str.split(':')
-            if len(parts) != 4:
-                print(f"[ERROR] Invalid target format: {target_str}", file=sys.stderr)
-                print("Expected: Name:AC:HP:PROT", file=sys.stderr)
-                sys.exit(1)
-
-            targets.append({
-                "name": parts[0],
-                "ac": int(parts[1]),
-                "hp": int(parts[2]),
-                "prot": int(parts[3])
-            })
-    elif args.enemy_type and args.enemy_count:
-        # TODO: Load enemy stats from campaign_rules
-        print("[ERROR] --enemy-type not yet implemented", file=sys.stderr)
-        sys.exit(1)
-    else:
-        print("[ERROR] Must specify either --targets or --enemy-type + --enemy-count", file=sys.stderr)
-        sys.exit(1)
-
-    # Resolve combat
-    if args.fire_mode == 'full_auto':
-        result = resolver.resolve_full_auto(args.weapon, args.ammo, targets)
-    else:
-        print(f"[ERROR] Fire mode '{args.fire_mode}' not yet implemented", file=sys.stderr)
-        sys.exit(1)
-
-    # Output result
-    print(format_combat_output(result))
-
-    # Update character (unless test mode)
-    if args.test:
-        print("\n" + "=" * 68)
-        print("  🧪 TEST MODE - NO CHANGES APPLIED")
-        print("=" * 68)
-        print(f"Would update character XP: +{result['total_xp']}")
-        print(f"Would update ammo remaining: {result['ammo_remaining']}")
-        print("Use dm-inventory.sh to apply changes manually")
-    else:
-        resolver.update_character_after_combat(result['shots_fired'], result['total_xp'])
-        print(f"\n[AUTO-PERSIST] Updated character XP: +{result['total_xp']}")
-        print(f"[AUTO-PERSIST] Ammo remaining: {result['ammo_remaining']}")
-        print("NOTE: Update ammo manually with: bash tools/dm-player.sh inventory")
 
 
 if __name__ == "__main__":

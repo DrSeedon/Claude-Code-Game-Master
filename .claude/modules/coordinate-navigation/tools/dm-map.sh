@@ -1,10 +1,11 @@
 #!/bin/bash
-# dm-map.sh - Display campaign map (delegates to coordinate-navigation module)
+# dm-map.sh - Map visualization module wrapper
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+MODULE_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$MODULE_DIR")")")"
 
-source "$SCRIPT_DIR/common.sh"
+source "$PROJECT_ROOT/tools/common.sh"
 
 if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "Usage: dm-map.sh [options]"
@@ -29,6 +30,21 @@ fi
 
 require_active_campaign
 
-# Delegate to coordinate-navigation module
-bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-map.sh" "$@"
+USE_GUI=false
+FILTERED_ARGS=()
+
+for arg in "$@"; do
+    if [ "$arg" == "--gui" ]; then
+        USE_GUI=true
+    else
+        FILTERED_ARGS+=("$arg")
+    fi
+done
+
+if [ "$USE_GUI" == "true" ]; then
+    $PYTHON_CMD "$MODULE_DIR/lib/map_gui.py" "${FILTERED_ARGS[@]}"
+else
+    $PYTHON_CMD "$MODULE_DIR/lib/map_renderer.py" "$@"
+fi
+
 exit $?

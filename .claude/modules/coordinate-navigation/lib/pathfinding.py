@@ -5,9 +5,15 @@ Handles intelligent route finding, bearing calculations, and coordinate systems
 """
 
 import math
+import sys
 from typing import Dict, List, Optional, Tuple
 from collections import deque
-from connection_utils import get_connections as cu_get_connections
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from lib.connection_utils import get_connections as cu_get_connections
 
 
 class PathFinder:

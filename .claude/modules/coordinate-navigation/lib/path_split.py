@@ -6,9 +6,18 @@ Splits long paths into multiple segments when they pass through intermediate loc
 
 import json
 import math
+import sys
 from typing import Dict, List, Tuple
 from pathlib import Path
-from connection_utils import get_connection_between, add_canonical_connection, remove_canonical_connection
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from lib.connection_utils import get_connection_between, add_canonical_connection, remove_canonical_connection
+
+MODULE_DIR = Path(__file__).parent
+sys.path.insert(0, str(MODULE_DIR))
+
 from path_intersect import check_path_intersection
 
 

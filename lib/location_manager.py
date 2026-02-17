@@ -12,8 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
-from path_manager import PathManager
-from connection_utils import get_connections as cu_get_connections, get_connection_between, add_canonical_connection, remove_canonical_connection
+from connection_utils import get_connections as cu_get_connections, get_connection_between, add_canonical_connection
 
 
 class LocationManager(EntityManager):
@@ -22,103 +21,32 @@ class LocationManager(EntityManager):
     def __init__(self, world_state_dir: str = None):
         super().__init__(world_state_dir)
         self.locations_file = "locations.json"
-        self.path_manager = PathManager(str(self.campaign_dir))
 
-    def add_location(self, name: str, position: str, from_location: str = None,
-                    bearing: float = None, distance: float = None, terrain: str = "open") -> bool:
+    def add_location(self, name: str, position: str) -> bool:
         """
-        Add a new location with optional coordinate calculation
-
-        Args:
-            name: Location name
-            position: Relative position description
-            from_location: Origin location for coordinate calculation
-            bearing: Direction in degrees (0=North)
-            distance: Distance in meters
-            terrain: Terrain type (open, forest, urban, etc.)
-
-        Returns True on success, False on failure
+        Add a new location (simple CRUD).
+        For coordinate-based creation, use coordinate-navigation module.
         """
-        # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
             print(f"[ERROR] {error}")
             return False
 
-        # Check if location already exists
         if self._entity_exists(self.locations_file, name):
             print(f"[ERROR] Location '{name}' already exists")
             return False
 
-        # Create location data
         location_data = {
             'position': position,
             'connections': [],
             'description': '',
-            'discovered': self.get_timestamp(),
-            'blocked_ranges': []
+            'discovered': self.get_timestamp()
         }
 
-        # Calculate coordinates if parameters provided
-        if from_location and bearing is not None and distance:
-            locations = self._load_entities(self.locations_file)
-
-            if from_location not in locations:
-                print(f"[ERROR] Origin location '{from_location}' not found")
-                return False
-
-            from_coords = locations[from_location].get('coordinates')
-            if not from_coords:
-                print(f"[ERROR] Origin location '{from_location}' has no coordinates")
-                return False
-
-            from pathfinding import PathFinder
-            pf = PathFinder()
-            new_coords = pf.calculate_coordinates(from_coords, distance, bearing)
-            location_data['coordinates'] = new_coords
-
-            locations[name] = location_data
-
-            add_canonical_connection(from_location, name, locations,
-                path=f"{distance}m на {bearing}°",
-                distance_meters=int(distance),
-                bearing=bearing,
-                terrain=terrain)
-
-            self._auto_split_paths(name, locations)
-            self._save_entities(self.locations_file, locations)
-
-            direction, abbr = pf.bearing_to_compass(bearing)
-            print(f"[INFO] Calculated coordinates: {new_coords}")
-            print(f"[INFO] Direction from {from_location}: {direction} ({abbr})")
-            print(f"[INFO] Auto-created connection")
-            print(f"[SUCCESS] Added location: {name} ({position})")
-            return True
-
         if self._add_entity(self.locations_file, name, location_data):
-            locations = self._load_entities(self.locations_file)
-            if name in locations and locations[name].get('coordinates'):
-                self._auto_split_paths(name, locations)
-                self._save_entities(self.locations_file, locations)
             print(f"[SUCCESS] Added location: {name} ({position})")
             return True
         return False
-
-    def _auto_split_paths(self, new_loc: str, locations: dict):
-        """Split existing paths that pass through newly added location"""
-        from path_intersect import check_path_intersection
-        from connection_utils import get_unique_edges
-        for loc_a, loc_b, conn in get_unique_edges(locations):
-            if loc_a == new_loc or loc_b == new_loc:
-                continue
-            intersections = check_path_intersection(loc_a, loc_b, locations)
-            if new_loc in intersections:
-                terrain = conn.get('terrain', 'open')
-                print(f"[INFO] Path {loc_a} ↔ {loc_b} passes through {new_loc} — splitting")
-                remove_canonical_connection(loc_a, loc_b, locations)
-                from path_split import add_connection
-                add_connection(loc_a, new_loc, locations, terrain)
-                add_connection(new_loc, loc_b, locations, terrain)
 
     def connect_locations(self, from_loc: str, to_loc: str, path: str,
                          terrain: str = None, distance: float = None) -> bool:
@@ -149,13 +77,6 @@ class LocationManager(EntityManager):
             kwargs['terrain'] = terrain
         if distance:
             kwargs['distance_meters'] = int(distance)
-            from_coords = locations[from_loc].get('coordinates')
-            to_coords = locations[to_loc].get('coordinates')
-            if from_coords and to_coords:
-                from pathfinding import PathFinder
-                pf = PathFinder()
-                bearing = pf.calculate_bearing(from_coords, to_coords)
-                kwargs['bearing'] = bearing
 
         add_canonical_connection(from_loc, to_loc, locations, **kwargs)
 
@@ -215,230 +136,6 @@ class LocationManager(EntityManager):
         locations = self._load_entities(self.locations_file)
         return cu_get_connections(name, locations)
 
-    def decide_route(self, from_loc: str, to_loc: str) -> bool:
-        """
-        Interactive route decision - analyzes options and prompts DM to choose
-        Returns True on success, False on failure
-        """
-        import json
-
-        # Get navigation suggestion
-        suggestion = self.path_manager.suggest_navigation(from_loc, to_loc)
-
-        if suggestion.get("method") == "error":
-            print(f"[ERROR] {suggestion.get('message')}")
-            return False
-
-        if suggestion.get("method") != "needs_decision":
-            # Already decided
-            cached = self.path_manager.get_cached_decision(from_loc, to_loc)
-            if cached:
-                print(f"[INFO] Decision already cached: {cached['decision']}")
-                print(json.dumps(cached, indent=2, ensure_ascii=False))
-                return True
-
-        # Display options
-        print("=" * 60)
-        print(f"ROUTE DECISION: {from_loc} → {to_loc}")
-        print("=" * 60)
-
-        options = suggestion.get("options", {})
-        analysis = suggestion.get("analysis", {})
-
-        print("\nAVAILABLE OPTIONS:\n")
-
-        option_keys = []
-
-        if "direct" in options:
-            opt = options["direct"]
-            option_keys.append("direct")
-            print(f"[1] DIRECT PATH")
-            print(f"    Distance: {opt['distance']}m")
-            print(f"    Direction: {opt['direction']}")
-            print(f"    Bearing: {opt['bearing']}°")
-            print()
-
-        if "use_route" in options:
-            opt = options["use_route"]
-            option_keys.append("use_route")
-            print(f"[2] USE EXISTING ROUTE")
-            print(f"    Path: {' → '.join(opt['route'])}")
-            print(f"    Distance: {opt['distance']}m")
-            print(f"    Hops: {opt['hops']}")
-            print()
-
-        if "blocked_reason" in options:
-            print(f"[!] DIRECT PATH BLOCKED: {options['blocked_reason']}\n")
-
-        print(f"[3] BLOCK THIS ROUTE (permanently)")
-        option_keys.append("blocked")
-        print()
-
-        print("=" * 60)
-        print("Enter choice [1-3]: ", end='', flush=True)
-
-        try:
-            choice = input().strip()
-            choice_num = int(choice)
-
-            if choice_num < 1 or choice_num > len(option_keys) + 1:
-                print(f"[ERROR] Invalid choice: {choice}")
-                return False
-
-            if choice_num == len(option_keys) + 1:
-                # Block route
-                print("Enter reason for blocking: ", end='', flush=True)
-                reason = input().strip()
-                self.path_manager.cache_decision(from_loc, to_loc, "blocked", reason=reason)
-                print(f"[SUCCESS] Route blocked: {reason}")
-                return True
-
-            # Get selected decision
-            decision = option_keys[choice_num - 1]
-
-            if decision == "direct":
-                self.path_manager.cache_decision(from_loc, to_loc, "direct")
-                print(f"[SUCCESS] Cached decision: use direct path")
-
-            elif decision == "use_route":
-                route = options["use_route"]["route"]
-                self.path_manager.cache_decision(from_loc, to_loc, "use_route", route=route)
-                print(f"[SUCCESS] Cached decision: use route through {len(route)-2} locations")
-
-            return True
-
-        except (ValueError, KeyboardInterrupt, EOFError):
-            print("\n[ERROR] Invalid input or cancelled")
-            return False
-
-    def show_routes(self, from_loc: str, to_loc: str) -> bool:
-        """
-        Show all possible routes between two locations
-        Returns True on success, False on failure
-        """
-        import json
-
-        analysis = self.path_manager.analyze_route_options(from_loc, to_loc)
-
-        if analysis.get("error"):
-            print(f"[ERROR] {analysis['error']}")
-            return False
-
-        print("=" * 60)
-        print(f"ROUTES: {from_loc} → {to_loc}")
-        print("=" * 60)
-        print()
-
-        # Check cached decision
-        cached = self.path_manager.get_cached_decision(from_loc, to_loc)
-        if cached:
-            print(f"CACHED DECISION: {cached['decision']}")
-            if cached.get('reason'):
-                print(f"  Reason: {cached['reason']}")
-            if cached.get('route'):
-                print(f"  Route: {' → '.join(cached['route'])}")
-            print()
-
-        # Direct path
-        if analysis.get("direct_distance"):
-            print(f"DIRECT PATH:")
-            print(f"  Distance: {analysis['direct_distance']}m")
-            print(f"  Bearing: {analysis['direct_bearing']}°")
-
-            from pathfinding import PathFinder
-            pf = PathFinder()
-            direction, abbr = pf.bearing_to_compass(analysis['direct_bearing'])
-            print(f"  Direction: {direction} ({abbr})")
-
-            if analysis.get("direct_blocked"):
-                print(f"  ⚠ BLOCKED: {analysis['blocked_reason']}")
-            print()
-
-        # Existing routes
-        existing_routes = analysis.get("existing_routes", [])
-        if existing_routes:
-            print(f"EXISTING ROUTES ({len(existing_routes)}):")
-            for i, route in enumerate(existing_routes, 1):
-                print(f"\n  Route {i}:")
-                print(f"    Path: {' → '.join(route['path'])}")
-                print(f"    Distance: {route['distance']}m")
-                print(f"    Hops: {route['hops']}")
-                # Show terrains for each hop
-                if route.get('terrains'):
-                    terrains_str = ' → '.join(route['terrains'])
-                    print(f"    Terrain: {terrains_str}")
-        else:
-            print("NO EXISTING ROUTES FOUND")
-
-        print()
-        print("=" * 60)
-        return True
-
-    def block_direction(self, location: str, from_deg: float, to_deg: float, reason: str) -> bool:
-        """
-        Add blocked direction range to a location
-        Returns True on success, False on failure
-        """
-        # Load locations
-        locations = self._load_entities(self.locations_file)
-
-        if location not in locations:
-            print(f"[ERROR] Location '{location}' not found")
-            return False
-
-        # Initialize blocked_ranges if needed
-        if 'blocked_ranges' not in locations[location]:
-            locations[location]['blocked_ranges'] = []
-
-        # Check for overlaps
-        for block in locations[location]['blocked_ranges']:
-            if (from_deg <= block['to'] and to_deg >= block['from']):
-                print(f"[WARNING] Range overlaps with existing block: {block['from']}° - {block['to']}°")
-
-        # Add new block
-        locations[location]['blocked_ranges'].append({
-            'from': from_deg,
-            'to': to_deg,
-            'reason': reason
-        })
-
-        if self._save_entities(self.locations_file, locations):
-            print(f"[SUCCESS] Blocked {from_deg}° - {to_deg}° at {location}: {reason}")
-            return True
-        return False
-
-    def unblock_direction(self, location: str, from_deg: float, to_deg: float) -> bool:
-        """
-        Remove blocked direction range from a location
-        Returns True on success, False on failure
-        """
-        # Load locations
-        locations = self._load_entities(self.locations_file)
-
-        if location not in locations:
-            print(f"[ERROR] Location '{location}' not found")
-            return False
-
-        if 'blocked_ranges' not in locations[location]:
-            print(f"[ERROR] No blocked ranges at {location}")
-            return False
-
-        # Find and remove matching block
-        original_count = len(locations[location]['blocked_ranges'])
-        locations[location]['blocked_ranges'] = [
-            block for block in locations[location]['blocked_ranges']
-            if not (block['from'] == from_deg and block['to'] == to_deg)
-        ]
-
-        new_count = len(locations[location]['blocked_ranges'])
-        if new_count == original_count:
-            print(f"[ERROR] No matching blocked range found: {from_deg}° - {to_deg}°")
-            return False
-
-        if self._save_entities(self.locations_file, locations):
-            print(f"[SUCCESS] Unblocked {from_deg}° - {to_deg}° at {location}")
-            return True
-        return False
 
     def create_batch(self, locations_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -526,10 +223,6 @@ def main():
     add_parser = subparsers.add_parser('add', help='Add new location')
     add_parser.add_argument('name', help='Location name')
     add_parser.add_argument('position', help='Relative position')
-    add_parser.add_argument('--from', dest='from_location', help='Origin location for coordinates')
-    add_parser.add_argument('--bearing', type=float, help='Direction in degrees (0=North)')
-    add_parser.add_argument('--distance', type=float, help='Distance in meters')
-    add_parser.add_argument('--terrain', default='open', help='Terrain type (open, forest, urban, etc.)')
 
     # Connect locations
     connect_parser = subparsers.add_parser('connect', help='Connect two locations')
@@ -555,29 +248,6 @@ def main():
     connections_parser = subparsers.add_parser('connections', help='Get location connections')
     connections_parser.add_argument('name', help='Location name')
 
-    # Decide route
-    decide_parser = subparsers.add_parser('decide', help='Decide route between locations')
-    decide_parser.add_argument('from_loc', help='From location')
-    decide_parser.add_argument('to_loc', help='To location')
-
-    # Show routes
-    routes_parser = subparsers.add_parser('routes', help='Show all possible routes')
-    routes_parser.add_argument('from_loc', help='From location')
-    routes_parser.add_argument('to_loc', help='To location')
-
-    # Block direction
-    block_parser = subparsers.add_parser('block', help='Block direction range')
-    block_parser.add_argument('location', help='Location name')
-    block_parser.add_argument('from_deg', type=float, help='From bearing (degrees)')
-    block_parser.add_argument('to_deg', type=float, help='To bearing (degrees)')
-    block_parser.add_argument('reason', help='Reason for blocking')
-
-    # Unblock direction
-    unblock_parser = subparsers.add_parser('unblock', help='Unblock direction range')
-    unblock_parser.add_argument('location', help='Location name')
-    unblock_parser.add_argument('from_deg', type=float, help='From bearing (degrees)')
-    unblock_parser.add_argument('to_deg', type=float, help='To bearing (degrees)')
-
     args = parser.parse_args()
 
     if not args.action:
@@ -587,14 +257,7 @@ def main():
     manager = LocationManager()
 
     if args.action == 'add':
-        if not manager.add_location(
-            args.name,
-            args.position,
-            from_location=args.from_location,
-            bearing=args.bearing,
-            distance=args.distance,
-            terrain=args.terrain
-        ):
+        if not manager.add_location(args.name, args.position):
             sys.exit(1)
 
     elif args.action == 'connect':
@@ -628,21 +291,6 @@ def main():
         else:
             print("No connections found")
 
-    elif args.action == 'decide':
-        if not manager.decide_route(args.from_loc, args.to_loc):
-            sys.exit(1)
-
-    elif args.action == 'routes':
-        if not manager.show_routes(args.from_loc, args.to_loc):
-            sys.exit(1)
-
-    elif args.action == 'block':
-        if not manager.block_direction(args.location, args.from_deg, args.to_deg, args.reason):
-            sys.exit(1)
-
-    elif args.action == 'unblock':
-        if not manager.unblock_direction(args.location, args.from_deg, args.to_deg):
-            sys.exit(1)
 
 
 if __name__ == "__main__":

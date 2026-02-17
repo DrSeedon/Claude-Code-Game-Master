@@ -16,11 +16,16 @@ except ImportError:
     print("[ERROR] Pygame not installed. Install with: uv pip install pygame")
     sys.exit(1)
 
-sys.path.insert(0, str(Path(__file__).parent))
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from json_ops import JsonOperations
+from lib.json_ops import JsonOperations
+from lib.connection_utils import get_unique_edges
+
+MODULE_DIR = Path(__file__).parent
+sys.path.insert(0, str(MODULE_DIR))
+
 from path_intersect import check_path_intersection
-from connection_utils import get_unique_edges
 
 DEFAULT_TERRAIN_COLORS = {
     'open': [100, 200, 100],

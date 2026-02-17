@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Time management module for DM tools."""
 
-import json
 import sys
 from pathlib import Path
 from lib.campaign_manager import CampaignManager
@@ -27,14 +26,14 @@ class TimeManager:
 
             self.json_ops = JsonOperations(str(self.campaign_dir))
 
-    def update_time(self, time_of_day: str, date: str, elapsed_hours: float = 0, precise_time: str = None, sleeping: bool = False) -> bool:
+    def update_time(self, time_of_day: str, date: str, elapsed_hours: float = 0, precise_time: str = None) -> bool:
         """
-        Update campaign time and optionally apply time effects.
+        Update campaign time and check timed consequences.
 
         Args:
             time_of_day: Descriptive time (e.g., "Evening", "Dawn")
             date: Campaign date string
-            elapsed_hours: Hours that passed (manual, for time effects)
+            elapsed_hours: Hours that passed (for timed consequences)
             precise_time: Exact time in HH:MM format (auto-calculates elapsed)
 
         Returns:
@@ -42,18 +41,15 @@ class TimeManager:
         """
         data = self.json_ops.load_json("campaign-overview.json")
 
-        # Calculate elapsed_hours from precise_time if provided
         if precise_time:
             old_precise_time = data.get('precise_time')
             if old_precise_time:
-                # Parse and calculate difference
                 from datetime import datetime
                 try:
                     old_dt = datetime.strptime(old_precise_time, "%H:%M")
                     new_dt = datetime.strptime(precise_time, "%H:%M")
                     elapsed_seconds = (new_dt - old_dt).total_seconds()
 
-                    # Handle day rollover (negative elapsed)
                     if elapsed_seconds < 0:
                         elapsed_seconds += 24 * 3600
 
@@ -62,43 +58,20 @@ class TimeManager:
                 except ValueError:
                     print(f"[WARNING] Invalid time format, using manual elapsed")
 
-        # 1. Update time
         data['time_of_day'] = time_of_day
         data['current_date'] = date
         if precise_time:
             data['precise_time'] = precise_time
 
-        results = {
-            'time_updated': True,
-            'custom_stats_changed': [],
-            'consequences_triggered': [],
-            'stat_consequences': []
-        }
-
-        # 2. Apply time effects if elapsed_hours > 0
+        consequences_triggered = []
         if elapsed_hours > 0:
-            time_effects = data.get('campaign_rules', {}).get('time_effects', {})
+            consequences_triggered = self._check_time_consequences(elapsed_hours)
 
-            if time_effects.get('enabled'):
-                # Apply custom stat changes
-                stat_changes = self._apply_time_effects(elapsed_hours, time_effects, sleeping=sleeping)
-                results['custom_stats_changed'] = stat_changes
-
-                # Check stat consequences (hunger=0 → damage)
-                stat_consequences = self._check_stat_consequences(elapsed_hours, time_effects)
-                results['stat_consequences'] = stat_consequences
-
-                # Check time-based consequences
-                triggered = self._check_time_consequences(elapsed_hours)
-                results['consequences_triggered'] = triggered
-
-        # 3. Save updated campaign data
         if not self.json_ops.save_json("campaign-overview.json", data):
             print(f"[ERROR] Failed to update time")
             return False
 
-        # 4. Print report
-        self._print_time_report(time_of_day, date, precise_time, results)
+        self._print_time_report(time_of_day, date, precise_time, elapsed_hours, consequences_triggered)
 
         return True
 
@@ -148,196 +121,6 @@ class TimeManager:
             'precise_time': data.get('precise_time')
         }
 
-    def _apply_time_effects(self, elapsed_hours: int, time_effects: dict, sleeping: bool = False) -> list:
-        """Apply custom stat changes based on time_effects rules"""
-        from lib.player_manager import PlayerManager
-
-        if self.campaign_mgr is None:
-            player_mgr = PlayerManager(str(self.campaign_dir), require_active_campaign=False)
-        else:
-            player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
-
-        campaign = self.json_ops.load_json("campaign-overview.json")
-        char_name = campaign.get('current_character')
-
-        if not char_name:
-            return []
-
-        char = player_mgr.get_player(char_name)
-        if not char:
-            return []
-
-        rules = time_effects.get('rules', [])
-
-        import copy
-        sim_char = copy.deepcopy(char)
-
-        for _ in range(int(elapsed_hours)):
-            for rule in rules:
-                stat = rule['stat']
-                change_per_hour = rule.get('per_hour', 0)
-
-                if stat == 'sleep' and sleeping:
-                    change_per_hour = rule.get('sleep_restore_per_hour', 12.5)
-
-                condition = rule.get('condition')
-                if condition and not self._check_rule_condition(condition, sim_char):
-                    continue
-
-                if abs(change_per_hour) < 0.001:
-                    continue
-
-                if stat == 'hp':
-                    sim_char['hp']['current'] = max(0, min(
-                        sim_char['hp']['current'] + int(change_per_hour),
-                        sim_char['hp']['max']
-                    ))
-                else:
-                    cs = sim_char.get('custom_stats', {}).get(stat)
-                    if cs:
-                        new_val = cs['current'] + change_per_hour
-                        cs_max = cs.get('max')
-                        cs_min = cs.get('min', 0)
-                        if cs_max is not None:
-                            new_val = min(new_val, cs_max)
-                        if cs_min is not None:
-                            new_val = max(new_val, cs_min)
-                        cs['current'] = new_val
-
-        changes = []
-        for stat in set(t['stat'] for t in rules):
-            if stat == 'hp':
-                old_val = char['hp']['current']
-                new_val = sim_char['hp']['current']
-                int_change = new_val - old_val
-                if int_change != 0:
-                    player_mgr.modify_hp(char_name, int_change)
-                    char = player_mgr.get_player(char_name)
-                    changes.append({'stat': 'hp', 'old': old_val, 'new': char['hp']['current'], 'change': int_change})
-            else:
-                old_cs = char.get('custom_stats', {}).get(stat)
-                new_cs = sim_char.get('custom_stats', {}).get(stat)
-                if old_cs and new_cs:
-                    diff = new_cs['current'] - old_cs['current']
-                    if abs(diff) > 0.001:
-                        result = player_mgr.modify_custom_stat(name=char_name, stat=stat, amount=diff)
-                        if result and result.get('success'):
-                            changes.append({'stat': stat, 'old': result['old_value'], 'new': result['new_value'], 'change': diff})
-
-        return changes
-
-    def _check_rule_condition(self, condition: str, char: dict) -> bool:
-        """Check if a rule condition is met. Supports: 'hp < max', 'hp > 0', 'stat:name < value'"""
-        try:
-            parts = condition.split()
-            if len(parts) != 3:
-                return True
-
-            target, operator, value_str = parts
-
-            if target == 'hp':
-                current = char['hp']['current']
-                if value_str == 'max':
-                    compare_to = char['hp']['max']
-                else:
-                    compare_to = float(value_str)
-            elif target.startswith('stat:'):
-                stat_name = target[5:]
-                custom_stats = char.get('custom_stats', {})
-                if stat_name not in custom_stats:
-                    return True
-                current = custom_stats[stat_name]['current']
-                if value_str == 'max':
-                    compare_to = custom_stats[stat_name].get('max', 999999)
-                else:
-                    compare_to = float(value_str)
-            else:
-                return True
-
-            if operator == '<':
-                return current < compare_to
-            elif operator == '<=':
-                return current <= compare_to
-            elif operator == '>':
-                return current > compare_to
-            elif operator == '>=':
-                return current >= compare_to
-            elif operator == '==':
-                return current == compare_to
-            elif operator == '!=':
-                return current != compare_to
-        except (ValueError, KeyError, TypeError):
-            pass
-        return True
-
-    def _check_stat_consequences(self, elapsed_hours: int, time_effects: dict) -> list:
-        """Check and apply stat-based consequences (e.g., hunger=0 → damage)"""
-        from lib.player_manager import PlayerManager
-
-        # Check if we're in test mode (no campaign_mgr)
-        if self.campaign_mgr is None:
-            player_mgr = PlayerManager(str(self.campaign_dir), require_active_campaign=False)
-        else:
-            player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
-
-        campaign = self.json_ops.load_json("campaign-overview.json")
-        char_name = campaign.get('current_character')
-
-        if not char_name:
-            return []
-
-        char = player_mgr.get_player(char_name)
-        if not char:
-            return []
-
-        custom_stats = char.get('custom_stats', {})
-        stat_consequences = time_effects.get('stat_consequences', {})
-
-        triggered = []
-
-        for consequence_name, consequence_data in stat_consequences.items():
-            condition = consequence_data['condition']
-            stat = condition['stat']
-            operator = condition['operator']
-            threshold = condition['value']
-
-            if stat not in custom_stats:
-                continue
-
-            current_value = custom_stats[stat]['current']
-
-            # Check condition
-            met = False
-            if operator == '<=':
-                met = current_value <= threshold
-            elif operator == '>=':
-                met = current_value >= threshold
-            elif operator == '==':
-                met = current_value == threshold
-
-            if met:
-                # Apply effects
-                for effect in consequence_data.get('effects', []):
-                    effect_type = effect['type']
-
-                    if effect_type == 'hp_damage':
-                        damage = effect['amount']
-                        if effect.get('per_hour'):
-                            damage *= elapsed_hours
-                        player_mgr.modify_hp(char_name, damage)
-
-                    elif effect_type == 'condition':
-                        player_mgr.modify_condition(char_name, 'add', effect['name'])
-
-                    elif effect_type == 'message':
-                        triggered.append({
-                            'type': 'stat_consequence',
-                            'name': consequence_name,
-                            'message': effect['text']
-                        })
-
-        return triggered
-
     def _check_time_consequences(self, elapsed_hours: int) -> list:
         """Check and trigger time-based consequences"""
         data = self.json_ops.load_json("consequences.json")
@@ -380,26 +163,20 @@ class TimeManager:
 
         return triggered
 
-    def _print_time_report(self, time_of_day: str, date: str, precise_time: str, results: dict):
-        """Print formatted report of time update results"""
+    def _print_time_report(self, time_of_day: str, date: str, precise_time: str, elapsed_hours: float, consequences_triggered: list):
+        """Print formatted report of time update results."""
         time_str = f"{time_of_day}"
         if precise_time:
             time_str += f" ({precise_time})"
 
         print(f"[SUCCESS] Time updated to: {time_str}, {date}")
 
-        # Custom stats changes (already printed by player_manager.modify_custom_stat)
+        if elapsed_hours > 0:
+            print(f"[ELAPSED] {elapsed_hours:.2f}")
 
-        # Stat consequences (hunger=0 → damage)
-        if results['stat_consequences']:
-            print("\nStat Consequences:")
-            for sc in results['stat_consequences']:
-                print(f"  ⚠️ {sc['name']}: {sc['message']}")
-
-        # Time consequences triggered
-        if results['consequences_triggered']:
+        if consequences_triggered:
             print("\nTriggered Events:")
-            for tc in results['consequences_triggered']:
+            for tc in consequences_triggered:
                 print(f"  ⚠️ [{tc['id']}] {tc['consequence']}")
 
 
@@ -416,8 +193,6 @@ def main():
     update_parser.add_argument('date', help='Campaign date')
     update_parser.add_argument('--elapsed', type=int, default=0, help='Hours elapsed (manual)')
     update_parser.add_argument('--precise-time', help='Exact time HH:MM (auto-calculates elapsed)')
-    update_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping (sleep restores instead of drains)')
-
     # Get time
     subparsers.add_parser('get', help='Get current campaign time')
 
@@ -435,8 +210,7 @@ def main():
                 args.time_of_day,
                 args.date,
                 elapsed_hours=args.elapsed,
-                precise_time=args.precise_time,
-                sleeping=args.sleeping
+                precise_time=args.precise_time
             ):
                 sys.exit(1)
 

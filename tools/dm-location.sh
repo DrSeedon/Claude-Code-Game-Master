@@ -7,20 +7,20 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-location.sh <action> [args]"
     echo ""
     echo "Actions:"
-    echo "  add <name> <position> [--from <loc>] [--bearing <deg>] [--distance <m>] [--terrain <type>]"
-    echo "                                     - Add new location with auto-calculated coordinates"
-    echo "  connect <from> <to> <path>         - Connect two locations"
-    echo "  describe <name> <description>      - Set location description"
-    echo "  get <name>                         - Get location info"
-    echo "  list                               - List all locations"
-    echo "  connections <name>                 - Show location connections"
+    echo "  add <name> <position>                - Add new location (simple)"
+    echo "  add <name> <position> --from <loc> --bearing <deg> --distance <m> [--terrain <type>]"
+    echo "                                       - Add with coordinates (delegates to navigation module)"
+    echo "  connect <from> <to> <path>           - Connect two locations"
+    echo "  describe <name> <description>        - Set location description"
+    echo "  get <name>                           - Get location info"
+    echo "  list                                 - List all locations"
+    echo "  connections <name>                   - Show location connections"
     echo ""
-    echo "Navigation & Pathfinding:"
-    echo "  decide <from> <to>                 - Decide route between locations"
-    echo "  routes <from> <to>                 - Show all possible routes"
+    echo "Navigation (delegates to coordinate-navigation module):"
+    echo "  decide <from> <to>                   - Decide route between locations"
+    echo "  routes <from> <to>                   - Show all possible routes"
     echo "  block <location> <from_deg> <to_deg> <reason> - Block direction range"
     echo "  unblock <location> <from_deg> <to_deg>        - Unblock direction range"
-    echo "  split [--dry-run]                  - Auto-split paths through intermediate locations"
     echo ""
     echo "Examples:"
     echo "  dm-location.sh add \"Volcano Temple\" \"north of village\""
@@ -40,11 +40,23 @@ shift
 case "$ACTION" in
     add)
         if [ "$#" -lt 2 ]; then
-            echo "Usage: dm-location.sh add <name> <position> [--from <loc>] [--bearing <deg>] [--distance <m>] [--terrain <type>]"
+            echo "Usage: dm-location.sh add <name> <position> [--from <loc> --bearing <deg> --distance <m> --terrain <type>]"
             exit 1
         fi
-        # Pass all arguments to Python
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" add "$@"
+        # Check if --from flag is present → delegate to navigation module
+        HAS_FROM=false
+        for arg in "$@"; do
+            if [ "$arg" = "--from" ]; then
+                HAS_FROM=true
+                break
+            fi
+        done
+        if [ "$HAS_FROM" = true ]; then
+            CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path)
+            bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-navigation.sh" add "$@"
+        else
+            $PYTHON_CMD "$LIB_DIR/location_manager.py" add "$@"
+        fi
         ;;
 
     connect)
@@ -90,7 +102,8 @@ case "$ACTION" in
             echo "Usage: dm-location.sh decide <from> <to>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" decide "$1" "$2"
+        CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path)
+        bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-navigation.sh" decide "$1" "$2"
         ;;
 
     routes)
@@ -98,7 +111,8 @@ case "$ACTION" in
             echo "Usage: dm-location.sh routes <from> <to>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" routes "$1" "$2"
+        CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path)
+        bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-navigation.sh" routes "$1" "$2"
         ;;
 
     block)
@@ -106,7 +120,7 @@ case "$ACTION" in
             echo "Usage: dm-location.sh block <location> <from_deg> <to_deg> <reason>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" block "$1" "$2" "$3" "$4"
+        bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-navigation.sh" block "$1" "$2" "$3" "$4"
         ;;
 
     unblock)
@@ -114,16 +128,13 @@ case "$ACTION" in
             echo "Usage: dm-location.sh unblock <location> <from_deg> <to_deg>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/location_manager.py" unblock "$1" "$2" "$3"
+        bash "$PROJECT_ROOT/.claude/modules/coordinate-navigation/tools/dm-navigation.sh" unblock "$1" "$2" "$3"
         ;;
 
     split)
-        CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path)
-        if [ "$1" == "--dry-run" ]; then
-            $PYTHON_CMD "$LIB_DIR/path_split.py" "$CAMPAIGN_DIR" --dry-run
-        else
-            $PYTHON_CMD "$LIB_DIR/path_split.py" "$CAMPAIGN_DIR" --apply
-        fi
+        echo "[DEPRECATED] split command moved to coordinate-navigation module"
+        echo "Use navigation features via dm-navigation.sh decide/routes instead"
+        exit 1
         ;;
 
     *)
