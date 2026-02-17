@@ -241,22 +241,24 @@ class PathFinder:
 
         Returns:
             List of route dicts sorted by distance (shortest first)
+            Each route includes: path, distance, hops, terrains (list of terrain types per hop)
         """
         if from_loc not in locations or to_loc not in locations:
             return []
 
         all_routes = []
-        queue = deque([(from_loc, [from_loc], 0, set())])
+        queue = deque([(from_loc, [from_loc], 0, set(), [])])  # Added terrains list
 
         while queue and len(all_routes) < max_routes:
-            current, path, distance, visited_edges = queue.popleft()
+            current, path, distance, visited_edges, terrains = queue.popleft()
 
             # Found destination - save this route
             if current == to_loc:
                 all_routes.append({
                     "path": path,
                     "distance": distance,
-                    "hops": len(path) - 1
+                    "hops": len(path) - 1,
+                    "terrains": terrains  # List of terrain types for each hop
                 })
                 continue
 
@@ -264,6 +266,7 @@ class PathFinder:
             for conn in cu_get_connections(current, locations):
                 next_loc = conn.get("to")
                 conn_distance = conn.get("distance_meters", 0)
+                conn_terrain = conn.get("terrain", "open")  # Get terrain type
 
                 # Create edge identifier
                 edge = tuple(sorted([current, next_loc]))
@@ -279,7 +282,8 @@ class PathFinder:
                         next_loc,
                         path + [next_loc],
                         distance + conn_distance,
-                        new_visited
+                        new_visited,
+                        terrains + [conn_terrain]  # Append terrain for this hop
                     ))
 
         # Sort by distance (shortest first)

@@ -18,7 +18,7 @@ from entity_manager import EntityManager
 class ConsequenceManager(EntityManager):
     """Manage consequence/event tracking. Inherits from EntityManager for common functionality."""
 
-    def __init__(self, world_state_dir: str = None):
+    def __init__(self, world_state_dir: Optional[str] = None):
         super().__init__(world_state_dir)
         self.consequences_file = "consequences.json"
         self._ensure_file()
@@ -30,7 +30,7 @@ class ConsequenceManager(EntityManager):
             data = {'active': [], 'resolved': []}
             self.json_ops.save_json(self.consequences_file, data)
 
-    def add_consequence(self, description: str, trigger: str, trigger_hours: int = None) -> str:
+    def add_consequence(self, description: str, trigger: str, trigger_hours: Optional[int] = None) -> str:
         """
         Add a new consequence with optional automatic triggering.
 
@@ -153,7 +153,21 @@ def main():
         else:
             print(f"{len(pending)} pending consequences:")
             for c in pending:
-                print(f"  [{c['id']}] {c['consequence']} (triggers: {c['trigger']})")
+                time_info = c['trigger']
+                th = c.get('trigger_hours')
+                he = c.get('hours_elapsed')
+                if th is not None and he is not None:
+                    remaining = th - he
+                    if remaining <= 0:
+                        time_info = "IMMINENT!"
+                    elif remaining < 1:
+                        time_info = f"{int(remaining * 60)}min left"
+                    elif remaining < 24:
+                        time_info = f"{remaining:.1f}h left"
+                    else:
+                        days = remaining / 24
+                        time_info = f"{days:.1f}d left ({remaining:.0f}h)"
+                print(f"  [{c['id']}] {c['consequence']} ({time_info})")
 
     elif args.action == 'resolve':
         if not manager.resolve(args.id):

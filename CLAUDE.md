@@ -138,7 +138,57 @@ Track turn order in memory (highest to lowest).
 
 ### Phase 3: Combat Rounds
 
-**Player Turn:**
+**Firearms Combat (STALKER/Modern Campaigns):**
+
+For campaigns with firearms systems (custom fire modes, PEN/PROT mechanics), use the automated resolver:
+
+```bash
+bash tools/dm-combat.sh resolve \
+  --attacker "Character Name" \
+  --weapon "АКМ" \
+  --fire-mode "full_auto" \
+  --ammo 54 \
+  --targets "Snork#1:AC14:HP25:PROT1" "Snork#2:AC14:HP25:PROT1"
+
+# Test mode - show detailed output but DON'T update ammo/XP
+bash tools/dm-combat.sh resolve \
+  --attacker "Меченый" \
+  --weapon "АКМ" \
+  --fire-mode "burst" \
+  --ammo 30 \
+  --targets "Bandit:AC13:HP20:PROT2" \
+  --test
+```
+
+**What it does:**
+- Calculates rounds per D&D round (6 sec) based on weapon RPM
+- Applies fire mode penalties (accounts for Стрелок subclass)
+- Rolls all attacks at once with progressive penalties
+- Shows detailed shot-by-shot breakdown: d20 rolls, modifiers, damage dice, raw damage, PEN vs PROT scaling, final damage
+- Auto-persists ammo and XP changes (unless `--test` flag is used)
+- Returns formatted combat result with complete roll details
+
+**Fire Modes:**
+- `single` - 1 shot, no penalty
+- `burst` - 3 shots, penalties -1/-2 (Стрелок) or -2/-4 (normal)
+- `full_auto` - Full magazine in 6 seconds (e.g., АКМ 600 RPM = 60 rounds/round)
+
+**Alternative (for enemy types in campaign_rules):**
+```bash
+bash tools/dm-combat.sh resolve \
+  --attacker "Меченый" \
+  --weapon "АКМ" \
+  --fire-mode "full_auto" \
+  --ammo 54 \
+  --enemy-type "snork" \
+  --enemy-count 6
+```
+
+This automatically pulls enemy stats (AC, HP, PROT) from campaign_rules.
+
+---
+
+**Player Turn (Standard D&D):**
 1. Ask: "Your turn. What do you do?"
 2. Resolve action (Attack, Cast Spell, Dash, Dodge, Help, Hide, Ready)
 3. Roll attack: `uv run python lib/dice.py "1d20+[attack_bonus]"` vs stated AC
@@ -189,14 +239,38 @@ bash tools/dm-player.sh xp "[character]" +[amount]
 | Epic | 250-500 XP | Story milestone, major character growth, significant discovery |
 
 #### 2. Handle Loot [PERSIST BEFORE NARRATING]
-```bash
-# PROACTIVELY spawn loot-dropper agent, then apply all at once:
-bash tools/dm-player.sh loot "[character]" --gold [amount] --items "[item1]" "[item2]"
 
-# Or individually:
+**UNIFIED INVENTORY MANAGER (Recommended):**
+```bash
+# Atomic transaction - all changes apply together or none do
+bash tools/dm-inventory.sh update "[character]" \
+  --gold +150 \
+  --xp +50 \
+  --add "Аптечка" 2 "Патроны 9mm" 30 \
+  --add-unique "АК-74 (5.45x39mm, 2d8+2, PEN 3)" \
+  --remove "Антирад" 1
+
+# Test mode - validate without applying
+bash tools/dm-inventory.sh update "[character]" \
+  --gold -100 \
+  --hp +10 \
+  --test
+
+# View inventory
+bash tools/dm-inventory.sh show "[character]"
+```
+
+**LEGACY COMMANDS (Still Supported):**
+```bash
 bash tools/dm-player.sh gold "[character]" +[amount]
 bash tools/dm-player.sh inventory "[character]" add "[item_name]"
 ```
+
+**Inventory System:**
+- **Stackable Items**: Consumables with quantities (Medkit x3, Ammo 9mm x60, Vodka x2)
+- **Unique Items**: Weapons, armor, quest items (one entry per item, no quantities)
+- Auto-migrates from old format on first use (creates `.backup`)
+- Transactions are atomic - all changes succeed or all fail
 
 #### 3. Record & Advance
 ```bash
@@ -365,11 +439,38 @@ bash tools/dm-search.sh "[destination_name]"
 - **Fast Travel**: Known safe routes skip to destination with appropriate time
 
 ### Phase 3: Update World State
+
+**For overland/normal movement:**
 ```bash
 bash tools/dm-session.sh move "[new_location]"
+```
+- Auto-creates destination if it doesn't exist
+- Auto-creates bidirectional connections from previous location
+- Auto-checks consequences
+
+**For dungeons/buildings/special locations (basements, labs, etc.):**
+
+If destination doesn't exist yet, create it manually FIRST:
+```bash
+# Create the location
+bash tools/dm-location.sh add "[location_name]" "[description]"
+
+# Create connection manually
+bash tools/dm-location.sh connect "[from]" "[to]" --terrain [type] --distance [meters]
+
+# Then move
+bash tools/dm-session.sh move "[location_name]"
+```
+
+**Why manual for dungeons?**
+- More control over terrain type (underground, cave, building_interior)
+- Prevents accidental auto-connections to wrong places
+- Allows setting specific distance (stairs = 10m, long corridor = 100m)
+
+**Time advancement (if needed):**
+```bash
 bash tools/dm-time.sh "[new_time]" "[date]"
 ```
-**Note:** `move` auto-creates the destination in `locations.json` if it doesn't exist and adds bidirectional connections from the previous location. Consequences are automatically checked after every move.
 
 ### Phase 3.1: Coordinate-Based Navigation (Optional)
 
@@ -606,10 +707,14 @@ Separate location per room with `dungeon` field:
 ```
 1. VALIDATE EXIT - Does it exist? Blocked/locked? Secret unfound?
 2. HANDLE OBSTACLES - Locked: pick/force/key. Secret: find first (Perception)
-3. UPDATE STATE - Set destination discovered: true, visited: true
-4. PERSIST - bash tools/dm-session.sh move "[Dungeon - Room Name]"
+3. CREATE LOCATION - If new room, create it first:
+   bash tools/dm-location.sh add "[Dungeon Room Name]" "[description]"
+   bash tools/dm-location.sh connect "[current]" "[new_room]" --terrain [type] --distance [meters]
+4. PERSIST - bash tools/dm-session.sh move "[Dungeon Room Name]"
 5. SHOW ROOM - Describe (2-4 sentences), list exits with types, note creatures
 ```
+
+**IMPORTANT:** For dungeon rooms, ALWAYS create location + connection manually BEFORE moving. `dm-session.sh move` does NOT auto-create dungeons.
 
 **Use Structured when:** Revisited 3+ times, complex puzzle states, player wants tactical grid play
 
@@ -644,6 +749,30 @@ Separate location per room with `dungeon` field:
 
 **THE RULE**: If it happened, persist it BEFORE describing it to the player.
 
+### Unified Inventory Manager (Preferred)
+
+For multiple simultaneous changes, use the atomic transaction system:
+
+```bash
+bash tools/dm-inventory.sh update "[character_name]" \
+  --gold +150 \
+  --hp -10 \
+  --xp +200 \
+  --add "Medkit" 2 "Ammo 9mm" 30 \
+  --remove "Bandage" 1 \
+  --add-unique "Magic Sword (+1)" \
+  --custom-stat hunger +20 thirst -15
+```
+
+**Advantages:**
+- All changes succeed together or fail together (atomic)
+- Single command for complex loot/combat resolution
+- Auto-validates (can't spend gold you don't have, etc.)
+- `--test` flag to preview without applying
+- Supports stackable items (quantities) and unique items (one-offs)
+
+### Individual Commands (Legacy, Still Supported)
+
 | Change Type | Command |
 |-------------|---------|
 | Gold | `bash tools/dm-player.sh gold "[name]" [+/-amount]` |
@@ -667,6 +796,65 @@ Separate location per room with `dungeon` field:
 | **Custom stat changed** | `bash tools/dm-player.sh custom-stat "[name]" "[stat]" [+/-amount]` |
 
 For custom stats, time effects, and timed consequences — see `.claude/rules/custom-campaigns.md`.
+
+### Inventory Manager Flags Reference
+
+**Multi-Flag Operations:**
+```bash
+bash tools/dm-inventory.sh update "[name]" \
+  --gold [+/-amount] \
+  --hp [+/-amount] \
+  --xp [+/-amount] \
+  --add "Item1" [qty] "Item2" [qty] \
+  --remove "Item3" [qty] \
+  --add-unique "Unique Item Name" \
+  --remove-unique "Unique Item Name" \
+  --set "Item4" [exact_qty] \
+  --custom-stat [stat_name] [+/-amount] \
+  --test
+```
+
+**Flag Details:**
+- `--gold` - Add or subtract gold (validates non-negative)
+- `--hp` - Modify HP (validates within 0 to max_hp)
+- `--xp` - Add XP (awards only, no subtraction)
+- `--add` - Add stackable items (creates if new, increments if exists)
+- `--remove` - Remove stackable items (validates sufficient quantity)
+- `--set` - Set exact quantity for stackable item
+- `--add-unique` - Add unique item to unique array (weapons, armor, quest items)
+- `--remove-unique` - Remove unique item from unique array
+- `--custom-stat` - Modify custom stats (hunger, thirst, radiation, etc.)
+- `--test` - Validation mode: shows what would happen but doesn't apply
+
+**Item Categories:**
+- **Stackable**: Consumables with quantities (Medkit, Ammo, Food, Bandages)
+- **Unique**: One-off items (Weapons with stats, Armor with AC, Quest items, Artifacts)
+
+**Examples:**
+```bash
+# Post-combat loot
+bash tools/dm-inventory.sh update "Grimjaw" \
+  --gold +250 \
+  --xp +150 \
+  --add "Medkit" 2 "Ammo 5.56mm" 60 \
+  --add-unique "M4A1 Carbine (5.56mm, 2d8+2, PEN 3)"
+
+# Use consumables
+bash tools/dm-inventory.sh update "Silara" \
+  --remove "Medkit" 1 \
+  --hp +20
+
+# Test transaction before applying
+bash tools/dm-inventory.sh update "Conan" \
+  --gold -500 \
+  --add-unique "Platemail Armor (AC 18)" \
+  --test
+```
+
+**View Inventory:**
+```bash
+bash tools/dm-inventory.sh show "[character_name]"
+```
 
 ### Note Categories
 - `session_events` - What happened this session
@@ -956,10 +1144,13 @@ bash tools/dm-player.sh hp "[character_name]" +[amount]
 
 ### Long Rest (8 Hours)
 ```bash
-bash tools/dm-time.sh "Dawn" "[next day date]"
-bash tools/dm-player.sh hp "[character_name]" +[amount]
+bash tools/dm-time.sh "Dawn" "[next day date]" --elapsed 8 --sleeping
 bash tools/dm-note.sh "session_events" "[character] completed a long rest"
 ```
+
+**CRITICAL: Always use `--sleeping` flag for rest!**
+- Without it, sleep stat DECREASES instead of restoring
+- `--sleeping` makes sleep restore to 100 during rest
 
 ### Healing Potions
 - Basic: 2d4+2 HP
@@ -1000,12 +1191,13 @@ bash tools/dm-note.sh "session_events" "[character] completed a long rest"
 | `dm-consequence.sh` | Track events that will trigger later |
 | `dm-note.sh` | Record important facts about the world |
 | `dm-search.sh` | Search world state AND/OR source material (see Search Guide below) |
-| `dm-plot.sh` | View and update plot/quest progress |
+| `dm-plot.sh` | Add, view, and update plot/quest progress |
 | `dm-player.sh` | Update PC stats (HP, XP, gold, inventory) |
 | `dm-session.sh` | Start/end sessions, move party, save/restore |
 | `dm-overview.sh` | Quick summary of world state |
 | `dm-time.sh` | Advance game time |
 | `dm-map.sh` | Display ASCII campaign map or minimap |
+| `dm-combat.sh` | **[MODERN/FIREARMS ONLY]** Automated firearms combat resolver with fire modes, PEN/PROT, RPM-based calculation |
 
 ---
 
@@ -1168,6 +1360,12 @@ bash tools/dm-search.sh "[current_location]"
 - **Saves**: JSON-based snapshots in each campaign's `saves/` folder
 - **Architecture**: Bash wrappers call Python modules in `lib/`
 - **Multi-Campaign**: Tools read `world-state/active-campaign.txt` to determine which campaign folder to use
+- **Inventory Auto-Migration**: When `dm-inventory.sh` first runs on a campaign with old `equipment` array format, it automatically:
+  - Creates `character.json.backup` with timestamp
+  - Converts old format to new `stackable`/`unique` structure
+  - Parses item quantities from names (e.g., "Medkit ×3" → stackable["Medkit"] = 3)
+  - Categorizes weapons/armor/quest items as unique
+  - No manual intervention needed — first run migrates, subsequent runs use new format
 
 ### Auto Memory Policy
 
@@ -1183,6 +1381,53 @@ Claude Code has a persistent memory directory (`~/.claude/projects/.../memory/`)
 | Tool usage patterns | This file (CLAUDE.md) |
 
 Memory is **only** for operational lessons that don't fit anywhere else — e.g., a Python version quirk, an OS-specific workaround. If a lesson applies to all users, put it in CLAUDE.md instead. When in doubt, don't write to memory — read from the existing world state files.
+
+---
+
+## Campaign Templates
+
+When creating new campaigns with specialized mechanics, use pre-built templates from `.claude/templates/`:
+
+### Modern/Firearms Campaign Template
+
+**Use for:** STALKER, Fallout, Modern Military, Cyberpunk, Zombie Survival
+
+**Location:** `.claude/templates/modern-firearms-campaign.json`
+
+**Features included:**
+- **Firearms system** with weapons (АКМ, АК-74, M4A1, SVD, etc.)
+- **Fire modes** (single, burst, full_auto) with RPM-based calculation
+- **PEN vs PROT** damage scaling
+- **Armor types** with PROT ratings
+- **Custom survival stats** (hunger, thirst, radiation, sleep)
+- **Time effects** with hourly stat changes
+- **Encounter system** for travel
+- **Sample enemies** with modern stats (snorks, bandits, mercenaries)
+- **Faction reputation** templates (STALKER, Military, Cyberpunk)
+- **Firearms subclasses** (Стрелок/Sharpshooter, Снайпер/Sniper)
+
+**How to use:**
+
+1. **When creating new campaign**, copy template fields into `campaign-overview.json`:
+   ```bash
+   # Manually merge sections from template into new campaign
+   ```
+
+2. **Customize for your setting:**
+   - Edit weapon list (add/remove as needed)
+   - Adjust survival stat decay rates
+   - Set appropriate faction list
+   - Configure encounter system difficulty
+
+3. **Character creation:**
+   - Copy `custom_stats` template into `character.json`
+   - Add `faction_reputation` section
+   - Choose firearms-compatible subclass (Стрелок recommended)
+
+**Tools that require this template:**
+- `dm-combat.sh` (needs `firearms_system.weapons` and `fire_modes`)
+- Time effects (needs `custom_stats` + `time_effects`)
+- Encounter system (needs `encounter_system` config)
 
 ---
 

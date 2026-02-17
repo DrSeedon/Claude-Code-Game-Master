@@ -2,6 +2,67 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [1.4.0] - 2026-02-17
+
+### Added
+- **Unified Inventory Manager** (`dm-inventory.sh`) — atomic transaction system for character state changes
+  - Multi-flag operations: `--gold`, `--hp`, `--xp`, `--add`, `--remove`, `--add-unique`, `--remove-unique`, `--set`, `--custom-stat`
+  - All changes apply together or fail together (rollback on error)
+  - `--test` flag for validation without applying changes
+  - Stackable items system (consumables with quantities: Medkit x3, Ammo 9mm x60)
+  - Unique items system (weapons, armor, quest items — one entry per item)
+  - Auto-migration from old `equipment` array format to new `stackable`/`unique` structure
+  - Creates timestamped backup on first migration
+  - Validates gold/HP bounds, item quantities, custom stat min/max
+- **Combat Resolver** (`dm-combat.sh`) — automated firearms combat system for modern/STALKER campaigns
+  - Calculates rounds per D&D turn (6 sec) based on weapon RPM
+  - Fire modes: `single`, `burst`, `full_auto` with progressive attack penalties
+  - Accounts for Стрелок subclass bonuses (reduced penalties)
+  - Detailed shot-by-shot output: d20 roll, modifier, hit/miss, damage dice, raw damage, PEN vs PROT scaling, final damage
+  - Auto-persists ammo consumption and XP awards
+  - `--test` flag to preview combat without updating character state
+  - Supports manual target specification or enemy type lookup from `campaign_rules`
+- **Modern Firearms Campaign Template** (`.claude/templates/modern-firearms-campaign.json`)
+  - Pre-configured weapons (АКМ, АК-74, M4A1, SVD, PMm, etc.) with RPM, damage, PEN values
+  - Fire mode definitions with attack penalties
+  - Armor types with PROT ratings
+  - Custom survival stats (hunger, thirst, radiation, sleep)
+  - Time effects with hourly stat changes
+  - Encounter system configuration
+  - Sample enemies (snorks, bandits, mercenaries) with AC/HP/PROT
+- **Plot Manager Enhancements**
+  - `dm-plot.sh add` command for creating new plots/quests
+  - Support for plot types (main, side, personal, faction)
+  - Structured fields: description, NPCs, locations, objectives, rewards, consequences
+- **Consequence Manager Improvements**
+  - Time-remaining display for timed consequences
+  - Shows "IMMINENT!" when trigger time has passed
+  - Human-readable time format (minutes, hours, days)
+
+### Changed
+- **CLAUDE.md** — comprehensive documentation updates
+  - Added "Firearms Combat" section with combat resolver usage
+  - Added "Unified Inventory Manager" section with multi-flag examples
+  - Added "Inventory Manager Flags Reference" with complete flag documentation
+  - Prioritized unified manager over legacy commands in State Persistence section
+  - Added inventory auto-migration notes to Technical Notes
+  - Updated Combat Resolution workflow to show `--test` flag usage
+- **Dungeon Location Creation** — changed from automatic to manual
+  - `dm-session.sh move` no longer auto-creates dungeon locations
+  - DM must manually create dungeon rooms with `dm-location.sh add` before moving
+  - Prevents accidental location bloat in structured dungeons
+
+### Fixed
+- Type hints consistency across managers (`Optional[str] = None` instead of `str = None`)
+- Consequence list display showing trigger conditions properly
+
+### Technical
+- New modules: `lib/combat_resolver.py` (18KB), `lib/inventory_manager.py` (24KB)
+- Bash wrappers: `tools/dm-combat.sh`, `tools/dm-inventory.sh`
+- Combat resolver uses character subclass detection for attack penalty modifiers
+- Inventory manager uses deepcopy snapshots for rollback capability
+- PEN vs PROT damage scaling: `FULL (100%)` → `HIGH (75%)` → `REDUCED (50%)` → `MINIMAL (25%)`
+
 ## [1.3.0] - 2026-02-16
 
 ### Added

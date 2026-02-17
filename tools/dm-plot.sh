@@ -11,6 +11,7 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-plot.sh <action> [args]"
     echo ""
     echo "=== Plot Management ==="
+    echo "  add <name> <desc> [OPTIONS]      Add a new plot/quest"
     echo "  list [--type X] [--status Y]     List plots (filter by type/status)"
     echo "  show <name>                      Show full plot details"
     echo "  search <query>                   Search plots by name, NPCs, locations"
@@ -28,6 +29,7 @@ if [ "$#" -lt 1 ]; then
     echo "  dm-plot.sh list --type main --status active  # Active main plots only"
     echo "  dm-plot.sh show \"The Eight Day Countdown\"    # Full plot details"
     echo "  dm-plot.sh search \"Mordecai\"                 # Find plots with Mordecai"
+    echo "  dm-plot.sh add \"Hunt\" \"Kill 3 boars\" --type side --npcs Barkeep --rewards \"600g\""
     echo "  dm-plot.sh update \"Murder Mystery\" \"Found first clue at docks\""
     echo "  dm-plot.sh complete \"Side Quest\" \"Rescued the merchant\""
     exit 1
@@ -40,6 +42,14 @@ shift  # Remove action from arguments
 
 # Delegate to Python module based on action
 case "$ACTION" in
+    add)
+        if [ "$#" -lt 2 ]; then
+            echo "Usage: dm-plot.sh add <name> <description> [--type X] [--npcs A B] [--locations A B] [--objectives A B] [--rewards X] [--consequences X]"
+            exit 1
+        fi
+        $PYTHON_CMD "$LIB_DIR/plot_manager.py" add "$@"
+        ;;
+
     list)
         $PYTHON_CMD "$LIB_DIR/plot_manager.py" list "$@"
         ;;

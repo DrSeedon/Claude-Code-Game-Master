@@ -35,23 +35,13 @@ class Validators:
     @staticmethod
     def validate_attitude(attitude: str) -> Tuple[bool, Optional[str]]:
         """
-        Validate NPC attitude
+        Validate NPC attitude - accepts any non-empty string
         Returns: (is_valid, error_message)
         """
-        valid_attitudes = [
-            'friendly', 'neutral', 'hostile', 'suspicious', 'helpful',
-            'indifferent', 'fearful', 'respectful', 'dismissive', 'curious',
-            'дружелюбный', 'дружелюбная', 'нейтральный', 'нейтральная',
-            'враждебный', 'враждебная', 'подозрительный', 'подозрительная',
-            'ворчливый', 'ворчливая', 'любопытный', 'любопытная',
-            'равнодушный', 'равнодушная', 'уважительный', 'уважительная',
-            'испуганный', 'испуганная', 'помогающий', 'помогающая'
-        ]
+        if not attitude or not attitude.strip():
+            return False, "Attitude cannot be empty"
 
-        attitude_lower = attitude.lower().strip()
-        if attitude_lower not in valid_attitudes:
-            return False, f"Invalid attitude. Choose from: {', '.join(valid_attitudes)}"
-
+        # Any non-empty string is valid - DM can use any attitude description
         return True, None
 
     @staticmethod

@@ -363,6 +363,10 @@ class LocationManager(EntityManager):
                 print(f"    Path: {' → '.join(route['path'])}")
                 print(f"    Distance: {route['distance']}m")
                 print(f"    Hops: {route['hops']}")
+                # Show terrains for each hop
+                if route.get('terrains'):
+                    terrains_str = ' → '.join(route['terrains'])
+                    print(f"    Terrain: {terrains_str}")
         else:
             print("NO EXISTING ROUTES FOUND")
 
