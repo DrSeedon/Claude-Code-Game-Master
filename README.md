@@ -12,6 +12,46 @@ D&D 5e rules give the story stakes and consequences. You don't need to know D&D 
 
 ## What's New in This Fork
 
+### 🎯 Unified Inventory Manager
+Atomic transaction system for character state — apply multiple changes at once or none at all. Stackable items (consumables with quantities) and unique items (weapons, armor, quest items) with automatic validation and rollback.
+
+```bash
+# Atomic transaction — all changes succeed or fail together
+bash tools/dm-inventory.sh update "Character" \
+  --gold +150 \
+  --xp +200 \
+  --hp -10 \
+  --add "Medkit" 2 "Ammo 9mm" 30 \
+  --add-unique "AK-47 (7.62x39mm, 2d8+3, PEN 4)" \
+  --remove "Bandage" 1 \
+  --custom-stat hunger +20
+
+# Test mode — validate without applying
+bash tools/dm-inventory.sh update "Character" --gold -500 --test
+```
+
+**Auto-migrates** from old inventory format on first use (creates timestamped backup).
+
+### ⚔️ Automated Firearms Combat
+Resolve modern firearms combat with realistic mechanics — RPM-based rounds per turn, fire modes (single/burst/full_auto), progressive attack penalties, and PEN vs PROT damage scaling. Detailed shot-by-shot output with complete roll breakdowns.
+
+```bash
+bash tools/dm-combat.sh resolve \
+  --attacker "Stalker" \
+  --weapon "AKM" \
+  --fire-mode "full_auto" \
+  --ammo 60 \
+  --targets "Mutant#1:AC14:HP30:PROT2" "Mutant#2:AC14:HP30:PROT2"
+
+# Test mode — preview combat without updating state
+bash tools/dm-combat.sh resolve ... --test
+```
+
+**Auto-persists** ammo consumption and XP awards. Accounts for class bonuses (e.g., Стрелок reduced penalties).
+
+### 📦 Modern Firearms Campaign Template
+Pre-built template (`.claude/templates/modern-firearms-campaign.json`) with weapons (AKM, AK-74, M4A1, SVD), armor types with PROT ratings, fire mode definitions, custom survival stats (hunger/thirst/radiation/sleep), time effects, and encounter system — ready for STALKER, Fallout, or Cyberpunk campaigns.
+
 ### Custom Character Stats
 Define **any** stats for your campaign — hunger, thirst, radiation, morale, sanity, reputation — whatever fits your world. Fully universal, zero hardcoded stat names.
 
@@ -21,13 +61,14 @@ bash tools/dm-player.sh custom-stat radiation -5
 ```
 
 ### Time Effects Engine
-Stats change automatically as game time passes. Define rates per hour in your campaign config, and the system handles the rest.
+Stats change automatically as game time passes. Define rates per hour in your campaign config, and the system handles the rest. Supports **conditional effects** (e.g., artifact healing only when HP < max) with per-tick simulation.
 
 ```
 Time updated to: Evening (18:30), Day 3
 Custom Stats:
   hunger: 80 → 68 (-12)
   thirst: 70 → 52 (-18)
+⚠️ TRIGGERED: "Merchant arrives"
 ```
 
 ### Auto Movement Time
@@ -40,10 +81,11 @@ bash tools/dm-session.sh move "Ruins"
 ```
 
 ### Timed Consequences
-Schedule events that trigger after elapsed game time, not just on story beats.
+Schedule events that trigger after elapsed game time, not just on story beats. Time-remaining display shows minutes/hours/days left.
 
 ```bash
 bash tools/dm-consequence.sh add "Trader arrives at camp" "in 24 hours" --hours 24
+# Shows: "Trader arrives (12.5h left)" or "IMMINENT!"
 ```
 
 ### Random Encounter System
@@ -54,11 +96,12 @@ bash tools/dm-encounter.sh check "Village" "Ruins" 2000 open
 ```
 
 ### Coordinate Navigation & Maps
-Locations have real coordinates. A* pathfinding finds routes. View your world as ASCII maps or a GUI window.
+Locations have real coordinates. A* pathfinding finds routes. View your world as ASCII maps or a GUI window. **Canonical connection management** — edges stored once, auto-deduplication.
 
 ```bash
 bash tools/dm-map.sh              # Full ASCII map
 bash tools/dm-map.sh --minimap    # Tactical minimap
+bash tools/dm-map.sh --gui        # GUI window with terrain colors
 
 # Add locations by bearing and distance
 bash tools/dm-location.sh add "Outpost" "Abandoned outpost" \
@@ -66,7 +109,7 @@ bash tools/dm-location.sh add "Outpost" "Abandoned outpost" \
 ```
 
 ### i18n Support
-Cyrillic names, non-English attitudes, and Unicode identifiers work out of the box. Build campaigns in any language.
+Cyrillic names, non-English attitudes, and Unicode identifiers work out of the box. Build campaigns in any language. All JSON saved with `ensure_ascii=False` — no more `\uXXXX` escaping.
 
 ---
 
@@ -158,14 +201,16 @@ Specialist agents spin up on the fly — monster stats, spell mechanics, loot ta
 | `dm-campaign.sh` | Create, list, switch campaigns |
 | `dm-session.sh` | Session lifecycle, movement, save/restore |
 | `dm-player.sh` | HP, XP, gold, inventory, **custom stats** |
+| **`dm-inventory.sh`** | **Unified inventory manager — atomic transactions, stackable/unique items** |
+| **`dm-combat.sh`** | **Automated firearms combat resolver with PEN/PROT mechanics** |
 | `dm-npc.sh` | NPC creation, updates, party management |
 | `dm-location.sh` | Locations, connections, **coordinates, navigation** |
-| `dm-time.sh` | Advance time, **time effects, precise time** |
-| `dm-consequence.sh` | Event scheduling, **timed triggers** |
+| `dm-time.sh` | Advance time, **time effects, precise time, conditional effects** |
+| `dm-consequence.sh` | Event scheduling, **timed triggers with countdown** |
 | `dm-encounter.sh` | **Random encounter checks** |
 | `dm-map.sh` | **ASCII maps, minimap, GUI** |
 | `dm-path.sh` | **A* pathfinding between locations** |
-| `dm-plot.sh` | Quest and storyline tracking |
+| `dm-plot.sh` | Quest and storyline tracking, **plot creation** |
 | `dm-search.sh` | Search world state and source material |
 | `dm-enhance.sh` | RAG-powered entity enrichment |
 | `dm-extract.sh` | Document import pipeline |
@@ -194,10 +239,11 @@ Specialist agents spin up on the fly — monster stats, spell mechanics, loot ta
 
 Features planned for future releases:
 
+- **Module System** — modular architecture for community expansion packs. Toggle mechanics (firearms, survival, coordinates, magic crafting, economic sim) during campaign creation. Mix & match features. Enable community to build and share modules. [See design in TODO.md](TODO.md)
 - **Nested Sub-Maps** — locations can contain their own internal maps. Enter a castle and explore its floors. Board a spaceship and navigate its decks. Dive into a cave system with branching tunnels. Each sub-map connects back to the parent world map seamlessly.
 - **Multi-Floor Dungeons** — vertical dungeon navigation with stairs, elevators, ladders between floors. Each floor is its own sub-map with independent room states.
 - **Vehicle Interiors** — ships, airships, space stations as explorable sub-maps that move on the world map. The vehicle travels between locations while you explore inside it.
-- **Campaign Templates** — pre-built campaign configs for popular genres (post-apocalyptic, space exploration, medieval, urban horror) with ready-to-use custom stats, time effects, and encounter tables.
+- **Inventory Weight & Slots** — carry capacity based on STR, overencumbrance penalties, automatic stacking, category filters. [See design in TODO.md](TODO.md)
 - **Visual Map Export** — export ASCII maps to PNG/SVG for sharing outside the terminal.
 
 Got ideas? [Open an issue](https://github.com/DrSeedon/Claude-Code-Game-Master/issues) or submit a PR.
