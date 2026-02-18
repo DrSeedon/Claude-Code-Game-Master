@@ -5,6 +5,7 @@ Handles PC operations: XP, HP, level progression, and character data
 """
 
 import sys
+import re
 import json
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -653,7 +654,7 @@ def main():
 
     # Modify HP
     hp_parser = subparsers.add_parser('hp', help='Modify character HP')
-    hp_parser.add_argument('name', help='Character name')
+    hp_parser.add_argument('name', nargs='?', default=None, help='Character name (optional, uses active)')
     hp_parser.add_argument('amount', help='HP change (+5 to heal, -3 for damage)')
 
     # Get full character JSON
@@ -730,18 +731,23 @@ def main():
             sys.exit(1)
 
     elif args.action == 'hp':
-        # Parse amount (handle +5 or -3 format)
+        # Auto-detect: if name looks like an amount, shift args
+        name = args.name
         amount_str = args.amount
+        if name is not None and re.match(r'^[+-]\d+$', name):
+            amount_str = name
+            name = None
+
         try:
             if amount_str.startswith('+'):
                 amount = int(amount_str[1:])
             else:
                 amount = int(amount_str)
         except ValueError:
-            print(f"[ERROR] Invalid HP amount: {args.amount}")
+            print(f"[ERROR] Invalid HP amount: {amount_str}")
             sys.exit(1)
 
-        result = manager.modify_hp(args.name, amount)
+        result = manager.modify_hp(name, amount)
         if not result.get('success'):
             sys.exit(1)
 

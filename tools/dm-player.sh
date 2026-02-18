@@ -56,12 +56,7 @@ case "$ACTION" in
             echo "Usage: dm-player.sh hp [character_name] <+/-amount>"
             exit 1
         fi
-        if [[ "$1" =~ ^[+-][0-9]+$ ]]; then
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "" "$1"
-        else
-            [ -z "$2" ] && { echo "[ERROR] Amount required after character name"; exit 1; }
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "$1" "$2"
-        fi
+        $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "$@"
         ;;
 
     get)
