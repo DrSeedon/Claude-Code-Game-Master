@@ -17,7 +17,7 @@ Atomic transaction system for character state — apply multiple changes at once
 
 ```bash
 # Atomic transaction — all changes succeed or fail together
-bash tools/dm-inventory.sh update "Character" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Character" \
   --gold +150 \
   --xp +200 \
   --hp -10 \
@@ -27,7 +27,7 @@ bash tools/dm-inventory.sh update "Character" \
   --custom-stat hunger +20
 
 # Test mode — validate without applying
-bash tools/dm-inventory.sh update "Character" --gold -500 --test
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Character" --gold -500 --test
 ```
 
 **Auto-migrates** from old inventory format on first use (creates timestamped backup).
@@ -36,7 +36,7 @@ bash tools/dm-inventory.sh update "Character" --gold -500 --test
 Resolve modern firearms combat with realistic mechanics — RPM-based rounds per turn, fire modes (single/burst/full_auto), progressive attack penalties, and PEN vs PROT damage scaling. Detailed shot-by-shot output with complete roll breakdowns.
 
 ```bash
-bash tools/dm-combat.sh resolve \
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Stalker" \
   --weapon "AKM" \
   --fire-mode "full_auto" \
@@ -44,13 +44,13 @@ bash tools/dm-combat.sh resolve \
   --targets "Mutant#1:AC14:HP30:PROT2" "Mutant#2:AC14:HP30:PROT2"
 
 # Test mode — preview combat without updating state
-bash tools/dm-combat.sh resolve ... --test
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve ... --test
 ```
 
 **Auto-persists** ammo consumption and XP awards. Accounts for class bonuses (e.g., Стрелок reduced penalties).
 
 ### 📦 Modern Firearms Campaign Template
-Pre-built template (`.claude/templates/modern-firearms-campaign.json`) with weapons (AKM, AK-74, M4A1, SVD), armor types with PROT ratings, fire mode definitions, custom survival stats (hunger/thirst/radiation/sleep), time effects, and encounter system — ready for STALKER, Fallout, or Cyberpunk campaigns.
+Pre-built template (`.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`) with weapons (AKM, AK-74, M4A1, SVD), armor types with PROT ratings, fire mode definitions, custom survival stats (hunger/thirst/radiation/sleep), time effects, and encounter system — ready for STALKER, Fallout, or Cyberpunk campaigns.
 
 ### Custom Character Stats
 Define **any** stats for your campaign — hunger, thirst, radiation, morale, sanity, reputation — whatever fits your world. Fully universal, zero hardcoded stat names.
@@ -92,16 +92,16 @@ bash tools/dm-consequence.sh add "Trader arrives at camp" "in 24 hours" --hours 
 Configurable random encounters during travel — frequency scales with distance, time of day, and character stats. Encounters create waypoints on the map where you can fight, talk, or explore before continuing.
 
 ```bash
-bash tools/dm-encounter.sh check "Village" "Ruins" 2000 open
+bash .claude/modules/encounter-system/tools/dm-encounter.sh check "Village" "Ruins" 2000 open
 ```
 
 ### Coordinate Navigation & Maps
 Locations have real coordinates. A* pathfinding finds routes. View your world as ASCII maps or a GUI window. **Canonical connection management** — edges stored once, auto-deduplication.
 
 ```bash
-bash tools/dm-map.sh              # Full ASCII map
-bash tools/dm-map.sh --minimap    # Tactical minimap
-bash tools/dm-map.sh --gui        # GUI window with terrain colors
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh              # Full ASCII map
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh --minimap    # Tactical minimap
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh --gui        # GUI window with terrain colors
 
 # Add locations by bearing and distance
 bash tools/dm-location.sh add "Outpost" "Abandoned outpost" \

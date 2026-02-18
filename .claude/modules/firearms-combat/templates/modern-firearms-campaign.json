@@ -100,7 +100,7 @@
       },
       "usage": {
         "manual_combat": "Use standard D&D rolls with fire mode penalties from above",
-        "automated_combat": "bash tools/dm-combat.sh resolve --weapon AKM --fire-mode full_auto --ammo 30 --targets Enemy:AC:HP:PROT"
+        "automated_combat": "bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve --weapon AKM --fire-mode full_auto --ammo 30 --targets Enemy:AC:HP:PROT"
       }
     },
     "armor_system": {

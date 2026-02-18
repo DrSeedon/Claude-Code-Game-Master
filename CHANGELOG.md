@@ -60,7 +60,7 @@ All notable changes to DM System will be documented in this file.
   - Auto-persists ammo consumption and XP awards
   - `--test` flag to preview combat without updating character state
   - Supports manual target specification or enemy type lookup from `campaign_rules`
-- **Modern Firearms Campaign Template** (`.claude/templates/modern-firearms-campaign.json`)
+- **Modern Firearms Campaign Template** (`.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`)
   - Pre-configured weapons (АКМ, АК-74, M4A1, SVD, PMm, etc.) with RPM, damage, PEN values
   - Fire mode definitions with attack penalties
   - Armor types with PROT ratings

@@ -236,6 +236,5 @@ Standard D&D campaigns continue to work without modification. If locations don't
 
 ## See Also
 
-- **Custom Campaign Rules:** `.claude/rules/custom-campaigns.md` (section 2)
 - **Schema Reference:** `docs/schema-reference.md`
 - **CORE DM Rules:** `CLAUDE.md`

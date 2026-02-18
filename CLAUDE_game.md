@@ -143,7 +143,7 @@ Track turn order in memory (highest to lowest).
 For campaigns with firearms systems (custom fire modes, PEN/PROT mechanics), use the automated resolver:
 
 ```bash
-bash tools/dm-combat.sh resolve \
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Character Name" \
   --weapon "АКМ" \
   --fire-mode "full_auto" \
@@ -151,7 +151,7 @@ bash tools/dm-combat.sh resolve \
   --targets "Snork#1:AC14:HP25:PROT1" "Snork#2:AC14:HP25:PROT1"
 
 # Test mode - show detailed output but DON'T update ammo/XP
-bash tools/dm-combat.sh resolve \
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Меченый" \
   --weapon "АКМ" \
   --fire-mode "burst" \
@@ -175,7 +175,7 @@ bash tools/dm-combat.sh resolve \
 
 **Alternative (for enemy types in campaign_rules):**
 ```bash
-bash tools/dm-combat.sh resolve \
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Меченый" \
   --weapon "АКМ" \
   --fire-mode "full_auto" \
@@ -243,7 +243,7 @@ bash tools/dm-player.sh xp "[character]" +[amount]
 **UNIFIED INVENTORY MANAGER (Recommended):**
 ```bash
 # Atomic transaction - all changes apply together or none do
-bash tools/dm-inventory.sh update "[character]" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "[character]" \
   --gold +150 \
   --xp +50 \
   --add "Аптечка" 2 "Патроны 9mm" 30 \
@@ -251,13 +251,13 @@ bash tools/dm-inventory.sh update "[character]" \
   --remove "Антирад" 1
 
 # Test mode - validate without applying
-bash tools/dm-inventory.sh update "[character]" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "[character]" \
   --gold -100 \
   --hp +10 \
   --test
 
 # View inventory
-bash tools/dm-inventory.sh show "[character]"
+bash .claude/modules/inventory-system/tools/dm-inventory.sh show "[character]"
 ```
 
 **LEGACY COMMANDS (Still Supported):**
@@ -474,7 +474,7 @@ bash tools/dm-time.sh "[new_time]" "[date]"
 
 ### Phase 3.1: Coordinate-Based Navigation (Optional)
 
-If campaign uses coordinate system — see `.claude/rules/custom-campaigns.md` for full details.
+If campaign uses coordinate system — see `.claude/modules/coordinate-navigation/rules.md` for full details.
 
 ### Phase 3.5: Arrival Awareness (Optional)
 Use when arriving at dangerous/unfamiliar locations or where ambush is likely.
@@ -754,7 +754,7 @@ Separate location per room with `dungeon` field:
 For multiple simultaneous changes, use the atomic transaction system:
 
 ```bash
-bash tools/dm-inventory.sh update "[character_name]" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "[character_name]" \
   --gold +150 \
   --hp -10 \
   --xp +200 \
@@ -795,13 +795,13 @@ bash tools/dm-inventory.sh update "[character_name]" \
 | Tag NPC to quest | `bash tools/dm-npc.sh tag-quest "[name]" "[quest]"` |
 | **Custom stat changed** | `bash tools/dm-player.sh custom-stat "[name]" "[stat]" [+/-amount]` |
 
-For custom stats, time effects, and timed consequences — see `.claude/rules/custom-campaigns.md`.
+For custom stats, time effects, and timed consequences — see `.claude/modules/survival-stats/rules.md`.
 
 ### Inventory Manager Flags Reference
 
 **Multi-Flag Operations:**
 ```bash
-bash tools/dm-inventory.sh update "[name]" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "[name]" \
   --gold [+/-amount] \
   --hp [+/-amount] \
   --xp [+/-amount] \
@@ -833,19 +833,19 @@ bash tools/dm-inventory.sh update "[name]" \
 **Examples:**
 ```bash
 # Post-combat loot
-bash tools/dm-inventory.sh update "Grimjaw" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Grimjaw" \
   --gold +250 \
   --xp +150 \
   --add "Medkit" 2 "Ammo 5.56mm" 60 \
   --add-unique "M4A1 Carbine (5.56mm, 2d8+2, PEN 3)"
 
 # Use consumables
-bash tools/dm-inventory.sh update "Silara" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Silara" \
   --remove "Medkit" 1 \
   --hp +20
 
 # Test transaction before applying
-bash tools/dm-inventory.sh update "Conan" \
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Conan" \
   --gold -500 \
   --add-unique "Platemail Armor (AC 18)" \
   --test
@@ -853,7 +853,7 @@ bash tools/dm-inventory.sh update "Conan" \
 
 **View Inventory:**
 ```bash
-bash tools/dm-inventory.sh show "[character_name]"
+bash .claude/modules/inventory-system/tools/dm-inventory.sh show "[character_name]"
 ```
 
 ### Note Categories
@@ -1386,13 +1386,13 @@ Memory is **only** for operational lessons that don't fit anywhere else — e.g.
 
 ## Campaign Templates
 
-When creating new campaigns with specialized mechanics, use pre-built templates from `.claude/templates/`:
+When creating new campaigns with specialized mechanics, use pre-built templates from module directories:
 
 ### Modern/Firearms Campaign Template
 
 **Use for:** STALKER, Fallout, Modern Military, Cyberpunk, Zombie Survival
 
-**Location:** `.claude/templates/modern-firearms-campaign.json`
+**Location:** `.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`
 
 **Features included:**
 - **Firearms system** with weapons (АКМ, АК-74, M4A1, SVD, etc.)
@@ -1430,10 +1430,6 @@ When creating new campaigns with specialized mechanics, use pre-built templates 
 - Encounter system (needs `encounter_system` config)
 
 ---
-
-## Supplementary Rules
-
-For non-standard campaigns (STALKER, Civilization, etc.) with custom stats, time effects, encounter system, and coordinate navigation — see `.claude/rules/custom-campaigns.md`.
 
 ## Modules
 

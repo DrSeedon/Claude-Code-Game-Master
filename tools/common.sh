@@ -204,6 +204,23 @@ check_env() {
     return 0
 }
 
+# Dispatch to module middleware
+# Usage: dispatch_middleware <tool-name> [args...]
+# Returns 0 if a middleware handled the call, 1 if CORE should handle
+dispatch_middleware() {
+    local tool="$1"
+    shift
+    for mw in "$PROJECT_ROOT/.claude/modules"/*/middleware/"$tool".sh; do
+        [ -f "$mw" ] || continue
+        bash "$mw" "$@"
+        local rc=$?
+        if [ $rc -eq 0 ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Load .env file if it exists
 if [ -f "$PROJECT_ROOT/.env" ]; then
     set -a

@@ -1,16 +1,12 @@
-#!/usr/bin/env bash
-#
-# dm-inventory.sh - Unified Inventory Manager
-# Delegates to inventory-system module
-#
+#!/bin/bash
+# Core wrapper for inventory management
+# Delegates to inventory-system module via middleware dispatch
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$(dirname "$0")/common.sh"
+require_active_campaign
 
-INV="$PROJECT_ROOT/.claude/modules/inventory-system"
-if [ -d "$INV" ]; then
-    bash "$INV/tools/dm-inventory.sh" "$@"
-else
-    echo "[ERROR] inventory-system module not found at: .claude/modules/inventory-system"
+dispatch_middleware "dm-inventory.sh" "$@" || {
+    echo "[ERROR] inventory-system module not found"
+    echo "Install: .claude/modules/inventory-system/"
     exit 1
-fi
+}

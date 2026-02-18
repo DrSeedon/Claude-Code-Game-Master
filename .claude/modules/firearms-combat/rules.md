@@ -92,7 +92,7 @@ Shots spread evenly across all targets (minimum 1 shot per target).
 ### CLI Command
 
 ```bash
-bash tools/dm-combat.sh resolve \
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Dmitri" \
   --weapon "AK-74" \
   --fire-mode full_auto \
@@ -104,7 +104,7 @@ bash tools/dm-combat.sh resolve \
 
 **Test Mode (dry run):**
 ```bash
-bash tools/dm-combat.sh resolve ... --test
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve ... --test
 ```
 Shows results without modifying character.json.
 

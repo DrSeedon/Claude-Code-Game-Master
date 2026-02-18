@@ -1,5 +1,5 @@
 #!/bin/bash
-# dm-consequence.sh - Consequence tracking (thin wrapper for consequence_manager.py)
+# dm-consequence.sh - Consequence tracking
 
 source "$(dirname "$0")/common.sh"
 
@@ -7,15 +7,10 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-consequence.sh <action> [args]"
     echo ""
     echo "Actions:"
-    echo "  add <description> <trigger>    - Add new consequence"
-    echo "  check                          - Check pending consequences"
-    echo "  resolve <id>                   - Resolve a consequence"
-    echo "  list-resolved                  - List resolved consequences"
-    echo ""
-    echo "Examples:"
-    echo "  dm-consequence.sh add \"Guards searching for party\" \"2 days\""
-    echo "  dm-consequence.sh check"
-    echo "  dm-consequence.sh resolve abc123"
+    echo "  add <description> <trigger> [--hours N] - Add consequence (--hours requires survival-stats module)"
+    echo "  check                                   - Check pending consequences"
+    echo "  resolve <id>                            - Resolve a consequence"
+    echo "  list-resolved                           - List resolved consequences"
     exit 1
 fi
 
@@ -28,27 +23,10 @@ case "$ACTION" in
     add)
         if [ "$#" -lt 2 ]; then
             echo "Usage: dm-consequence.sh add <description> <trigger> [--hours N]"
-            echo ""
-            echo "Triggers:"
-            echo "  Event-based: 'on meeting', 'after quest', 'immediate'"
-            echo "  Time-based:  'in 2 hours', 'in 3 days' + --hours <number>"
-            echo ""
-            echo "Examples:"
-            echo "  dm-consequence.sh add \"NPC arrives\" \"in 24 hours\" --hours 24"
-            echo "  dm-consequence.sh add \"Quest expires\" \"on meeting\""
             exit 1
         fi
-
-        DESC="$1"
-        TRIGGER="$2"
-        shift 2
-
-        HOURS_ARG=""
-        if [ "$1" = "--hours" ]; then
-            HOURS_ARG="--hours $2"
-        fi
-
-        $PYTHON_CMD "$LIB_DIR/consequence_manager.py" add "$DESC" "$TRIGGER" $HOURS_ARG
+        dispatch_middleware "dm-consequence.sh" add "$@" || \
+            $PYTHON_CMD "$LIB_DIR/consequence_manager.py" add "$1" "$2"
         ;;
 
     check)
@@ -74,5 +52,4 @@ case "$ACTION" in
         ;;
 esac
 
-# Propagate Python exit code
 exit $?
