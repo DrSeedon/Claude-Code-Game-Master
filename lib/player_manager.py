@@ -43,7 +43,7 @@ class PlayerManager(EntityManager):
         355000,  # Level 20
     ]
 
-    def __init__(self, world_state_dir: str = None, require_active_campaign: bool = True):
+    def __init__(self, world_state_dir: Optional[str] = None, require_active_campaign: bool = True):
         super().__init__(world_state_dir, require_active_campaign)
 
         # Additional paths specific to player management
@@ -74,7 +74,7 @@ class PlayerManager(EntityManager):
         char_id = self._name_to_id(name)
         return self.characters_dir / f"{char_id}.json"
 
-    def _load_character(self, name: str = None) -> Optional[Dict]:
+    def _load_character(self, name: Optional[str] = None) -> Optional[Dict]:
         """
         Load character data from file
         In single-character mode, name is optional/ignored
@@ -137,7 +137,7 @@ class PlayerManager(EntityManager):
         campaign = self.json_ops.load_json(self.campaign_file)
         return campaign.get('current_character')
 
-    def get_player(self, name: str = None) -> Optional[Dict]:
+    def get_player(self, name: Optional[str] = None) -> Optional[Dict]:
         """
         Get full player character data
         If name is None, uses active character from campaign
@@ -325,7 +325,7 @@ class PlayerManager(EntityManager):
             'xp_remaining': remaining
         }
 
-    def modify_hp(self, name: str = None, amount: int = 0) -> Dict[str, Any]:
+    def modify_hp(self, name: Optional[str] = None, amount: int = 0) -> Dict[str, Any]:
         """
         Modify character HP (positive = heal, negative = damage)
         If name is None, uses active character
@@ -379,7 +379,7 @@ class PlayerManager(EntityManager):
             'bloodied': 0 < new_hp <= max_hp // 4
         }
 
-    def modify_gold(self, name: str = None, amount: Optional[int] = None) -> Dict[str, Any]:
+    def modify_gold(self, name: Optional[str] = None, amount: Optional[int] = None) -> Dict[str, Any]:
         """
         Modify character gold or show current gold if no amount given
         If name is None, uses active character
