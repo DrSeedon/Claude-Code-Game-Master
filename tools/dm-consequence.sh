@@ -20,14 +20,15 @@ require_active_campaign
 ACTION="$1"
 shift
 
+dispatch_middleware "dm-consequence.sh" "$ACTION" "$@" && exit $?
+
 case "$ACTION" in
     add)
         if [ "$#" -lt 2 ]; then
             echo "Usage: dm-consequence.sh add <description> <trigger>"
             exit 1
         fi
-        dispatch_middleware "dm-consequence.sh" add "$@" || \
-            $PYTHON_CMD "$LIB_DIR/consequence_manager.py" add "$1" "$2"
+        $PYTHON_CMD "$LIB_DIR/consequence_manager.py" add "$1" "$2"
         ;;
 
     check)

@@ -33,6 +33,8 @@ fi
 ACTION="$1"
 shift
 
+dispatch_middleware "dm-session.sh" "$ACTION" "$@" && exit $?
+
 case "$ACTION" in
     start)
         echo "Starting D&D Session"
@@ -92,8 +94,7 @@ case "$ACTION" in
         echo "Moving Party"
         echo "============"
         echo ""
-        dispatch_middleware "dm-session.sh" move "$@" || \
-            $PYTHON_CMD "$LIB_DIR/session_manager.py" move "$@"
+        $PYTHON_CMD "$LIB_DIR/session_manager.py" move "$@"
         RESULT=$?
         if [ $RESULT -ne 0 ]; then exit $RESULT; fi
 
