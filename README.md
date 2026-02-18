@@ -10,23 +10,9 @@ D&D 5e rules give the story stakes and consequences. You don't need to know D&D 
 
 ---
 
-## What's New in This Fork
-
-- **Module system** — optional mechanics as self-contained mods, toggled per campaign
-- **Middleware architecture** — CORE tools are vanilla upstream; modules hook in without touching CORE
-- **Unified inventory manager** — atomic transactions, stackable/unique items, auto-migration
-- **Automated firearms combat** — RPM-based fire modes, PEN/PROT damage scaling, shot-by-shot output
-- **Survival stats** — any custom stat (hunger, thirst, radiation) decaying automatically over time
-- **Coordinate navigation** — real coordinates, A* pathfinding, ASCII/GUI maps
-- **Random encounters** — DC-scaled checks during travel, waypoint creation
-- **Timed consequences** — events that fire after elapsed game time with countdown display
-- **i18n** — Cyrillic, Unicode, any language out of the box
-
----
-
 ## Modules
 
-Optional systems you enable per campaign. At campaign creation `/dm` presents them as a mod selection menu — pick what fits your setting.
+Optional systems enabled per campaign. At creation `/dm` scans all available modules and presents them as a mod selection menu — pick what fits your setting, the DM patches the config automatically.
 
 | Module | What it does | Good for |
 |--------|-------------|----------|
@@ -38,6 +24,130 @@ Optional systems you enable per campaign. At campaign creation `/dm` presents th
 | 📜 **quest-system** | Full quest metadata — objectives, NPCs, locations, rewards, state tracking. | Story-heavy campaigns |
 
 Each module is self-contained: own `tools/`, `lib/`, `rules.md`, `module.json`. Drop a folder into `.claude/modules/` to install a community module.
+
+---
+
+## What's New in This Fork
+
+### 🧩 Module System — Campaign Mods
+When creating a new campaign, `/dm` scans all available modules and presents them as optional mods. Pick what you want, the DM enables them and patches the campaign config automatically.
+
+```
+================================================================
+  OPTIONAL MODS
+  ────────────────────────────────────────────────────────────
+  [1] Survival Stats       — hunger, thirst, radiation decay over time
+  [2] Encounter System     — random events during travel
+  [3] Coordinate Navigation — spatial map, distances, travel time
+  [4] Firearms Combat      — modern weapons, fire modes, PEN/PROT
+  [A] Enable ALL
+  [N] None — standard D&D only
+================================================================
+```
+
+Each module is self-contained: own tools, rules, and config patches. Add community modules by dropping a folder into `.claude/modules/`.
+
+### 🔀 Middleware Architecture
+CORE tools (`dm-time.sh`, `dm-player.sh`, `dm-session.sh`, etc.) are vanilla upstream. Modules hook in via middleware — no CORE modifications needed. `/dm` automatically injects all active module rules into context.
+
+### 🎯 Unified Inventory Manager
+Atomic transaction system for character state — apply multiple changes at once or none at all. Stackable items (consumables with quantities) and unique items (weapons, armor, quest items) with automatic validation and rollback.
+
+```bash
+# Atomic transaction — all changes succeed or fail together
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Character" \
+  --gold +150 \
+  --xp +200 \
+  --hp -10 \
+  --add "Medkit" 2 "Ammo 9mm" 30 \
+  --add-unique "AK-47 (7.62x39mm, 2d8+3, PEN 4)" \
+  --remove "Bandage" 1 \
+  --custom-stat hunger +20
+
+# Test mode — validate without applying
+bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Character" --gold -500 --test
+```
+
+**Auto-migrates** from old inventory format on first use (creates timestamped backup).
+
+### ⚔️ Automated Firearms Combat
+Resolve modern firearms combat with realistic mechanics — RPM-based rounds per turn, fire modes (single/burst/full_auto), progressive attack penalties, and PEN vs PROT damage scaling. Detailed shot-by-shot output with complete roll breakdowns.
+
+```bash
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
+  --attacker "Stalker" \
+  --weapon "AKM" \
+  --fire-mode "full_auto" \
+  --ammo 60 \
+  --targets "Mutant#1:AC14:HP30:PROT2" "Mutant#2:AC14:HP30:PROT2"
+
+# Test mode — preview combat without updating state
+bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve ... --test
+```
+
+**Auto-persists** ammo consumption and XP awards. Accounts for class bonuses (e.g., Стрелок reduced penalties).
+
+### 📦 Modern Firearms Campaign Template
+Pre-built template (`.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`) with weapons (AKM, AK-74, M4A1, SVD), armor types with PROT ratings, fire mode definitions, custom survival stats (hunger/thirst/radiation/sleep), time effects, and encounter system — ready for STALKER, Fallout, or Cyberpunk campaigns.
+
+### Custom Character Stats
+Define **any** stats for your campaign — hunger, thirst, radiation, morale, sanity, reputation — whatever fits your world. Fully universal, zero hardcoded stat names.
+
+```bash
+bash tools/dm-player.sh custom-stat hunger +15
+bash tools/dm-player.sh custom-stat radiation -5
+```
+
+### Time Effects Engine
+Stats change automatically as game time passes. Define rates per hour in your campaign config, and the system handles the rest. Supports **conditional effects** (e.g., artifact healing only when HP < max) with per-tick simulation.
+
+```
+Time updated to: Evening (18:30), Day 3
+Custom Stats:
+  hunger: 80 → 68 (-12)
+  thirst: 70 → 52 (-18)
+⚠️ TRIGGERED: "Merchant arrives"
+```
+
+### Auto Movement Time
+Move between locations and travel time is calculated automatically from distance and character speed. Custom stats tick during travel.
+
+```bash
+bash tools/dm-session.sh move "Ruins"
+# Auto-calculates: 2000m at 4 km/h = 30 minutes
+# Auto-applies time effects to hunger, thirst, etc.
+```
+
+### Timed Consequences
+Schedule events that trigger after elapsed game time, not just on story beats. Time-remaining display shows minutes/hours/days left.
+
+```bash
+bash tools/dm-consequence.sh add "Trader arrives at camp" "in 24 hours" --hours 24
+# Shows: "Trader arrives (12.5h left)" or "IMMINENT!"
+```
+
+### Random Encounter System
+Configurable random encounters during travel — frequency scales with distance, time of day, and character stats. Encounters create waypoints on the map where you can fight, talk, or explore before continuing.
+
+```bash
+bash .claude/modules/encounter-system/tools/dm-encounter.sh check "Village" "Ruins" 2000 open
+```
+
+### Coordinate Navigation & Maps
+Locations have real coordinates. A* pathfinding finds routes. View your world as ASCII maps or a GUI window. **Canonical connection management** — edges stored once, auto-deduplication.
+
+```bash
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh              # Full ASCII map
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh --minimap    # Tactical minimap
+bash .claude/modules/coordinate-navigation/tools/dm-map.sh --gui        # GUI window with terrain colors
+
+# Add locations by bearing and distance
+bash tools/dm-location.sh add "Outpost" "Abandoned outpost" \
+  --from "Village" --bearing 90 --distance 2500 --terrain forest
+```
+
+### i18n Support
+Cyrillic names, non-English attitudes, and Unicode identifiers work out of the box. Build campaigns in any language. All JSON saved with `ensure_ascii=False` — no more `\uXXXX` escaping.
 
 ---
 
