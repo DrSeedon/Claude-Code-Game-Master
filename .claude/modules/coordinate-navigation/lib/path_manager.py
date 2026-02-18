@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from lib.json_ops import JsonOperations
-from lib.connection_utils import get_connection_between
+from connection_utils import get_connection_between
 
 MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))

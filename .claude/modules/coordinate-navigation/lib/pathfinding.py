@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from lib.connection_utils import get_connections as cu_get_connections
+from connection_utils import get_connections as cu_get_connections
 
 
 class PathFinder:

@@ -20,7 +20,9 @@ from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
 from lib.time_manager import TimeManager
 from lib.player_manager import PlayerManager
-from lib.connection_utils import add_canonical_connection
+NAV_LIB = PROJECT_ROOT / ".claude" / "modules" / "coordinate-navigation" / "lib"
+sys.path.insert(0, str(NAV_LIB))
+from connection_utils import add_canonical_connection
 
 
 class EncounterEngine:

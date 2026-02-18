@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from lib.connection_utils import get_connection_between, add_canonical_connection, remove_canonical_connection
+from connection_utils import get_connection_between, add_canonical_connection, remove_canonical_connection
 
 MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))

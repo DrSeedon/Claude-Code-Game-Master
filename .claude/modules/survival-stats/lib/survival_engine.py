@@ -158,9 +158,20 @@ class SurvivalEngine:
                 if old_cs and new_cs:
                     diff = new_cs['current'] - old_cs['current']
                     if abs(diff) > 0.001:
-                        result = self.player_mgr.modify_custom_stat(name=char_name, stat=stat, amount=diff)
-                        if result and result.get('success'):
-                            changes.append({'stat': stat, 'old': result['old_value'], 'new': result['new_value'], 'change': diff})
+                        old_val = old_cs['current']
+                        char_data = self.json_ops.load_json("character.json")
+                        cs_entry = char_data.get('custom_stats', {}).get(stat)
+                        if cs_entry:
+                            cs_max = cs_entry.get('max')
+                            cs_min = cs_entry.get('min', 0)
+                            new_val = cs_entry['current'] + diff
+                            if cs_max is not None:
+                                new_val = min(new_val, cs_max)
+                            if cs_min is not None:
+                                new_val = max(new_val, cs_min)
+                            cs_entry['current'] = round(new_val, 2)
+                            self.json_ops.save_json("character.json", char_data)
+                            changes.append({'stat': stat, 'old': old_val, 'new': cs_entry['current'], 'change': diff})
 
         return changes
 
@@ -305,11 +316,22 @@ class SurvivalEngine:
         if name is None:
             name = self._get_active_character_name()
 
-        result = self.player_mgr.modify_custom_stat(name=name, stat=stat, amount=amount)
-        if not result or not result.get('success'):
-            raise RuntimeError(f"Failed to modify custom stat '{stat}' for {name}")
+        char = self.json_ops.load_json("character.json")
+        cs = char.get('custom_stats', {}).get(stat)
+        if cs is None:
+            raise RuntimeError(f"Custom stat '{stat}' not found for {name}")
 
-        return result
+        old_val = cs['current']
+        new_val = old_val + amount
+        cs_max = cs.get('max')
+        cs_min = cs.get('min', 0)
+        if cs_max is not None:
+            new_val = min(new_val, cs_max)
+        if cs_min is not None:
+            new_val = max(new_val, cs_min)
+        cs['current'] = round(new_val, 2)
+        self.json_ops.save_json("character.json", char)
+        return {'success': True, 'old_value': old_val, 'new_value': cs['current']}
 
     def list_custom_stats(self, name: str = None) -> dict:
         """List all custom stats for character."""
