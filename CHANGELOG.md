@@ -2,6 +2,43 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [2.1.0] - 2026-02-21
+
+### Added
+- **Hierarchical location system** — world → compound → interior with parent/children tree, entry points, and nested navigation
+  - `hierarchy_manager.py` — core API: `create_compound`, `add_interior`, `enter_compound`, `exit_compound`, `move_interior` (BFS reachability), `get_tree`, `get_ancestors`, `validate_hierarchy`
+  - `dm-hierarchy.sh` — CLI: `create-compound`, `add-room`, `enter`, `exit`, `move`, `tree`, `entry-config`, `validate`
+  - `force_layout.py` — force-directed graph layout for interior views (spring algorithm, 100 iterations, entry point edge anchoring)
+  - `migrate_to_hierarchy.py` — migration script: converts `_vehicle` fields to hierarchy format with backup
+  - 60 new tests in `test_hierarchy_manager.py` (compounds, interiors, enter/exit, BFS, tree, ancestors, entry points, validation, cycles)
+- **Entry point system** — `is_entry_point` + `entry_config` on interior locations: `on_enter`, `on_exit` events, `locked`, `hidden`, `leads_to` for DM guidance
+- **Location stack** (`location_stack` in `player_position`) — automatic breadcrumb trail computed from parent chain on every move
+
+### Changed
+- **`map_gui.py`** — dual-mode rendering: global view (world + top-level compounds) and interior view (force-directed layout of children). Compounds render as squares. Double-click to drill down, ESC to go up. Breadcrumb bar at top with clickable navigation.
+- **`location_manager.py`** — new kwargs on `add_location()`: `parent`, `location_type`, `is_entry_point`, `entry_config`, `children`. New methods: `get_parent()`, `get_children()`. `list_locations()` supports `parent` filter and `top_level` flag. All backward-compatible.
+- **`session_manager.py`** — `move_party()` computes `location_stack` via parent chain. `_ensure_location_and_connection()` scope-aware: no auto-connections between interior↔world.
+- **`vehicle_manager.py`** — dual-write: sets both `_vehicle` fields and hierarchy fields (`type`, `parent`, `children`, `entry_points`). Existing vehicle tests unchanged.
+- **`dm-session.sh` middleware** — hierarchy-aware move: if target is compound, routes to `enter_compound` before vehicle check.
+
+### Technical
+- 265 tests, all green (was 205)
+- Location types: `world` (coordinate point), `compound` (container with children), `interior` (room/zone inside compound)
+- Hierarchy validation detects: parent cycles, orphan children, parent↔child desync
+- Force layout: repulsion (Coulomb), attraction (spring), edge anchoring for entry points, damping 0.9
+
+## [2.0.0] - 2026-02-21
+
+### Added
+- **Narrator style system** — 4 built-in narrative styles with voice, pacing, and forbidden patterns
+  - `dm-narrator.sh` — CLI: `list`, `recommend`, `apply`, `show`, `remove`
+  - `.claude/narrator-styles/` — epic-heroic, horror-atmospheric, sarcastic-puns, serious-cinematic
+  - Phase 1.7 in `/new-game` — narrator style selection menu with genre-based recommendation
+
+### Changed
+- **`/dm-continue`** — rules now load via Read tool (`/tmp/dm-rules.md`) instead of inline Bash to avoid truncation
+- **`dm-active-modules-rules.sh`** — rewritten for reliability
+
 ## [1.9.0] - 2026-02-19
 
 ### Added

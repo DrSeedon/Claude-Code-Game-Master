@@ -20,6 +20,12 @@ from json_ops import JsonOperations
 from connection_utils import add_canonical_connection, remove_canonical_connection, get_connection_between, get_connections
 from pathfinding import PathFinder
 
+MODULE_LIB = Path(__file__).parent
+if str(MODULE_LIB) not in sys.path:
+    sys.path.insert(0, str(MODULE_LIB))
+
+from hierarchy_manager import HierarchyManager
+
 
 class VehicleManager:
     """Manages vehicles as dual-map entities with internal rooms and external docking."""
@@ -27,6 +33,7 @@ class VehicleManager:
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
         self.ops = JsonOperations(str(campaign_dir))
+        self.hierarchy = HierarchyManager(str(campaign_dir))
 
     def register_vehicle(self, anchor_name: str, vehicle_id: str, vehicle_type: str,
                          dock_room: str, proximity_radius: int = 5000,
@@ -43,6 +50,14 @@ class VehicleManager:
             "proximity_radius_meters": proximity_radius,
             "max_dock_connections": max_dock_connections
         }
+
+        locations[anchor_name]["type"] = "compound"
+        locations[anchor_name].setdefault("children", [])
+        locations[anchor_name].setdefault("entry_points", [])
+        if dock_room and dock_room not in locations[anchor_name]["entry_points"]:
+            locations[anchor_name]["entry_points"].append(dock_room)
+        locations[anchor_name]["mobile"] = True
+
         self.ops.save_json("locations.json", locations)
         return True
 
@@ -64,8 +79,18 @@ class VehicleManager:
                 "vehicle_id": vehicle_id,
                 "is_vehicle_anchor": False,
                 "map_context": "local"
-            }
+            },
+            "type": "interior",
+            "parent": self._get_anchor(vehicle_id, locations) or from_room
         }
+
+        anchor_name = self._get_anchor(vehicle_id, locations)
+        if anchor_name and anchor_name in locations:
+            locations[anchor_name].setdefault("children", [])
+            if room_name not in locations[anchor_name]["children"]:
+                locations[anchor_name]["children"].append(room_name)
+            if room_name in locations[anchor_name].get("entry_points", []):
+                pass
 
         add_canonical_connection(from_room, room_name, locations,
                                 distance_meters=distance, bearing=bearing, terrain="internal")
@@ -85,6 +110,7 @@ class VehicleManager:
             return {"success": False, "error": f"Room '{target_room}' not part of vehicle"}
 
         self._update_player_position(target_room, "local", vehicle_id)
+        self._sync_hierarchy_enter(anchor_name, target_room)
         return {"success": True, "room": target_room, "vehicle_id": vehicle_id}
 
     def exit_vehicle(self) -> Dict[str, Any]:
@@ -98,6 +124,7 @@ class VehicleManager:
             return {"success": False, "error": "Vehicle anchor not found"}
 
         self._update_player_position(anchor_name, "global", None)
+        self._sync_hierarchy_position(anchor_name, [anchor_name])
         return {"success": True, "location": anchor_name}
 
     def move_internal(self, room: str) -> Dict[str, Any]:
@@ -114,6 +141,8 @@ class VehicleManager:
             return {"success": False, "error": f"Room '{room}' not part of vehicle"}
 
         self._update_player_position(room, "local", status["vehicle_id"])
+        anchor_name = self._get_anchor(status["vehicle_id"], locations)
+        self._sync_hierarchy_position(room, self.hierarchy.get_ancestors(anchor_name) + [room] if anchor_name else [room])
         return {"success": True, "room": room}
 
     def move_vehicle(self, vehicle_id: str, destination: Optional[str] = None,
@@ -165,6 +194,22 @@ class VehicleManager:
             "new_connections": new_connections,
             "player_status": player_status
         }
+
+    def _sync_hierarchy_enter(self, anchor_name: str, target_room: str) -> None:
+        locations = self.ops.load_json("locations.json")
+        anchor_data = locations.get(anchor_name, {})
+        eps = anchor_data.get("entry_points", [])
+        if target_room in eps:
+            self.hierarchy.enter_compound(anchor_name, entry_point=target_room)
+        else:
+            stack = self.hierarchy.get_ancestors(anchor_name) + [target_room]
+            self._sync_hierarchy_position(target_room, stack)
+
+    def _sync_hierarchy_position(self, location: str, stack: List[str]) -> None:
+        overview = self.ops.load_json("campaign-overview.json")
+        pp = overview.setdefault("player_position", {})
+        pp["location_stack"] = stack
+        self.ops.save_json("campaign-overview.json", overview)
 
     def _rebuild_external_connections(self, anchor_name: str, locations: Dict) -> List[str]:
         vehicle_data = locations[anchor_name].get("_vehicle", {})

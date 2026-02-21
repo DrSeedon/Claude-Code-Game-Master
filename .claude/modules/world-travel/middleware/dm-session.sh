@@ -15,6 +15,16 @@ fi
 shift  # remove 'move'
 DESTINATION="$1"
 
+# Hierarchy system: if target is compound, use enter_compound
+HIERARCHY_PY="$MODULE_DIR/lib/hierarchy_manager.py"
+if [ -f "$HIERARCHY_PY" ]; then
+    LOC_TYPE=$(uv run python "$HIERARCHY_PY" get-type "$DESTINATION" 2>/dev/null)
+    if [ "$LOC_TYPE" = "compound" ]; then
+        uv run python "$HIERARCHY_PY" enter "$DESTINATION"
+        exit $?
+    fi
+fi
+
 # Vehicle system: if player is inside a vehicle, intercept internal room movement
 VEHICLE_PY="$MODULE_DIR/lib/vehicle_manager.py"
 if [ -f "$VEHICLE_PY" ]; then

@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Pygame GUI map renderer for campaign visualization
-Interactive visual map with zoom, pan, and location info
-"""
+"""Pygame GUI map renderer with hierarchy support — global view, interior view, breadcrumb navigation."""
 
 import sys
 import math
@@ -26,6 +23,7 @@ MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from path_intersect import check_path_intersection
+from force_layout import compute_layout
 
 DEFAULT_TERRAIN_COLORS = {
     'open': [100, 200, 100],
@@ -39,6 +37,8 @@ DEFAULT_TERRAIN_COLORS = {
 }
 
 MAX_TERRAIN_PIXELS = 2000
+DOUBLE_CLICK_MS = 300
+BREADCRUMB_HEIGHT = 30
 
 
 class MapGUI:
@@ -50,6 +50,11 @@ class MapGUI:
     COLOR_TEXT = (200, 200, 220)
     COLOR_HIGHLIGHT = (255, 255, 100)
     COLOR_BLOCKED = (200, 50, 50, 128)
+    COLOR_COMPOUND = (180, 120, 255)
+    COLOR_ENTRY = (80, 255, 80)
+    COLOR_INTERIOR_LINE = (200, 200, 200)
+    COLOR_BREADCRUMB_BG = (30, 30, 50)
+    COLOR_BREADCRUMB_SEP = (100, 100, 120)
 
     def __init__(self, campaign_dir: str, width: int = 1200, height: int = 800):
         self.json_ops = JsonOperations(campaign_dir)
@@ -73,6 +78,15 @@ class MapGUI:
         self.drag_start = (0, 0)
         self.selected_location = None
         self.hovered_location = None
+
+        self.view_mode = "global"
+        self.current_compound = None
+        self.breadcrumb = []
+        self.interior_layout = {}
+        self.breadcrumb_rects = []
+
+        self.last_click_time = 0
+        self.last_click_location = None
 
         self.refresh_btn_rect = pygame.Rect(self.width - 160, self.height - 50, 150, 40)
         self.refresh_btn_hover = False
@@ -107,18 +121,107 @@ class MapGUI:
 
         self.terrain_surface = None
 
-        if self.locations:
-            coords_list = [
-                (loc_data.get('coordinates', {}).get('x', 0),
-                 loc_data.get('coordinates', {}).get('y', 0))
-                for loc_data in self.locations.values()
-                if loc_data.get('coordinates')
-            ]
-            if coords_list:
-                avg_x = sum(c[0] for c in coords_list) / len(coords_list)
-                avg_y = sum(c[1] for c in coords_list) / len(coords_list)
-                self.camera_x = avg_x
-                self.camera_y = avg_y
+        if self.view_mode == "global":
+            self._center_camera_global()
+        elif self.view_mode == "interior" and self.current_compound:
+            self._compute_interior_layout()
+
+    def _center_camera_global(self):
+        if not self.locations:
+            return
+        coords_list = [
+            (loc_data.get('coordinates', {}).get('x', 0),
+             loc_data.get('coordinates', {}).get('y', 0))
+            for loc_data in self.locations.values()
+            if loc_data.get('coordinates') and not loc_data.get('parent')
+        ]
+        if coords_list:
+            avg_x = sum(c[0] for c in coords_list) / len(coords_list)
+            avg_y = sum(c[1] for c in coords_list) / len(coords_list)
+            self.camera_x = avg_x
+            self.camera_y = avg_y
+
+    def _is_global_visible(self, loc_name: str, loc_data: Dict) -> bool:
+        loc_type = loc_data.get('type', 'world')
+        parent = loc_data.get('parent')
+        if parent:
+            return False
+        if loc_type in ('world', 'compound'):
+            return True
+        if loc_type not in ('interior',):
+            return True
+        return False
+
+    def _is_compound(self, loc_data: Dict) -> bool:
+        return loc_data.get('type') == 'compound'
+
+    def enter_compound(self, compound_name: str):
+        loc_data = self.locations.get(compound_name, {})
+        if not self._is_compound(loc_data):
+            return
+        self.breadcrumb.append(compound_name)
+        self.current_compound = compound_name
+        self.view_mode = "interior"
+        self.selected_location = None
+        self._compute_interior_layout()
+
+    def exit_to_level(self, level_index: int):
+        if level_index < 0:
+            self.view_mode = "global"
+            self.current_compound = None
+            self.breadcrumb = []
+            self.interior_layout = {}
+            self._center_camera_global()
+            return
+        self.breadcrumb = self.breadcrumb[:level_index + 1]
+        self.current_compound = self.breadcrumb[-1]
+        self.view_mode = "interior"
+        self.selected_location = None
+        self._compute_interior_layout()
+
+    def go_up(self):
+        if not self.breadcrumb:
+            return
+        self.breadcrumb.pop()
+        if self.breadcrumb:
+            self.current_compound = self.breadcrumb[-1]
+            self._compute_interior_layout()
+        else:
+            self.view_mode = "global"
+            self.current_compound = None
+            self.interior_layout = {}
+            self._center_camera_global()
+
+    def _compute_interior_layout(self):
+        if not self.current_compound:
+            return
+        compound_data = self.locations.get(self.current_compound, {})
+        children = compound_data.get('children', [])
+        if not children:
+            self.interior_layout = {}
+            return
+
+        entry_points = compound_data.get('entry_points', [])
+        edges = []
+        for child_name in children:
+            child_data = self.locations.get(child_name, {})
+            for conn in child_data.get('connections', []):
+                to_name = conn.get('to') if isinstance(conn, dict) else conn
+                if to_name in children:
+                    edges.append((child_name, to_name))
+
+        margin = 60
+        layout_w = self.width - margin * 2
+        layout_h = self.height - BREADCRUMB_HEIGHT - margin * 2
+        self.interior_layout = compute_layout(
+            children, edges,
+            entry_points=entry_points,
+            width=layout_w, height=layout_h
+        )
+
+        for name, pos in self.interior_layout.items():
+            pos['x'] = pos['x'] + margin
+            pos['y'] = pos['y'] + BREADCRUMB_HEIGHT + margin
 
     def world_to_screen(self, world_x: float, world_y: float) -> Tuple[int, int]:
         screen_x = (world_x - self.camera_x) * self.zoom + self.width // 2
@@ -149,8 +252,8 @@ class MapGUI:
 
         coords_list = [(loc.get('coordinates', {}).get('x', 0),
                         loc.get('coordinates', {}).get('y', 0))
-                       for loc in self.locations.values()
-                       if loc.get('coordinates')]
+                       for name, loc in self.locations.items()
+                       if loc.get('coordinates') and not loc.get('parent')]
 
         if not coords_list:
             return None
@@ -182,10 +285,12 @@ class MapGUI:
 
         default_color = self.terrain_colors.get('default', (100, 150, 255))
 
+        global_locs = {n: d for n, d in self.locations.items() if self._is_global_visible(n, d)}
+
         connection_lines = []
-        for loc_a, loc_b, conn in get_unique_edges(self.locations):
-            coords_a = self.locations[loc_a].get('coordinates')
-            coords_b = self.locations.get(loc_b, {}).get('coordinates')
+        for loc_a, loc_b, conn in get_unique_edges(global_locs):
+            coords_a = global_locs[loc_a].get('coordinates')
+            coords_b = global_locs.get(loc_b, {}).get('coordinates')
             if not coords_a or not coords_b:
                 continue
             terrain = conn.get('terrain', 'default')
@@ -248,7 +353,6 @@ class MapGUI:
 
         screen_x, screen_y = self.world_to_screen(bounds['min_x'], bounds['max_y'])
 
-        # Crop source rect to visible screen area only
         src_x = max(0, int(-screen_x / scale_factor))
         src_y = max(0, int(-screen_y / scale_factor))
         src_x2 = min(surf_w, int((self.width - screen_x) / scale_factor) + 1)
@@ -278,14 +382,14 @@ class MapGUI:
 
     def draw_connections(self):
         default_color = self.terrain_colors.get('default', (100, 150, 255))
-        for loc_a, loc_b, conn in get_unique_edges(self.locations):
-            coords_a = self.locations[loc_a].get('coordinates')
-            coords_b = self.locations.get(loc_b, {}).get('coordinates')
+        global_locs = {n: d for n, d in self.locations.items() if self._is_global_visible(n, d)}
+        for loc_a, loc_b, conn in get_unique_edges(global_locs):
+            coords_a = global_locs[loc_a].get('coordinates')
+            coords_b = global_locs.get(loc_b, {}).get('coordinates')
             if not coords_a or not coords_b:
                 continue
             x1, y1 = self.world_to_screen(coords_a['x'], coords_a['y'])
             x2, y2 = self.world_to_screen(coords_b['x'], coords_b['y'])
-            to_loc = loc_b
             terrain = conn.get('terrain', 'default')
             conn_color = self.terrain_colors.get(terrain, default_color)
             pygame.draw.line(self.screen, conn_color, (x1, y1), (x2, y2), 3)
@@ -338,6 +442,8 @@ class MapGUI:
         mouse_pos = pygame.mouse.get_pos()
         self.hovered_location = None
         for loc_name, loc_data in self.locations.items():
+            if not self._is_global_visible(loc_name, loc_data):
+                continue
             coords = loc_data.get('coordinates')
             if not coords:
                 continue
@@ -348,6 +454,7 @@ class MapGUI:
             if x < -margin or x > self.width + margin or y < -margin or y > self.height + margin:
                 continue
             self.draw_blocked_ranges(loc_name, loc_data)
+            is_compound = self._is_compound(loc_data)
             is_waypoint = loc_data.get('is_waypoint', False)
             is_current = (loc_name == self.current_location)
             is_selected = (loc_name == self.selected_location)
@@ -356,7 +463,19 @@ class MapGUI:
             if dist < max(radius_screen, 10):
                 is_hovered = True
                 self.hovered_location = loc_name
-            if is_waypoint:
+            if is_compound:
+                half = max(10, int(radius_screen))
+                color = self.COLOR_PLAYER if is_current else self.COLOR_COMPOUND
+                if is_selected:
+                    color = self.COLOR_HIGHLIGHT
+                if is_hovered or is_selected:
+                    pygame.draw.rect(self.screen, self.COLOR_HIGHLIGHT,
+                                     (x - half - 4, y - half - 4, (half + 4) * 2, (half + 4) * 2), 2)
+                surf = pygame.Surface((half * 2, half * 2), pygame.SRCALPHA)
+                pygame.draw.rect(surf, (*color, 100), (0, 0, half * 2, half * 2))
+                self.screen.blit(surf, (x - half, y - half))
+                pygame.draw.rect(self.screen, color, (x - half, y - half, half * 2, half * 2), 2)
+            elif is_waypoint:
                 color = (255, 150, 0)
                 size = max(8, int(radius_screen))
                 triangle_points = [(x, y - size), (x - size, y + size), (x + size, y + size)]
@@ -383,42 +502,164 @@ class MapGUI:
             self.screen.blit(shadow, (label_rect.x + 1, label_rect.y + 1))
             self.screen.blit(label, label_rect)
 
+    def draw_interior_connections(self):
+        if not self.current_compound:
+            return
+        compound_data = self.locations.get(self.current_compound, {})
+        children = compound_data.get('children', [])
+        drawn = set()
+        for child_name in children:
+            child_data = self.locations.get(child_name, {})
+            for conn in child_data.get('connections', []):
+                to_name = conn.get('to') if isinstance(conn, dict) else conn
+                if to_name not in children:
+                    continue
+                edge_key = tuple(sorted([child_name, to_name]))
+                if edge_key in drawn:
+                    continue
+                drawn.add(edge_key)
+                pos_a = self.interior_layout.get(child_name)
+                pos_b = self.interior_layout.get(to_name)
+                if not pos_a or not pos_b:
+                    continue
+                x1, y1 = int(pos_a['x']), int(pos_a['y'])
+                x2, y2 = int(pos_b['x']), int(pos_b['y'])
+                pygame.draw.line(self.screen, self.COLOR_INTERIOR_LINE, (x1, y1), (x2, y2), 2)
+                path_label = conn.get('path', '') if isinstance(conn, dict) else ''
+                if path_label:
+                    mid_x = (x1 + x2) // 2
+                    mid_y = (y1 + y2) // 2
+                    lbl = self.font.render(path_label, True, self.COLOR_TEXT)
+                    lbl_rect = lbl.get_rect(center=(mid_x, mid_y - 10))
+                    bg = lbl_rect.inflate(6, 4)
+                    pygame.draw.rect(self.screen, (20, 20, 30), bg)
+                    self.screen.blit(lbl, lbl_rect)
+
+    def draw_interior_locations(self):
+        if not self.current_compound:
+            return
+        compound_data = self.locations.get(self.current_compound, {})
+        children = compound_data.get('children', [])
+        entry_points = set(compound_data.get('entry_points', []))
+        mouse_pos = pygame.mouse.get_pos()
+        self.hovered_location = None
+
+        for child_name in children:
+            pos = self.interior_layout.get(child_name)
+            if not pos:
+                continue
+            child_data = self.locations.get(child_name, {})
+            x, y = int(pos['x']), int(pos['y'])
+            is_compound = self._is_compound(child_data)
+            is_entry = child_name in entry_points
+            is_current = (child_name == self.current_location)
+            is_selected = (child_name == self.selected_location)
+            is_hovered = False
+            radius = 20
+
+            dist = math.sqrt((mouse_pos[0] - x)**2 + (mouse_pos[1] - y)**2)
+            if dist < radius + 5:
+                is_hovered = True
+                self.hovered_location = child_name
+
+            if is_compound:
+                half = radius
+                color = self.COLOR_PLAYER if is_current else self.COLOR_COMPOUND
+                if is_selected:
+                    color = self.COLOR_HIGHLIGHT
+                if is_hovered or is_selected:
+                    pygame.draw.rect(self.screen, self.COLOR_HIGHLIGHT,
+                                     (x - half - 4, y - half - 4, (half + 4) * 2, (half + 4) * 2), 2)
+                if is_entry:
+                    pygame.draw.rect(self.screen, self.COLOR_ENTRY,
+                                     (x - half - 2, y - half - 2, (half + 2) * 2, (half + 2) * 2), 2)
+                surf = pygame.Surface((half * 2, half * 2), pygame.SRCALPHA)
+                pygame.draw.rect(surf, (*color, 100), (0, 0, half * 2, half * 2))
+                self.screen.blit(surf, (x - half, y - half))
+                pygame.draw.rect(self.screen, color, (x - half, y - half, half * 2, half * 2), 2)
+            else:
+                color = self.COLOR_PLAYER if is_current else self.COLOR_LOCATION
+                if is_selected:
+                    color = self.COLOR_HIGHLIGHT
+                if is_hovered or is_selected:
+                    pygame.draw.circle(self.screen, self.COLOR_HIGHLIGHT, (x, y), radius + 4, 2)
+                if is_entry:
+                    pygame.draw.circle(self.screen, self.COLOR_ENTRY, (x, y), radius + 2, 2)
+                surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                pygame.draw.circle(surf, (*color, 100), (radius, radius), radius)
+                self.screen.blit(surf, (x - radius, y - radius))
+                pygame.draw.circle(self.screen, color, (x, y), radius, 2)
+
+            label = self.font.render(child_name, True, self.COLOR_TEXT)
+            label_rect = label.get_rect(center=(x, y - radius - 12))
+            shadow = self.font.render(child_name, True, (0, 0, 0))
+            self.screen.blit(shadow, (label_rect.x + 1, label_rect.y + 1))
+            self.screen.blit(label, label_rect)
+
+    def draw_breadcrumb(self):
+        pygame.draw.rect(self.screen, self.COLOR_BREADCRUMB_BG,
+                         (0, 0, self.width, BREADCRUMB_HEIGHT))
+        pygame.draw.line(self.screen, self.COLOR_BREADCRUMB_SEP,
+                         (0, BREADCRUMB_HEIGHT), (self.width, BREADCRUMB_HEIGHT), 1)
+
+        self.breadcrumb_rects = []
+        x_offset = 10
+        segments = ["World"] + list(self.breadcrumb)
+
+        for i, seg in enumerate(segments):
+            is_current = (i == len(segments) - 1)
+            color = self.COLOR_HIGHLIGHT if is_current else self.COLOR_TEXT
+            text = self.font.render(seg, True, color)
+            rect = text.get_rect(midleft=(x_offset, BREADCRUMB_HEIGHT // 2))
+            self.screen.blit(text, rect)
+            self.breadcrumb_rects.append((rect, i - 1))
+            x_offset = rect.right + 5
+
+            if i < len(segments) - 1:
+                sep = self.font.render(">", True, self.COLOR_BREADCRUMB_SEP)
+                sep_rect = sep.get_rect(midleft=(x_offset, BREADCRUMB_HEIGHT // 2))
+                self.screen.blit(sep, sep_rect)
+                x_offset = sep_rect.right + 5
+
     def draw_ui(self):
         campaign_name = self.overview.get('campaign_name', 'Campaign Map')
-        title = self.font_large.render(campaign_name, True, self.COLOR_TEXT)
-        self.screen.blit(title, (10, 10))
+        ui_y_start = BREADCRUMB_HEIGHT + 5 if self.view_mode == "interior" else 0
 
-        instructions = [
-            "Controls:",
-            "  Scroll - Zoom",
-            "  Drag - Pan",
-            "  Click - Select",
-            "  ESC - Exit",
-        ]
-        y_offset = 40
+        title = self.font_large.render(campaign_name, True, self.COLOR_TEXT)
+        self.screen.blit(title, (10, ui_y_start + 10))
+
+        instructions = ["Controls:", "  Scroll - Zoom", "  Drag - Pan", "  Click - Select"]
+        if self.view_mode == "interior":
+            instructions.append("  DblClick - Enter compound")
+            instructions.append("  ESC - Go up")
+        else:
+            instructions.append("  DblClick - Enter compound")
+            instructions.append("  ESC - Exit")
+
+        y_offset = ui_y_start + 40
         for line in instructions:
             text = self.font.render(line, True, self.COLOR_TEXT)
             self.screen.blit(text, (10, y_offset))
             y_offset += 18
 
-        y_offset += 10
-        legend_text = self.font.render("Terrain:", True, self.COLOR_TEXT)
-        self.screen.blit(legend_text, (10, y_offset))
-        y_offset += 20
-        for terrain, color in self.terrain_colors.items():
-            if terrain == 'default':
-                continue
-            pygame.draw.line(self.screen, color, (15, y_offset + 5), (35, y_offset + 5), 3)
-            text = self.font.render(terrain, True, color)
-            self.screen.blit(text, (40, y_offset))
-            y_offset += 18
+        if self.view_mode == "global":
+            y_offset += 10
+            legend_text = self.font.render("Terrain:", True, self.COLOR_TEXT)
+            self.screen.blit(legend_text, (10, y_offset))
+            y_offset += 20
+            for terrain, color in self.terrain_colors.items():
+                if terrain == 'default':
+                    continue
+                pygame.draw.line(self.screen, color, (15, y_offset + 5), (35, y_offset + 5), 3)
+                text = self.font.render(terrain, True, color)
+                self.screen.blit(text, (40, y_offset))
+                y_offset += 18
 
-        info_lines = [
-            f"Zoom: {self.zoom:.2f}x",
-            f"Camera: ({int(self.camera_x)}, {int(self.camera_y)})",
-        ]
-        if self.terrain_gen_time > 0:
+        info_lines = [f"Zoom: {self.zoom:.2f}x", f"Camera: ({int(self.camera_x)}, {int(self.camera_y)})"]
+        if self.terrain_gen_time > 0 and self.view_mode == "global":
             info_lines.append(f"Terrain: {self.terrain_gen_time:.1f}s")
+        if self.view_mode == "interior":
+            info_lines.append(f"Interior: {self.current_compound}")
 
         y_offset = self.height - 80
         for line in info_lines:
@@ -428,11 +669,12 @@ class MapGUI:
 
         legend_items = [
             (self.COLOR_PLAYER, "@ Current Position"),
-            (self.COLOR_LOCATION, "  Location")
+            (self.COLOR_LOCATION, "  Location"),
+            (self.COLOR_COMPOUND, "  Compound"),
         ]
-        for color, label in legend_items:
+        for color, label_txt in legend_items:
             pygame.draw.circle(self.screen, color, (15, y_offset + 5), 5)
-            text = self.font.render(label, True, self.COLOR_TEXT)
+            text = self.font.render(label_txt, True, self.COLOR_TEXT)
             self.screen.blit(text, (25, y_offset))
             y_offset += 18
 
@@ -462,11 +704,20 @@ class MapGUI:
         title = self.font_large.render(loc_name, True, self.COLOR_HIGHLIGHT)
         self.screen.blit(title, (panel_x + 10, panel_y + 10))
         y = panel_y + 40
-        info_lines = [
-            f"Position: {loc_data.get('position', 'unknown')}",
-            f"Coordinates: ({coords.get('x', 0)}, {coords.get('y', 0)})",
-            "", "Connections:"
-        ]
+        info_lines = []
+        loc_type = loc_data.get('type', '')
+        if loc_type:
+            info_lines.append(f"Type: {loc_type}")
+        parent = loc_data.get('parent', '')
+        if parent:
+            info_lines.append(f"Parent: {parent}")
+        if coords:
+            info_lines.append(f"Coordinates: ({coords.get('x', 0)}, {coords.get('y', 0)})")
+        info_lines.append(f"Position: {loc_data.get('position', 'unknown')}")
+        children = loc_data.get('children', [])
+        if children:
+            info_lines.append(f"Children: {', '.join(children)}")
+        info_lines.extend(["", "Connections:"])
         for conn in loc_data.get('connections', []):
             info_lines.append(f"  > {conn.get('to', '?')} ({conn.get('distance_meters', 0)}m, {conn.get('bearing', 0)}deg)")
         blocked = loc_data.get('blocked_ranges', [])
@@ -481,24 +732,52 @@ class MapGUI:
             self.screen.blit(text, (panel_x + 10, y))
             y += 18
 
+    def _handle_click(self, pos):
+        if self.view_mode == "interior":
+            for rect, level_idx in self.breadcrumb_rects:
+                if rect.collidepoint(pos):
+                    self.exit_to_level(level_idx)
+                    return
+
+        if self.refresh_btn_rect.collidepoint(pos):
+            self.reload_data()
+            return
+
+        now = time.time() * 1000
+        if (self.hovered_location
+                and self.hovered_location == self.last_click_location
+                and (now - self.last_click_time) < DOUBLE_CLICK_MS):
+            loc_data = self.locations.get(self.hovered_location, {})
+            if self._is_compound(loc_data):
+                self.enter_compound(self.hovered_location)
+                self.last_click_time = 0
+                self.last_click_location = None
+                return
+
+        self.last_click_time = now
+        self.last_click_location = self.hovered_location
+
+        if self.hovered_location:
+            self.selected_location = self.hovered_location
+        else:
+            self.dragging = True
+            self.drag_start = pos
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    return False
+                    if self.view_mode == "interior":
+                        self.go_up()
+                    else:
+                        return False
                 elif event.key == pygame.K_r:
                     self.reload_data()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
-                    if self.refresh_btn_rect.collidepoint(event.pos):
-                        self.reload_data()
-                    elif self.hovered_location:
-                        self.selected_location = self.hovered_location
-                    else:
-                        self.dragging = True
-                        self.drag_start = event.pos
+                    self._handle_click(event.pos)
                 elif event.button == 4:
                     self.zoom = min(self.zoom * 1.1, self.max_zoom)
                     mx, my = pygame.mouse.get_pos()
@@ -530,10 +809,15 @@ class MapGUI:
         while running:
             running = self.handle_events()
             self.screen.fill(self.COLOR_BG)
-            self.draw_terrain_background()
-            self.draw_grid()
-            self.draw_connections()
-            self.draw_locations()
+            if self.view_mode == "global":
+                self.draw_terrain_background()
+                self.draw_grid()
+                self.draw_connections()
+                self.draw_locations()
+            else:
+                self.draw_interior_connections()
+                self.draw_interior_locations()
+                self.draw_breadcrumb()
             self.draw_ui()
             pygame.display.flip()
             self.clock.tick(60)
