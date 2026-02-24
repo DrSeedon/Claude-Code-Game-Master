@@ -5,6 +5,7 @@ Handles PC operations: XP, HP, level progression, and character data
 """
 
 import sys
+import re
 import json
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -42,8 +43,8 @@ class PlayerManager(EntityManager):
         355000,  # Level 20
     ]
 
-    def __init__(self, world_state_dir: str = None):
-        super().__init__(world_state_dir)
+    def __init__(self, world_state_dir: Optional[str] = None, require_active_campaign: bool = True):
+        super().__init__(world_state_dir, require_active_campaign)
 
         # Additional paths specific to player management
         self.world_state_dir = self.campaign_dir  # Alias for compatibility
@@ -73,7 +74,7 @@ class PlayerManager(EntityManager):
         char_id = self._name_to_id(name)
         return self.characters_dir / f"{char_id}.json"
 
-    def _load_character(self, name: str = None) -> Optional[Dict]:
+    def _load_character(self, name: Optional[str] = None) -> Optional[Dict]:
         """
         Load character data from file
         In single-character mode, name is optional/ignored
@@ -82,7 +83,8 @@ class PlayerManager(EntityManager):
         if self._is_using_single_character():
             try:
                 with open(self.character_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    char = json.load(f)
+                return self._normalize_hp(char)
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[ERROR] Failed to load character: {e}")
                 return None
@@ -100,7 +102,8 @@ class PlayerManager(EntityManager):
             return None
         try:
             with open(char_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                char = json.load(f)
+            return self._normalize_hp(char)
         except (json.JSONDecodeError, IOError) as e:
             print(f"[ERROR] Failed to load character: {e}")
             return None
@@ -115,6 +118,16 @@ class PlayerManager(EntityManager):
         char_path = self._get_character_path(name)
         char_path.parent.mkdir(parents=True, exist_ok=True)
         return self.json_ops.save_json(str(char_path), data)
+
+    def _normalize_hp(self, char: Dict) -> Dict:
+        """Normalize HP to object format {current, max}"""
+        hp = char.get('hp', 0)
+        if isinstance(hp, int):
+            max_hp = char.get('max_hp', hp)
+            char['hp'] = {'current': hp, 'max': max_hp}
+        elif not isinstance(hp, dict):
+            char['hp'] = {'current': 0, 'max': 0}
+        return char
 
     def _normalize_xp(self, char: Dict) -> Dict:
         """Normalize XP to object format {current, next_level}"""
@@ -131,8 +144,22 @@ class PlayerManager(EntityManager):
 
         return char
 
-    def get_player(self, name: str) -> Optional[Dict]:
-        """Get full player character data"""
+    def _get_active_character_name(self) -> Optional[str]:
+        """Get active character name from campaign overview"""
+        campaign = self.json_ops.load_json(self.campaign_file)
+        return campaign.get('current_character')
+
+    def get_player(self, name: Optional[str] = None) -> Optional[Dict]:
+        """
+        Get full player character data
+        If name is None, uses active character from campaign
+        """
+        if name is None:
+            name = self._get_active_character_name()
+            if not name:
+                print(f"[ERROR] No active character in campaign")
+                return None
+
         char = self._load_character(name)
         if not char:
             print(f"[ERROR] Character '{name}' not found")
@@ -310,11 +337,18 @@ class PlayerManager(EntityManager):
             'xp_remaining': remaining
         }
 
-    def modify_hp(self, name: str, amount: int) -> Dict[str, Any]:
+    def modify_hp(self, name: Optional[str] = None, amount: int = 0) -> Dict[str, Any]:
         """
         Modify character HP (positive = heal, negative = damage)
+        If name is None, uses active character
         Returns dict with HP status info
         """
+        if name is None:
+            name = self._get_active_character_name()
+            if not name:
+                print(f"[ERROR] No active character in campaign")
+                return {'success': False}
+
         char = self._load_character(name)
         if not char:
             print(f"[ERROR] Character '{name}' not found")
@@ -357,11 +391,18 @@ class PlayerManager(EntityManager):
             'bloodied': 0 < new_hp <= max_hp // 4
         }
 
-    def modify_gold(self, name: str, amount: Optional[int] = None) -> Dict[str, Any]:
+    def modify_gold(self, name: Optional[str] = None, amount: Optional[int] = None) -> Dict[str, Any]:
         """
         Modify character gold or show current gold if no amount given
+        If name is None, uses active character
         Returns dict with gold status info
         """
+        if name is None:
+            name = self._get_active_character_name()
+            if not name:
+                print(f"[ERROR] No active character in campaign")
+                return {'success': False}
+
         char = self._load_character(name)
         if not char:
             print(f"[ERROR] Character '{name}' not found")
@@ -596,7 +637,6 @@ class PlayerManager(EntityManager):
             print(f"[ERROR] Unknown condition action: {action}")
             return {'success': False}
 
-
 def main():
     """CLI interface for player management"""
     import argparse
@@ -626,7 +666,7 @@ def main():
 
     # Modify HP
     hp_parser = subparsers.add_parser('hp', help='Modify character HP')
-    hp_parser.add_argument('name', help='Character name')
+    hp_parser.add_argument('name', nargs='?', default=None, help='Character name (optional, uses active)')
     hp_parser.add_argument('amount', help='HP change (+5 to heal, -3 for damage)')
 
     # Get full character JSON
@@ -703,25 +743,30 @@ def main():
             sys.exit(1)
 
     elif args.action == 'hp':
-        # Parse amount (handle +5 or -3 format)
+        # Auto-detect: if name looks like an amount, shift args
+        name = args.name
         amount_str = args.amount
+        if name is not None and re.match(r'^[+-]\d+$', name):
+            amount_str = name
+            name = None
+
         try:
             if amount_str.startswith('+'):
                 amount = int(amount_str[1:])
             else:
                 amount = int(amount_str)
         except ValueError:
-            print(f"[ERROR] Invalid HP amount: {args.amount}")
+            print(f"[ERROR] Invalid HP amount: {amount_str}")
             sys.exit(1)
 
-        result = manager.modify_hp(args.name, amount)
+        result = manager.modify_hp(name, amount)
         if not result.get('success'):
             sys.exit(1)
 
     elif args.action == 'get':
         char = manager.get_player(args.name)
         if char:
-            print(json.dumps(char, indent=2))
+            print(json.dumps(char, indent=2, ensure_ascii=False))
         else:
             sys.exit(1)
 
@@ -760,7 +805,6 @@ def main():
         result = manager.modify_condition(args.name, args.cond_action, args.condition)
         if not result.get('success'):
             sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

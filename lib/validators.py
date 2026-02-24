@@ -26,7 +26,7 @@ class Validators:
             return False, "Name too long (max 100 characters)"
 
         # Check characters
-        pattern = r"^[a-zA-Z0-9\s\-']+$"
+        pattern = r"^[a-zA-Zа-яА-ЯёЁ0-9\s\-'«»]+$"
         if not re.match(pattern, name):
             return False, "Invalid name. Use only letters, numbers, spaces, hyphens, and apostrophes"
 
@@ -35,18 +35,13 @@ class Validators:
     @staticmethod
     def validate_attitude(attitude: str) -> Tuple[bool, Optional[str]]:
         """
-        Validate NPC attitude
+        Validate NPC attitude - accepts any non-empty string
         Returns: (is_valid, error_message)
         """
-        valid_attitudes = [
-            'friendly', 'neutral', 'hostile', 'suspicious', 'helpful',
-            'indifferent', 'fearful', 'respectful', 'dismissive', 'curious'
-        ]
+        if not attitude or not attitude.strip():
+            return False, "Attitude cannot be empty"
 
-        attitude_lower = attitude.lower().strip()
-        if attitude_lower not in valid_attitudes:
-            return False, f"Invalid attitude. Choose from: {', '.join(valid_attitudes)}"
-
+        # Any non-empty string is valid - DM can use any attitude description
         return True, None
 
     @staticmethod
