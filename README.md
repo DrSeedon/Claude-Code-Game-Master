@@ -2,9 +2,27 @@
 
 **Drop any book into it. Play inside the story.**
 
-Got a favourite fantasy novel? A STALKER fanfic? A weird sci-fi book from the 70s? Drop the PDF in — the system extracts every character, location, item, and plot thread, then drops you into that world as whoever you want to be.
+Got a favourite fantasy novel? A Star Trek fanfic? A weird detective novel from the 70s? Drop the PDF in — the system extracts every character, location, item, and plot thread, then drops you into that world as whoever you want to be.
 
 D&D 5e rules give the story stakes and consequences. You don't need to know D&D. Just say what you want to do.
+
+---
+
+## Getting Started
+
+**Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+
+```bash
+git clone https://github.com/Sstobo/Claude-Code-Game-Master.git
+cd Claude-Code-Game-Master
+./install.sh
+```
+
+Once installed:
+
+1: Optional: drop a PDF or text file into `source-material/`
+2. Run `claude` to launch Claude Code
+3. Type `/new-game` — choose **Classic** for the classic experience, or if youre feeling brave, **Advanced** to configure modules 
 
 ---
 
@@ -43,35 +61,6 @@ Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module
 
 ---
 
-## Narrator Styles (Advanced)
-
-Four built-in narrator presets applied per campaign:
-
-| Style | Voice |
-|-------|-------|
-| `epic-heroic` | Grand scale, legendary deeds, bardic gravitas |
-| `horror-atmospheric` | Dread through implication — never gore |
-| `sarcastic-puns` | Terry Pratchett at a tavern |
-| `serious-cinematic` | Every scene is a film shot |
-
-Custom styles supported: point to any `.md` file.
-
----
-
-## Campaign Rules Templates (Advanced)
-
-Pre-built mechanical overlays that define how a campaign world works at the rule level — eras, resources, sanity, factions, FTL. Applied at creation, enforced every session via `/dm-continue`.
-
-| Template | For |
-|----------|-----|
-| `survival-zone` | STALKER, Fallout, Metro — resources, morale, hazards |
-| `horror-investigation` | CoC, SCP, Delta Green — sanity, clues, dread |
-| `space-travel` | FTL, The Expanse, Mass Effect — ships, crew, FTL |
-| `political-intrigue` | Vampire Masquerade, court drama — factions, influence |
-| `civilization` | 4X, empire building — eras, population, tech tree |
-
----
-
 ## Campaign Ideas
 
 The system is universal — not just fantasy.
@@ -103,23 +92,6 @@ A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the sk
 
 ---
 
-## Getting Started
-
-**Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-
-```bash
-git clone https://github.com/Sstobo/Claude-Code-Game-Master.git
-cd Claude-Code-Game-Master
-./install.sh
-```
-
-Once installed:
-
-1. Run `claude` to launch Claude Code
-2. Run `/new-game` — choose **Classic** for instant play, **Advanced** to configure modules
-3. Or drop a PDF into `source-material/` first and run `/import` to play inside a book
-
----
 
 ## How It Works
 
