@@ -1,5 +1,3 @@
-[🇷🇺 Читать на русском](README.ru.md)
-
 # DM Claude — AI Dungeon Master
 
 **Drop any book into it. Play inside the story.**
@@ -201,17 +199,6 @@ tools/                             ├── infrastructure/   ← dispatch, nar
 ```
 
 The vanilla core (`lib/`, `tools/`) is never modified by modules. Advanced features hook in via middleware — enabled per campaign, invisible when not active. A campaign's `advanced_mode` flag in `campaign-overview.json` determines which path `/dm` takes.
-
----
-
-## Roadmap
-
-- **Nested Sub-Maps** — locations can contain their own internal maps. Enter a castle and explore its floors. Board a spaceship and navigate its decks.
-- **Multi-Floor Dungeons** — vertical dungeon navigation with stairs between floors.
-- **Vehicle Interiors** — ships and stations as explorable sub-maps that move on the world map.
-- **Inventory Weight & Slots** — carry capacity, overencumbrance, automatic stacking.
-
-Got ideas? [Open an issue](https://github.com/Sstobo/Claude-Code-Game-Master/issues) or submit a PR.
 
 ---
 
