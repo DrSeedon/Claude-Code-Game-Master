@@ -1,62 +1,33 @@
 # TODO — DM System
 
-## Module System (Community Expansion Packs)
+## Module System ✅
 
-### Done
-
-- [x] **Module Registry** — `.claude/additional/registry.json` with metadata for all modules
-- [x] **Module Loader** — `.claude/additional/module_loader.py` for module discovery and activation
-- [x] **Module Structure** — each module is self-contained in `.claude/additional/modules/<name>/`
-- [x] **Middleware Architecture** — `dispatch_middleware` / `dispatch_middleware_post` / `dispatch_middleware_help`
-- [x] **4 modules created**: custom-stats, world-travel, firearms-combat, inventory-system
-- [x] `dm-module.sh list` — show available modules
-- [x] `/new-game` asks which modules to enable
-- [x] `module.json` manifest with dependencies, middleware declarations, features
-- [x] Module rules loaded during gameplay (`rules.md`) and campaign creation (`creation-rules.md`)
-- [x] `dm-module.sh activate/deactivate` — toggle modules for active campaign
-- [x] Module dependency validation on enable (checks hard deps before activation, blocks deactivation if dependents exist)
-- [x] **Restructured** `.claude/modules/` → `.claude/additional/` with clean separation
-
-### Remaining
-
-- [x] Community docs: [module development guide](docs/module-development.md)
+- [x] Module Registry, Loader, Structure, Middleware Architecture
+- [x] 4 modules: custom-stats, world-travel, firearms-combat, inventory-system
+- [x] `dm-module.sh list/activate/deactivate` with dependency validation
+- [x] Restructured `.claude/modules/` → `.claude/additional/`
+- [x] [Module development guide](docs/module-development.md)
 
 ---
 
-## custom-stats module
+## custom-stats module ✅
 
-### Done
-
-- [x] SurvivalEngine — per-tick stat simulation, conditional effects, threshold consequences
-- [x] Sleep/rest mode with `--sleeping` flag
-- [x] CLI: `dm-survival.sh tick/status/custom-stat/custom-stats-list`
-- [x] Middleware: `dm-player.sh` (show stats), `dm-consequence.sh` (timed triggers)
-
-- [x] Auto-tick via `dm-time.sh.post` middleware — `dm-time.sh "Night" "Day 3" --elapsed 4` ticks stats automatically
-- [x] Sleep rate support — `sleep_rate` field in time_effects rules slows stat drain during sleep
-
-### Remaining
-
-_(none)_
+All done: SurvivalEngine, sleep mode, auto-tick via middleware, sleep_rate, timed effects, rate modifiers.
 
 ---
 
-## world-travel module
+## world-travel module ✅
 
-### Done
-
-- [x] Hierarchical locations (compound/interior with entry points)
-- [x] BFS pathfinding with bidirectional connections
-- [x] Coordinate system with bearing-based location creation
-- [x] GUI map (tkinter) with campaign terrain colors and caching
-- [x] Encounter engine with DC scaling by distance/time
-- [x] Middleware: `dm-session.sh` (move intercept), `dm-location.sh`
-- [x] Vehicle system — `dm-vehicle.sh` with create/board/exit/move/map/status/list
+All done:
+- [x] Coordinate system, BFS pathfinding, bearing-based location creation
+- [x] GUI map (tkinter) with terrain colors and caching
+- [x] Encounter engine with DC scaling, segment checks, waypoints
+- [x] Vehicle system — `dm-vehicle.sh` create/board/exit/move/map/status/list
+- [x] **Hierarchy/submaps** — `dm-hierarchy.sh` create-compound/add-room/enter/exit/move/tree/validate. Compounds have children (interior rooms), entry points, nested navigation. GUI supports interior view with breadcrumbs. Vehicles use hierarchy for internal rooms.
 
 ### Remaining
 
-- [ ] Submaps for building interiors, ship decks, dungeon floors
-- [ ] Encounter generation creates type (Dangerous/Neutral/Beneficial) but DM must narrate — no auto-enemy spawn
+- [ ] Encounter auto-spawn — engine rolls category (Dangerous/Neutral/Beneficial/Special) but DM narrates manually. No encounter table → auto-generate NPC/monster with stats.
 
 ---
 
@@ -64,15 +35,14 @@ _(none)_
 
 ### Done
 
-- [x] Full-auto combat resolver with RPM calculation, penetration vs protection, crits, XP
-- [x] CLI: `dm-combat.sh resolve --weapon AK-74 --ammo 120 --targets "Enemy:13:30:4"`
+- [x] Full-auto combat resolver with RPM → shots/round, PEN vs PROT, crits, XP
 
 ### Remaining
 
-- [ ] Single fire mode — currently returns "not implemented"
-- [ ] Burst fire mode — currently returns "not implemented"
-- [ ] Auto-update ammo in inventory after combat (currently manual)
-- [ ] Enemy type support (`--enemy-type` flag parsed but not implemented)
+- [ ] Single fire mode — `--fire-mode single` returns "not implemented". 1 shot/round, no progressive penalty.
+- [ ] Burst fire mode — `--fire-mode burst` returns "not implemented". 3 shots/round, moderate penalties.
+- [ ] Auto-ammo deduction — after combat, auto-call `dm-inventory.sh` to subtract spent ammo. Currently manual.
+- [ ] Enemy type presets — `--enemy-type` flag is parsed but ignored. Types (mutant, human, armored) should set AC/HP/PROT defaults.
 
 ---
 
@@ -81,23 +51,23 @@ _(none)_
 ### Done
 
 - [x] Stackable + unique items with atomic transactions and rollback
-- [x] Gold, HP, XP tracking
-- [x] Loot shorthand: `dm-inventory.sh loot`
-- [x] Migration from old `equipment[]` format
-- [x] CLI: `dm-inventory.sh show/update/loot`
+- [x] Gold, HP, XP, custom-stat tracking in one command
+- [x] Loot shorthand, old format migration
 
 ### Remaining
 
-- [ ] Equipment slots (weapon, armor, accessory)
-- [ ] Weight system with carry capacity (STR-based)
-- [ ] Transfer items between characters
-- [ ] Separate `inventory.json` file (currently stored in `character.json`)
-- [ ] Filter by category: `dm-inventory.sh list --category weapon`
+- [ ] Equipment slots — weapon/armor/accessory/helmet. Equipped items give AC/stat bonuses. Currently all items are a flat list.
+- [ ] Weight system — item weight, carry capacity = STR × 15, overload penalty to speed.
+- [ ] Transfer items — `dm-inventory.sh transfer "Item" "CharA" "CharB"`. Atomic remove+add.
+- [ ] Separate inventory.json — move `inventory` out of `character.json` into its own file.
+- [ ] Category filter — `dm-inventory.sh list --category weapon`.
 
 ---
 
-## Quest System
+## Quest System (CORE)
 
-- [ ] `dm-plot.sh add` — create quests via CLI (currently manual JSON only)
-- [ ] `dm-plot.sh objectives` — mark quest objectives as complete
-- [ ] `/dm quests` — display active quests to player
+`dm-plot.sh` has list/show/search/update/complete/fail/threads/counts but no way to create quests via CLI.
+
+- [ ] `dm-plot.sh add "Name" --type side --description "..."` — create quest. PlotManager has no `add_plot()` method.
+- [ ] `dm-plot.sh objectives "Quest" "Objective" complete` — mark sub-objectives.
+- [ ] `/dm quests` — player-facing active quest display.
