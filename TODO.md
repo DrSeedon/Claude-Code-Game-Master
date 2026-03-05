@@ -5,19 +5,20 @@
 ### Done
 
 - [x] **Module Registry** — `.claude/additional/registry.json` with metadata for all modules
-- [x] **Module Loader** — `lib/module_loader.py` for module discovery and activation
-- [x] **Module Structure** — each module is self-contained in `.claude/additional/<name>/`
+- [x] **Module Loader** — `.claude/additional/module_loader.py` for module discovery and activation
+- [x] **Module Structure** — each module is self-contained in `.claude/additional/modules/<name>/`
 - [x] **Middleware Architecture** — `dispatch_middleware` / `dispatch_middleware_post` / `dispatch_middleware_help`
 - [x] **4 modules created**: custom-stats, world-travel, firearms-combat, inventory-system
-- [x] `tools/dm-module.sh list` — show available modules
+- [x] `dm-module.sh list` — show available modules
 - [x] `/new-game` asks which modules to enable
 - [x] `module.json` manifest with dependencies, middleware declarations, features
 - [x] Module rules loaded during gameplay (`rules.md`) and campaign creation (`creation-rules.md`)
+- [x] `dm-module.sh activate/deactivate` — toggle modules for active campaign
+- [x] Module dependency validation on enable (checks hard deps before activation, blocks deactivation if dependents exist)
+- [x] **Restructured** `.claude/modules/` → `.claude/additional/` with clean separation
 
 ### Remaining
 
-- [ ] `tools/dm-module.sh enable/disable` — toggle modules for active campaign
-- [ ] Module dependency validation on enable (if module A requires module B)
 - [ ] Community docs: module development guide
 
 ---
@@ -48,10 +49,10 @@
 - [x] GUI map (tkinter) with campaign terrain colors and caching
 - [x] Encounter engine with DC scaling by distance/time
 - [x] Middleware: `dm-session.sh` (move intercept), `dm-location.sh`
+- [x] Vehicle system — `dm-vehicle.sh` with create/board/exit/move/map/status/list
 
 ### Remaining
 
-- [ ] Vehicle system — code exists (`vehicle_manager.py`) but full board/exit/move cycle incomplete
 - [ ] Submaps for building interiors, ship decks, dungeon floors
 - [ ] Encounter generation creates type (Dangerous/Neutral/Beneficial) but DM must narrate — no auto-enemy spawn
 
