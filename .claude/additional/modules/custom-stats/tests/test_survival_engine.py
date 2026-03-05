@@ -881,3 +881,48 @@ class TestTimedEffects:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSleepRate:
+    def test_sleep_rate_slows_drain(self, tmp_path):
+        override = {
+            "rules": [
+                {"stat": "hunger", "per_hour": -2, "sleep_rate": -0.5},
+                {"stat": "thirst", "per_hour": -3, "sleep_rate": -1},
+            ],
+        }
+        ws = make_campaign(tmp_path, base_campaign(override), base_character())
+        engine = make_engine(ws)
+
+        result = engine.tick(4, sleeping=True)
+        changes = {c['stat']: c['change'] for c in result['stat_changes']}
+        assert changes['hunger'] == -2.0   # -0.5/h * 4h
+        assert changes['thirst'] == -4.0   # -1/h * 4h
+
+    def test_no_sleep_rate_uses_full_drain(self, tmp_path):
+        ws = make_campaign(tmp_path, base_campaign(), base_character())
+        engine = make_engine(ws)
+
+        result = engine.tick(4, sleeping=True)
+        changes = {c['stat']: c['change'] for c in result['stat_changes']}
+        assert changes['hunger'] == -8.0   # -2/h * 4h (no sleep_rate = full speed)
+        assert changes['thirst'] == -12.0  # -3/h * 4h
+
+    def test_sleep_restores_sleep_stat(self, tmp_path):
+        override = {
+            "rules": [
+                {"stat": "sleep", "per_hour": -3, "sleep_restore_per_hour": 10},
+            ],
+        }
+        char = base_character()
+        char['custom_stats']['sleep'] = {"current": 30, "min": 0, "max": 100}
+        ws = make_campaign(tmp_path, base_campaign(override), char)
+        engine = make_engine(ws)
+
+        result = engine.tick(4, sleeping=True)
+        changes = {c['stat']: c['change'] for c in result['stat_changes']}
+        assert changes['sleep'] == 40.0  # +10/h * 4h
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

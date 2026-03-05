@@ -14,19 +14,27 @@ bash .claude/additional/modules/custom-stats/tools/dm-survival.sh tick --elapsed
 
 ### After every `dm-time.sh` with elapsed hours
 
-If time was advanced and `--elapsed` was specified:
+Stats tick **automatically** via middleware when `--elapsed` is passed to `dm-time.sh`:
 
 ```bash
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh tick --elapsed <hours>
+bash tools/dm-time.sh "Night" "Day 3" --elapsed 4
+bash tools/dm-time.sh "Morning" "Day 4" --elapsed 8 --sleeping
 ```
+
+No need to call `dm-survival.sh tick` separately — the post-hook handles it.
 
 ### During sleep/long rest
 
+Add `--sleeping` flag to `dm-time.sh`:
+
 ```bash
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh tick --elapsed 8 --sleeping
+bash tools/dm-time.sh "Morning" "Day 4" --elapsed 8 --sleeping
 ```
 
-The `--sleeping` flag reverses drain for stats that have `sleep_restore_per_hour` configured (e.g., sleep stat restores instead of draining).
+The `--sleeping` flag:
+- **sleep** stat: uses `sleep_restore_per_hour` (default +12.5/h) instead of drain
+- Other stats with `sleep_rate` configured: uses that rate instead of `per_hour` (e.g., hunger drains slower during sleep)
+- Stats without `sleep_rate`: drain at full speed (backward compatible)
 
 ## When NOT to Call
 

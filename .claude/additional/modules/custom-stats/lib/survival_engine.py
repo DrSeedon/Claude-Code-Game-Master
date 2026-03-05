@@ -356,8 +356,11 @@ class SurvivalEngine:
                     except Exception:
                         pass
 
-                if stat == 'sleep' and sleeping:
-                    change_per_hour = rule.get('sleep_restore_per_hour', 12.5)
+                if sleeping:
+                    if stat == 'sleep':
+                        change_per_hour = rule.get('sleep_restore_per_hour', 12.5)
+                    elif 'sleep_rate' in rule:
+                        change_per_hour = rule['sleep_rate']
 
                 condition = rule.get('condition')
                 if condition and not self._check_rule_condition(condition, sim_char):

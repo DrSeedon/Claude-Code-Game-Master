@@ -32,10 +32,12 @@
 - [x] CLI: `dm-survival.sh tick/status/custom-stat/custom-stats-list`
 - [x] Middleware: `dm-player.sh` (show stats), `dm-consequence.sh` (timed triggers)
 
+- [x] Auto-tick via `dm-time.sh.post` middleware — `dm-time.sh "Night" "Day 3" --elapsed 4` ticks stats automatically
+- [x] Sleep rate support — `sleep_rate` field in time_effects rules slows stat drain during sleep
+
 ### Remaining
 
-- [ ] Wire `advance_time()` to `dm-time.sh.post` middleware — currently tick must be called explicitly
-- [ ] Fix sleep stat drain during rest (known bug — sleep penalty applies even during sleep)
+_(none)_
 
 ---
 
