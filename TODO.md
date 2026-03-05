@@ -19,7 +19,7 @@
 
 ### Remaining
 
-- [ ] Community docs: module development guide
+- [x] Community docs: [module development guide](docs/module-development.md)
 
 ---
 
