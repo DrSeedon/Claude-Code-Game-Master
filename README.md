@@ -44,7 +44,7 @@ The original experience. Zero setup beyond naming your campaign.
 
 Everything in Classic, plus a suite of optional modules you toggle like game mods. Designed for campaigns that need mechanics beyond standard D&D.
 
-At campaign creation you get a module selection menu, narrator style picker, and campaign rules template selector. All of it lives in `.claude/modules/` and never touches the vanilla core.
+At campaign creation you get a module selection menu, narrator style picker, and campaign rules template selector. All of it lives in `.claude/additional/` and never touches the vanilla core.
 
 ---
 
@@ -57,7 +57,7 @@ At campaign creation you get a module selection menu, narrator style picker, and
 | ⚔️ **firearms-combat** | Automated combat resolver. RPM → shots per round, fire modes (single/burst/full\_auto), PEN vs PROT damage scaling, subclass bonuses. | Modern or military campaigns |
 | 📦 **inventory-system** | Atomic multi-change transactions (`--gold --hp --xp --add --remove` in one command). Stackable items with quantities. Unique items with automatic validation. | All campaigns |
 
-Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module.json`. Drop a folder into `.claude/modules/` to install community modules.
+Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module.json`. Drop a folder into `.claude/additional/modules/` to install community modules.
 
 ---
 
@@ -162,12 +162,15 @@ Advanced module tools (`dm-inventory.sh`, `dm-combat.sh`, `dm-map.sh`, `dm-encou
 ```
 CORE (vanilla)                   ADVANCED (opt-in, per campaign)
 ──────────────                   ───────────────────────────────
-lib/                             .claude/modules/
-tools/                             ├── infrastructure/   ← dispatch, narrator, rules
-.claude/commands/                  ├── custom-stats/
-                                   ├── world-travel/
-                                   ├── inventory-system/
-                                   └── firearms-combat/
+lib/                             .claude/additional/
+tools/                             ├── modules/          ← gameplay modules
+.claude/commands/                  │   ├── custom-stats/
+                                   │   ├── world-travel/
+                                   │   ├── inventory-system/
+                                   │   └── firearms-combat/
+                                   ├── infrastructure/   ← dispatch, narrator, rules
+                                   ├── dm-slots/         ← vanilla DM rules
+                                   └── narrator-styles/  ← narrator presets
 ```
 
 The vanilla core (`lib/`, `tools/`) is never modified by modules. Advanced features hook in via middleware — enabled per campaign, invisible when not active. A campaign's `advanced_mode` flag in `campaign-overview.json` determines which path `/dm` takes.

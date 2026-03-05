@@ -8,18 +8,18 @@
 ## Architecture
 - `lib/` — upstream CORE only. No custom features.
 - `tools/` — thin bash wrappers + `dispatch_middleware` for module hooks
-- `.claude/modules/` — all custom features as self-contained modules
-- `.claude/modules/dm-slots/` — vanilla DM rules (27 slot files, loaded in advanced mode only)
-- `.claude/modules/infrastructure/` — advanced mode loaders (dm-active-modules-rules.sh, dm-campaign-rules.sh, dm-narrator.sh)
-- `.claude/modules/campaign-rules-templates/` — campaign rule templates
-- `.claude/modules/narrator-styles/` — narrator style definitions
+- `.claude/additional/modules/` — self-contained gameplay modules (with module.json)
+- `.claude/additional/dm-slots/` — vanilla DM rules (27 slot files, loaded in advanced mode only)
+- `.claude/additional/infrastructure/` — advanced mode loaders (dm-active-modules-rules.sh, dm-campaign-rules.sh, dm-narrator.sh)
+- `.claude/additional/campaign-rules-templates/` — campaign rule templates
+- `.claude/additional/narrator-styles/` — narrator style definitions
 
 ## Two gameplay modes
 - **Vanilla** (`/dm`): loads dm-slots via `dm-active-modules-rules.sh` → `/tmp/dm-rules.md` (pure vanilla slots, no module replacements)
 - **Advanced** (`/dm-continue`): loads dm-slots + module rules via `dm-active-modules-rules.sh` → `/tmp/dm-rules.md`, campaign rules via `dm-campaign-rules.sh`, narrator styles. Activated when `campaign-overview.json` has `"advanced_mode": true`
 
 ## Module pattern
-Each module in `.claude/modules/<name>/`:
+Each module in `.claude/additional/modules/<name>/`:
 - `middleware/<tool>.sh` — intercepts CORE tool calls, handles `--help`
 - `lib/` — module Python code
 - `tools/` — module-specific CLI
@@ -28,7 +28,7 @@ Each module in `.claude/modules/<name>/`:
 ## Dev commands
 ```bash
 uv run pytest                                              # run all tests
-bash .claude/modules/infrastructure/tools/dm-module.sh list # list active modules
+bash .claude/additional/infrastructure/tools/dm-module.sh list # list active modules
 git diff upstream/main -- lib/                              # check CORE purity
 ```
 
@@ -36,4 +36,4 @@ git diff upstream/main -- lib/                              # check CORE purity
 - CORE tools delegate to modules via `dispatch_middleware "tool.sh" "$ACTION" "$@" && exit $?`
 - `lib/` diff from upstream: only `ensure_ascii=False`, `require_active_campaign`, `name=None` auto-detect
 - Never add features to `lib/` — put them in modules
-- `/dm` vanilla: no external rules loaded. `/dm-continue` advanced: loads `.claude/modules/dm-slots/*.md` + module rules via `dm-active-modules-rules.sh`
+- `/dm` vanilla: no external rules loaded. `/dm-continue` advanced: loads `.claude/additional/dm-slots/*.md` + module rules via `dm-active-modules-rules.sh`

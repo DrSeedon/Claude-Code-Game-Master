@@ -213,9 +213,9 @@ fi
 
 # --- Module middleware dispatch ---
 # Source advanced dispatch if modules infrastructure exists; otherwise define no-ops.
-# This keeps CORE clean: vanilla installs have no .claude/modules/ and pay zero cost.
+# This keeps CORE clean: vanilla installs have no .claude/additional/ and pay zero cost.
 
-_ADVANCED_SH="$PROJECT_ROOT/.claude/modules/infrastructure/common-advanced.sh"
+_ADVANCED_SH="$PROJECT_ROOT/.claude/additional/infrastructure/common-advanced.sh"
 if [ -f "$_ADVANCED_SH" ]; then
     source "$_ADVANCED_SH"
 else

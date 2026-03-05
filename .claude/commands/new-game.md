@@ -71,7 +71,7 @@ Run after campaign is created and switched (so modules persist to campaign-overv
 
 ### 1. List available modules
 ```bash
-bash .claude/modules/infrastructure/tools/dm-module.sh list-verbose
+bash .claude/additional/infrastructure/tools/dm-module.sh list-verbose
 ```
 
 ### 2. Display module menu
@@ -101,13 +101,13 @@ bash .claude/modules/infrastructure/tools/dm-module.sh list-verbose
 
 ### 3. Apply selection
 ```bash
-bash .claude/modules/infrastructure/tools/dm-module.sh activate <module-name>    # for each enabled
-bash .claude/modules/infrastructure/tools/dm-module.sh deactivate <module-name>  # for each disabled
+bash .claude/additional/infrastructure/tools/dm-module.sh activate <module-name>    # for each enabled
+bash .claude/additional/infrastructure/tools/dm-module.sh deactivate <module-name>  # for each disabled
 ```
 
 ### 4. Load module rules into context
 ```bash
-bash .claude/modules/infrastructure/dm-active-modules-rules.sh
+bash .claude/additional/infrastructure/dm-active-modules-rules.sh
 ```
 
 Rules are now in context — use them for all world-building that follows.
@@ -119,7 +119,7 @@ Rules are now in context — use them for all world-building that follows.
 Load creation-specific instructions from active modules:
 
 ```bash
-bash .claude/modules/infrastructure/dm-active-modules-creation-rules.sh
+bash .claude/additional/infrastructure/dm-active-modules-creation-rules.sh
 ```
 
 These rules tell you HOW to handle world-building for each active module:
@@ -137,12 +137,12 @@ Follow module-specific instructions when they apply to that phase.
 
 ### 1. List available styles
 ```bash
-bash .claude/modules/infrastructure/dm-narrator.sh list
+bash .claude/additional/infrastructure/dm-narrator.sh list
 ```
 
 ### 2. Get recommendation based on campaign genre
 ```bash
-bash .claude/modules/infrastructure/dm-narrator.sh recommend "<genre>"
+bash .claude/additional/infrastructure/dm-narrator.sh recommend "<genre>"
 ```
 Genre hints from campaign name/tone: horror→horror-atmospheric, classic fantasy→epic-heroic, roguelike/comedy→sarcastic-puns, noir/drama→serious-cinematic.
 
@@ -173,7 +173,7 @@ Genre hints from campaign name/tone: horror→horror-atmospheric, classic fantas
 
 ### 4. Apply selected style
 ```bash
-bash .claude/modules/infrastructure/dm-narrator.sh apply <style-id>
+bash .claude/additional/infrastructure/dm-narrator.sh apply <style-id>
 ```
 
 This writes the full narrator style object into `campaign-overview.json` under `narrator_style`.
@@ -191,13 +191,13 @@ If user points to a `.md` file with their own style:
 
 ### 1. Get recommendation based on campaign genre
 ```bash
-bash .claude/modules/infrastructure/dm-campaign-rules.sh recommend "<genre>"
+bash .claude/additional/infrastructure/dm-campaign-rules.sh recommend "<genre>"
 ```
 Genre hints: horror/investigation → horror-investigation, survival/stalker/metro/fallout → survival-zone, space/sci-fi/ftl → space-travel, political/intrigue → political-intrigue, civilization/tribe/4x → civilization.
 
 ### 2. List available templates
 ```bash
-bash .claude/modules/infrastructure/dm-campaign-rules.sh list
+bash .claude/additional/infrastructure/dm-campaign-rules.sh list
 ```
 
 ### 3. Display menu
@@ -228,7 +228,7 @@ bash .claude/modules/infrastructure/dm-campaign-rules.sh list
 
 ### 4. Apply selected template
 ```bash
-bash .claude/modules/infrastructure/dm-campaign-rules.sh apply <template-id>
+bash .claude/additional/infrastructure/dm-campaign-rules.sh apply <template-id>
 ```
 
 This writes template metadata into `campaign-overview.json` under `campaign_rules_template`

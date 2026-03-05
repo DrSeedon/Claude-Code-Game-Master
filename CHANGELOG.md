@@ -129,14 +129,14 @@ All notable changes to DM System will be documented in this file.
 ## [1.5.0] - 2026-02-17
 
 ### Added
-- **Module System** — optional campaign features extracted into self-contained modules in `.claude/modules/`
+- **Module System** — optional campaign features extracted into self-contained modules in `.claude/additional/`
   - `coordinate-navigation` — PathManager, PathFinder, path intersections, map rendering (ASCII & GUI)
   - `encounter-system` — travel encounter checks with distance-based DC scaling
   - `firearms-combat` — automated firearms resolver with fire modes, PEN/PROT, RPM
   - `survival-stats` — time effects engine, per-tick simulation, conditional effects, sleep restoration
 - **Module Loader** (`lib/module_loader.py`) — discovers and validates installed modules
 - **Module CLI** (`tools/dm-module.sh`) — list, info, and status for installed modules
-- **Module Registry** (`.claude/modules/registry.json`) — central manifest of available modules
+- **Module Registry** (`.claude/additional/registry.json`) — central manifest of available modules
 - **Navigation Module CLI** (`dm-navigation.sh add`) — coordinate-based location creation with auto-connection and path splitting
 
 ### Changed
@@ -148,14 +148,14 @@ All notable changes to DM System will be documented in this file.
 - `dm-combat.sh`, `dm-encounter.sh`, `dm-map.sh`, `dm-time.sh` — delegate to respective module wrappers
 
 ### Removed
-- `lib/combat_resolver.py` — moved to `.claude/modules/firearms-combat/`
-- `lib/encounter_manager.py` — moved to `.claude/modules/encounter-system/`
-- `lib/path_manager.py` — moved to `.claude/modules/coordinate-navigation/`
-- `lib/pathfinding.py` — moved to `.claude/modules/coordinate-navigation/`
-- `lib/path_intersect.py` — moved to `.claude/modules/coordinate-navigation/`
-- `lib/path_split.py` — moved to `.claude/modules/coordinate-navigation/`
-- `lib/map_renderer.py` — moved to `.claude/modules/coordinate-navigation/`
-- `lib/map_gui.py` — moved to `.claude/modules/coordinate-navigation/`
+- `lib/combat_resolver.py` — moved to `.claude/additional/modules/firearms-combat/`
+- `lib/encounter_manager.py` — moved to `.claude/additional/encounter-system/`
+- `lib/path_manager.py` — moved to `.claude/additional/coordinate-navigation/`
+- `lib/pathfinding.py` — moved to `.claude/additional/coordinate-navigation/`
+- `lib/path_intersect.py` — moved to `.claude/additional/coordinate-navigation/`
+- `lib/path_split.py` — moved to `.claude/additional/coordinate-navigation/`
+- `lib/map_renderer.py` — moved to `.claude/additional/coordinate-navigation/`
+- `lib/map_gui.py` — moved to `.claude/additional/coordinate-navigation/`
 - `lib/location_manager.py.backup` — cleanup
 
 ### Technical
@@ -184,7 +184,7 @@ All notable changes to DM System will be documented in this file.
   - Auto-persists ammo consumption and XP awards
   - `--test` flag to preview combat without updating character state
   - Supports manual target specification or enemy type lookup from `campaign_rules`
-- **Modern Firearms Campaign Template** (`.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`)
+- **Modern Firearms Campaign Template** (`.claude/additional/modules/firearms-combat/templates/modern-firearms-campaign.json`)
   - Pre-configured weapons (АКМ, АК-74, M4A1, SVD, PMm, etc.) with RPM, damage, PEN values
   - Fire mode definitions with attack penalties
   - Armor types with PROT ratings

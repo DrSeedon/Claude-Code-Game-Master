@@ -101,4 +101,4 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", ".claude/modules"]
+testpaths = ["tests", ".claude/additional/modules"]

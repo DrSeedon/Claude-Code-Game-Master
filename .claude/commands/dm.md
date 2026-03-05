@@ -179,7 +179,7 @@ Otherwise, continue below with the standard vanilla gameplay loop.
 
 #### Step 1: Load Full Context (PRIMARY)
 ```bash
-bash .claude/modules/infrastructure/dm-active-modules-rules.sh 2>/dev/null > /tmp/dm-rules.md
+bash .claude/additional/infrastructure/dm-active-modules-rules.sh 2>/dev/null > /tmp/dm-rules.md
 bash tools/dm-session.sh start
 bash tools/dm-session.sh context
 ```

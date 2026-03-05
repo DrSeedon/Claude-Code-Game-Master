@@ -4,9 +4,9 @@
 
 ### Done
 
-- [x] **Module Registry** — `.claude/modules/registry.json` with metadata for all modules
+- [x] **Module Registry** — `.claude/additional/registry.json` with metadata for all modules
 - [x] **Module Loader** — `lib/module_loader.py` for module discovery and activation
-- [x] **Module Structure** — each module is self-contained in `.claude/modules/<name>/`
+- [x] **Module Structure** — each module is self-contained in `.claude/additional/<name>/`
 - [x] **Middleware Architecture** — `dispatch_middleware` / `dispatch_middleware_post` / `dispatch_middleware_help`
 - [x] **4 modules created**: custom-stats, world-travel, firearms-combat, inventory-system
 - [x] `tools/dm-module.sh list` — show available modules

@@ -21,7 +21,7 @@
 | ⚔️ **firearms-combat** | Автоматизированный резолвер боя. RPM → выстрелов за раунд, огневые режимы (одиночный/очередь/авто), PEN vs PROT, бонусы подкласса. Шаблон с АКМ/АК-74/M4A1/СВД. | Любая современная/военная кампания |
 | 📦 **inventory-system** | Атомарные транзакции (`--gold --hp --xp --add --remove` одной командой). Stackable предметы с количеством. Unique предметы (оружие, броня). Режим `--test`. | Все кампании (рекомендуется всегда) |
 
-Каждый модуль самодостаточен: свои `tools/`, `lib/`, `rules.md`, `module.json`. Брось папку в `.claude/modules/` — и модуль установлен.
+Каждый модуль самодостаточен: свои `tools/`, `lib/`, `rules.md`, `module.json`. Брось папку в `.claude/additional/modules/` — и модуль установлен.
 
 ---
 
@@ -43,7 +43,7 @@
 ================================================================
 ```
 
-Каждый модуль самодостаточен: свои инструменты, правила и патчи конфига. Добавь community-модуль, бросив папку в `.claude/modules/`.
+Каждый модуль самодостаточен: свои инструменты, правила и патчи конфига. Добавь community-модуль, бросив папку в `.claude/additional/modules/`.
 
 ### 🔀 Middleware архитектура
 CORE инструменты (`dm-time.sh`, `dm-player.sh`, `dm-session.sh` и т.д.) — vanilla upstream. Модули подключаются через middleware — без изменения CORE. `/dm` автоматически инжектирует правила всех активных модулей в контекст.
@@ -80,7 +80,7 @@ bash tools/dm-plot.sh add "Потерянная реликвия" --type side --
 
 ```bash
 # Атомарная транзакция — всё или ничего
-bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Персонаж" \
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "Персонаж" \
   --gold +150 \
   --xp +200 \
   --hp -10 \
@@ -90,7 +90,7 @@ bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Персон
   --custom-stat hunger +20
 
 # Тест-режим — проверка без применения
-bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Персонаж" --gold -500 --test
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "Персонаж" --gold -500 --test
 ```
 
 **Автоматическая миграция** из старого формата инвентаря (создаёт backup с timestamp).
@@ -99,7 +99,7 @@ bash .claude/modules/inventory-system/tools/dm-inventory.sh update "Персон
 Разрешение боя с огнестрельным оружием с реалистичными механиками — расчёт выстрелов за раунд на основе RPM, огневые режимы (одиночный/очередь/авто), прогрессивные штрафы к атаке, механика PEN vs PROT. Детальный вывод каждого выстрела с полным разбором бросков.
 
 ```bash
-bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
+bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Сталкер" \
   --weapon "АКМ" \
   --fire-mode "full_auto" \
@@ -107,13 +107,13 @@ bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve \
   --targets "Мутант#1:AC14:HP30:PROT2" "Мутант#2:AC14:HP30:PROT2"
 
 # Тест-режим — предпросмотр боя без изменения состояния
-bash .claude/modules/firearms-combat/tools/dm-combat.sh resolve ... --test
+bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve ... --test
 ```
 
 **Автосохранение** расхода патронов и начисления XP. Учитывает классовые бонусы (например, Стрелок с уменьшенными штрафами).
 
 ### 📦 Шаблон современной кампании с огнестрелом
-Готовый шаблон (`.claude/modules/firearms-combat/templates/modern-firearms-campaign.json`) с оружием (АКМ, АК-74, M4A1, СВД), типами брони с PROT, определениями огневых режимов, кастомными статами выживания (голод/жажда/радиация/сон), эффектами времени и системой встреч — готово для кампаний в стиле STALKER, Fallout или Cyberpunk.
+Готовый шаблон (`.claude/additional/modules/firearms-combat/templates/modern-firearms-campaign.json`) с оружием (АКМ, АК-74, M4A1, СВД), типами брони с PROT, определениями огневых режимов, кастомными статами выживания (голод/жажда/радиация/сон), эффектами времени и системой встреч — готово для кампаний в стиле STALKER, Fallout или Cyberpunk.
 
 ### Кастомные характеристики персонажа
 Определяй **любые** статы для своей кампании — голод, жажда, радиация, мораль, рассудок, репутация — что угодно. Полностью универсально, ничего не захардкожено.
@@ -158,10 +158,10 @@ bash tools/dm-consequence.sh add "Торговец прибывает" "чере
 bash tools/dm-session.sh move "Руины"
 # Авто: проверяет встречу, считает время пути, тикает статы
 
-bash .claude/modules/world-travel/tools/dm-encounter.sh check "Деревня" "Руины" 2000 open
-bash .claude/modules/world-travel/tools/dm-map.sh              # Полная ASCII-карта
-bash .claude/modules/world-travel/tools/dm-map.sh --minimap    # Тактическая мини-карта
-bash .claude/modules/world-travel/tools/dm-map.sh --gui        # GUI-окно с цветами рельефа
+bash .claude/additional/modules/world-travel/tools/dm-encounter.sh check "Деревня" "Руины" 2000 open
+bash .claude/additional/modules/world-travel/tools/dm-map.sh              # Полная ASCII-карта
+bash .claude/additional/modules/world-travel/tools/dm-map.sh --minimap    # Тактическая мини-карта
+bash .claude/additional/modules/world-travel/tools/dm-map.sh --gui        # GUI-окно с цветами рельефа
 
 # Добавить локацию по азимуту и расстоянию
 bash tools/dm-location.sh add "Форпост" "Заброшенный форпост" \
