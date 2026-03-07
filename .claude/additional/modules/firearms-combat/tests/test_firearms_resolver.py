@@ -39,29 +39,44 @@ def fake_campaign(tmp_path):
         "name": "Test Campaign",
         "current_character": "Test Stalker",
         "current_location": "Test Zone",
-        "current_time": "Day",
-        "campaign_rules": {
-            "firearms_system": {
-                "weapons": {
-                    "AK-74": {
-                        "damage": "2d8+2",
-                        "pen": 6,
-                        "rpm": 650,
-                        "ammo_type": "5.45x39mm"
-                    }
-                },
-                "fire_modes": {
-                    "full_auto": {
-                        "penalty_per_shot": -2,
-                        "penalty_per_shot_sharpshooter": -1
-                    }
-                }
+        "current_time": "Day"
+    }
+
+    firearms_config = {
+        "weapons": {
+            "AK-74": {
+                "damage": "2d8+2",
+                "pen": 6,
+                "rpm": 650,
+                "ammo_type": "5.45x39mm"
+            }
+        },
+        "fire_modes": {
+            "single": {
+                "attacks": 1,
+                "ammo": 1,
+                "penalty": 0
+            },
+            "burst": {
+                "attacks": 3,
+                "ammo": 3,
+                "penalty_per_shot": -3,
+                "penalty_per_shot_sharpshooter": -2
+            },
+            "full_auto": {
+                "penalty_per_shot": -3,
+                "penalty_per_shot_sharpshooter": -2,
+                "max_shots_per_target": 10
             }
         }
     }
 
     (campaign_dir / "character.json").write_text(json.dumps(character_data, indent=2))
     (campaign_dir / "campaign-overview.json").write_text(json.dumps(campaign_overview, indent=2))
+
+    module_data_dir = campaign_dir / "module-data"
+    module_data_dir.mkdir()
+    (module_data_dir / "firearms-combat.json").write_text(json.dumps(firearms_config, indent=2))
 
     return world_state
 
@@ -72,7 +87,7 @@ def test_resolver_initialization(fake_campaign):
 
     assert resolver.character["name"] == "Test Stalker"
     assert resolver.character["subclass"] == "Стрелок"
-    assert resolver.campaign_rules["firearms_system"]["weapons"]["AK-74"]["damage"] == "2d8+2"
+    assert resolver.firearms_config["weapons"]["AK-74"]["damage"] == "2d8+2"
 
 
 def test_attack_bonus_calculation(fake_campaign):
@@ -181,10 +196,103 @@ def test_character_update_after_combat(fake_campaign):
     result = resolver.resolve_full_auto("AK-74", ammo_available=5, targets=targets)
 
     if result["enemies_killed"] > 0:
-        resolver.update_character_after_combat(result["shots_fired"], result["total_xp"])
+        resolver.update_character_after_combat(result)
 
         updated_char = resolver.player_mgr.get_player("Test Stalker")
         assert updated_char["xp"]["current"] > initial_xp
+
+
+def test_single_fire_basic(fake_campaign):
+    """Test single fire mode — one shot, one target"""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    targets = [{"name": "Bandit", "ac": 12, "hp": 20, "prot": 2}]
+    result = resolver.resolve_single("AK-74", ammo_available=30, targets=targets)
+
+    assert result["fire_mode"] == "single"
+    assert result["shots_fired"] == 1
+    assert result["ammo_remaining"] == 29
+    assert result["ammo_type"] == "5.45x39mm"
+    assert len(result["targets"]) == 1
+    assert result["targets"][0]["shots"] == 1
+    assert len(result["targets"][0]["hits"]) == 1
+
+
+def test_single_fire_no_ammo(fake_campaign):
+    """Test single fire with 0 ammo"""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    targets = [{"name": "Bandit", "ac": 12, "hp": 20, "prot": 2}]
+    result = resolver.resolve_single("AK-74", ammo_available=0, targets=targets)
+
+    assert result["shots_fired"] == 0
+    assert result["ammo_remaining"] == 0
+
+
+def test_burst_fire_basic(fake_campaign):
+    """Test burst fire — 3 shots, progressive penalty"""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    targets = [{"name": "Bandit", "ac": 12, "hp": 30, "prot": 2}]
+    result = resolver.resolve_burst("AK-74", ammo_available=30, targets=targets)
+
+    assert result["fire_mode"] == "burst"
+    assert result["shots_fired"] == 3
+    assert result["ammo_remaining"] == 27
+    assert result["ammo_type"] == "5.45x39mm"
+    assert len(result["targets"][0]["hits"]) == 3
+
+    hits = result["targets"][0]["hits"]
+    assert hits[0]["modifier"] >= hits[1]["modifier"]
+    assert hits[1]["modifier"] >= hits[2]["modifier"]
+
+
+def test_burst_fire_limited_ammo(fake_campaign):
+    """Test burst fire with less than 3 ammo"""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    targets = [{"name": "Bandit", "ac": 12, "hp": 20, "prot": 2}]
+    result = resolver.resolve_burst("AK-74", ammo_available=2, targets=targets)
+
+    assert result["shots_fired"] == 2
+    assert result["ammo_remaining"] == 0
+
+
+def test_full_auto_has_ammo_type(fake_campaign):
+    """Test full_auto result includes ammo_type"""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    targets = [{"name": "Snork", "ac": 12, "hp": 15, "prot": 2}]
+    result = resolver.resolve_full_auto("AK-74", ammo_available=5, targets=targets)
+
+    assert result["ammo_type"] == "5.45x39mm"
+    assert result["fire_mode"] == "full_auto"
+
+
+def test_missing_module_data_raises(tmp_path):
+    """Test that missing module-data/firearms-combat.json raises RuntimeError"""
+    world_state = tmp_path / "world-state"
+    campaign_dir = world_state / "campaigns" / "no-config"
+    campaign_dir.mkdir(parents=True)
+    (world_state / "active-campaign.txt").write_text("no-config")
+
+    character_data = {
+        "name": "NoConfig",
+        "class": "Воин",
+        "level": 1,
+        "hp": {"current": 10, "max": 10},
+        "abilities": {"str": 10, "dex": 14, "con": 10, "int": 10, "wis": 10, "cha": 10},
+        "proficiency_bonus": 2,
+        "xp": {"current": 0, "next_level": 300}
+    }
+
+    overview = {"name": "No Config Test", "current_character": "NoConfig"}
+
+    (campaign_dir / "character.json").write_text(json.dumps(character_data, indent=2))
+    (campaign_dir / "campaign-overview.json").write_text(json.dumps(overview, indent=2))
+
+    with pytest.raises(RuntimeError, match="No firearms config found"):
+        FirearmsCombatResolver(str(world_state))
 
 
 if __name__ == "__main__":

@@ -385,7 +385,7 @@ bash tools/dm-npc.sh tag-location "[Name]" "[location]"
 
 ### Generate Plot Hooks
 
-Create three interconnected storylines:
+Create three interconnected storylines as proper quests:
 
 **Local Conflict** (1-3 sessions)
 - Affects starting location directly
@@ -400,9 +400,9 @@ Create three interconnected storylines:
 - Only hints initially
 
 ```bash
-bash tools/dm-note.sh "plot_local" "[local conflict description]"
-bash tools/dm-note.sh "plot_regional" "[regional mystery description]"
-bash tools/dm-note.sh "plot_world" "[world event hints]"
+bash tools/dm-plot.sh add "[Local conflict name]" --type side --description "[description]" --objectives "[obj1],[obj2]" --npcs "[npc1]" --locations "[loc1]"
+bash tools/dm-plot.sh add "[Regional mystery name]" --type mystery --description "[description]" --objectives "[obj1],[obj2]" --npcs "[npc1]" --locations "[loc1],[loc2]"
+bash tools/dm-plot.sh add "[World event name]" --type threat --description "[description]" --objectives "[obj1]"
 ```
 
 ### Schedule Consequences
@@ -479,7 +479,7 @@ cat > "$CAMPAIGN_DIR/session-log.md" << EOF
 ### World Summary
 - **Starting Location**: [Location name]
 - **Initial NPCs**: [List the 6 NPC names]
-- **Plot Hooks**: Local conflict, regional mystery, world event
+- **Plot Hooks**: [List the 3 quest names from plots.json]
 
 Ready for character creation.
 
@@ -552,7 +552,7 @@ Before transitioning to character creation, verify:
 - [ ] Starting location + 3-4 connected locations
 - [ ] All locations connected via paths
 - [ ] 6 NPCs with descriptions and locations
-- [ ] 3-tier plot structure in facts.json
+- [ ] 3 plot hooks in plots.json (via dm-plot.sh add)
 - [ ] 3+ consequences scheduled
 - [ ] Session log initialized
 - [ ] Campaign overview updated with settings

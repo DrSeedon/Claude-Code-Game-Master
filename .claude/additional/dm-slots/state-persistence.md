@@ -21,6 +21,10 @@
 | NPC joins party | `bash tools/dm-npc.sh promote "[name]"` |
 | Tag NPC to location | `bash tools/dm-npc.sh tag-location "[name]" "[location]"` |
 | Tag NPC to quest | `bash tools/dm-npc.sh tag-quest "[name]" "[quest]"` |
+| **Quest created** | `bash tools/dm-plot.sh add "[name]" --type [type] --description "[desc]" --objectives "[o1],[o2]"` |
+| **Quest progress** | `bash tools/dm-plot.sh update "[name]" "[event]"` |
+| **Quest objective done** | `bash tools/dm-plot.sh objective "[name]" "[objective]" complete` |
+| **Quest completed** | `bash tools/dm-plot.sh complete "[name]" "[outcome]"` |
 | **Custom stat changed** | `bash tools/dm-player.sh custom-stat "[name]" "[stat]" [+/-amount]` |
 
 ### Consequence Rules (MANDATORY — NO EXCEPTIONS)
@@ -31,12 +35,23 @@
 - `immediate` = `--hours 0` (triggers on next tick)
 - **ALWAYS use `--elapsed` or `--to` when advancing time.** Setting time without elapsed means consequences DON'T tick.
 
+### Quest Rules (MANDATORY)
+
+- **New storyline emerges** (NPC gives task, player discovers mystery, threat appears) → `dm-plot.sh add` with type, description, objectives, linked NPCs/locations.
+- **Player makes progress** (finds clue, reaches location, talks to NPC about quest) → `dm-plot.sh update` to log the event.
+- **Objective fulfilled** (specific goal achieved) → `dm-plot.sh objective "Quest" "Objective" complete`.
+- **New goal discovered mid-quest** → `dm-plot.sh objective "Quest" "New goal" add`.
+- **Quest resolved** → `dm-plot.sh complete` or `dm-plot.sh fail` with outcome description.
+- **Every quest MUST have at least one objective.** A quest without objectives has no trackable progress.
+- **Use `dm-plot.sh threads`** at session start to review active storylines and catch stale quests.
+- Quests live in `plots.json`. Do NOT store quest/plot data in `facts.json` via `dm-note.sh`.
+
 ### Note Categories
 - `session_events` - What happened this session
-- `plot_local` - Local storyline developments
-- `plot_regional` - Broader mystery/conspiracy
-- `plot_world` - Major world-shaking revelations
 - `player_choices` - Key decisions and reasoning
 - `npc_relations` - How NPCs feel about the party
+- `world_lore` - World facts, history, lore details
+
+**Plot/quest data belongs in `plots.json` via `dm-plot.sh`, NOT in notes.**
 
 ---

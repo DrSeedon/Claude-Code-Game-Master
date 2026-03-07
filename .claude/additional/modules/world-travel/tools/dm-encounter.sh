@@ -42,21 +42,20 @@ case "$ACTION" in
             echo "[ERROR] No active campaign"
             exit 1
         fi
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
+        mkdir -p "$(dirname "$MODULE_DATA")"
 
-        if [ ! -f "$OVERVIEW" ]; then
-            echo "[ERROR] Campaign overview not found"
-            exit 1
+        if [ ! -f "$MODULE_DATA" ]; then
+            echo '{}' > "$MODULE_DATA"
         fi
 
-        CURRENT=$(jq -r '.campaign_rules.encounter_system.enabled // false' "$OVERVIEW")
+        CURRENT=$(jq -r '.encounter_system.enabled // false' "$MODULE_DATA")
 
         if [ "$CURRENT" == "true" ]; then
-            jq '.campaign_rules.encounter_system.enabled = false' "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+            jq '.encounter_system.enabled = false' "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
             echo "[SUCCESS] Encounter system DISABLED"
         else
-            # Create default configuration if not exists
-            jq '.campaign_rules.encounter_system = {
+            jq '.encounter_system = {
                 "enabled": true,
                 "min_distance_meters": 300,
                 "base_dc": 16,
@@ -69,7 +68,7 @@ case "$ACTION" in
                     "Evening": 2,
                     "Night": 4
                 }
-            }' "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+            }' "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
             echo "[SUCCESS] Encounter system ENABLED"
         fi
         ;;
@@ -79,11 +78,11 @@ case "$ACTION" in
             echo "[ERROR] No active campaign"
             exit 1
         fi
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
         echo "Encounter System Status"
         echo "======================="
-        if [ -f "$OVERVIEW" ]; then
-            jq -r '.campaign_rules.encounter_system // {}' "$OVERVIEW"
+        if [ -f "$MODULE_DATA" ]; then
+            jq -r '.encounter_system // {}' "$MODULE_DATA"
         else
             echo "No encounter system configured"
         fi
@@ -95,8 +94,8 @@ case "$ACTION" in
             exit 1
         fi
         NEW_DC="$1"
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
-        jq ".campaign_rules.encounter_system.base_dc = $NEW_DC" "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
+        jq ".encounter_system.base_dc = $NEW_DC" "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
         echo "[SUCCESS] Base DC set to $NEW_DC"
         ;;
 
@@ -106,8 +105,8 @@ case "$ACTION" in
             exit 1
         fi
         NEW_MOD="$1"
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
-        jq ".campaign_rules.encounter_system.distance_modifier = $NEW_MOD" "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
+        jq ".encounter_system.distance_modifier = $NEW_MOD" "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
         echo "[SUCCESS] Distance modifier set to $NEW_MOD"
         ;;
 
@@ -118,8 +117,8 @@ case "$ACTION" in
             exit 1
         fi
         STAT_NAME="$1"
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
-        jq ".campaign_rules.encounter_system.stat_to_use = \"$STAT_NAME\"" "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
+        jq ".encounter_system.stat_to_use = \"$STAT_NAME\"" "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
         echo "[SUCCESS] Encounter stat set to $STAT_NAME"
         ;;
 
@@ -130,8 +129,8 @@ case "$ACTION" in
         fi
         TIME="$1"
         MOD="$2"
-        OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
-        jq ".campaign_rules.encounter_system.time_dc_modifiers.\"$TIME\" = $MOD" "$OVERVIEW" > "$OVERVIEW.tmp" && mv "$OVERVIEW.tmp" "$OVERVIEW"
+        MODULE_DATA="$WORLD_STATE_DIR/module-data/world-travel.json"
+        jq ".encounter_system.time_dc_modifiers.\"$TIME\" = $MOD" "$MODULE_DATA" > "$MODULE_DATA.tmp" && mv "$MODULE_DATA.tmp" "$MODULE_DATA"
         echo "[SUCCESS] Time modifier for '$TIME' set to $MOD"
         ;;
 

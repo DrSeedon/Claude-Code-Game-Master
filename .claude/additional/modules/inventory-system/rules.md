@@ -1,6 +1,8 @@
 # Inventory System — DM Rules
 
-Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/HP/XP/stat changes — never edit character.json manually.
+Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/HP/XP/stat changes — never edit JSON files manually.
+
+**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, gold, abilities, custom_stats) remain in `character.json`.
 
 ---
 
@@ -73,6 +75,32 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[ch
 ## Validation
 
 All-or-nothing: if any part fails (not enough gold, item missing, stat out of bounds) — **nothing is written**. Use `--test` to check before committing.
+
+---
+
+## Transfer Items
+
+Give items from character to NPC (narratively):
+
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh transfer "[char]" \
+  --item "Medkit" 2 --unique "AK-74 (5.45mm)"
+```
+
+Items are removed from character inventory. NPC receives them narratively (no NPC inventory tracking).
+
+---
+
+## Category Filter
+
+View inventory filtered by category:
+
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[char]" --category weapon
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[char]" --category ammo
+```
+
+Categories: `weapon`, `ammo`, `food`, `medicine`, `artifact`, `misc`. Auto-detected by item name keywords.
 
 ---
 

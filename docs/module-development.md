@@ -53,6 +53,7 @@ The manifest. Every field explained:
 
   "enabled_by_default": false,
   "dependencies": [],
+  "optional_dependencies": [],
   "incompatible_with": [],
 
   "middleware": ["dm-player.sh"],
@@ -72,6 +73,7 @@ The manifest. Every field explained:
 | `id` | Unique identifier. Must match folder name. |
 | `enabled_by_default` | If `true`, module is active for new campaigns without user selection. |
 | `dependencies` | List of module IDs that must be enabled first. System blocks activation if deps are missing. |
+| `optional_dependencies` | Modules that enhance functionality if present. Not required — graceful fallback if absent. |
 | `incompatible_with` | List of module IDs that conflict. Advisory only (not enforced). |
 | `middleware` | CORE tools this module intercepts (pre-hook). Return exit 0 to handle, non-zero to let CORE handle. |
 | `post_middleware` | CORE tools this module hooks after execution. File must be named `<tool>.post`. |
@@ -237,18 +239,29 @@ Loaded by `dm-active-modules-creation-rules.sh` during campaign creation.
 
 ## Campaign Data
 
-Store module config in `campaign-overview.json` under `campaign_rules`:
+### Module-specific data (recommended)
 
-```json
-{
-  "campaign_rules": {
-    "my_module_config": {
-      "enabled": true,
-      "settings": { ... }
-    }
-  }
-}
+Store module config and runtime data in `module-data/<module-id>.json` inside the campaign directory:
+
 ```
+world-state/campaigns/<campaign>/module-data/
+  firearms-combat.json
+  my-module.json
+```
+
+Use `ModuleDataManager` from infrastructure:
+
+```python
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
+from module_data import ModuleDataManager
+
+mdm = ModuleDataManager(campaign_dir)
+config = mdm.load("my-module")
+config["setting"] = "value"
+mdm.save("my-module", config)
+```
+
+### Per-character data
 
 Store per-character data in `character.json`:
 

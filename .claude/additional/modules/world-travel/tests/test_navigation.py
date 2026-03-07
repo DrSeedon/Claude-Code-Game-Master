@@ -181,7 +181,12 @@ class TestNavigationIntegration:
         }))
 
         overview_file.write_text(json.dumps({
-            "campaign_name": "Test Campaign",
+            "campaign_name": "Test Campaign"
+        }))
+
+        module_data_dir = campaign_dir / "module-data"
+        module_data_dir.mkdir()
+        (module_data_dir / "world-travel.json").write_text(json.dumps({
             "path_preferences": {}
         }))
 
@@ -207,7 +212,12 @@ class TestNavigationIntegration:
         }))
 
         overview_file.write_text(json.dumps({
-            "campaign_name": "Test Campaign",
+            "campaign_name": "Test Campaign"
+        }))
+
+        module_data_dir = campaign_dir / "module-data"
+        module_data_dir.mkdir()
+        (module_data_dir / "world-travel.json").write_text(json.dumps({
             "path_preferences": {}
         }))
 

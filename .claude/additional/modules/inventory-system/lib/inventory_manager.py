@@ -2,6 +2,7 @@
 """
 Unified Inventory Manager
 Handles all character inventory/stats operations in atomic transactions
+Inventory data stored in module-data/inventory-system.json
 """
 
 import json
@@ -11,6 +12,24 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 
+PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
+from module_data import ModuleDataManager
+
+
+ITEM_CATEGORIES = {
+    "weapon": ["АК", "AK", "ПМ", "PM", "SVD", "СВД", "Glock", "нож", "knife",
+               "rifle", "pistol", "shotgun", "обрез", "дробовик", "винтовк",
+               "автомат", "пистолет", "ружь"],
+    "ammo": ["патрон", "ammo", "mm", "мм", "калибр", "gauge",
+             "x39", "x18", "x54", "x19", "x45"],
+    "food": ["еда", "food", "тушён", "хлеб", "консерв", "колбас", "сухпай",
+             "bread", "ration", "вода", "water"],
+    "medicine": ["бинт", "аптечка", "медик", "антирад", "bandage", "medkit",
+                 "medicine", "stim", "промедол", "антибиотик"],
+    "artifact": ["артефакт", "artifact", "artefact"],
+}
+
 
 class InventoryManager:
     """Unified manager for character inventory, gold, HP, XP, and custom stats"""
@@ -18,69 +37,96 @@ class InventoryManager:
     def __init__(self, campaign_path: Path):
         self.campaign_path = campaign_path
         self.character_file = campaign_path / "character.json"
+        self.module_data_mgr = ModuleDataManager(campaign_path)
         self.character = self._load_character()
+        self.inventory = self._load_inventory()
         self.changes_log = []
 
     def _load_character(self) -> Dict:
-        """Load character.json"""
+        """Load character.json + inject custom_stats from module-data"""
         if not self.character_file.exists():
             raise FileNotFoundError(f"Character file not found: {self.character_file}")
 
         with open(self.character_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            char = json.load(f)
+
+        cs_data = self.module_data_mgr.load("custom-stats")
+        if cs_data:
+            char['custom_stats'] = cs_data.get('character_stats', {})
+        return char
 
     def _save_character(self):
-        """Save character.json"""
+        """Save character.json (without inventory/custom_stats) + persist custom_stats to module-data"""
+        custom_stats = self.character.pop('custom_stats', {})
+        save_data = {k: v for k, v in self.character.items() if k != "inventory"}
         with open(self.character_file, 'w', encoding='utf-8') as f:
-            json.dump(self.character, f, indent=2, ensure_ascii=False)
+            json.dump(save_data, f, indent=2, ensure_ascii=False)
+        if custom_stats:
+            self.character['custom_stats'] = custom_stats
+            cs_data = self.module_data_mgr.load("custom-stats") or {}
+            cs_data['character_stats'] = custom_stats
+            self.module_data_mgr.save("custom-stats", cs_data)
+
+    def _load_inventory(self) -> Dict:
+        """Load inventory from module-data/inventory-system.json"""
+        data = self.module_data_mgr.load("inventory-system")
+        if not data:
+            return {"stackable": {}, "unique": []}
+        return data
+
+    def _save_inventory(self):
+        """Save inventory to module-data/inventory-system.json"""
+        self.module_data_mgr.save("inventory-system", self.inventory)
 
     def _migrate_old_format(self):
-        """Migrate old equipment array to new stackable/unique format"""
-        if "equipment" in self.character and "inventory" not in self.character:
-            print("[MIGRATION] Converting old inventory format...")
+        """Migrate old equipment/inventory from character.json to module-data"""
+        if "equipment" in self.character:
+            print("[MIGRATION] Converting old equipment format...")
 
-            # Create backup
             backup_file = self.character_file.with_suffix('.json.backup')
             with open(backup_file, 'w', encoding='utf-8') as f:
                 json.dump(self.character, f, indent=2, ensure_ascii=False)
             print(f"[BACKUP] Saved to {backup_file}")
 
-            # Parse old equipment
             stackable = {}
             unique = []
 
             for item in self.character.get("equipment", []):
-                # Check if item is unique (has characteristics, quest item, etc.)
                 if self._is_unique_item(item):
                     unique.append(item)
                 else:
-                    # Parse quantity from string like "Патроны (30 шт)"
                     item_name, quantity = self._parse_item_quantity(item)
-
                     if item_name in stackable:
                         stackable[item_name] += quantity
                     else:
                         stackable[item_name] = quantity
 
-            # Create new inventory structure
-            self.character["inventory"] = {
-                "stackable": stackable,
-                "unique": unique
-            }
+            self.inventory = {"stackable": stackable, "unique": unique}
+            self._save_inventory()
 
-            # Remove old equipment field
             del self.character["equipment"]
-
+            if "inventory" in self.character:
+                del self.character["inventory"]
             self._save_character()
+
             print(f"[SUCCESS] Migrated {len(stackable)} stackable + {len(unique)} unique items")
+
+        elif "inventory" in self.character:
+            print("[MIGRATION] Moving inventory from character.json to module-data...")
+
+            self.inventory = self.character["inventory"]
+            self._save_inventory()
+
+            del self.character["inventory"]
+            self._save_character()
+
+            print("[SUCCESS] Inventory moved to module-data/inventory-system.json")
 
     def _is_unique_item(self, item: str) -> bool:
         """Determine if item should be in unique category"""
-        # Items with stats/characteristics
         if re.search(r'\(.*(?:AC|HP|PEN|PROT|d\d+|\+\d+).*\)', item):
             return True
 
-        # Quest/special items
         keywords = ['PDA', 'ПДА', 'quest', 'квест', 'artifact', 'артефакт',
                     'key', 'ключ', 'note', 'записка', 'data', 'данные',
                     'flash', 'флешка', 'document', 'документ']
@@ -89,7 +135,6 @@ class InventoryManager:
         if any(kw in item_lower for kw in keywords):
             return True
 
-        # Weapons/armor by keywords
         weapon_armor = ['АКМ', 'АК-74', 'ПМ', 'M4', 'SVD', 'shotgun', 'rifle',
                         'armor', 'броня', 'vest', 'жилет', 'exo', 'экзо']
 
@@ -100,13 +145,11 @@ class InventoryManager:
 
     def _parse_item_quantity(self, item: str) -> Tuple[str, int]:
         """Parse item name and quantity from string"""
-        # Match patterns like "Item (N шт)" or "Item (N)"
         match = re.search(r'^(.+?)\s*\((\d+)\s*(?:шт|шт\.|pieces?)?\)$', item)
 
         if match:
             return match.group(1).strip(), int(match.group(2))
         else:
-            # No quantity specified, assume 1
             return item.strip(), 1
 
     def validate_transaction(self, operations: Dict) -> Tuple[bool, List[str]]:
@@ -117,43 +160,30 @@ class InventoryManager:
         """
         errors = []
 
-        # Check gold
         if 'gold' in operations:
             current_gold = self.character.get("gold", 0)
             new_gold = current_gold + operations['gold']
             if new_gold < 0:
                 errors.append(f"Not enough gold: need {abs(operations['gold'])}₽, have {current_gold}₽")
 
-        # Check HP
         if 'hp' in operations:
             current_hp = self.character.get("hp", {}).get("current", 0)
             max_hp = self.character.get("hp", {}).get("max", 0)
             new_hp = current_hp + operations['hp']
-            # Allow HP to go to 0, but warn if it would go negative
             if new_hp < -max_hp:
                 errors.append(f"HP would drop to {new_hp} (too low, character would be dead)")
 
-        # Check removals
         for item, quantity in operations.get('remove', {}).items():
-            inventory = self.character.get("inventory", {})
-
-            # Migrate if needed
-            if "inventory" not in self.character:
-                return True, []  # Allow first operation to trigger migration
-
-            stackable = inventory.get("stackable", {})
+            stackable = self.inventory.get("stackable", {})
 
             if item not in stackable:
                 errors.append(f"Item '{item}' not found in inventory")
             elif stackable[item] < quantity:
                 errors.append(f"Cannot remove {quantity}x {item} (only {stackable[item]} available)")
 
-        # Check unique removals
         for item in operations.get('remove_unique', []):
-            inventory = self.character.get("inventory", {})
-            unique = inventory.get("unique", [])
+            unique = self.inventory.get("unique", [])
 
-            # Fuzzy match
             found = False
             for unique_item in unique:
                 if item.lower() in unique_item.lower():
@@ -163,7 +193,6 @@ class InventoryManager:
             if not found:
                 errors.append(f"Unique item '{item}' not found in inventory")
 
-        # Check custom stats
         for stat_name, change in operations.get('custom_stats', {}).items():
             custom_stats = self.character.get("custom_stats", {})
 
@@ -200,11 +229,6 @@ class InventoryManager:
             "custom_stats": {"hunger": +/-amount, ...}
         }
         """
-        # Migrate if needed
-        if "inventory" not in self.character:
-            self._migrate_old_format()
-
-        # Validate
         is_valid, errors = self.validate_transaction(operations)
 
         if not is_valid:
@@ -216,36 +240,32 @@ class InventoryManager:
 
         if test_mode:
             print("=" * 68)
-            print("  🧪 TEST MODE - VALIDATION PASSED")
+            print("  TEST MODE - VALIDATION PASSED")
             print("=" * 68)
             self._preview_changes(operations)
             print("\n[TEST] No actual changes applied")
             return True
 
-        # Create backup of current state
-        original_state = deepcopy(self.character)
+        original_character = deepcopy(self.character)
+        original_inventory = deepcopy(self.inventory)
 
         try:
-            # Apply changes
             self.changes_log = []
 
-            # Gold
             if 'gold' in operations:
                 old = self.character.get("gold", 0)
                 new = old + operations['gold']
                 self.character["gold"] = new
                 self.changes_log.append(("gold", old, new, operations['gold']))
 
-            # HP
             if 'hp' in operations:
                 old = self.character["hp"]["current"]
-                new = max(0, old + operations['hp'])  # Clamp to 0
+                new = max(0, old + operations['hp'])
                 max_hp = self.character["hp"]["max"]
-                new = min(new, max_hp)  # Clamp to max
+                new = min(new, max_hp)
                 self.character["hp"]["current"] = new
                 self.changes_log.append(("hp", old, new, operations['hp']))
 
-            # XP
             if 'xp' in operations:
                 old = self.character.get("xp", {}).get("current", 0)
                 new = old + operations['xp']
@@ -254,17 +274,13 @@ class InventoryManager:
                 self.character["xp"]["current"] = new
                 self.changes_log.append(("xp", old, new, operations['xp']))
 
-            # Inventory operations
-            inventory = self.character.setdefault("inventory", {"stackable": {}, "unique": []})
-            stackable = inventory.setdefault("stackable", {})
+            stackable = self.inventory.setdefault("stackable", {})
 
-            # Add items
             for item, quantity in operations.get('add', {}).items():
                 old = stackable.get(item, 0)
                 stackable[item] = old + quantity
                 self.changes_log.append(("add", item, old, old + quantity, quantity))
 
-            # Remove items
             for item, quantity in operations.get('remove', {}).items():
                 old = stackable[item]
                 new = old - quantity
@@ -275,36 +291,30 @@ class InventoryManager:
                     stackable[item] = new
                     self.changes_log.append(("remove", item, old, new, quantity))
 
-            # Set items
             for item, quantity in operations.get('set', {}).items():
                 old = stackable.get(item, 0)
                 stackable[item] = quantity
                 self.changes_log.append(("set", item, old, quantity, quantity - old))
 
-            # Add unique
-            unique = inventory.setdefault("unique", [])
+            unique = self.inventory.setdefault("unique", [])
             for item in operations.get('add_unique', []):
                 if item not in unique:
                     unique.append(item)
                     self.changes_log.append(("add_unique", item, None, None, None))
 
-            # Remove unique
             for item in operations.get('remove_unique', []):
-                # Fuzzy match
                 for unique_item in unique[:]:
                     if item.lower() in unique_item.lower():
                         unique.remove(unique_item)
                         self.changes_log.append(("remove_unique", unique_item, None, None, None))
                         break
 
-            # Custom stats
             for stat_name, change in operations.get('custom_stats', {}).items():
                 stat = self.character["custom_stats"][stat_name]
                 key = "current" if "current" in stat else "value"
                 old = stat[key]
                 new = old + change
 
-                # Clamp to min/max
                 min_val = stat.get("min", 0)
                 max_val = stat.get("max")
                 new = max(min_val, new)
@@ -314,18 +324,18 @@ class InventoryManager:
                 stat[key] = new
                 self.changes_log.append(("custom_stat", stat_name, old, new, change))
 
-            # Save
             self._save_character()
+            self._save_inventory()
 
-            # Print summary
             self._print_changes_summary()
 
             return True
 
         except Exception as e:
-            # Rollback on error
-            self.character = original_state
+            self.character = original_character
+            self.inventory = original_inventory
             self._save_character()
+            self._save_inventory()
             print(f"[ERROR] Transaction failed: {e}", file=sys.stderr)
             print("[ROLLBACK] Changes reverted", file=sys.stderr)
             return False
@@ -354,11 +364,11 @@ class InventoryManager:
             print(f"  XP: {current} → {new} ({change:+d})")
 
         for item, qty in operations.get('add', {}).items():
-            current = self.character.get("inventory", {}).get("stackable", {}).get(item, 0)
+            current = self.inventory.get("stackable", {}).get(item, 0)
             print(f"  + {item} x{qty} (total: {current} → {current + qty})")
 
         for item, qty in operations.get('remove', {}).items():
-            current = self.character.get("inventory", {}).get("stackable", {}).get(item, 0)
+            current = self.inventory.get("stackable", {}).get(item, 0)
             print(f"  - {item} x{qty} (total: {current} → {current - qty})")
 
         for item in operations.get('add_unique', []):
@@ -379,7 +389,6 @@ class InventoryManager:
         print(f"  INVENTORY UPDATE: {self.character.get('name', 'Character')}")
         print("=" * 68)
 
-        # Stats changes
         stat_changes = [entry for entry in self.changes_log
                         if entry[0] in ("gold", "hp", "xp", "custom_stat")]
 
@@ -401,14 +410,12 @@ class InventoryManager:
                     stat_name, old, new, delta = entry[1:5]
                     print(f"  {stat_name.capitalize()}: {old} → {new} ({delta:+d})")
 
-        # Items added
         adds = [data for op, *data in self.changes_log if op == "add"]
         if adds:
             print("\nITEMS ADDED:")
             for item, old, new, qty in adds:
                 print(f"  + {item} x{qty} (total: {new})")
 
-        # Items removed
         removes = [data for op, *data in self.changes_log if op == "remove"]
         if removes:
             print("\nITEMS REMOVED:")
@@ -418,7 +425,6 @@ class InventoryManager:
                 else:
                     print(f"  - {item} x{qty} (total: {old} → {new})")
 
-        # Unique items
         unique_adds = [data for op, *data in self.changes_log if op == "add_unique"]
         if unique_adds:
             print("\nUNIQUE ITEMS ADDED:")
@@ -435,8 +441,56 @@ class InventoryManager:
         print("[SUCCESS] Transaction completed")
         print("=" * 68)
 
-    def show_inventory(self):
-        """Display full inventory"""
+    def _categorize_item(self, item_name: str) -> str:
+        """Return category for an item based on keyword matching"""
+        item_lower = item_name.lower()
+        for category, keywords in ITEM_CATEGORIES.items():
+            for keyword in keywords:
+                if keyword.lower() in item_lower:
+                    return category
+        return "misc"
+
+    def transfer_to(self, target_name: str, items: Dict[str, int],
+                    unique_items: List[str], test_mode: bool = False) -> bool:
+        """Remove items from inventory as a transfer to target_name"""
+        operations = {}
+
+        if items:
+            operations['remove'] = items
+        if unique_items:
+            operations['remove_unique'] = unique_items
+
+        if not operations:
+            print("[ERROR] No items specified for transfer", file=sys.stderr)
+            return False
+
+        is_valid, errors = self.validate_transaction(operations)
+        if not is_valid:
+            print("[ERROR] Transfer validation failed:", file=sys.stderr)
+            for error in errors:
+                print(f"  - {error}", file=sys.stderr)
+            return False
+
+        if test_mode:
+            print("=" * 68)
+            print(f"  TEST MODE — TRANSFER TO: {target_name}")
+            print("=" * 68)
+            self._preview_changes(operations)
+            print("\n[TEST] No actual changes applied")
+            return True
+
+        success = self.apply_transaction(operations)
+        if success:
+            print(f"\n[TRANSFER] Items given to {target_name}:")
+            for item, qty in items.items():
+                print(f"  → {qty}x {item}")
+            for item in unique_items:
+                print(f"  → {item} [unique]")
+
+        return success
+
+    def show_inventory(self, category: Optional[str] = None):
+        """Display full inventory, optionally filtered by category"""
         char = self.character
         name = char.get("name", "Character")
         gold = char.get("gold", 0)
@@ -452,16 +506,22 @@ class InventoryManager:
         print(f"  Gold: {gold}₽  |  HP: {hp_cur}/{hp_max}  |  XP: {xp_cur}/{xp_next}  |  Level: {level}")
         print("=" * 68)
 
-        # Migrate if needed
-        if "inventory" not in char:
-            self._migrate_old_format()
-            char = self.character
+        stackable = self.inventory.get("stackable", {})
+        unique = self.inventory.get("unique", [])
 
-        inventory = char.get("inventory", {})
-        stackable = inventory.get("stackable", {})
-        unique = inventory.get("unique", [])
+        if category:
+            category = category.lower()
+            if category not in list(ITEM_CATEGORIES.keys()) + ["misc"]:
+                print(f"[ERROR] Unknown category '{category}'. "
+                      f"Available: {', '.join(list(ITEM_CATEGORIES.keys()) + ['misc'])}",
+                      file=sys.stderr)
+                return
+            print(f"  Filter: {category.upper()}")
+            print("-" * 68)
+            stackable = {k: v for k, v in stackable.items()
+                         if self._categorize_item(k) == category}
+            unique = [i for i in unique if self._categorize_item(i) == category]
 
-        # Stackable items
         if stackable:
             print("\nSTACKABLE ITEMS:")
             max_len = max(len(name) for name in stackable.keys()) if stackable else 0
@@ -471,7 +531,6 @@ class InventoryManager:
         else:
             print("\nSTACKABLE ITEMS: (none)")
 
-        # Unique items
         if unique:
             print("\nUNIQUE ITEMS:")
             for item in unique:
@@ -479,7 +538,6 @@ class InventoryManager:
         else:
             print("\nUNIQUE ITEMS: (none)")
 
-        # Custom stats
         custom_stats = char.get("custom_stats", {})
         if custom_stats:
             print("\nCUSTOM STATS:")
@@ -500,7 +558,6 @@ def main():
     parser = argparse.ArgumentParser(description="Unified Inventory Manager")
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
-    # Update command
     update_parser = subparsers.add_parser('update', help='Update inventory/stats')
     update_parser.add_argument('character', help='Character name')
     update_parser.add_argument('--gold', type=int, help='Add/remove gold (e.g., +100, -50)')
@@ -521,11 +578,20 @@ def main():
     update_parser.add_argument('--test', action='store_true',
                               help='Test mode: validate but do not apply changes')
 
-    # Show command
     show_parser = subparsers.add_parser('show', help='Show full inventory')
     show_parser.add_argument('character', help='Character name')
+    show_parser.add_argument('--category', choices=['weapon', 'ammo', 'food', 'medicine', 'artifact', 'misc'],
+                             help='Filter by item category')
 
-    # Loot shorthand
+    transfer_parser = subparsers.add_parser('transfer', help='Transfer items to NPC/character')
+    transfer_parser.add_argument('target', help='Target name (NPC or character)')
+    transfer_parser.add_argument('--item', nargs=2, action='append', metavar=('ITEM', 'QTY'),
+                                 help='Stackable item to transfer (name quantity)')
+    transfer_parser.add_argument('--unique', action='append', metavar='ITEM',
+                                 help='Unique item to transfer')
+    transfer_parser.add_argument('--test', action='store_true',
+                                 help='Test mode: validate but do not apply changes')
+
     loot_parser = subparsers.add_parser('loot', help='Quick loot (gold + items + xp)')
     loot_parser.add_argument('character', help='Character name')
     loot_parser.add_argument('--gold', type=int, help='Gold amount')
@@ -541,7 +607,6 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # Get campaign path
     active_campaign_file = Path("world-state/active-campaign.txt")
     if not active_campaign_file.exists():
         print("[ERROR] No active campaign found", file=sys.stderr)
@@ -550,10 +615,8 @@ def main():
     campaign_name = active_campaign_file.read_text().strip()
     campaign_path = Path(f"world-state/campaigns/{campaign_name}")
 
-    # Initialize manager
     manager = InventoryManager(campaign_path)
 
-    # Execute command
     if args.command == 'show':
         manager.show_inventory()
 

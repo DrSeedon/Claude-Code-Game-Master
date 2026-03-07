@@ -20,6 +20,11 @@ from lib.json_ops import JsonOperations
 from lib.player_manager import PlayerManager
 from lib.campaign_manager import CampaignManager
 
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
+from module_data import ModuleDataManager
+
+MODULE_ID = "firearms-combat"
+
 
 class FirearmsCombatResolver:
     """Resolves firearms combat with automatic attack/damage calculation"""
@@ -33,13 +38,19 @@ class FirearmsCombatResolver:
 
         self.json_ops = JsonOperations(str(self.campaign_dir))
         self.player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
-        self.campaign_rules = self._load_campaign_rules()
+        self.module_data_mgr = ModuleDataManager(self.campaign_dir)
+        self.firearms_config = self._load_firearms_config()
         self.character = self._load_character()
 
-    def _load_campaign_rules(self) -> Dict:
-        """Load campaign rules from campaign-overview.json"""
-        overview = self.json_ops.load_json("campaign-overview.json")
-        return overview.get("campaign_rules", {})
+    def _load_firearms_config(self) -> Dict:
+        """Load firearms config from module-data/firearms-combat.json."""
+        data = self.module_data_mgr.load(MODULE_ID)
+        if not data:
+            raise RuntimeError(
+                "No firearms config found. "
+                "Expected: module-data/firearms-combat.json in campaign directory."
+            )
+        return data
 
     def _load_character(self) -> Dict:
         """Load active character — prefers character.json, falls back to current_character in overview"""
@@ -56,19 +67,17 @@ class FirearmsCombatResolver:
         return char
 
     def _get_weapon_stats(self, weapon_name: str) -> Dict:
-        """Get weapon stats from campaign_rules"""
-        weapons = self.campaign_rules.get("firearms_system", {}).get("weapons", {})
+        weapons = self.firearms_config.get("weapons", {})
         weapon = weapons.get(weapon_name)
         if not weapon:
-            raise ValueError(f"Weapon '{weapon_name}' not found in campaign_rules")
+            raise ValueError(f"Weapon '{weapon_name}' not found in firearms config")
         return weapon
 
     def _get_fire_mode_config(self, mode: str) -> Dict:
-        """Get fire mode configuration"""
-        fire_modes = self.campaign_rules.get("firearms_system", {}).get("fire_modes", {})
+        fire_modes = self.firearms_config.get("fire_modes", {})
         mode_config = fire_modes.get(mode)
         if not mode_config:
-            raise ValueError(f"Fire mode '{mode}' not found in campaign_rules")
+            raise ValueError(f"Fire mode '{mode}' not found in firearms config")
         return mode_config
 
     def _get_attack_bonus(self) -> int:
@@ -124,6 +133,215 @@ class FirearmsCombatResolver:
         else:
             return damage // 2
 
+    def resolve_single(
+        self,
+        weapon_name: str,
+        ammo_available: int,
+        targets: List[Dict]
+    ) -> Dict:
+        weapon = self._get_weapon_stats(weapon_name)
+        if ammo_available < 1:
+            return self._empty_result(weapon_name, 0, ammo_available, targets)
+
+        base_attack = self._get_attack_bonus()
+        target = targets[0]
+
+        roll = self._roll_d20()
+        total = roll + base_attack
+
+        hit = False
+        crit = False
+        if roll == 20:
+            hit, crit = True, True
+        elif roll == 1:
+            hit = False
+        elif total >= target["ac"]:
+            hit = True
+
+        target_result = {
+            "name": target["name"],
+            "ac": target["ac"],
+            "initial_hp": target["hp"],
+            "prot": target["prot"],
+            "shots": 1,
+            "hits": [{
+                "shot_num": 1, "roll": roll, "modifier": base_attack,
+                "total": total, "hit": hit, "crit": crit
+            }],
+            "damage_dealt": 0,
+            "final_hp": target["hp"],
+            "killed": False
+        }
+
+        total_damage = 0
+        total_xp = 0
+
+        if hit:
+            if crit:
+                damage_dice = self._double_dice(weapon["damage"])
+            else:
+                damage_dice = weapon["damage"]
+            raw_damage = self._roll_damage(damage_dice)
+            pen, prot = weapon["pen"], target["prot"]
+            final_damage = self._apply_pen_vs_prot(raw_damage, pen, prot)
+            scaling, scaling_pct = self._get_scaling_label(pen, prot)
+
+            target["hp"] -= final_damage
+            target_result["damage_dealt"] = final_damage
+            target_result["final_hp"] = target["hp"]
+            total_damage = final_damage
+
+            target_result["hits"][0].update({
+                "damage_dice": damage_dice, "raw_damage": raw_damage,
+                "pen": pen, "prot": prot, "scaling": scaling,
+                "scaling_pct": scaling_pct, "final_damage": final_damage
+            })
+
+        if target["hp"] <= 0:
+            target_result["killed"] = True
+            total_xp = 25
+
+        return {
+            "weapon": weapon_name,
+            "fire_mode": "single",
+            "shots_fired": 1,
+            "ammo_remaining": ammo_available - 1,
+            "ammo_type": weapon.get("ammo_type"),
+            "base_attack": base_attack,
+            "is_sharpshooter": self._is_sharpshooter(),
+            "targets": [target_result],
+            "total_damage": total_damage,
+            "enemies_killed": 1 if target_result["killed"] else 0,
+            "total_xp": total_xp
+        }
+
+    def resolve_burst(
+        self,
+        weapon_name: str,
+        ammo_available: int,
+        targets: List[Dict]
+    ) -> Dict:
+        weapon = self._get_weapon_stats(weapon_name)
+        fire_mode = self._get_fire_mode_config("burst")
+
+        shots_count = min(ammo_available, fire_mode.get("attacks", 3))
+        if shots_count == 0:
+            return self._empty_result(weapon_name, 0, ammo_available, targets)
+
+        base_attack = self._get_attack_bonus()
+        is_sharpshooter = self._is_sharpshooter()
+
+        if is_sharpshooter:
+            penalty_per_shot = fire_mode.get("penalty_per_shot_sharpshooter", -1)
+        else:
+            penalty_per_shot = fire_mode.get("penalty_per_shot", -2)
+
+        target = targets[0]
+        target_result = {
+            "name": target["name"],
+            "ac": target["ac"],
+            "initial_hp": target["hp"],
+            "prot": target["prot"],
+            "shots": shots_count,
+            "hits": [],
+            "damage_dealt": 0,
+            "final_hp": target["hp"],
+            "killed": False
+        }
+
+        total_damage = 0
+        total_xp = 0
+
+        for shot_num in range(shots_count):
+            penalty = shot_num * penalty_per_shot
+            attack_mod = base_attack + penalty
+            roll = self._roll_d20()
+            total = roll + attack_mod
+
+            hit, crit = False, False
+            if roll == 20:
+                hit, crit = True, True
+            elif roll == 1:
+                hit = False
+            elif total >= target["ac"]:
+                hit = True
+
+            shot_data = {
+                "shot_num": shot_num + 1, "roll": roll, "modifier": attack_mod,
+                "total": total, "hit": hit, "crit": crit
+            }
+
+            if hit:
+                if crit:
+                    damage_dice = self._double_dice(weapon["damage"])
+                else:
+                    damage_dice = weapon["damage"]
+                raw_damage = self._roll_damage(damage_dice)
+                pen, prot = weapon["pen"], target["prot"]
+                final_damage = self._apply_pen_vs_prot(raw_damage, pen, prot)
+                scaling, scaling_pct = self._get_scaling_label(pen, prot)
+
+                target["hp"] -= final_damage
+                target_result["damage_dealt"] += final_damage
+                total_damage += final_damage
+
+                shot_data.update({
+                    "damage_dice": damage_dice, "raw_damage": raw_damage,
+                    "pen": pen, "prot": prot, "scaling": scaling,
+                    "scaling_pct": scaling_pct, "final_damage": final_damage
+                })
+
+            target_result["hits"].append(shot_data)
+
+        target_result["final_hp"] = target["hp"]
+        if target["hp"] <= 0:
+            target_result["killed"] = True
+            total_xp = 25
+
+        return {
+            "weapon": weapon_name,
+            "fire_mode": "burst",
+            "shots_fired": shots_count,
+            "ammo_remaining": ammo_available - shots_count,
+            "ammo_type": weapon.get("ammo_type"),
+            "base_attack": base_attack,
+            "is_sharpshooter": is_sharpshooter,
+            "targets": [target_result],
+            "total_damage": total_damage,
+            "enemies_killed": 1 if target_result["killed"] else 0,
+            "total_xp": total_xp
+        }
+
+    def _double_dice(self, damage_dice: str) -> str:
+        if 'd' not in damage_dice:
+            return damage_dice
+        parts = damage_dice.split('d')
+        num_dice = int(parts[0])
+        return f"{num_dice * 2}d{parts[1]}"
+
+    def _get_scaling_label(self, pen: int, prot: int) -> Tuple[str, int]:
+        if pen > prot:
+            return "FULL", 100
+        elif pen <= prot / 2:
+            return "QUARTER", 25
+        else:
+            return "HALF", 50
+
+    def _empty_result(self, weapon_name: str, shots: int, ammo: int, targets: List[Dict]) -> Dict:
+        return {
+            "weapon": weapon_name,
+            "fire_mode": "empty",
+            "shots_fired": 0,
+            "ammo_remaining": ammo,
+            "ammo_type": None,
+            "base_attack": 0,
+            "is_sharpshooter": False,
+            "targets": [],
+            "total_damage": 0,
+            "enemies_killed": 0,
+            "total_xp": 0
+        }
+
     def resolve_full_auto(
         self,
         weapon_name: str,
@@ -150,13 +368,17 @@ class FirearmsCombatResolver:
         if shots_per_target == 0:
             shots_per_target = 1
 
+        max_shots_cap = fire_mode.get("max_shots_per_target", 0)
+        if max_shots_cap > 0:
+            shots_per_target = min(shots_per_target, max_shots_cap)
+
         base_attack = self._get_attack_bonus()
         is_sharpshooter = self._is_sharpshooter()
 
         if is_sharpshooter:
-            penalty_per_shot = fire_mode.get("penalty_per_shot_sharpshooter", -1)
+            penalty_per_shot = fire_mode.get("penalty_per_shot_sharpshooter", -2)
         else:
-            penalty_per_shot = fire_mode.get("penalty_per_shot", -2)
+            penalty_per_shot = fire_mode.get("penalty_per_shot", -3)
 
         results = []
         total_damage = 0
@@ -260,12 +482,15 @@ class FirearmsCombatResolver:
 
             results.append(target_result)
 
-        ammo_remaining = ammo_available - shots_fired
+        actual_shots = shots_per_target * len(targets)
+        ammo_remaining = ammo_available - actual_shots
 
         return {
             "weapon": weapon_name,
-            "shots_fired": shots_fired,
+            "fire_mode": "full_auto",
+            "shots_fired": actual_shots,
             "ammo_remaining": ammo_remaining,
+            "ammo_type": weapon.get("ammo_type"),
             "base_attack": base_attack,
             "is_sharpshooter": is_sharpshooter,
             "targets": results,
@@ -274,13 +499,43 @@ class FirearmsCombatResolver:
             "total_xp": total_xp
         }
 
-    def update_character_after_combat(self, ammo_spent: int, xp_gained: int):
-        """Update character.json with XP changes"""
+    def update_character_after_combat(self, result: Dict):
+        """Update character XP and deduct ammo via inventory-system"""
         char_name = self.character.get("name")
         if not char_name:
             raise RuntimeError("Character has no name")
 
-        self.player_mgr.award_xp(char_name, xp_gained)
+        if result.get("total_xp", 0) > 0:
+            self.player_mgr.award_xp(char_name, result["total_xp"])
+
+        ammo_type = result.get("ammo_type")
+        shots_fired = result.get("shots_fired", 0)
+        if ammo_type and shots_fired > 0:
+            self._deduct_ammo(char_name, ammo_type, shots_fired)
+
+    def _deduct_ammo(self, char_name: str, ammo_type: str, quantity: int):
+        """Try to deduct ammo via inventory-system module, fall back to manual"""
+        import subprocess
+
+        inventory_script = PROJECT_ROOT / ".claude" / "additional" / "modules" / "inventory-system" / "tools" / "dm-inventory.sh"
+        if not inventory_script.exists():
+            print(f"[AMMO] inventory-system not available. Deduct manually: {quantity}x {ammo_type}")
+            return
+
+        try:
+            cmd = [
+                "bash", str(inventory_script), "update", char_name,
+                "--remove", ammo_type, str(quantity)
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if proc.returncode == 0:
+                print(f"[AUTO-AMMO] Deducted {quantity}x {ammo_type}")
+            else:
+                print(f"[AMMO] Auto-deduct failed: {proc.stderr.strip()}")
+                print(f"[AMMO] Deduct manually: {quantity}x {ammo_type}")
+        except Exception as e:
+            print(f"[AMMO] Auto-deduct error: {e}")
+            print(f"[AMMO] Deduct manually: {quantity}x {ammo_type}")
 
 
 def format_combat_output(result: Dict) -> str:
@@ -403,9 +658,10 @@ def main():
 
         if args.fire_mode == 'full_auto':
             result = resolver.resolve_full_auto(args.weapon, args.ammo, targets)
-        else:
-            print(f"[ERROR] Fire mode '{args.fire_mode}' not yet implemented", file=sys.stderr)
-            sys.exit(1)
+        elif args.fire_mode == 'single':
+            result = resolver.resolve_single(args.weapon, args.ammo, targets)
+        elif args.fire_mode == 'burst':
+            result = resolver.resolve_burst(args.weapon, args.ammo, targets)
 
         print(format_combat_output(result))
 
@@ -414,13 +670,10 @@ def main():
             print("  🧪 TEST MODE - NO CHANGES APPLIED")
             print("=" * 68)
             print(f"Would update character XP: +{result['total_xp']}")
-            print(f"Would update ammo remaining: {result['ammo_remaining']}")
-            print("Use dm-inventory.sh to apply changes manually")
+            print(f"Would deduct ammo: {result['shots_fired']}x {result.get('ammo_type', '?')}")
         else:
-            resolver.update_character_after_combat(result['shots_fired'], result['total_xp'])
-            print(f"\n[AUTO-PERSIST] Updated character XP: +{result['total_xp']}")
-            print(f"[AUTO-PERSIST] Ammo remaining: {result['ammo_remaining']}")
-            print("NOTE: Update ammo manually with: bash tools/dm-player.sh inventory")
+            resolver.update_character_after_combat(result)
+            print(f"\n[AUTO-PERSIST] XP: +{result['total_xp']}")
 
     except RuntimeError as e:
         print(f"[ERROR] {e}", file=sys.stderr)

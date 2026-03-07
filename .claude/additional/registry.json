@@ -315,15 +315,19 @@
       ],
       "enabled_by_default": false,
       "dependencies": [],
+      "optional_dependencies": [
+        "inventory-system"
+      ],
       "incompatible_with": [],
       "middleware": [],
       "features": [
-        "Full-auto fire mode with RPM-based shot calculation",
+        "Single, burst, and full-auto fire modes",
         "Penetration vs Protection damage scaling",
         "Subclass bonuses (Стрелок sharpshooter)",
         "Critical hit mechanics (2× dice on nat 20)",
-        "Multi-target distribution",
+        "Multi-target distribution (full-auto)",
         "Auto XP tracking",
+        "Auto ammo deduction (via inventory-system if active)",
         "Test mode for dry runs"
       ],
       "adds_to_core": {

@@ -7,8 +7,8 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-note.sh <category> <fact>"
     echo "       dm-note.sh categories"
     echo ""
-    echo "Categories: session_events, plot_local, plot_regional, plot_world,"
-    echo "            player_choices, npc_relations, lore, rules"
+    echo "Categories: session_events, player_choices, npc_relations, world_lore, lore, rules"
+    echo "  (Plot/quest data belongs in dm-plot.sh, not notes)"
     echo ""
     echo "Example: dm-note.sh \"volcano\" \"The volcano god demands royal blood\""
     exit 1

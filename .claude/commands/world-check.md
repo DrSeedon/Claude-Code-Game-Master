@@ -106,28 +106,42 @@ for name, data in npcs.items():
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
+import json, sys
+from pathlib import Path
 
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/facts.json', 'r') as f:
-    facts = json.load(f)
+plots_path = Path(campaign_dir) / 'plots.json'
 
 print('📜 PLOT STRUCTURE:')
 
-# Check for three-tier plots
-plot_categories = ['plot_local', 'plot_regional', 'plot_world']
-for category in plot_categories:
-    if category in facts:
-        count = len(facts[category])
-        print(f'✅ {category}: {count} facts')
-    else:
-        print(f'❌ {category}: Missing')
+if not plots_path.exists():
+    print('❌ plots.json missing — no quests created')
+    sys.exit(0)
 
-# Check for other fact categories
-other_categories = [k for k in facts.keys() if 'plot_' not in k]
-if other_categories:
-    print(f'📚 Other fact categories: {other_categories}')
+with open(plots_path, 'r') as f:
+    plots = json.load(f)
+
+if not plots:
+    print('❌ plots.json is empty — no quests')
+    sys.exit(0)
+
+by_type = {}
+for name, data in plots.items():
+    if not isinstance(data, dict):
+        continue
+    t = data.get('type', 'other')
+    by_type.setdefault(t, []).append(name)
+
+for t in ['main', 'side', 'mystery', 'threat']:
+    names = by_type.get(t, [])
+    if names:
+        print(f'✅ {t}: {len(names)} — {', '.join(names)}')
+    else:
+        print(f'⚠️  {t}: none')
+
+active = sum(1 for d in plots.values() if isinstance(d, dict) and d.get('status') == 'active')
+total = len([d for d in plots.values() if isinstance(d, dict)])
+print(f'📊 Total: {total} ({active} active)')
 " "$CAMPAIGN_DIR"
 ```
 
@@ -314,12 +328,12 @@ bash tools/dm-location.sh connect "[Orphaned]" "[Nearby Location]" "a winding pa
 # Launch with Task tool targeting specific location/NPC
 ```
 
-### No Plot Facts
+### No Plots
 ```bash
 # Quick plot generation
-bash tools/dm-note.sh "plot_local" "Strange disappearances plague the town at night"
-bash tools/dm-note.sh "plot_regional" "Ancient seals are weakening across the land"
-bash tools/dm-note.sh "plot_world" "The Dark Star approaches, heralding change"
+bash tools/dm-plot.sh add "Strange Disappearances" --type side --description "People vanish from the town at night" --objectives "Investigate the disappearances,Find the source"
+bash tools/dm-plot.sh add "Weakening Seals" --type mystery --description "Ancient seals are failing across the land" --objectives "Discover a broken seal,Research the cause"
+bash tools/dm-plot.sh add "The Dark Star" --type threat --description "A dark star approaches, heralding change" --objectives "Learn about the prophecy"
 ```
 
 ---

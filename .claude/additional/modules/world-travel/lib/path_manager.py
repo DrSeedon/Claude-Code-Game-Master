@@ -12,8 +12,10 @@ from pathlib import Path
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
 
 from lib.json_ops import JsonOperations
+from module_data import ModuleDataManager
 from connection_utils import get_connection_between
 
 MODULE_DIR = Path(__file__).parent
@@ -27,18 +29,17 @@ class PathManager:
 
     def __init__(self, campaign_dir: str):
         self.json_ops = JsonOperations(campaign_dir)
+        self.module_data_mgr = ModuleDataManager(Path(campaign_dir))
         self.pf = PathFinder()
 
     def _load_path_preferences(self) -> Dict:
-        """Load path preferences from campaign overview"""
-        overview = self.json_ops.load_json("campaign-overview.json")
-        return overview.get("path_preferences", {})
+        config = self.module_data_mgr.load("world-travel")
+        return config.get("path_preferences", {})
 
     def _save_path_preferences(self, preferences: Dict):
-        """Save path preferences to campaign overview"""
-        overview = self.json_ops.load_json("campaign-overview.json")
-        overview["path_preferences"] = preferences
-        self.json_ops.save_json("campaign-overview.json", overview)
+        config = self.module_data_mgr.load("world-travel")
+        config["path_preferences"] = preferences
+        self.module_data_mgr.save("world-travel", config)
 
     def _get_preference_key(self, from_loc: str, to_loc: str) -> str:
         """Generate canonical key for location pair (alphabetically sorted)"""

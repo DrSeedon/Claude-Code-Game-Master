@@ -11,12 +11,14 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-plot.sh <action> [args]"
     echo ""
     echo "=== Plot Management ==="
+    echo "  add <name> [options]             Create a new plot"
     echo "  list [--type X] [--status Y]     List plots (filter by type/status)"
     echo "  show <name>                      Show full plot details"
     echo "  search <query>                   Search plots by name, NPCs, locations"
     echo "  update <name> <event>            Add progress event to plot"
     echo "  complete <name> [outcome]        Mark plot as completed"
     echo "  fail <name> [reason]             Mark plot as failed"
+    echo "  objective <name> <obj> [action]  Manage objectives (complete/incomplete/add)"
     echo "  threads                          Active story threads (DM dashboard)"
     echo "  counts                           Show plot statistics"
     echo ""
@@ -24,12 +26,12 @@ if [ "$#" -lt 1 ]; then
     echo "Status: active, completed, failed, dormant"
     echo ""
     echo "Examples:"
-    echo "  dm-plot.sh list                              # List all plots"
-    echo "  dm-plot.sh list --type main --status active  # Active main plots only"
-    echo "  dm-plot.sh show \"The Eight Day Countdown\"    # Full plot details"
-    echo "  dm-plot.sh search \"Mordecai\"                 # Find plots with Mordecai"
+    echo "  dm-plot.sh add \"Side Quest\" --type side --description \"Find the artifact\""
+    echo "  dm-plot.sh add \"Main Quest\" --type main --objectives \"Find key,Open door\""
+    echo "  dm-plot.sh objective \"Main Quest\" \"Find key\" complete"
+    echo "  dm-plot.sh objective \"Main Quest\" \"New task\" add"
+    echo "  dm-plot.sh list --type main --status active"
     echo "  dm-plot.sh update \"Murder Mystery\" \"Found first clue at docks\""
-    echo "  dm-plot.sh complete \"Side Quest\" \"Rescued the merchant\""
     exit 1
 fi
 
@@ -42,6 +44,22 @@ dispatch_middleware "dm-plot.sh" "$ACTION" "$@" && exit $?
 
 # Delegate to Python module based on action
 case "$ACTION" in
+    add)
+        if [ "$#" -lt 1 ]; then
+            echo "Usage: dm-plot.sh add <name> [--type X] [--description \"...\"] [--npcs \"a,b\"] [--objectives \"x,y\"]"
+            exit 1
+        fi
+        $PYTHON_CMD "$LIB_DIR/plot_manager.py" add "$@"
+        ;;
+
+    objective)
+        if [ "$#" -lt 2 ]; then
+            echo "Usage: dm-plot.sh objective <plot_name> <objective_text> [complete|incomplete|add]"
+            exit 1
+        fi
+        $PYTHON_CMD "$LIB_DIR/plot_manager.py" objective "$@"
+        ;;
+
     list)
         $PYTHON_CMD "$LIB_DIR/plot_manager.py" list "$@"
         ;;

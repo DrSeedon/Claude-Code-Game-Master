@@ -12,6 +12,29 @@ A standalone module that handles modern/sci-fi combat resolution: RPM-based shot
 
 ---
 
+## Data Storage
+
+```
+world-state/campaigns/<campaign>/
+  module-data/
+    firearms-combat.json     <-- weapons, fire_modes, armor, enemies
+  character.json             <-- subclass, XP (written by resolver)
+  campaign-overview.json     <-- no firearms data (migrated out)
+```
+
+| Data | Location | Who writes |
+|------|----------|------------|
+| Weapon definitions | `module-data/firearms-combat.json` -> `weapons` | DM during /new-game |
+| Fire mode config | `module-data/firearms-combat.json` -> `fire_modes` | DM during /new-game |
+| Armor/enemy presets | `module-data/firearms-combat.json` -> `armor_system`, `enemies_modern` | DM during /new-game |
+| Character subclass | `character.json` -> `subclass` | DM during /new-game |
+| Character XP | `character.json` -> `xp.current` | Resolver after combat |
+| Ammo inventory | `character.json` (via inventory-system) | Resolver after combat |
+
+The template at `templates/modern-firearms-campaign.json` contains a full STALKER preset with all weapons, armor, enemies, subclasses, and survival stats.
+
+---
+
 ## CORE D&D 5e vs firearms-combat
 
 | Feature | Vanilla CORE (D&D 5e) | firearms-combat |
@@ -20,7 +43,7 @@ A standalone module that handles modern/sci-fi combat resolution: RPM-based shot
 | Damage per round | One dice roll | One dice roll **per shot** |
 | Shots per round | 1 (or Extra Attack) | Derived from weapon RPM over 6 seconds |
 | Armor | AC threshold | AC threshold + PROT rating that scales damage |
-| Ammunition | Not tracked | Deducted automatically |
+| Ammunition | Not tracked | Deducted automatically (if inventory-system active) |
 | Fire modes | None | `single` / `burst` / `full_auto` |
 | Crit mechanics | 2x dice on nat 20 | 2x dice on nat 20, applied per-shot |
 | XP tracking | Manual | Auto-written to character file |
@@ -38,13 +61,13 @@ A D&D combat round is 6 seconds. The resolver converts weapon RPM into a realist
 shots_per_round = int((rpm / 60) * 6)
 ```
 
-Available ammo caps the total. Shots are distributed evenly across targets.
+Available ammo caps the total. In full_auto, shots per target are capped at `max_shots_per_target` (default 10).
 
-Example: AK-74 at 650 RPM -> 65 shots/round theoretical maximum. With 30 rounds available, you fire 30 shots distributed across your targets.
+Example: AK-74 at 650 RPM -> 65 shots/round theoretical. With 30 rounds and 3 targets, each target gets 10 shots (capped).
 
 ### Penetration vs Protection
 
-Every weapon has a `pen` value. Every armored target has a `prot` value. The comparison determines damage scaling on each hit:
+Every weapon has a `pen` value. Every armored target has a `prot` value:
 
 | Condition | Damage Applied |
 |---|---|
@@ -52,27 +75,36 @@ Every weapon has a `pen` value. Every armored target has a `prot` value. The com
 | `prot/2 < pen <= prot` | 50% (half damage) |
 | `pen <= prot/2` | 25% (quarter damage) |
 
-Example: AKM (`pen 4`) vs Mercenary (`prot 3`) -> `4 > 3` -> full damage.
-Example: PM Pistol (`pen 1`) vs Heavy Armor (`prot 5`) -> `1 <= 5/2` -> quarter damage.
+Example: AKM (`pen 4`) vs Mercenary (`prot 3`) -> full damage.
+Example: PM Pistol (`pen 1`) vs Heavy Armor (`prot 5`) -> quarter damage.
 
 ### Fire Modes
 
 **`single`** — One attack roll, one damage roll. No penalty. Consumes 1 round.
 
-**`burst`** — 3 shots, progressive penalty per shot:
+**`burst`** — 3 shots (or less if low ammo), progressive penalty:
 - Shot 1: no penalty
-- Shot 2: -2 to attack (or -1 for Sharpshooter subclass)
-- Shot 3: -4 to attack (or -2 for Sharpshooter)
+- Shot 2: -3 to attack (Sharpshooter: -2)
+- Shot 3: -6 to attack (Sharpshooter: -4)
 
-**`full_auto`** — All available shots fired. Each additional shot beyond the first accumulates a cumulative penalty:
+**`full_auto`** — RPM-based shot count, max 10 per target. Progressive penalty:
 
 ```
 attack_modifier = base_attack + (shot_index * penalty_per_shot)
 ```
 
-Default penalty: -2 per shot. With `Стрелок` (Sharpshooter) subclass: -1 per shot.
+Default penalty: **-3 per shot**. With Sharpshooter subclass: **-2 per shot**.
 
-A character with +7 to attack firing 5 shots full-auto has modifiers: +7, +5, +3, +1, -1.
+A Sharpshooter with +8 to attack firing 5 shots: +8, +6, +4, +2, +0.
+A normal shooter with +5 firing 5 shots: +5, +2, -1, -4, -7.
+
+### Balance Design
+
+Full auto is deliberately **not** a guaranteed kill:
+- Cap at 10 shots/target prevents mag-dumping 30 rounds into one enemy
+- Steep penalty means only first 3-5 shots reliably hit
+- Single fire is ammo-efficient; full auto is high-risk burst damage
+- Monte Carlo sims show AK-74 full_auto kills a Bandit ~59% of the time (was 100% before balance patch)
 
 ### Critical Hits
 
@@ -89,7 +121,7 @@ Crit:     4d8+2  ->  roll 4d8, add 2
 total_attack = DEX_modifier + proficiency_bonus + subclass_bonus
 ```
 
-Subclass `Стрелок` adds +2 to attack and reduces full-auto/burst penalty from -2 to -1 per shot.
+Subclass Sharpshooter adds +2 to attack and reduces burst/full-auto penalty from -3 to -2 per shot.
 
 ---
 
@@ -99,18 +131,18 @@ All combat is resolved through a single command:
 
 ```bash
 bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
-  --attacker "Сталкер" \
+  --attacker "Stalker" \
   --weapon "AK-74" \
   --fire-mode full_auto \
   --ammo 90 \
-  --targets "Бандит:14:25:3" "Бандит2:12:20:2"
+  --targets "Bandit:14:25:3" "Bandit2:12:20:2"
 ```
 
 Add `--test` to simulate without writing any changes:
 
 ```bash
 bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
-  --attacker "Сталкер" \
+  --attacker "Stalker" \
   --weapon "SVD" \
   --fire-mode single \
   --ammo 10 \
@@ -135,50 +167,7 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
 Name:AC:HP:Protection
 ```
 
-Example: `"Бандит:13:20:2"` — enemy named Бандит, AC 13, 20 HP, protection rating 2.
-
-### Output Example
-
-```
-====================================================================
-  FIREARMS COMBAT RESOLVER
-====================================================================
-Weapon: AK-74
-Base Attack: +6 (Стрелок subclass)
-Shots Fired: 30
-Ammo Remaining: 60
-
---------------------------------------------------------------------
-TARGET RESULTS:
---------------------------------------------------------------------
-
-Бандит (AC 14, HP 25, PROT 3)
-  Shots: 15 | Hits: 8 (including 1 CRITS!)
-
-  Shot #1:  HIT (18+6=24 vs AC 14)
-    Damage: 2d6+2 = 9 raw -> PEN 3 vs PROT 3 = HALF -> 4 HP
-  Shot #2:  HIT (15+5=20 vs AC 14)
-    Damage: 2d6+2 = 11 raw -> PEN 3 vs PROT 3 = HALF -> 5 HP
-  ...
-  Shot #7:  CRIT! (20+0=20 vs AC 14)
-    Damage: 4d6+2 = 18 raw -> PEN 3 vs PROT 3 = HALF -> 9 HP
-  Shot #8:  MISS (3-1=2 vs AC 14)
-
-  Total Damage Dealt: 31 HP
-  Status: KILLED (overkill: -6)
-
---------------------------------------------------------------------
-SUMMARY:
---------------------------------------------------------------------
-Total Damage: 31 HP
-Enemies Killed: 1/1
-XP Gained: +25
-====================================================================
-
-[AUTO-PERSIST] Updated character XP: +25
-[AUTO-PERSIST] Ammo remaining: 60
-NOTE: Update ammo manually with: bash tools/dm-player.sh inventory
-```
+Example: `"Bandit:13:20:2"` — enemy named Bandit, AC 13, 20 HP, protection rating 2.
 
 ---
 
@@ -230,9 +219,32 @@ Add a new entry to `campaign-overview.json`:
 
 ---
 
+## Fire Mode Configuration
+
+Fire modes are configurable per-campaign in `campaign-overview.json`:
+
+```json
+"fire_modes": {
+  "single": {"attacks": 1, "ammo": 1, "penalty": 0},
+  "burst": {
+    "penalty_per_shot": -3,
+    "penalty_per_shot_sharpshooter": -2
+  },
+  "full_auto": {
+    "penalty_per_shot": -3,
+    "penalty_per_shot_sharpshooter": -2,
+    "max_shots_per_target": 10
+  }
+}
+```
+
+If `fire_modes` is missing, the resolver uses defaults: -3/-2 penalty, 10 max shots/target.
+
+---
+
 ## Enemy Types
 
-From the template (`templates/modern-firearms-campaign.json`), enemies for modern/STALKER campaigns:
+From the template, enemies for modern/STALKER campaigns:
 
 | Enemy | AC | HP | PROT | XP |
 |---|---|---|---|---|
@@ -262,31 +274,37 @@ Pass any enemy as a CLI target directly:
 
 ## Subclasses
 
-Two subclasses are defined in the campaign template and interact with the resolver:
-
-**Sharpshooter (`Стрелок`, Fighter subclass)**
+**Sharpshooter (Fighter subclass)**
 - +2 to attack bonus on all ranged attacks
-- Full-auto/burst penalty reduced: -1 per shot instead of -2
-- Quick Reload as bonus action (roleplay rule, not enforced by resolver)
+- Full-auto/burst penalty: -2 per shot instead of -3
+- Quick Reload as bonus action (roleplay rule)
 
 **Sniper (Rogue subclass)**
-- Critical hits on 19-20 (roleplay/DM-adjudicated, resolver uses nat 20 only by default)
+- Critical hits on 19-20 (roleplay/DM-adjudicated)
 - Long Shot: double range without penalty
+- Precision Strike: +1d8 on first shot each round
 
 ---
 
-## Use Cases
+## Optional Dependencies
 
-- **STALKER campaigns** — Duty vs Freedom firefights in the Zone, bandit ambushes, pseudogiant encounters
-- **Fallout wasteland** — raider gangs, Brotherhood patrols, super mutant assaults
-- **Modern military** — squad-level CQB, urban warfare, hostage rescue
-- **Cyberpunk** — corpo hit teams, gang shootouts, Netrunner-backed ambushes
-- **Zombie apocalypse** — horde suppression, ammo conservation decisions under fire mode pressure
+- **inventory-system** — if active, resolver auto-deducts ammo via `dm-inventory.sh`. If not active, prints manual deduction note. This is a soft dependency — the module works fine without it.
+
+---
+
+## Balance Tools
+
+Two matplotlib dashboards in `tools/`:
+
+- `balance-dashboard.py` — 8-chart dashboard: DPA, kill% heatmap, accuracy decay, damage distribution, avg damage, ammo cost, PEN/PROT matrix, verdict panel
+- `balance-comparison.py` — side-by-side comparison of different penalty/cap configurations
+
+Run: `uv run python .claude/additional/modules/firearms-combat/tools/balance-dashboard.py`
 
 ---
 
 ## Architecture Notes
 
-The module imports CORE's `PlayerManager`, `CampaignManager`, and `JsonOperations` directly. CORE has zero knowledge of this module. No middleware is registered — the module does not intercept `dm-attack.sh` or any other CORE tool. The DM (Claude) decides when to call `dm-combat.sh` based on campaign context.
+The module imports CORE's `PlayerManager`, `CampaignManager`, and `JsonOperations` directly. CORE has zero knowledge of this module. No middleware is registered — the module does not intercept any CORE tool. The DM (Claude) decides when to call `dm-combat.sh` based on campaign context.
 
-Post-combat state: XP is written automatically to the character file. Ammo must be updated manually with `dm-player.sh inventory` — the resolver prints the remaining count in the output.
+Post-combat: XP is written to character file automatically. Ammo is deducted via inventory-system if available, otherwise printed as manual note.

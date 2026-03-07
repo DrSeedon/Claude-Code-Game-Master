@@ -77,17 +77,18 @@
           "description": "3-round burst",
           "attacks": 3,
           "ammo": 3,
-          "penalty_per_shot": -2,
-          "penalty_per_shot_sharpshooter": -1,
-          "comment": "2nd shot: -2, 3rd shot: -4 (or -1/-2 for Sharpshooter subclass)"
+          "penalty_per_shot": -3,
+          "penalty_per_shot_sharpshooter": -2,
+          "comment": "2nd shot: -3, 3rd shot: -6 (or -2/-4 for Sharpshooter subclass)"
         },
         "full_auto": {
           "description": "Full automatic fire (empty magazine in 6 seconds)",
           "attacks": "based_on_rpm",
           "ammo": "full_magazine",
-          "penalty_per_shot": -2,
-          "penalty_per_shot_sharpshooter": -1,
-          "comment": "Progressive penalty per shot. Use dm-combat.sh resolve for auto-calculation."
+          "penalty_per_shot": -3,
+          "penalty_per_shot_sharpshooter": -2,
+          "max_shots_per_target": 10,
+          "comment": "Progressive penalty per shot. Max 10 shots per target. Use dm-combat.sh resolve for auto-calculation."
         }
       },
       "penetration_vs_armor": {
@@ -365,7 +366,7 @@
       "features": [
         "Precise Shot: +2 to ranged attacks with firearms",
         "Quick Reload: Reload as bonus action",
-        "Controlled Bursts: -1 penalty instead of -2 per shot in burst/auto fire"
+        "Controlled Bursts: -2 penalty instead of -3 per shot in burst/auto fire"
       ]
     },
     "Sniper": {

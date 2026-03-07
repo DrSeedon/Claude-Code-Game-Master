@@ -55,6 +55,93 @@ class PlotManager(EntityManager):
             return None
         return self._get_entity(self.plots_file, actual_name)
 
+    def add_plot(self, name: str, plot_type: str = "side",
+                 description: str = "", npcs: List[str] = None,
+                 locations: List[str] = None,
+                 objectives: List[str] = None) -> bool:
+        valid, error = self.validators.validate_name(name)
+        if not valid:
+            print(f"[ERROR] {error}")
+            return False
+
+        if self._entity_exists(self.plots_file, name):
+            print(f"[ERROR] Plot '{name}' already exists")
+            return False
+
+        valid_types = ['main', 'side', 'mystery', 'threat']
+        if plot_type.lower() not in valid_types:
+            print(f"[ERROR] Invalid type '{plot_type}'. Valid: {', '.join(valid_types)}")
+            return False
+
+        obj_list = []
+        if objectives:
+            obj_list = [{"text": o, "completed": False} for o in objectives]
+
+        plot_data = {
+            'type': plot_type.lower(),
+            'status': 'active',
+            'description': description,
+            'npcs': npcs or [],
+            'locations': locations or [],
+            'objectives': obj_list,
+            'events': [],
+            'created_at': self.get_timestamp()
+        }
+
+        if self._add_entity(self.plots_file, name, plot_data):
+            print(f"[SUCCESS] Created plot '{name}' (type: {plot_type})")
+            return True
+        return False
+
+    def update_objective(self, plot_name: str, objective_text: str,
+                         action: str = "complete") -> bool:
+        actual_name = self._find_entity_name(self.plots_file, plot_name)
+        if not actual_name:
+            print(f"[ERROR] Plot '{plot_name}' not found")
+            return False
+
+        plots = self._load_entities(self.plots_file)
+        objectives = plots[actual_name].get('objectives', [])
+
+        obj_lower = objective_text.lower()
+        found = False
+        for obj in objectives:
+            if isinstance(obj, str):
+                continue
+            if obj['text'].lower() == obj_lower:
+                if action == 'complete':
+                    obj['completed'] = True
+                elif action == 'incomplete':
+                    obj['completed'] = False
+                found = True
+                break
+
+        if not found:
+            print(f"[ERROR] Objective '{objective_text}' not found in plot '{actual_name}'")
+            return False
+
+        if self._save_entities(self.plots_file, plots):
+            status = "completed" if action == "complete" else "incomplete"
+            print(f"[SUCCESS] Objective '{objective_text}' marked as {status}")
+            return True
+        return False
+
+    def add_objective(self, plot_name: str, objective_text: str) -> bool:
+        actual_name = self._find_entity_name(self.plots_file, plot_name)
+        if not actual_name:
+            print(f"[ERROR] Plot '{plot_name}' not found")
+            return False
+
+        plots = self._load_entities(self.plots_file)
+        objectives = plots[actual_name].get('objectives', [])
+        objectives.append({"text": objective_text, "completed": False})
+        plots[actual_name]['objectives'] = objectives
+
+        if self._save_entities(self.plots_file, plots):
+            print(f"[SUCCESS] Added objective '{objective_text}' to plot '{actual_name}'")
+            return True
+        return False
+
     def search_plots(self, query: str) -> Dict[str, Dict]:
         """
         Search plots by name, description, NPCs, locations, or objectives
@@ -269,7 +356,11 @@ class PlotManager(EntityManager):
             lines.append("")
             lines.append("Objectives:")
             for obj in objectives:
-                lines.append(f"  • {obj}")
+                if isinstance(obj, dict):
+                    marker = "[x]" if obj.get('completed') else "[ ]"
+                    lines.append(f"  {marker} {obj.get('text', '')}")
+                else:
+                    lines.append(f"  • {obj}")
 
         # Consequences
         consequences = plot.get('consequences', '')
@@ -459,6 +550,15 @@ def main():
     parser = argparse.ArgumentParser(description='Plot management')
     subparsers = parser.add_subparsers(dest='action', help='Action to perform')
 
+    # Add plot
+    add_parser = subparsers.add_parser('add', help='Create a new plot')
+    add_parser.add_argument('name', help='Plot name')
+    add_parser.add_argument('--type', default='side', help='Plot type (main, side, mystery, threat)')
+    add_parser.add_argument('--description', default='', help='Plot description')
+    add_parser.add_argument('--npcs', default='', help='Comma-separated NPC names')
+    add_parser.add_argument('--locations', default='', help='Comma-separated location names')
+    add_parser.add_argument('--objectives', default='', help='Comma-separated objectives')
+
     # List plots
     list_parser = subparsers.add_parser('list', help='List plots')
     list_parser.add_argument('--type', help='Filter by type (main, side, mystery, threat)')
@@ -487,6 +587,14 @@ def main():
     fail_parser.add_argument('name', help='Plot name')
     fail_parser.add_argument('reason', nargs='?', help='Failure reason')
 
+    # Objectives
+    obj_parser = subparsers.add_parser('objective', help='Manage plot objectives')
+    obj_parser.add_argument('name', help='Plot name')
+    obj_parser.add_argument('objective', help='Objective text')
+    obj_parser.add_argument('obj_action', nargs='?', default='complete',
+                           choices=['complete', 'incomplete', 'add'],
+                           help='Action: complete, incomplete, or add')
+
     # Counts
     counts_parser = subparsers.add_parser('counts', help='Get plot counts')
 
@@ -501,7 +609,15 @@ def main():
 
     manager = PlotManager()
 
-    if args.action == 'list':
+    if args.action == 'add':
+        npcs = [s.strip() for s in args.npcs.split(',') if s.strip()] if args.npcs else []
+        locations = [s.strip() for s in args.locations.split(',') if s.strip()] if args.locations else []
+        objectives = [s.strip() for s in args.objectives.split(',') if s.strip()] if args.objectives else []
+        if not manager.add_plot(args.name, args.type, args.description,
+                                npcs, locations, objectives):
+            sys.exit(1)
+
+    elif args.action == 'list':
         plots = manager.list_plots(args.type, args.status)
         print(manager.format_plot_list(plots))
 
@@ -530,6 +646,15 @@ def main():
     elif args.action == 'fail':
         if not manager.fail_plot(args.name, args.reason):
             sys.exit(1)
+
+    elif args.action == 'objective':
+        obj_action = getattr(args, 'obj_action', 'complete')
+        if obj_action == 'add':
+            if not manager.add_objective(args.name, args.objective):
+                sys.exit(1)
+        else:
+            if not manager.update_objective(args.name, args.objective, obj_action):
+                sys.exit(1)
 
     elif args.action == 'counts':
         import json

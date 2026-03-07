@@ -71,75 +71,41 @@ Show a summary before writing:
 
 ## Step 3: Write Config to Campaign
 
-### 3a. Write `time_effects` to campaign-overview.json
+### 3a. Write EVERYTHING to `module-data/custom-stats.json`
+
+Both rules AND character stat values go in the same file:
 
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
+mkdir -p "$CAMPAIGN_DIR/module-data"
 ```
 
-For simple stats (no conditions):
 ```json
 {
-  "campaign_rules": {
-    "time_effects": {
-      "enabled": true,
-      "effects_per_hour": {
-        "hunger": -5,
-        "thirst": -8
-      },
-      "stat_consequences": {
-        "starvation": {
-          "condition": {"stat": "hunger", "operator": "<=", "value": 0},
-          "effects": [
-            {"type": "hp_damage", "amount": -2, "per_hour": true},
-            {"type": "message", "text": "Hunger takes its toll."}
-          ]
-        }
-      }
+  "enabled": true,
+  "character_stats": {
+    "hunger":    {"current": 80, "min": 0, "max": 100},
+    "thirst":    {"current": 85, "min": 0, "max": 100},
+    "radiation": {"current": 0,  "min": 0, "max": 500}
+  },
+  "rules": [
+    {"stat": "hunger", "per_hour": -5, "sleep_rate": -1},
+    {"stat": "thirst", "per_hour": -8, "sleep_rate": -1},
+    {"stat": "radiation", "per_hour": -1}
+  ],
+  "stat_consequences": {
+    "starvation": {
+      "condition": {"stat": "hunger", "operator": "<=", "value": 0},
+      "effects": [
+        {"type": "hp_damage", "amount": -2, "per_hour": true},
+        {"type": "message", "text": "Hunger takes its toll."}
+      ]
     }
   }
 }
 ```
 
-For stats with sleep recovery (use `rules` array instead):
-```json
-{
-  "rules": [
-    {
-      "stat": "fatigue",
-      "per_hour": 5,
-      "sleep_restore_per_hour": -20
-    },
-    {
-      "stat": "mana",
-      "per_hour": 8,
-      "condition": "stat:mana < max"
-    }
-  ]
-}
-```
-
-### 3b. Initialize stats in character.json
-
-```python
-uv run python -c "
-import json
-
-char_path = '[CAMPAIGN_DIR]/character.json'
-with open(char_path) as f:
-    char = json.load(f)
-
-char['custom_stats'] = {
-    'hunger':    {'current': 80, 'min': 0, 'max': 100},
-    'thirst':    {'current': 85, 'min': 0, 'max': 100},
-    'radiation': {'current': 0,  'min': 0}
-}
-
-with open(char_path, 'w') as f:
-    json.dump(char, f, indent=2, ensure_ascii=False)
-print('[OK] Custom stats initialized')
-"
-```
+**Do NOT put custom_stats in character.json** — the engine reads/writes `character_stats` from module-data only.
 
 ---
 

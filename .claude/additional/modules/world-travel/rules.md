@@ -169,7 +169,7 @@ bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh map kestrel
 
 ## Terrain
 
-Campaign-defined in `campaign-overview.json`:
+Campaign-defined in `module-data/world-travel.json`:
 
 ```json
 {

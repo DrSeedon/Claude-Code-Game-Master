@@ -17,8 +17,10 @@ except ImportError:
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
 
 from lib.json_ops import JsonOperations
+from module_data import ModuleDataManager
 from connection_utils import get_unique_edges, get_connections
 
 MODULE_DIR = Path(__file__).parent
@@ -56,6 +58,7 @@ class MapGUI:
 
     def __init__(self, campaign_dir: str, width: int = 1200, height: int = 800):
         self.json_ops = JsonOperations(campaign_dir)
+        self.module_data_mgr = ModuleDataManager(Path(campaign_dir))
         self.width = width
         self.height = height
 
@@ -105,7 +108,8 @@ class MapGUI:
         self._load_and_generate_all()
 
     def _load_terrain_colors(self):
-        raw = self.overview.get('terrain_colors') or self.overview.get('campaign_rules', {}).get('terrain_colors', {})
+        config = self.module_data_mgr.load("world-travel")
+        raw = config.get("terrain_colors", {})
         merged = dict(DEFAULT_TERRAIN_COLORS)
         for key, val in raw.items():
             if isinstance(val, list) and len(val) == 3:

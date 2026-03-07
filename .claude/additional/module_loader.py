@@ -322,6 +322,9 @@ def main():
                 print(f"    Status: {icon} {status_str}")
                 if deps:
                     print(f"    Requires: {', '.join(deps)}")
+                opt_deps = m.get("optional_dependencies", [])
+                if opt_deps:
+                    print(f"    Enhances with: {', '.join(opt_deps)}")
                 print(f"    Description: {m['description']}")
                 print()
 

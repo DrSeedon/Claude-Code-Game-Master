@@ -24,6 +24,19 @@ def make_campaign(tmp_path, campaign_overview, character):
 
     (ws / "active-campaign.txt").write_text("test-campaign")
 
+    module_data = campaigns / "module-data"
+    module_data.mkdir(parents=True, exist_ok=True)
+
+    time_effects = campaign_overview.get('campaign_rules', {}).pop('time_effects', None)
+    custom_stats = character.pop('custom_stats', {})
+
+    cs_config = time_effects or {}
+    if custom_stats:
+        cs_config['character_stats'] = custom_stats
+    if cs_config:
+        with open(module_data / "custom-stats.json", "w", encoding="utf-8") as f:
+            json.dump(cs_config, f, indent=2, ensure_ascii=False)
+
     ops = JsonOperations(str(campaigns))
     ops.save_json("campaign-overview.json", campaign_overview)
     ops.save_json("character.json", character)
@@ -84,10 +97,21 @@ def load_engine(ws_path):
 # Since survival_engine uses CampaignManager("world-state") by default,
 # we need to construct it manually for tests.
 
+def read_stats(ws_path):
+    """Read custom_stats from module-data/custom-stats.json (not character.json)."""
+    campaign_dir = ws_path / "campaigns" / "test-campaign"
+    with open(campaign_dir / "module-data" / "custom-stats.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get('character_stats', {})
+
+
 def make_engine(ws_path):
     """Build a SurvivalEngine-like object pointing at tmp campaign."""
     from lib.player_manager import PlayerManager
     from lib.campaign_manager import CampaignManager
+
+    sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
+    from module_data import ModuleDataManager
 
     class TestSurvivalEngine:
         def __init__(self, ws):
@@ -95,8 +119,8 @@ def make_engine(ws_path):
             self.campaign_dir = self.campaign_mgr.get_active_campaign_dir()
             self.json_ops = JsonOperations(str(self.campaign_dir))
             self.player_mgr = PlayerManager(str(ws))
+            self.module_data_mgr = ModuleDataManager(self.campaign_dir)
 
-    # Import the real class methods
     sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "modules" / "custom-stats" / "lib"))
     from survival_engine import SurvivalEngine
 
@@ -105,6 +129,13 @@ def make_engine(ws_path):
         'tick': SurvivalEngine.tick,
         'status': SurvivalEngine.status,
         '_normalize_custom_stats': SurvivalEngine._normalize_custom_stats,
+        '_load_module_config': SurvivalEngine._load_module_config,
+        '_load_custom_stats': SurvivalEngine._load_custom_stats,
+        '_save_custom_stats': SurvivalEngine._save_custom_stats,
+        '_inject_stats': SurvivalEngine._inject_stats,
+        '_persist_stats': SurvivalEngine._persist_stats,
+        '_load_char_with_stats': SurvivalEngine._load_char_with_stats,
+        '_save_char_with_stats': SurvivalEngine._save_char_with_stats,
         '_apply_time_effects': SurvivalEngine._apply_time_effects,
         '_is_blocked': SurvivalEngine._is_blocked,
         '_check_rule_condition': SurvivalEngine._check_rule_condition,
@@ -116,6 +147,9 @@ def make_engine(ws_path):
         'add_effect': SurvivalEngine.add_effect,
         'remove_effect': SurvivalEngine.remove_effect,
         'list_effects': SurvivalEngine.list_effects,
+        'get_custom_stat': SurvivalEngine.get_custom_stat,
+        'modify_custom_stat': SurvivalEngine.modify_custom_stat,
+        'list_custom_stats': SurvivalEngine.list_custom_stats,
     })
 
     return engine
@@ -514,10 +548,10 @@ class TestPersistence:
 
         engine.tick(3)
 
-        char = engine.player_mgr.get_player("TestHero")
-        assert char['custom_stats']['hunger']['value'] < 80
-        assert char['custom_stats']['thirst']['value'] < 70
-        assert char['custom_stats']['radiation']['value'] > 10
+        stats = read_stats(ws)
+        assert stats['hunger']['value'] < 80
+        assert stats['thirst']['value'] < 70
+        assert stats['radiation']['value'] > 10
 
     def test_consecutive_ticks_accumulate(self, tmp_path):
         ws = make_campaign(tmp_path, base_campaign(), base_character())
@@ -526,9 +560,9 @@ class TestPersistence:
         engine.tick(1)
         engine.tick(1)
 
-        char = engine.player_mgr.get_player("TestHero")
-        assert char['custom_stats']['hunger']['value'] == 76
-        assert char['custom_stats']['thirst']['value'] == 64
+        stats = read_stats(ws)
+        assert stats['hunger']['value'] == 76
+        assert stats['thirst']['value'] == 64
 
 
 # ─── Tests: Rate Modifiers ────────────────────────────────
@@ -754,8 +788,8 @@ class TestTimedEffects:
 
         engine.add_effect("Яд", [{"stat": "radiation", "instant": 50}], duration_hours=1)
 
-        char_data = engine.json_ops.load_json("character.json")
-        assert char_data['custom_stats']['radiation']['value'] == 60  # 10 + 50
+        stats = read_stats(ws)
+        assert stats['radiation']['value'] == 60  # 10 + 50
 
     def test_instant_hp(self, tmp_path):
         ws = make_campaign(tmp_path, base_campaign(), base_character())
@@ -875,8 +909,8 @@ class TestTimedEffects:
 
         engine.add_effect("Megadose", [{"stat": "radiation", "instant": 9999}], duration_hours=1)
 
-        char_data = engine.json_ops.load_json("character.json")
-        assert char_data['custom_stats']['radiation']['value'] == 500  # clamped to max
+        stats = read_stats(ws)
+        assert stats['radiation']['value'] == 500  # clamped to max
 
 
 if __name__ == "__main__":

@@ -29,9 +29,17 @@ Use `--test` to preview without writing changes.
 
 ## Fire Modes
 
-- `single` — one shot, no penalty
-- `burst` — 3 shots, -2/-4 per shot (Стрелок: -1/-2)
-- `full_auto` — all available rounds, -2 cumulative per shot (Стрелок: -1)
+- `single` — one shot, no penalty, 1 ammo
+- `burst` — 3 shots (or less if low ammo), progressive penalty: -3/-6 per shot (Sharpshooter: -2/-4)
+- `full_auto` — RPM-based shot count, max 10 shots per target, progressive -3 per shot (Sharpshooter: -2)
+
+### Full Auto Balance Rules
+
+Full auto is capped at **10 shots per target** regardless of RPM or ammo. This prevents spray-and-pray from being an instant kill button. Penalty is steep: by shot 4 a normal shooter is at -9 to attack. Sharpshooter fares better but still degrades fast.
+
+Effective shots (where hit chance > 50%) for AK-74 vs AC 13:
+- Normal (+5 base): ~2-3 shots
+- Sharpshooter (+8 base): ~4-5 shots
 
 ---
 
@@ -41,21 +49,46 @@ Use `--test` to preview without writing changes.
 |-----------|--------|
 | PEN > PROT | 100% |
 | PEN > PROT/2 | 50% |
-| PEN ≤ PROT/2 | 25% |
+| PEN <= PROT/2 | 25% |
 
 ---
 
 ## Critical Hits
 
-Natural 20 → double damage dice (modifiers unchanged). Natural 1 → auto-miss.
+Natural 20 on any shot -> double damage dice (modifiers unchanged). Natural 1 -> auto-miss.
 
 ---
 
 ## After Combat
 
-System auto-writes XP to character. Update ammo manually:
+The resolver automatically:
+1. **Writes XP** to character file (25 XP per kill)
+2. **Deducts ammo** via inventory-system module (if active)
+3. If inventory-system is not available, prints manual deduction note
 
-```bash
-bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[char]" \
-  --remove "Ammo 5.45mm" [rounds_fired]
-```
+---
+
+## Data Location
+
+ALL firearms config lives in `module-data/firearms-combat.json` inside the campaign directory:
+- `weapons` — weapon stats (damage, pen, rpm, magazine, type)
+- `fire_modes` — penalty values, max_shots_per_target
+- `armor` — armor types with PROT and AC bonus
+- `bestiary` — enemy types with HP, AC, PROT, attack, damage, speed, CR, XP
+- `combat_rules` — headshot, cover, suppression, bleed, morale
+- `range_rules` — close/normal/long/beyond_long modifiers
+- `penetration_vs_armor` — damage scaling rules (PEN vs PROT)
+- `combat_style` — hybrid_lethal config
+
+The module writes XP to `character.json` and deducts ammo via inventory-system.
+
+**Nothing stored in campaign-overview.json** — all data in module-data/.
+
+---
+
+## When NOT to Call
+
+- Melee/thrown weapons — use standard D&D attack
+- Magic attacks — use standard spell mechanics
+- Narrative combat (chase scenes, intimidation) — no dice needed
+- NPC-vs-NPC combat — resolve narratively, no resolver call

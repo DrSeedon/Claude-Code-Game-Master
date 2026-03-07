@@ -78,7 +78,7 @@ Always show the list and ask: **"Edit anything or looks good?"**
 
 ---
 
-## Step 3: Write Inventory to character.json
+## Step 3: Write Inventory to module-data/inventory-system.json
 
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
@@ -87,13 +87,22 @@ CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 ```python
 uv run python -c "
 import json
+from pathlib import Path
 
-char_path = '[CAMPAIGN_DIR]/character.json'
+campaign = Path('[CAMPAIGN_DIR]')
+
+# Set starting gold in character.json
+char_path = campaign / 'character.json'
 with open(char_path) as f:
     char = json.load(f)
-
 char['gold'] = [STARTING_GOLD]
-char['inventory'] = {
+with open(char_path, 'w') as f:
+    json.dump(char, f, indent=2, ensure_ascii=False)
+
+# Write inventory to module-data
+inv_path = campaign / 'module-data' / 'inventory-system.json'
+inv_path.parent.mkdir(parents=True, exist_ok=True)
+inv = {
     'stackable': {
         '[Item Name]': [quantity],
     },
@@ -102,9 +111,8 @@ char['inventory'] = {
         '[Armor with AC]'
     ]
 }
-
-with open(char_path, 'w') as f:
-    json.dump(char, f, indent=2, ensure_ascii=False)
+with open(inv_path, 'w') as f:
+    json.dump(inv, f, indent=2, ensure_ascii=False)
 print('[OK] Inventory initialized')
 "
 ```
@@ -132,7 +140,9 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[Ch
 
 ## Notes
 
-- Always use `dm-inventory.sh update` (not direct JSON) when character file already exists — avoids clobbering other fields
+- Always use `dm-inventory.sh update` (not direct JSON) when inventory already exists — avoids clobbering other fields
+- Inventory is stored in `module-data/inventory-system.json`, NOT in `character.json`
+- Gold stays in `character.json` (it's a character stat)
 - Unique items: include ALL stats in the name string (weapon damage, armor AC, etc.)
 - If custom-stats module is also active, do NOT set custom_stats here — that's handled by custom-stats creation-rules
 - Starting gold should feel appropriate to genre: medieval GP, post-apoc rubles/caps, sci-fi credits

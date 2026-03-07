@@ -14,10 +14,12 @@ from pathlib import Path
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
 
 from lib.json_ops import JsonOperations
 from lib.player_manager import PlayerManager
 from lib.campaign_manager import CampaignManager
+from module_data import ModuleDataManager
 
 
 class SurvivalEngine:
@@ -32,6 +34,7 @@ class SurvivalEngine:
 
         self.json_ops = JsonOperations(str(self.campaign_dir))
         self.player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
+        self.module_data_mgr = ModuleDataManager(self.campaign_dir)
 
     def _normalize_custom_stats(self, char: dict) -> dict:
         """Normalize custom_stats: convert {value, min, max} → {current, min, max}"""
@@ -40,19 +43,54 @@ class SurvivalEngine:
                 stat_data['current'] = stat_data['value']
         return char
 
+    def _load_module_config(self) -> dict:
+        data = self.module_data_mgr.load("custom-stats")
+        if not data:
+            raise RuntimeError("No custom-stats config found. Expected: module-data/custom-stats.json")
+        return data
+
+    def _load_custom_stats(self) -> dict:
+        data = self.module_data_mgr.load("custom-stats")
+        return data.get('character_stats', {})
+
+    def _save_custom_stats(self, stats: dict):
+        data = self.module_data_mgr.load("custom-stats")
+        data['character_stats'] = stats
+        self.module_data_mgr.save("custom-stats", data)
+
+    def _inject_stats(self, char: dict) -> dict:
+        char['custom_stats'] = self._load_custom_stats()
+        return char
+
+    def _persist_stats(self, char: dict):
+        stats = char.pop('custom_stats', {})
+        if stats:
+            self._save_custom_stats(stats)
+
+    def _load_char_with_stats(self) -> dict:
+        char_data = self.json_ops.load_json("character.json")
+        char_data['custom_stats'] = self._load_custom_stats()
+        return char_data
+
+    def _save_char_with_stats(self, char_data: dict):
+        stats = char_data.pop('custom_stats', {})
+        self.json_ops.save_json("character.json", char_data)
+        if stats:
+            self._save_custom_stats(stats)
+
     def tick(self, elapsed_hours: float, sleeping: bool = False) -> dict:
         """
         Main entry point. Apply time effects + check stat consequences.
 
         Returns dict with stat_changes, stat_consequences lists.
         """
-        campaign = self.json_ops.load_json("campaign-overview.json")
-        time_effects = campaign.get('campaign_rules', {}).get('time_effects', {})
+        time_effects = self._load_module_config()
 
         if not time_effects.get('enabled'):
             print("[SKIP] Time effects not enabled for this campaign")
             return {'stat_changes': [], 'stat_consequences': []}
 
+        campaign = self.json_ops.load_json("campaign-overview.json")
         char_name = campaign.get('current_character')
         if not char_name:
             print("[SKIP] No active character")
@@ -81,6 +119,7 @@ class SurvivalEngine:
             print(f"[ERROR] Character '{char_name}' not found")
             return {}
 
+        char = self._inject_stats(char)
         char = self._normalize_custom_stats(char)
         custom_stats = char.get('custom_stats', {})
         if not custom_stats:
@@ -130,7 +169,7 @@ class SurvivalEngine:
         if char_name is None:
             char_name = self._get_active_character_name()
 
-        char_data = self.json_ops.load_json("character.json")
+        char_data = self._load_char_with_stats()
         active_effects = char_data.setdefault('active_effects', [])
 
         if not stackable:
@@ -168,12 +207,12 @@ class SurvivalEngine:
                         cs.pop('current', None)
 
         if has_instant_hp:
-            fresh = self.json_ops.load_json("character.json")
+            fresh = self._load_char_with_stats()
             fresh['active_effects'] = char_data['active_effects']
             fresh['custom_stats'] = char_data.get('custom_stats', fresh.get('custom_stats', {}))
             char_data = fresh
 
-        self.json_ops.save_json("character.json", char_data)
+        self._save_char_with_stats(char_data)
         print(f"[EFFECT] Added '{name}' for {duration_hours}h (stackable={stackable})")
         return effect_entry
 
@@ -181,12 +220,12 @@ class SurvivalEngine:
         if char_name is None:
             char_name = self._get_active_character_name()
 
-        char_data = self.json_ops.load_json("character.json")
+        char_data = self._load_char_with_stats()
         active_effects = char_data.get('active_effects', [])
         before = len(active_effects)
         char_data['active_effects'] = [e for e in active_effects if e['name'] != name]
         removed = before - len(char_data['active_effects'])
-        self.json_ops.save_json("character.json", char_data)
+        self._save_char_with_stats(char_data)
         print(f"[EFFECT] Removed {removed} effect(s) named '{name}'")
         return removed
 
@@ -194,7 +233,7 @@ class SurvivalEngine:
         if char_name is None:
             char_name = self._get_active_character_name()
 
-        char_data = self.json_ops.load_json("character.json")
+        char_data = self._load_char_with_stats()
         active_effects = char_data.get('active_effects', [])
 
         if not active_effects:
@@ -225,8 +264,8 @@ class SurvivalEngine:
         if char_name is None:
             char_name = self._get_active_character_name()
 
-        char_data = self.json_ops.load_json("character.json")
-        cs = char_data.get('custom_stats', {}).get(stat)
+        custom_stats = self._load_custom_stats()
+        cs = custom_stats.get(stat)
         if cs is None:
             raise RuntimeError(f"Custom stat '{stat}' not found")
 
@@ -240,7 +279,7 @@ class SurvivalEngine:
             new_mod = old_mod + float(value)
 
         cs['rate_modifier'] = new_mod
-        self.json_ops.save_json("character.json", char_data)
+        self._save_custom_stats(custom_stats)
         return {'stat': stat, 'old_modifier': old_mod, 'new_modifier': new_mod}
 
     def show_rates(self, char_name: str = None) -> list:
@@ -248,17 +287,17 @@ class SurvivalEngine:
         if char_name is None:
             char_name = self._get_active_character_name()
 
-        campaign = self.json_ops.load_json("campaign-overview.json")
-        time_effects = campaign.get('campaign_rules', {}).get('time_effects', {})
+        time_effects = self._load_module_config()
         rules = time_effects.get('rules', [])
         if not rules:
             effects_per_hour = time_effects.get('effects_per_hour', {})
             if effects_per_hour:
                 rules = [{'stat': s, 'per_hour': c} for s, c in effects_per_hour.items()]
 
-        char_data = self.json_ops.load_json("character.json")
+        char_data = self._load_char_with_stats()
         char = self.player_mgr.get_player(char_name)
         if char:
+            char = self._inject_stats(char)
             char = self._normalize_custom_stats(char)
 
         active_effects = char_data.get('active_effects', [])
@@ -305,6 +344,7 @@ class SurvivalEngine:
         char = self.player_mgr.get_player(char_name)
         if not char:
             return []
+        char = self._inject_stats(char)
         char = self._normalize_custom_stats(char)
 
         rules = time_effects.get('rules', [])
@@ -316,7 +356,7 @@ class SurvivalEngine:
         if not rules:
             return []
 
-        char_data = self.json_ops.load_json("character.json")
+        char_data = self._load_char_with_stats()
         active_effects = char_data.get('active_effects', [])
 
         sim_char = copy.deepcopy(char)
@@ -426,8 +466,8 @@ class SurvivalEngine:
                     diff = new_cs['current'] - old_cs['current']
                     if abs(diff) > 0.001:
                         old_val = old_cs['current']
-                        char_data = self.json_ops.load_json("character.json")
-                        cs_entry = char_data.get('custom_stats', {}).get(stat)
+                        current_stats = self._load_custom_stats()
+                        cs_entry = current_stats.get(stat)
                         if cs_entry:
                             cs_max = cs_entry.get('max')
                             cs_min = cs_entry.get('min', 0)
@@ -440,13 +480,13 @@ class SurvivalEngine:
                             new_val = round(new_val, 2)
                             cs_entry['value'] = new_val
                             cs_entry.pop('current', None)
-                            self.json_ops.save_json("character.json", char_data)
+                            self._save_custom_stats(current_stats)
                             changes.append({'stat': stat, 'old': old_val, 'new': new_val, 'change': diff})
 
         if active_effects:
             char_data = self.json_ops.load_json("character.json")
             char_data['active_effects'] = [e for e in active_effects if e.get('remaining_hours', 0) > 0]
-            self.json_ops.save_json("character.json", char_data)
+            self.json_ops.save_json("character.json", char_data)  # active_effects stays in character.json
 
         if expired_names:
             for name in expired_names:
@@ -504,6 +544,7 @@ class SurvivalEngine:
         if not char:
             return []
 
+        char = self._inject_stats(char)
         char = self._normalize_custom_stats(char)
         custom_stats = char.get('custom_stats', {})
         stat_consequences = time_effects.get('stat_consequences', {})
@@ -579,12 +620,11 @@ class SurvivalEngine:
         if name is None:
             name = self._get_active_character_name()
 
-        char = self.player_mgr.get_player(name)
-        if not char:
-            raise RuntimeError(f"Character '{name}' not found")
+        custom_stats = self._load_custom_stats()
+        for stat_data in custom_stats.values():
+            if isinstance(stat_data, dict) and 'current' not in stat_data and 'value' in stat_data:
+                stat_data['current'] = stat_data['value']
 
-        self._normalize_custom_stats(char)
-        custom_stats = char.get('custom_stats', {})
         if stat and stat not in custom_stats:
             raise RuntimeError(f"Custom stat '{stat}' not found for {name}")
 
@@ -597,8 +637,8 @@ class SurvivalEngine:
         if name is None:
             name = self._get_active_character_name()
 
-        char = self.json_ops.load_json("character.json")
-        cs = char.get('custom_stats', {}).get(stat)
+        custom_stats = self._load_custom_stats()
+        cs = custom_stats.get(stat)
         if cs is None:
             raise RuntimeError(f"Custom stat '{stat}' not found for {name}")
 
@@ -613,7 +653,7 @@ class SurvivalEngine:
         new_val = round(new_val, 2)
         cs['value'] = new_val
         cs.pop('current', None)
-        self.json_ops.save_json("character.json", char)
+        self._save_custom_stats(custom_stats)
         return {'success': True, 'old_value': old_val, 'new_value': new_val}
 
     def list_custom_stats(self, name: str = None) -> dict:
@@ -621,12 +661,11 @@ class SurvivalEngine:
         if name is None:
             name = self._get_active_character_name()
 
-        char = self.player_mgr.get_player(name)
-        if not char:
-            raise RuntimeError(f"Character '{name}' not found")
-
-        self._normalize_custom_stats(char)
-        return char.get('custom_stats', {})
+        custom_stats = self._load_custom_stats()
+        for stat_data in custom_stats.values():
+            if isinstance(stat_data, dict) and 'current' not in stat_data and 'value' in stat_data:
+                stat_data['current'] = stat_data['value']
+        return custom_stats
 
     def advance_time(self, time_of_day: str, date: str, elapsed_hours: float = 0,
                      precise_time: str = None, sleeping: bool = False) -> bool:

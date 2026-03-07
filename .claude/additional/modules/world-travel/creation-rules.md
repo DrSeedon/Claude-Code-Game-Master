@@ -66,7 +66,7 @@ bash tools/dm-location.sh add "Forest" "Dark woods" \
 
 ### Terrain & Colors [MANDATORY]
 
-Set terrain types and RGB colors for the GUI map. Store in `campaign_rules.terrain_colors`.
+Set terrain types and RGB colors for the GUI map. Store in `module-data/world-travel.json` under `terrain_colors`.
 Name the keys in the campaign's language (e.g. Russian campaign → Russian keys).
 
 **Palette by genre:**
@@ -78,7 +78,7 @@ Name the keys in the campaign's language (e.g. Russian campaign → Russian keys
 | Horror | forest [30,60,30], swamp [50,70,40], road [100,90,80], ruins [80,70,60], mist [150,150,170] |
 | Stone Age | cave [80,70,60], river [60,120,200], forest [50,150,50], plains [160,200,100], mountain [120,100,80], beach [220,200,140], tundra [200,210,220] |
 
-Add only terrains that realistically appear on this map. Write into `campaign_rules.terrain_colors` in campaign-overview.json.
+Add only terrains that realistically appear on this map. Write into `terrain_colors` in `module-data/world-travel.json`.
 
 ### Location Sizes [MANDATORY]
 
@@ -118,18 +118,16 @@ with open(f'{CAMPAIGN_DIR}/locations.json', 'w') as f:
 
 ## 5. Encounters
 
-Ask: enable random encounters? If yes:
+Ask: enable random encounters? If yes, write to `module-data/world-travel.json`:
 
 ```json
 {
-  "campaign_rules": {
-    "encounter_system": {
-      "enabled": true,
-      "base_dc": 16,
-      "distance_modifier": 2,
-      "stat_to_use": "stealth",
-      "time_dc_modifiers": { "Morning": 0, "Day": 0, "Evening": 2, "Night": 4 }
-    }
+  "encounter_system": {
+    "enabled": true,
+    "base_dc": 16,
+    "distance_modifier": 2,
+    "stat_to_use": "stealth",
+    "time_dc_modifiers": { "Morning": 0, "Day": 0, "Evening": 2, "Night": 4 }
   }
 }
 ```

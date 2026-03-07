@@ -23,38 +23,37 @@ class TestCustomStats:
     """Custom stats structure tests (no TimeManager needed)"""
 
     def test_custom_stats_exist(self, stalker_campaign):
-        char = json.loads((stalker_campaign / "character.json").read_text())
-        assert "custom_stats" in char
-        assert "hunger" in char["custom_stats"]
-        assert "thirst" in char["custom_stats"]
+        config = json.loads((stalker_campaign / "module-data" / "custom-stats.json").read_text())
+        stats = config.get("character_stats", {})
+        assert "hunger" in stats
+        assert "thirst" in stats
 
     def test_custom_stat_structure(self, stalker_campaign):
-        char = json.loads((stalker_campaign / "character.json").read_text())
-        hunger = char["custom_stats"]["hunger"]
+        config = json.loads((stalker_campaign / "module-data" / "custom-stats.json").read_text())
+        hunger = config["character_stats"]["hunger"]
         assert "current" in hunger
         assert "max" in hunger
         assert hunger["current"] <= hunger["max"]
 
 
 class TestTimeEffectsConfig:
-    """Verify time_effects config in campaign_rules (no TimeManager needed)"""
+    """Verify time_effects config in module-data/custom-stats.json"""
 
     def test_time_effects_enabled(self, stalker_campaign):
-        overview = json.loads((stalker_campaign / "campaign-overview.json").read_text())
-        time_effects = overview["campaign_rules"]["time_effects"]
-        assert time_effects["enabled"] is True
+        config = json.loads((stalker_campaign / "module-data" / "custom-stats.json").read_text())
+        assert config["enabled"] is True
 
     def test_time_effects_rules_present(self, stalker_campaign):
-        overview = json.loads((stalker_campaign / "campaign-overview.json").read_text())
-        rules = overview["campaign_rules"]["time_effects"]["rules"]
+        config = json.loads((stalker_campaign / "module-data" / "custom-stats.json").read_text())
+        rules = config["rules"]
         assert len(rules) > 0
         stats = [r["stat"] for r in rules]
         assert "hunger" in stats
         assert "thirst" in stats
 
     def test_thirst_drains_faster_than_hunger(self, stalker_campaign):
-        overview = json.loads((stalker_campaign / "campaign-overview.json").read_text())
-        rules = overview["campaign_rules"]["time_effects"]["rules"]
+        config = json.loads((stalker_campaign / "module-data" / "custom-stats.json").read_text())
+        rules = config["rules"]
         by_stat = {r["stat"]: r for r in rules}
         hunger_rate = abs(by_stat["hunger"]["per_hour"])
         thirst_rate = abs(by_stat["thirst"]["per_hour"])

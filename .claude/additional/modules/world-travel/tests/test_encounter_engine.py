@@ -21,34 +21,37 @@ from encounter_engine import EncounterEngine
 
 @pytest.fixture
 def campaign_dir(tmp_path):
-    """Create a temporary campaign directory with minimal setup"""
     campaign = tmp_path / "test-campaign"
     campaign.mkdir()
 
-    # Create campaign-overview.json
     overview = {
         "name": "Test Campaign",
-        "campaign_rules": {
-            "encounter_system": {
-                "enabled": True,
-                "min_distance_meters": 300,
-                "base_dc": 16,
-                "distance_modifier": 2,
-                "stat_to_use": "stealth",
-                "use_luck": False,
-                "time_dc_modifiers": {
-                    "Morning": 0,
-                    "Day": 0,
-                    "Evening": 2,
-                    "Night": 4
-                }
-            }
-        },
         "time_of_day": "Day",
         "precise_time": "12:00"
     }
     with open(campaign / "campaign-overview.json", "w") as f:
         json.dump(overview, f)
+
+    module_data_dir = campaign / "module-data"
+    module_data_dir.mkdir()
+    wt_config = {
+        "encounter_system": {
+            "enabled": True,
+            "min_distance_meters": 300,
+            "base_dc": 16,
+            "distance_modifier": 2,
+            "stat_to_use": "stealth",
+            "use_luck": False,
+            "time_dc_modifiers": {
+                "Morning": 0,
+                "Day": 0,
+                "Evening": 2,
+                "Night": 4
+            }
+        }
+    }
+    with open(module_data_dir / "world-travel.json", "w") as f:
+        json.dump(wt_config, f)
 
     # Create character.json
     character = {
@@ -86,14 +89,12 @@ def test_is_enabled(campaign_dir):
 
 
 def test_disabled_system(campaign_dir):
-    """Test system skip when disabled"""
-    # Disable system
-    overview_path = campaign_dir / "campaign-overview.json"
-    with open(overview_path, "r") as f:
-        overview = json.load(f)
-    overview['campaign_rules']['encounter_system']['enabled'] = False
-    with open(overview_path, "w") as f:
-        json.dump(overview, f)
+    wt_path = campaign_dir / "module-data" / "world-travel.json"
+    with open(wt_path, "r") as f:
+        config = json.load(f)
+    config['encounter_system']['enabled'] = False
+    with open(wt_path, "w") as f:
+        json.dump(config, f)
 
     engine = EncounterEngine(str(campaign_dir))
     assert engine.is_enabled() is False
@@ -127,48 +128,41 @@ def test_calculate_dc(campaign_dir):
 
 
 def test_get_character_modifier_skill(campaign_dir):
-    """Test character modifier from D&D skill"""
-    # Change config to use skill:stealth
-    overview_path = campaign_dir / "campaign-overview.json"
-    with open(overview_path, "r") as f:
-        overview = json.load(f)
-    overview['campaign_rules']['encounter_system']['stat_to_use'] = 'skill:stealth'
-    with open(overview_path, "w") as f:
-        json.dump(overview, f)
+    wt_path = campaign_dir / "module-data" / "world-travel.json"
+    with open(wt_path, "r") as f:
+        config = json.load(f)
+    config['encounter_system']['stat_to_use'] = 'skill:stealth'
+    with open(wt_path, "w") as f:
+        json.dump(config, f)
 
     engine = EncounterEngine(str(campaign_dir))
     modifier = engine.get_character_modifier()
-    assert modifier == 5  # character has stealth: 5
+    assert modifier == 5
 
 
 def test_get_character_modifier_custom_stat(campaign_dir):
-    """Test character modifier from custom stat"""
-    # Change config to use custom:awareness
-    overview_path = campaign_dir / "campaign-overview.json"
-    with open(overview_path, "r") as f:
-        overview = json.load(f)
-    overview['campaign_rules']['encounter_system']['stat_to_use'] = 'custom:awareness'
-    with open(overview_path, "w") as f:
-        json.dump(overview, f)
+    wt_path = campaign_dir / "module-data" / "world-travel.json"
+    with open(wt_path, "r") as f:
+        config = json.load(f)
+    config['encounter_system']['stat_to_use'] = 'custom:awareness'
+    with open(wt_path, "w") as f:
+        json.dump(config, f)
 
     engine = EncounterEngine(str(campaign_dir))
     modifier = engine.get_character_modifier()
-    # awareness: 70 → (70 - 50) // 10 = 2
     assert modifier == 2
 
 
 def test_get_character_modifier_ability(campaign_dir):
-    """Test character modifier from D&D ability"""
-    overview_path = campaign_dir / "campaign-overview.json"
-    with open(overview_path, "r") as f:
-        overview = json.load(f)
-    overview['campaign_rules']['encounter_system']['stat_to_use'] = 'dex'
-    with open(overview_path, "w") as f:
-        json.dump(overview, f)
+    wt_path = campaign_dir / "module-data" / "world-travel.json"
+    with open(wt_path, "r") as f:
+        config = json.load(f)
+    config['encounter_system']['stat_to_use'] = 'dex'
+    with open(wt_path, "w") as f:
+        json.dump(config, f)
 
     engine = EncounterEngine(str(campaign_dir))
     modifier = engine.get_character_modifier()
-    # dex: 14 → (14 - 10) // 2 = 2
     assert modifier == 2
 
 

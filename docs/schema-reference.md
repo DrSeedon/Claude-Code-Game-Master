@@ -188,11 +188,11 @@ A dictionary with category keys, each containing an array of fact strings.
 
 - `world_building` - Established world facts
 - `session_events` - What happened this session
-- `plot_local` - Local storyline facts
-- `plot_regional` - Broader mystery/conspiracy facts
-- `plot_world` - World-shaking revelations
 - `player_choices` - Key decisions made
 - `npc_relations` - How NPCs feel about the party
+- `world_lore` - World facts, history, lore details
+
+> **Note:** Plot/quest data belongs in `plots.json` via `dm-plot.sh`, not in notes.
 
 ---
 

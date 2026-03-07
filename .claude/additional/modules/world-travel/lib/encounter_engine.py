@@ -15,11 +15,13 @@ from datetime import datetime, timedelta
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
 
 from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
 from lib.time_manager import TimeManager
 from lib.player_manager import PlayerManager
+from module_data import ModuleDataManager
 MODULE_LIB = Path(__file__).parent
 sys.path.insert(0, str(MODULE_LIB))
 from connection_utils import add_canonical_connection
@@ -29,7 +31,7 @@ class EncounterEngine:
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
         self.json_ops = JsonOperations(str(self.campaign_dir))
-        # Lazy init managers (they may fail if campaign not ready)
+        self.module_data_mgr = ModuleDataManager(self.campaign_dir)
         self._time_mgr = None
         self._player_mgr = None
 
@@ -46,15 +48,13 @@ class EncounterEngine:
         return self._player_mgr
 
     def is_enabled(self) -> bool:
-        """Check if encounter system is enabled"""
-        overview = self.json_ops.load_json("campaign-overview.json") or {}
-        rules = overview.get('campaign_rules', {}).get('encounter_system', {})
+        config = self.module_data_mgr.load("world-travel")
+        rules = config.get("encounter_system", {})
         return rules.get('enabled', False)
 
     def get_rules(self) -> dict:
-        """Get encounter system rules"""
-        overview = self.json_ops.load_json("campaign-overview.json") or {}
-        return overview.get('campaign_rules', {}).get('encounter_system', {})
+        config = self.module_data_mgr.load("world-travel")
+        return config.get("encounter_system", {})
 
     def calculate_segments(self, distance_meters: float) -> int:
         """How many segments (checks) for given distance"""
@@ -96,6 +96,11 @@ class EncounterEngine:
         character = self.json_ops.load_json('character.json')
         if not character:
             return 0
+
+        # Inject custom_stats from module-data
+        cs_data = self.module_data_mgr.load("custom-stats")
+        if cs_data:
+            character['custom_stats'] = cs_data.get('character_stats', {})
 
         # If custom stat
         if stat_name.startswith('custom:'):

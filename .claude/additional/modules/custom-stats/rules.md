@@ -39,7 +39,7 @@ The `--sleeping` flag:
 ## When NOT to Call
 
 - Do NOT call after `dm-session.sh move` if no `[ELAPSED]` line was printed (e.g., teleportation, same-area movement)
-- Do NOT call if campaign does NOT have `campaign_rules.time_effects.enabled = true`
+- Do NOT call if `module-data/custom-stats.json` does not exist or has `enabled = false`
 
 ## Checking Status
 
@@ -148,5 +148,17 @@ With `--stackable`: multiple instances stack (two healing potions = double heali
 
 ## Activation Check
 
-At session start, check if campaign has `campaign_rules.time_effects.enabled = true`.
+At session start, check if `module-data/custom-stats.json` exists and has `enabled = true`.
 If yes, load these rules and follow them for the duration of the session.
+
+## Data Location
+
+ALL module data is stored at `module-data/custom-stats.json` (per-campaign), NOT in `campaign-overview.json` or `character.json`.
+
+The file contains:
+- `enabled` — module active flag
+- `character_stats` — current stat values (hunger, thirst, radiation, sleep, rep_*, etc.)
+- `rules` — tick rules (per_hour, sleep_rate, conditions)
+- `stat_consequences` — threshold triggers (starvation, dehydration, radiation sickness)
+
+**Character values are NOT in character.json** — they are injected at runtime from module-data.
