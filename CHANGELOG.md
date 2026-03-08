@@ -2,6 +2,41 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [2.2.0] - 2026-03-08
+
+### Added
+- **Inventory weight system** — every item has weight in kg, carry capacity = STR × 7
+  - 5 encumbrance tiers: Normal → Encumbered (−5ft) → Heavy (−10ft) → Overloaded (−15ft + disadvantage) → Immobile
+  - Stackable items: `{"qty": N, "weight": X}` format with per-unit weight
+  - Unique items: `[Xkg]` tag parsing, default weights by category (ammo 0.02, medicine 0.3, food 0.5, weapon 3.0)
+  - `weigh` command — full weight breakdown with capacity thresholds
+  - `drop` command — drop items in combat, logged via dm-note at current location
+  - Backward compatible: old `"item": int` format gets default weight
+- **NPC party inventories** — party members have full inventory + weight tracking
+  - Stored in `module-data/inventory-party.json` (one file, keyed by NPC name)
+  - NPC stats (STR for capacity) read from `character_sheet` in npcs.json
+  - `party` command — summary of all inventories with weight status
+  - All inventory commands work for NPCs: show, weigh, update, loot, drop
+- **Bidirectional transfer** — move items between any combination of player↔NPC, NPC↔NPC
+  - `transfer` command with `--from` flag for source, `--item` and `--unique` for items
+  - Items actually removed from source and added to target with weight preserved
+- **Category filter** — `show --category weapon|ammo|food|medicine|artifact|misc`
+- **Campaign rules templates** — `gladiator-arena.md` template
+- **`map.sh`** — root shortcut for GUI map launcher
+
+### Fixed
+- `validators.py` — Unicode support for names (кириллица now works in `validate_name`)
+
+### Changed
+- **Campaign data cleanup** — `campaign_rules` block removed from `campaign-overview.json`, data moved to proper `module-data/` files (firearms-combat.json, world-travel.json)
+- **NPC data deduplication** — removed `equipment` and `combat_stats` from npcs.json party members (duplicated inventory-party.json and character_sheet)
+- `ITEM_CATEGORIES` ordering — ammo before weapon to prevent substring false positives ("медпАК" vs "АК")
+
+### Technical
+- 303 tests, all green
+- `inventory_manager.py` rewritten (~600 lines): weight calculation, NPC branching, transfer logic
+- Module data principle: one source of truth per data type (inventory → inventory-party.json, stats → character_sheet, weapons → firearms-combat.json)
+
 ## [2.1.0] - 2026-02-21
 
 ### Added
