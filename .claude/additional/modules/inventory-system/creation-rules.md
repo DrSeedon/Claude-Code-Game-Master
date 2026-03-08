@@ -40,100 +40,78 @@ Genre presets:
 
 ## Step 2: Build Starting Inventory
 
-Based on genre and choice, propose a concrete item list.
+Based on genre and choice, propose a concrete item list **with weights**.
 
-**STALKER/Post-Apocalyptic example (EQUIPPED):**
+**Sci-Fi Military EQUIPPED example:**
 ```
 Stackable:
-  AK-74 Патрон 5.45mm × 90
-  Медаптечка × 2
-  Бинт × 3
-  Хлеб × 2
-  Водка × 1
+  Заряд DC-15A × 200  (0.02 kg each = 4.0 kg)
+  Заряд DC-17 × 48     (0.02 kg each = 0.96 kg)
+  Медпак × 3            (0.3 kg each = 0.9 kg)
+  Паёк × 5              (0.5 kg each = 2.5 kg)
 
 Unique:
-  AK-74 (5.45mm, 2d6+2, PEN 3)
-  Куртка сталкера (AC 12, PROT 1)
+  DC-15A (штурмовая, 2d6+2, PEN 3) [4.5kg]
+  DC-17 (пистолет, 2d4+1, PEN 1) [1.2kg]
+  Фаза I клон (AC 14, PROT 4) [12kg]
 
-Gold: 500₽
+Total: ~26 kg / STR 15 × 7 = 105 kg capacity — Normal
+Gold: 200 credits
 ```
 
 **Fantasy STANDARD example:**
 ```
 Stackable:
-  Стрела × 20
-  Зелье лечения малое × 2
-  Факел × 5
-  Рацион × 3
+  Стрела × 20           (0.05 kg each = 1.0 kg)
+  Зелье лечения × 2     (0.3 kg each = 0.6 kg)
+  Факел × 5             (0.5 kg each = 2.5 kg)
+  Рацион × 3            (0.5 kg each = 1.5 kg)
 
 Unique:
-  Короткий меч (1d6, фехтование)
-  Кожаный доспех (AC 11)
-  Рюкзак путника
+  Короткий меч (1d6, фехтование) [1.0kg]
+  Кожаный доспех (AC 11) [5.0kg]
+  Рюкзак путника [2.5kg]
 
+Total: ~14 kg / STR 12 × 7 = 84 kg capacity — Normal
 Gold: 50 GP
 ```
 
-Always show the list and ask: **"Edit anything or looks good?"**
+Always show the list with weight totals and ask: **"Edit anything or looks good?"**
 
 ---
 
-## Step 3: Write Inventory to module-data/inventory-system.json
+## Step 3: Write Inventory
+
+Use dm-inventory.sh with weight parameters:
 
 ```bash
-CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
-```
-
-```python
-uv run python -c "
-import json
-from pathlib import Path
-
-campaign = Path('[CAMPAIGN_DIR]')
-
-# Set starting gold in character.json
-char_path = campaign / 'character.json'
-with open(char_path) as f:
-    char = json.load(f)
-char['gold'] = [STARTING_GOLD]
-with open(char_path, 'w') as f:
-    json.dump(char, f, indent=2, ensure_ascii=False)
-
-# Write inventory to module-data
-inv_path = campaign / 'module-data' / 'inventory-system.json'
-inv_path.parent.mkdir(parents=True, exist_ok=True)
-inv = {
-    'stackable': {
-        '[Item Name]': [quantity],
-    },
-    'unique': [
-        '[Weapon with stats]',
-        '[Armor with AC]'
-    ]
-}
-with open(inv_path, 'w') as f:
-    json.dump(inv, f, indent=2, ensure_ascii=False)
-print('[OK] Inventory initialized')
-"
-```
-
-Or use dm-inventory.sh:
-```bash
+# Stackable: --add "Item" QTY WEIGHT_KG
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[CharName]" \
-  --gold [AMOUNT] \
-  --add "Медаптечка" 2 "Патрон 5.45" 90 \
-  --add-unique "AK-74 (5.45mm, 2d6+2, PEN 3)" \
-  --add-unique "Куртка сталкера (AC 12, PROT 1)"
+  --gold 200 \
+  --add "Заряд DC-15A" 200 0.02 \
+  --add "Заряд DC-17" 48 0.02 \
+  --add "Медпак" 3 0.3 \
+  --add "Паёк" 5 0.5 \
+  --add-unique "DC-15A (штурмовая, 2d6+2, PEN 3) [4.5kg]" \
+  --add-unique "DC-17 (пистолет, 2d4+1, PEN 1) [1.2kg]" \
+  --add-unique "Фаза I клон (AC 14, PROT 4) [12kg]"
+```
+
+Or via loot shorthand (Name:Qty:WeightKg):
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh loot "[CharName]" \
+  --gold 200 --items "Заряд DC-15A:200:0.02" "Медпак:3:0.3" "Паёк:5:0.5"
 ```
 
 ---
 
 ## Step 4: Confirm with Preview
 
-After writing, show inventory:
+After writing, show inventory with weight:
 
 ```bash
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[CharName]"
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh weigh "[CharName]"
 ```
 
 ---
@@ -143,6 +121,9 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[Ch
 - Always use `dm-inventory.sh update` (not direct JSON) when inventory already exists — avoids clobbering other fields
 - Inventory is stored in `module-data/inventory-system.json`, NOT in `character.json`
 - Gold stays in `character.json` (it's a character stat)
-- Unique items: include ALL stats in the name string (weapon damage, armor AC, etc.)
+- Unique items: include ALL stats in the name string + weight tag `[Xkg]`
+- Stackable items: weight is per unit, stored as `{"qty": N, "weight": X}`
+- If no weight specified, defaults by category: weapon 3.0, ammo 0.02, food 0.5, medicine 0.3, artifact 1.0, misc 0.5
+- Carry capacity = STR × 7 kg. Overload = speed penalty + disadvantage
 - If custom-stats module is also active, do NOT set custom_stats here — that's handled by custom-stats creation-rules
 - Starting gold should feel appropriate to genre: medieval GP, post-apoc rubles/caps, sci-fi credits

@@ -148,6 +148,8 @@ _recommend() {
             echo "political-intrigue" ;;
         civilization|tribal|empire|4x|strategy)
             echo "civilization" ;;
+        gladiator|arena|battle-royale|pvp|combat|colosseum|fighting)
+            echo "gladiator-arena" ;;
         *)
             echo "survival-zone" ;;
     esac

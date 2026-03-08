@@ -6,15 +6,66 @@ Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/
 
 ---
 
+## Weight System
+
+Every item has weight in kilograms. Carry capacity = **STR × 7 kg**.
+
+### Encumbrance Tiers
+
+| Load | Threshold | Speed Penalty | Disadvantage |
+|------|-----------|---------------|--------------|
+| Normal | 0–100% capacity | none | no |
+| Encumbered | 100–130% | −5 ft | no |
+| Heavy | 130–160% | −10 ft | no |
+| Overloaded | 160–200% | −15 ft | YES (attacks) |
+| Immobile | >200% | cannot move | YES |
+
+### Item Weight Format
+
+**Stackable items** — stored as `{"qty": N, "weight": X}` (weight per unit in kg):
+```json
+"Медпак": {"qty": 5, "weight": 0.3}
+```
+
+**Unique items** — weight tag `[Xkg]` at end of string:
+```
+"DC-15A (штурмовая, 2d6+2, PEN 3) [4.5kg]"
+```
+
+**Default weights** (used when no explicit weight):
+| Category | Default weight |
+|----------|---------------|
+| weapon | 3.0 kg |
+| ammo | 0.02 kg |
+| food | 0.5 kg |
+| medicine | 0.3 kg |
+| artifact | 1.0 kg |
+| misc | 0.5 kg |
+
+### Drop in Combat
+
+If overloaded during combat — warn player and suggest dropping heavy items:
+
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh drop "[char]" "[item]" --qty 1
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh drop "[char]" "[item]" --unique
+```
+
+Dropped items are logged as `dm-note` at current location. Can be picked up later with `--add`.
+
+---
+
 ## After Combat / Loot Found
 
 ### 1. Persist with dm-inventory.sh [PERSIST BEFORE NARRATING]
 
 ```bash
-# All-in-one after combat
+# All-in-one after combat (with optional weight per item)
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh loot "[char]" \
-  --gold 250 --xp 150 --items "Medkit:2" "Ammo 5.56mm:60"
+  --gold 250 --xp 150 --items "Medkit:2:0.3" "Ammo 5.56mm:60:0.02"
 ```
+
+Format: `Name:Qty` or `Name:Qty:WeightKg`
 
 ### 2. Record & Advance
 ```bash
@@ -38,7 +89,7 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[
 
 ```bash
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[char]" \
-  --gold -500 --add-unique "Platemail Armor (AC 18)"
+  --gold -500 --add-unique "Platemail Armor (AC 18) [30kg]"
 ```
 
 ### Player takes damage / gains XP
@@ -48,10 +99,16 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[
   --hp -10 --xp +200
 ```
 
-### View inventory
+### View inventory (with weight)
 
 ```bash
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[char]"
+```
+
+### Full weight breakdown
+
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh weigh "[char]"
 ```
 
 ---
@@ -63,9 +120,10 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[ch
 | `--gold N` | Add/subtract gold (fails if insufficient) |
 | `--hp N` | Modify HP (clamped to 0–max) |
 | `--xp N` | Add XP |
-| `--add "Item" N` | Add stackable item (merges with existing) |
+| `--add "Item" N [W]` | Add stackable item (qty, optional weight in kg) |
 | `--remove "Item" N` | Remove stackable item (fails if insufficient) |
-| `--add-unique "Item"` | Add unique item (weapon, armor, quest) |
+| `--add-unique "Item [Xkg]"` | Add unique item with weight tag |
+| `--unique-weight "Item" W` | Set weight for unique item being added |
 | `--remove-unique "Item"` | Remove unique item (fuzzy match) |
 | `--stat name N` | Modify custom stat (hunger, radiation, etc.) |
 | `--test` | Preview only — validate without writing |
@@ -76,18 +134,52 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "[ch
 
 All-or-nothing: if any part fails (not enough gold, item missing, stat out of bounds) — **nothing is written**. Use `--test` to check before committing.
 
+After adding items, system warns if encumbered but does NOT block the transaction. DM decides whether to enforce.
+
+---
+
+## Party NPC Inventories
+
+Party members (promoted via `dm-npc.sh promote`) have full inventory + weight tracking. Data stored in `module-data/inventory-party.json`.
+
+### View NPC inventory
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh show "Рекс CT-7567"
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh weigh "Бумер CT-2224"
+```
+
+### Modify NPC inventory
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "Док CT-5597" \
+  --add "Медпак" 3 0.3 --remove "Бакта-инъектор" 1
+```
+
+### View entire party
+```bash
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh party
+```
+
 ---
 
 ## Transfer Items
 
-Give items from character to NPC (narratively):
+Transfer items between player and NPC (real bidirectional):
 
 ```bash
-bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh transfer "[char]" \
-  --item "Medkit" 2 --unique "AK-74 (5.45mm)"
+# Player → NPC
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh transfer "Рекс CT-7567" \
+  --item "Медпак" 2 --unique "Макробинокль"
+
+# NPC → Player
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh transfer "CT-7777 Хантер" \
+  --from "Рекс CT-7567" --item "Заряд DC-15S" 30
+
+# NPC → NPC
+bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh transfer "Бумер CT-2224" \
+  --from "Док CT-5597" --item "Медпак" 1
 ```
 
-Items are removed from character inventory. NPC receives them narratively (no NPC inventory tracking).
+Items are actually moved — removed from source, added to target with weight preserved.
 
 ---
 
@@ -106,5 +198,6 @@ Categories: `weapon`, `ammo`, `food`, `medicine`, `artifact`, `misc`. Auto-detec
 
 ## Item Types
 
-- **Stackable** — consumables with quantity: Medkit, Ammo, Food, Potions
-- **Unique** — named items with full stats in the name: `"AK-74 (5.56mm, 2d6+2, PEN 3)"`, `"Leather Armor (AC 11)"`
+- **Stackable** — consumables with quantity and weight: `{"qty": 5, "weight": 0.3}`
+- **Unique** — named items with stats and weight tag: `"AK-74 (5.56mm, 2d6+2, PEN 3) [3.5kg]"`
+- **Backward compatible** — old format `"Медпак": 5` still works, uses default weight by category

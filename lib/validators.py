@@ -26,8 +26,8 @@ class Validators:
             return False, "Name too long (max 100 characters)"
 
         # Check characters
-        pattern = r"^[a-zA-Z0-9\s\-']+$"
-        if not re.match(pattern, name):
+        pattern = r"^[\w\s\-']+$"
+        if not re.match(pattern, name, re.UNICODE):
             return False, "Invalid name. Use only letters, numbers, spaces, hyphens, and apostrophes"
 
         return True, None
