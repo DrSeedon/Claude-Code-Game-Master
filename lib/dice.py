@@ -43,8 +43,8 @@ class DiceRoller:
     def __init__(self):
         # Regex patterns for different dice notations
         self.simple_pattern = re.compile(r'(\d+)d(\d+)([+-]\d+)?')
-        self.advantage_pattern = re.compile(r'(\d+)d(\d+)kh(\d+)')  # keep highest
-        self.disadvantage_pattern = re.compile(r'(\d+)d(\d+)kl(\d+)')  # keep lowest
+        self.advantage_pattern = re.compile(r'(\d+)d(\d+)kh(\d+)([+-]\d+)?')  # keep highest
+        self.disadvantage_pattern = re.compile(r'(\d+)d(\d+)kl(\d+)([+-]\d+)?')  # keep lowest
         
     def roll(self, notation: str) -> Dict:
         """
@@ -63,35 +63,51 @@ class DiceRoller:
         match = self.advantage_pattern.match(notation)
         if match:
             count, sides, keep = int(match.group(1)), int(match.group(2)), int(match.group(3))
+            modifier = int(match.group(4)) if match.group(4) else 0
             if sides < 1:
                 raise ValueError(f"Invalid die size: d{sides} (must be at least 1)")
             rolls = sorted([random.randint(1, sides) for _ in range(count)], reverse=True)
             kept = rolls[:keep]
-            return {
+            result = {
                 'notation': notation,
                 'rolls': rolls,
                 'kept': kept,
                 'discarded': rolls[keep:],
-                'total': sum(kept),
+                'modifier': modifier,
+                'total': sum(kept) + modifier,
                 'type': 'advantage'
             }
-        
+            if sides == 20 and keep == 1:
+                if kept[0] == 20:
+                    result['natural_20'] = True
+                elif kept[0] == 1:
+                    result['natural_1'] = True
+            return result
+
         # Check for disadvantage (keep lowest)
         match = self.disadvantage_pattern.match(notation)
         if match:
             count, sides, keep = int(match.group(1)), int(match.group(2)), int(match.group(3))
+            modifier = int(match.group(4)) if match.group(4) else 0
             if sides < 1:
                 raise ValueError(f"Invalid die size: d{sides} (must be at least 1)")
             rolls = sorted([random.randint(1, sides) for _ in range(count)])
             kept = rolls[:keep]
-            return {
+            result = {
                 'notation': notation,
                 'rolls': rolls,
                 'kept': kept,
                 'discarded': rolls[keep:],
-                'total': sum(kept),
+                'modifier': modifier,
+                'total': sum(kept) + modifier,
                 'type': 'disadvantage'
             }
+            if sides == 20 and keep == 1:
+                if kept[0] == 20:
+                    result['natural_20'] = True
+                elif kept[0] == 1:
+                    result['natural_1'] = True
+            return result
         
         # Standard roll
         match = self.simple_pattern.match(notation)
@@ -125,15 +141,17 @@ class DiceRoller:
     
     def format_result(self, result: Dict) -> str:
         """Format a roll result for display with colors"""
-        if result['type'] == 'advantage':
+        if result['type'] in ('advantage', 'disadvantage'):
             kept_str = '+'.join(str(r) for r in result['kept'])
             discarded_str = '+'.join(str(r) for r in result['discarded'])
-            return f"🎲 {result['notation']}: {Colors.CYAN}[{kept_str}]{Colors.RESET} {Colors.DIM}(discarded: {discarded_str}){Colors.RESET} = {Colors.CYAN}{result['total']}{Colors.RESET}"
-
-        elif result['type'] == 'disadvantage':
-            kept_str = '+'.join(str(r) for r in result['kept'])
-            discarded_str = '+'.join(str(r) for r in result['discarded'])
-            return f"🎲 {result['notation']}: {Colors.CYAN}[{kept_str}]{Colors.RESET} {Colors.DIM}(discarded: {discarded_str}){Colors.RESET} = {Colors.CYAN}{result['total']}{Colors.RESET}"
+            mod = result.get('modifier', 0)
+            mod_str = f" {mod:+d}" if mod != 0 else ""
+            base = f"🎲 {result['notation']}: {Colors.CYAN}[{kept_str}]{Colors.RESET} {Colors.DIM}(discarded: {discarded_str}){Colors.RESET}{mod_str} = {Colors.CYAN}{result['total']}{Colors.RESET}"
+            if result.get('natural_20'):
+                base += f" ⚔️ {Colors.BOLD_GREEN}CRITICAL HIT!{Colors.RESET}"
+            elif result.get('natural_1'):
+                base += f" 💀 {Colors.BOLD_RED}CRITICAL MISS!{Colors.RESET}"
+            return base
 
         else:  # standard
             is_crit = result.get('natural_20', False)

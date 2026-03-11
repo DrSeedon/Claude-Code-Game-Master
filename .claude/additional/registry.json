@@ -107,6 +107,50 @@
       "architecture": "Middleware hooks into dm-player.sh (show custom stats), dm-consequence.sh (threshold effects). Post-hook on dm-time.sh reads --elapsed and ticks stats after CORE updates time. Zero hardcoded stat names — all defined in campaign_rules.time_effects.",
       "replaces": []
     },
+    "enhanced-dice": {
+      "id": "enhanced-dice",
+      "name": "Enhanced Dice",
+      "version": "1.0.0",
+      "author": "DM System",
+      "description": "Adds --label and --dc to dice rolls for transparent, cheat-proof roll display",
+      "category": "core-mechanics",
+      "genre_tags": [
+        "fantasy",
+        "survival",
+        "scifi",
+        "modern",
+        "horror"
+      ],
+      "tags": [
+        "dice",
+        "rolls",
+        "transparency"
+      ],
+      "enabled_by_default": true,
+      "dependencies": [],
+      "incompatible_with": [],
+      "middleware": [
+        "dm-roll.sh"
+      ],
+      "features": [
+        "Roll labels (--label 'Perception (Рекс)')",
+        "DC checks with auto pass/fail (--dc 15)",
+        "AC checks with auto hit/miss (--ac 18)",
+        "Nat 20 / Nat 1 special handling",
+        "Full transparency: DC declared before result shown"
+      ],
+      "adds_to_core": {
+        "tools": [],
+        "commands": {
+          "dm-roll.sh <dice> --label <text>": "Roll with description label",
+          "dm-roll.sh <dice> --dc <N>": "Roll vs DC with auto pass/fail",
+          "dm-roll.sh <dice> --ac <N>": "Attack roll vs AC with auto hit/miss"
+        }
+      },
+      "replaces": [
+        "dice-rolling"
+      ]
+    },
     "world-travel": {
       "id": "world-travel",
       "name": "World Travel (Navigation + Encounters)",
