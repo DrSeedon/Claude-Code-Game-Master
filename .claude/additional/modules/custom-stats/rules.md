@@ -1,6 +1,31 @@
-# Survival Stats — DM Rules
+# Custom Stats — DM Rules
 
-> These instructions tell the DM (Claude) when and how to call the survival module.
+> These instructions tell the DM (Claude) when and how to call the custom stats module.
+
+## ⚠️ MANDATORY: Always Pass --elapsed [NEVER SKIP]
+
+**Every `dm-time.sh` call MUST include `--elapsed <hours>`**. Without it, custom stats do NOT tick and the survival system is silently broken.
+
+```bash
+# ✅ CORRECT — stats tick automatically via post-hook
+bash tools/dm-time.sh "Late Morning" "Day 1" --elapsed 1.5
+bash tools/dm-time.sh "Evening" "Day 1" --elapsed 6
+bash tools/dm-time.sh "Morning" "Day 2" --elapsed 8 --sleeping
+
+# ❌ WRONG — stats DO NOT tick, survival is broken
+bash tools/dm-time.sh "Late Morning" "Day 1"
+```
+
+**How to estimate --elapsed:**
+| Scene | Elapsed |
+|-------|---------|
+| Short conversation / shopping | 0.5–1h |
+| Exploring a location / socializing | 1–2h |
+| Travel between nearby locations | handled by `dm-session.sh move` |
+| Short rest | 1h |
+| Long rest / sleep | 8h (add `--sleeping`) |
+| Half a day skip | 4–6h |
+| Full day skip | 12–16h |
 
 ## When to Call
 
@@ -42,8 +67,6 @@ The `--sleeping` flag:
 - Do NOT call if `module-data/custom-stats.json` does not exist or has `enabled = false`
 
 ## Checking Status
-
-To show the player's current custom stats:
 
 ```bash
 bash .claude/additional/modules/custom-stats/tools/dm-survival.sh status
@@ -120,16 +143,16 @@ Rule of thumb:
 
 ```bash
 # Anti-radiation drug: slows existing radiation rate for 4 hours
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Антирадин" --stat radiation --rate-bonus -10 --duration 4
+bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Anti-Rad" --stat radiation --rate-bonus -10 --duration 4
 
 # Healing potion: direct +5 hp/h for 3 hours (independent of rules)
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Хилка" --stat hp --per-hour 5 --duration 3 --stackable
+bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Healing Potion" --stat hp --per-hour 5 --duration 3 --stackable
 
 # Poison: instant -10 hp + ongoing radiation rate increase
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Яд" --stat hp --instant -10 --stat radiation --rate-bonus 3 --duration 6
+bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect add "Venom" --stat hp --instant -10 --stat radiation --rate-bonus 3 --duration 6
 
 # Remove all effects with a given name
-bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect remove "Яд"
+bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effect remove "Venom"
 
 # List active effects with remaining time
 bash .claude/additional/modules/custom-stats/tools/dm-survival.sh effects
@@ -145,6 +168,24 @@ With `--stackable`: multiple instances stack (two healing potions = double heali
 `effective_rate = base_per_hour + rate_modifier + sum(effect_rate_bonus)`
 
 `per_hour` effects are applied separately after the rate formula, not part of it.
+
+## Timed Consequences
+
+Add consequences that auto-trigger after elapsed game hours:
+
+```bash
+bash tools/dm-consequence.sh add "Bandits attack the outpost" "8 hours" --hours 8
+```
+
+- `--hours N` makes the consequence time-tracked
+- Every `dm-time.sh --elapsed` tick decrements remaining hours automatically
+- When remaining reaches 0 → auto-resolves and prints `⚠️ Timed Consequences Triggered`
+- `dm-consequence.sh check` shows remaining time with color indicators:
+  - 🟢 more than 6h remaining
+  - 🟡 2–6h remaining
+  - 🔴 less than 2h remaining
+
+Without `--hours`, consequences work as before (text-only triggers for DM reference).
 
 ## Activation Check
 

@@ -299,23 +299,77 @@ class NavigationManager:
         print("=" * 60)
         return True
 
+    def _tick_survival_stats(self, elapsed_hours: float):
+        import subprocess
+        survival_script = PROJECT_ROOT / ".claude" / "additional" / "modules" / "custom-stats" / "tools" / "dm-survival.sh"
+        stats_data = self.json_ops.world_state_dir / "module-data" / "custom-stats.json"
+        if elapsed_hours > 0 and survival_script.exists() and stats_data and stats_data.exists():
+            try:
+                result = subprocess.run(
+                    ["bash", str(survival_script), "tick", "--elapsed", str(elapsed_hours)],
+                    capture_output=True, text=True, check=False
+                )
+                if result.returncode == 0:
+                    print(result.stdout.strip())
+                else:
+                    print(f"[WARNING] custom-stats tick failed: {result.stderr.strip()}")
+            except Exception as e:
+                print(f"[WARNING] Could not call custom-stats: {e}")
+        elif elapsed_hours > 0:
+            print(f"[INFO] Travel time: {elapsed_hours:.2f} hours")
+
+    def _run_encounter_check(self, from_loc: str, to_loc: str,
+                             distance_meters: float, terrain: str) -> Optional[Dict]:
+        try:
+            from encounter_engine import EncounterEngine
+            engine = EncounterEngine(str(self.json_ops.world_state_dir))
+            if not engine.is_enabled():
+                return None
+            speed_kmh = (self.json_ops.load_json("character.json") or {}).get("speed_kmh", 4.0)
+            journey = engine.check_journey(from_loc, to_loc, distance_meters, terrain, speed_kmh)
+            print(engine.format_journey_output(journey))
+            return journey
+        except Exception as e:
+            print(f"[WARNING] Encounter check failed: {e}")
+            return None
+
+    def _build_route(self, current_location: str, destination: str, locations: Dict) -> Optional[List[Dict]]:
+        connection = get_connection_between(current_location, destination, locations)
+        if connection:
+            return [{
+                "from": current_location,
+                "to": destination,
+                "distance_meters": connection.get("distance_meters", 0),
+                "terrain": connection.get("terrain", "open"),
+                "path": connection.get("path", "")
+            }]
+
+        routes = self.pf.find_all_routes(current_location, destination, locations, max_routes=5)
+        if not routes:
+            return None
+
+        best = routes[0]  # sorted by distance (shortest first)
+        hops = []
+        for i in range(len(best["path"]) - 1):
+            a, b = best["path"][i], best["path"][i + 1]
+            conn = get_connection_between(a, b, locations)
+            hops.append({
+                "from": a,
+                "to": b,
+                "distance_meters": conn.get("distance_meters", 0) if conn else 0,
+                "terrain": best["terrains"][i] if i < len(best["terrains"]) else "open",
+                "path": conn.get("path", "") if conn else ""
+            })
+        return hops
+
     def move_with_navigation(self, location: str, speed_multiplier: float = 1.0) -> Dict:
         """
-        Move party with distance-based time calculation.
-
-        1. Load locations, find connection between current location and destination
-        2. Get distance_meters from connection
-        3. Get character speed (from character.json, default 4.0 km/h)
-        4. Calculate elapsed_hours = (distance_meters / 1000) / (speed_kmh * speed_multiplier)
-        5. Try to advance clock via custom-stats module (if present), else print elapsed time
-        6. Call CORE session_manager.move_party(location) for the actual move
-        7. Return result dict
+        Multi-hop move with encounter checks at each segment.
+        If no direct connection, finds route via BFS and walks each hop.
+        Each hop: time tick → encounter check → move to next location.
         """
-        import subprocess
-        from pathlib import Path
-
         campaign_overview = self.json_ops.load_json("campaign-overview.json")
-        character_data = self.json_ops.load_json("character.json")
+        character_data = self.json_ops.load_json("character.json") or {}
         locations = self.json_ops.load_json("locations.json")
 
         if not campaign_overview:
@@ -331,49 +385,68 @@ class NavigationManager:
         if current_location == location:
             return {"success": False, "error": "Already at that location"}
 
-        connection = get_connection_between(current_location, location, locations)
-        if not connection:
-            return {"success": False, "error": f"No connection between '{current_location}' and '{location}'"}
+        route = self._build_route(current_location, location, locations)
+        if not route:
+            return {"success": False, "error": f"No route between '{current_location}' and '{location}'"}
 
-        distance_meters = connection.get("distance_meters")
-        if not distance_meters:
-            print("[WARNING] No distance_meters in connection — skipping time calculation")
-            elapsed_hours = 0
-        else:
-            speed_kmh = character_data.get("speed_kmh", 4.0)
-            elapsed_hours = (distance_meters / 1000.0) / (speed_kmh * speed_multiplier)
+        is_multihop = len(route) > 1
+        if is_multihop:
+            total_dist = sum(h["distance_meters"] for h in route)
+            via = " → ".join([route[0]["from"]] + [h["to"] for h in route])
+            print(f"[ROUTE] {via}")
+            print(f"[ROUTE] Total: {total_dist}m, {len(route)} hops")
+            print()
 
-        survival_stats_script = PROJECT_ROOT / ".claude" / "additional" / "modules" / "custom-stats" / "tools" / "dm-survival.sh"
-
-        if elapsed_hours > 0:
-            if survival_stats_script.exists():
-                try:
-                    result = subprocess.run(
-                        ["bash", str(survival_stats_script), "tick", "--elapsed", str(elapsed_hours)],
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    if result.returncode == 0:
-                        print(result.stdout.strip())
-                    else:
-                        print(f"[WARNING] custom-stats time advance failed: {result.stderr.strip()}")
-                except Exception as e:
-                    print(f"[WARNING] Could not call custom-stats module: {e}")
-            else:
-                print(f"[INFO] Travel time: {elapsed_hours:.2f} hours ({distance_meters}m)")
-
+        speed_kmh = character_data.get("speed_kmh", 4.0)
+        total_distance = 0
+        total_elapsed = 0.0
         session_mgr = SessionManager()
-        move_result = session_mgr.move_party(location)
+        encounters_triggered = []
 
-        if "current_location" not in move_result:
-            return {"success": False, "error": move_result.get("message", "Move failed")}
+        for i, hop in enumerate(route):
+            hop_num = i + 1
+            distance = hop["distance_meters"]
+            terrain = hop["terrain"]
+            elapsed = (distance / 1000.0) / (speed_kmh * speed_multiplier) if distance > 0 else 0
+
+            if is_multihop:
+                print(f"--- HOP {hop_num}/{len(route)}: {hop['from']} → {hop['to']} ({distance}m, {terrain}) ---")
+
+            self._tick_survival_stats(elapsed)
+
+            journey = self._run_encounter_check(hop["from"], hop["to"], distance, terrain)
+            if journey and journey.get("total_encounters", 0) > 0:
+                encounters_triggered.append({
+                    "hop": hop_num,
+                    "from": hop["from"],
+                    "to": hop["to"],
+                    "journey": journey
+                })
+
+            move_result = session_mgr.move_party(hop["to"])
+            if "current_location" not in move_result:
+                return {
+                    "success": False,
+                    "error": f"Move to '{hop['to']}' failed: {move_result.get('message', '')}",
+                    "stopped_at": hop["from"],
+                    "completed_hops": i
+                }
+
+            total_distance += distance
+            total_elapsed += elapsed
+
+            if is_multihop and hop["to"] != location:
+                print(f"[ARRIVED] {hop['to']}")
+                print()
 
         return {
             "success": True,
             "location": location,
-            "distance_meters": distance_meters,
-            "elapsed_hours": elapsed_hours
+            "distance_meters": total_distance,
+            "elapsed_hours": total_elapsed,
+            "route": [route[0]["from"]] + [h["to"] for h in route],
+            "hops": len(route),
+            "encounters_triggered": len(encounters_triggered)
         }
 
     def connect_with_metadata(
@@ -403,8 +476,7 @@ class NavigationManager:
             return False
 
         kwargs = {"path": path}
-        if terrain:
-            kwargs["terrain"] = terrain
+        kwargs["terrain"] = terrain or "open"
         if distance is not None:
             kwargs["distance_meters"] = int(distance)
 
@@ -414,12 +486,12 @@ class NavigationManager:
             bearing = self.pf.calculate_bearing(from_coords, to_coords)
             kwargs["bearing"] = bearing
 
-        add_canonical_connection(from_loc, to_loc, locations, **kwargs)
+        if not add_canonical_connection(from_loc, to_loc, locations, **kwargs):
+            return False
 
         if self.json_ops.save_json("locations.json", locations):
             print(f"[SUCCESS] Connected '{from_loc}' ↔ '{to_loc}'")
-            if terrain:
-                print(f"  Terrain: {terrain}")
+            print(f"  Terrain: {kwargs['terrain']}")
             if distance:
                 print(f"  Distance: {distance}m")
             if "bearing" in kwargs:

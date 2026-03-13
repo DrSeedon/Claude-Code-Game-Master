@@ -37,3 +37,14 @@ git diff upstream/main -- lib/                              # check CORE purity
 - `lib/` diff from upstream: only `ensure_ascii=False`, `require_active_campaign`, `name=None` auto-detect
 - Never add features to `lib/` — put them in modules
 - `/dm` vanilla: no external rules loaded. `/dm-continue` advanced: loads `.claude/additional/dm-slots/*.md` + module rules via `dm-active-modules-rules.sh`
+
+## Post-compaction recovery
+After context compaction, ALWAYS reload all DM rules before continuing gameplay:
+```bash
+# Load all active module rules
+bash .claude/additional/infrastructure/dm-active-modules-rules.sh --modules-only | cat
+
+# Load campaign rules
+bash .claude/additional/infrastructure/dm-campaign-rules.sh | cat
+```
+This ensures module-specific rules (inventory usage, combat mechanics, custom stats, etc.) are fresh in context and not forgotten after compaction.

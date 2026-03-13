@@ -24,7 +24,8 @@ case "$ACTION" in
     add)
         for arg in "$@"; do
             if [ "$arg" = "--from" ]; then
-                exec bash "$MODULE_DIR/tools/dm-navigation.sh" add "$@"
+                bash "$MODULE_DIR/tools/dm-navigation.sh" add "$@"
+                exit 0
             fi
         done
         exit 1
@@ -32,7 +33,8 @@ case "$ACTION" in
     connect)
         for arg in "$@"; do
             if [ "$arg" = "--terrain" ] || [ "$arg" = "--distance" ]; then
-                exec bash "$MODULE_DIR/tools/dm-navigation.sh" connect "$@"
+                bash "$MODULE_DIR/tools/dm-navigation.sh" connect "$@"
+                exit 0
             fi
         done
         exit 1

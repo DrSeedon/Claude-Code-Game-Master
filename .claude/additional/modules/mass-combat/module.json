@@ -1,0 +1,51 @@
+{
+  "id": "mass-combat",
+  "name": "Mass Combat System",
+  "version": "1.0.0",
+  "author": "DM System",
+  "description": "Individual unit tracking for large-scale battles. Every unit has HP, attacks individually, dies individually.",
+  "category": "combat",
+  "genre_tags": ["fantasy", "scifi", "modern", "survival", "horror"],
+  "tags": ["combat", "mass-battle", "unit-tracking", "wargame"],
+  "enabled_by_default": false,
+  "dependencies": [],
+  "optional_dependencies": ["enhanced-dice"],
+  "incompatible_with": [],
+  "middleware": [],
+  "features": [
+    "Individual unit HP and attack tracking",
+    "Template-based unit spawning (24 droids in one command)",
+    "Group attacks (whole squad fires at once)",
+    "Named unit attacks (player actions)",
+    "AOE damage with saves (grenades, Force Push)",
+    "Cover system (+2 AC per group)",
+    "Persistent battle state in JSON",
+    "Status table with HP bars",
+    "Advantage/disadvantage support"
+  ],
+  "adds_to_core": {
+    "tools": ["dm-mass-combat.sh"],
+    "commands": {
+      "dm-mass-combat.sh init": "Initialize a battle",
+      "dm-mass-combat.sh add": "Add units from template",
+      "dm-mass-combat.sh round": "Group attacks (all units fire)",
+      "dm-mass-combat.sh attack": "Single unit attacks specific targets",
+      "dm-mass-combat.sh aoe": "Area damage with optional saves",
+      "dm-mass-combat.sh damage": "Direct HP damage",
+      "dm-mass-combat.sh heal": "Heal a unit",
+      "dm-mass-combat.sh kill": "Instant kill",
+      "dm-mass-combat.sh cover": "Group takes/leaves cover",
+      "dm-mass-combat.sh status": "Show battle status",
+      "dm-mass-combat.sh next-round": "Advance round counter",
+      "dm-mass-combat.sh end": "End battle, calculate XP"
+    }
+  },
+  "use_cases": [
+    "Clone Wars battalion assaults",
+    "Siege battles with 30+ combatants",
+    "Any combat where individual tracking matters",
+    "Squad-based tactical combat"
+  ],
+  "architecture": "Standalone tool. DM calls dm-mass-combat.sh for large battles. Battle state stored in combat-state.json (temporary, deleted on end). No middleware — does not intercept CORE tools.",
+  "replaces": []
+}

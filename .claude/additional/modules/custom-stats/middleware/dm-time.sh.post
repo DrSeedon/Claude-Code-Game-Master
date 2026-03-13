@@ -1,21 +1,18 @@
 #!/bin/bash
 # custom-stats post-hook for dm-time.sh
-# Called AFTER CORE updates time. Reads --elapsed from args and ticks custom stats.
+# Thin wrapper — all logic in survival_engine.py time-post-hook
+#
+# CORE calls: dispatch_middleware_post "dm-time.sh" "$1" "$2" "$@"
+# After shift in dispatch: $1=time_of_day $2=date $3=time_of_day(dup) $4=date(dup) $5+=flags
+# We use $2 (date) and extract flags from $5+
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_dir="$MODULE_DIR"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+PROJECT_ROOT="$_dir"
 
-ELAPSED=""
-SLEEPING=""
-i=1
-for arg in "$@"; do
-    if [ "$arg" = "--elapsed" ]; then
-        eval "ELAPSED=\${$((i+1)):-}"
-    elif [ "$arg" = "--sleeping" ]; then
-        SLEEPING="--sleeping"
-    fi
-    i=$((i+1))
-done
+DATE="$2"
+shift 4 2>/dev/null || shift $#
 
-[ -n "$ELAPSED" ] || exit 0
-
-bash "$MODULE_DIR/tools/dm-survival.sh" tick --elapsed "$ELAPSED" $SLEEPING
+cd "$PROJECT_ROOT"
+uv run python "$MODULE_DIR/lib/survival_engine.py" time-post-hook "$DATE" "$@"

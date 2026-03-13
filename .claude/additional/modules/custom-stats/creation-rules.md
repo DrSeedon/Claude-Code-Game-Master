@@ -156,3 +156,24 @@ Use `per_hour_formula` instead of `per_hour` — the engine evaluates it each ti
 ```bash
 bash .claude/additional/modules/custom-stats/tools/dm-survival.sh custom-stat food +[amount]
 ```
+
+---
+
+## Timed Consequences During World-Building
+
+When scheduling future events during world creation, use `--hours N` to make them tick automatically with game time:
+
+```bash
+# Event triggers after 8 game hours
+bash tools/dm-consequence.sh add "Patrol arrives at the gate" "8 hours" --hours 8
+
+# Event triggers after 2 days
+bash tools/dm-consequence.sh add "Storm hits the southern sector" "2 days" --hours 48
+
+# Event triggers next session (~8 hours of game time)
+bash tools/dm-consequence.sh add "Merchant offers a bounty over drinks" "next session" --hours 8
+```
+
+Conversion table: "30 min" = `--hours 0.5`, "2 hours" = `--hours 2`, "1 day" = `--hours 24`, "3 days" = `--hours 72`, "1 week" = `--hours 168`.
+
+Every `dm-time.sh --elapsed` automatically decrements remaining hours. When a consequence reaches 0 → auto-resolves and the DM is notified with `⚠️ Timed Consequences Triggered`.

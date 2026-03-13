@@ -1,0 +1,46 @@
+#!/bin/bash
+# custom-stats post-hook for dm-consequence.sh
+# After CORE 'check': show remaining hours for timed consequences.
+
+ACTION="$1"
+
+[ "$ACTION" != "check" ] && exit 0
+
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_dir="$MODULE_DIR"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+PROJECT_ROOT="$_dir"
+
+cd "$PROJECT_ROOT"
+uv run python - <<'PYEOF'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("lib")))
+from json_ops import JsonOperations
+from campaign_manager import CampaignManager
+
+campaign_dir = CampaignManager().get_active_campaign_dir()
+if not campaign_dir:
+    sys.exit(0)
+
+json_ops = JsonOperations(str(campaign_dir))
+data = json_ops.load_json("consequences.json")
+
+timed = [c for c in data.get('active', []) if 'trigger_hours' in c]
+if not timed:
+    sys.exit(0)
+
+print("\n⏱️  Timed consequences:")
+for c in timed:
+    remaining = c['trigger_hours'] - c.get('hours_elapsed', 0)
+    if remaining <= 0:
+        status = "⚠️  TRIGGERED"
+    elif remaining <= 2:
+        status = f"🔴 {remaining:.1f}h remaining"
+    elif remaining <= 6:
+        status = f"🟡 {remaining:.1f}h remaining"
+    else:
+        status = f"🟢 {remaining:.1f}h remaining"
+    print(f"  [{c['id']}] {c['consequence']} — {status}")
+PYEOF

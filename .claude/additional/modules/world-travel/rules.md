@@ -8,6 +8,17 @@ bash tools/dm-session.sh move "Temple" --speed-multiplier 1.5
 ```
 
 Move = distance/time calc + clock advance + auto encounter check.
+**Multi-hop**: if no direct connection, BFS finds shortest route through intermediate locations. Each hop: stats tick → encounter check → arrive. DM gets narrative opportunity at each stop.
+
+### Connections [MANDATORY]
+
+When creating connections, **ALWAYS specify `--terrain`**. Default is `open` but DM should pick the correct terrain type for the area.
+
+```bash
+bash tools/dm-location.sh connect "A" "B" "path desc" --terrain forest --distance 2000
+```
+
+**Route validation**: direct connections that pass through another location's radius are BLOCKED. Create intermediate connections instead (A→C, C→B).
 
 Route decisions (no direct connection):
 ```bash
@@ -113,10 +124,36 @@ NPCs use `tags.locations[]` — association tags, not positional tracking. DM de
 - Connections are canonical (stored once, read bidirectionally)
 - `diameter_meters` on compounds = visual size on global map
 
+### Interior Terrain [MANDATORY]
+
+Every interior location MUST have a `terrain` field set to distinguish area types on the GUI map. The terrain value maps to `terrain_colors` in `module-data/world-travel.json`.
+
+Common interior terrain types:
+
+| Terrain | Use for | Example color |
+|---------|---------|---------------|
+| `outdoor` | Open areas, yards, gates, rooftops | [90, 110, 90] |
+| `indoor` | Rooms, halls, shops, quarters | [70, 65, 55] |
+
+These terrain types MUST be added to `terrain_colors` in `module-data/world-travel.json` during campaign creation. They are campaign-specific — different genres may use different interior types (e.g. `corridor`, `hangar`, `cave-room`).
+
+When creating a compound with rooms:
+1. Add `indoor`/`outdoor` (or genre-appropriate) colors to `terrain_colors`
+2. Set `"terrain": "indoor"` or `"terrain": "outdoor"` on each interior location
+
+```json
+{
+  "terrain_colors": {
+    "outdoor": [90, 110, 90],
+    "indoor": [70, 65, 55]
+  }
+}
+```
+
 ### GUI
 
 - **Global**: top-level locations only. Compounds = squares.
-- **Interior**: click compound → select. Click again / Enter button → drill down. Radial tree layout.
+- **Interior**: click compound → select. Click again / Enter button → drill down. Radial tree layout. Node colors reflect terrain type (indoor vs outdoor).
 - **Breadcrumb**: `World > City > Castle > Room`. Click = navigate.
 - **Player location**: highlighted on both global (parent compound) and interior views.
 - **ESC**: go up. **R**: refresh.
@@ -174,14 +211,63 @@ Campaign-defined in `module-data/world-travel.json`:
 ```json
 {
   "terrain_colors": {
-    "space": [40, 40, 80],
-    "nebula": [100, 50, 150],
-    "forest": [50, 150, 50]
+    "wasteland": [140, 120, 80],
+    "forest": [50, 100, 50],
+    "road": [160, 150, 110],
+    "outdoor": [90, 110, 90],
+    "indoor": [70, 65, 55]
   }
 }
 ```
 
 No defaults. DM creates types per campaign. Unknown types use `default` fallback color.
+
+### Connection Terrain vs Location Terrain [MANDATORY]
+
+Connection `terrain` = what you WALK THROUGH to get there. It controls the color of the path on the GUI map.
+
+- Connection terrain must be a **traversable surface**: `wasteland`, `forest`, `road`, `swamp`, `plains`, `space`, etc.
+- NEVER use destination-specific terrain on connections: `anomaly`, `ruins`, `radiation`, `cave` on a 5km path makes no sense.
+- The destination itself can have special properties — handle those as location descriptions, subtypes, or interior terrain.
+
+**Wrong:** `Outpost → Anomaly Field: terrain=anomaly` (5km of anomaly?)
+**Right:** `Outpost → Anomaly Field: terrain=wasteland` (you walk through wasteland to reach it)
+
+### Terrain type categories
+
+| Category | Used on | Examples |
+|----------|---------|---------|
+| **World terrain** | Connections between locations | `wasteland`, `forest`, `road`, `swamp`, `plains`, `mountain`, `space` |
+| **Interior terrain** | Interior locations inside compounds | `outdoor`, `indoor`, `corridor`, `hangar`, `cave-room` |
+
+Do NOT mix these — world terrain on connections, interior terrain on compound rooms.
+
+---
+
+## Auto-Compound on Arrival [MANDATORY]
+
+When the player arrives at a NEW location for the first time, evaluate whether it needs interior structure.
+
+**Convert to compound if:**
+- Settlement (village, outpost, camp, town, city)
+- Building (bar, lab, bunker, warehouse, church)
+- Vehicle/ship (boat, truck, helicopter, spaceship)
+- Dungeon/cave system with distinct areas
+- Any location with 2+ interesting areas inside
+
+**Do NOT convert:**
+- Wilderness (forest, field, swamp, wasteland) — uniform terrain, nothing to split
+- Roads, bridges, rivers — transit locations
+- Abstract/narrative waypoints
+
+**On arrival at convertible location:**
+1. Create compound structure (entry point + hub + key rooms)
+2. Add `outdoor`/`indoor` terrain to each room
+3. Set entry_config on the gate/door if guarded or hidden
+4. Enter via entry point, navigate to hub
+5. THEN narrate the scene
+
+This ensures every meaningful location has explorable interior from the first visit.
 
 ---
 

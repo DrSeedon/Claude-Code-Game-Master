@@ -26,7 +26,8 @@
     "dm-consequence.sh"
   ],
   "post_middleware": [
-    "dm-time.sh.post"
+    "dm-time.sh.post",
+    "dm-consequence.sh.post"
   ],
   "features": [
     "Define ANY custom stats — hunger, mana, sanity, reputation, fatigue, oxygen, fuel, stress...",
@@ -38,7 +39,8 @@
     "Auto-tick during travel and time advancement",
     "Dynamic rate modifiers — DM adjusts drain/regen speed on the fly (clothing, shelter, potions)",
     "Blocked-by conditions — positive rate blocked when prerequisite stat is too low",
-    "Timed effects (buffs/debuffs) — temporary rate bonuses, per-hour changes, instant effects with auto-expiration"
+    "Timed effects (buffs/debuffs) — temporary rate bonuses, per-hour changes, instant effects with auto-expiration",
+    "Timed consequences — dm-consequence.sh add ... --hours N auto-triggers after elapsed game time"
   ],
   "adds_to_core": {
     "tools": [
@@ -96,6 +98,6 @@
     "Social: reputation with factions, trust",
     "Any stat that changes over time or has thresholds"
   ],
-  "architecture": "Middleware hooks into dm-player.sh (show custom stats), dm-consequence.sh (threshold effects). Post-hook on dm-time.sh reads --elapsed and ticks stats after CORE updates time. Zero hardcoded stat names — all defined in campaign_rules.time_effects.",
+  "architecture": "Middleware hooks into dm-player.sh (show custom stats), dm-consequence.sh (timed consequences with --hours). Post-hooks on dm-time.sh (tick stats + check timed consequences) and dm-consequence.sh (show remaining hours on check). Zero hardcoded stat names — all defined in module-data/custom-stats.json.",
   "replaces": []
 }

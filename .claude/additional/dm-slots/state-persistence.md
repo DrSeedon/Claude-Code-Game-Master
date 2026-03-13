@@ -29,6 +29,7 @@
 
 ### Consequence Rules (MANDATORY — NO EXCEPTIONS)
 
+- **Consequences are DM-ONLY knowledge.** NEVER reveal consequence text, timers, or remaining hours to the player. Consequences are hidden plot triggers — the player experiences them as surprise events when they fire. No "ticking clocks" in narration, no countdowns, no hints about remaining time.
 - **EVERY consequence MUST have `--hours N`.** No exceptions. A consequence without `--hours` is BROKEN — it will never tick, never trigger, and silently rot in the JSON. If you catch yourself typing `dm-consequence.sh add` without `--hours` — STOP and add it.
 - `dm-time.sh --elapsed N` and `dm-time.sh --to HH:MM` automatically tick consequences. **Never call `dm-consequence.sh tick` manually.**
 - Conversion: "30 min" = `--hours 0.5`, "2 hours" = `--hours 2`, "1 day" = `--hours 24`, "3 days" = `--hours 72`, "1 week" = `--hours 168`, "next session" = `--hours 8`

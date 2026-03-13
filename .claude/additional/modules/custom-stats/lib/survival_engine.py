@@ -667,54 +667,54 @@ class SurvivalEngine:
                 stat_data['current'] = stat_data['value']
         return custom_stats
 
-    def advance_time(self, time_of_day: str, date: str, elapsed_hours: float = 0,
-                     precise_time: str = None, sleeping: bool = False) -> bool:
+    def time_post_hook(self, date: str, elapsed_hours: float = -1,
+                       set_time: str = None, sleeping: bool = False) -> bool:
         """
-        Full time advance with survival mechanics.
+        Post-hook for dm-time.sh. Updates precise clock in module-data,
+        ticks stats if elapsed, checks timed consequences.
 
-        1. If precise_time given, auto-calculate elapsed from previous precise_time
-        2. Update campaign-overview.json with time_of_day, date, precise_time
-        3. If elapsed_hours > 0, call self.tick(elapsed_hours, sleeping) for stat effects
-        4. Check timed consequences (_check_time_consequences)
-        5. Print report
+        Called from dm-time.sh.post with parsed args.
         """
-        campaign = self.json_ops.load_json("campaign-overview.json")
+        data = self.module_data_mgr.load("custom-stats")
+        if not data or not data.get('enabled'):
+            return True
 
-        auto_elapsed = 0
-        if precise_time:
-            previous_time = campaign.get('time', {}).get('precise_time')
-            previous_date = campaign.get('time', {}).get('date')
-            if previous_time and previous_date:
-                auto_elapsed = self._calculate_elapsed_hours(previous_time, precise_time, previous_date, date)
-            elapsed_hours = auto_elapsed
+        clock = data.get("precise_time", "08:00")
+        old_h, old_m = map(int, clock.split(":"))
 
-        campaign.setdefault('time', {})
-        campaign['time']['time_of_day'] = time_of_day
-        campaign['time']['date'] = date
-        if precise_time:
-            campaign['time']['precise_time'] = precise_time
+        if set_time:
+            new_h, new_m = map(int, set_time.split(":"))
+            if elapsed_hours < 0:
+                old_total = old_h * 60 + old_m
+                new_total = new_h * 60 + new_m
+                diff_min = new_total - old_total
+                if diff_min < 0:
+                    diff_min += 24 * 60
+                elapsed_hours = diff_min / 60.0
+            h, m = new_h, new_m
+        elif elapsed_hours > 0:
+            total_min = old_h * 60 + old_m + int(elapsed_hours * 60)
+            h = (total_min // 60) % 24
+            m = total_min % 60
+        else:
+            h, m = old_h, old_m
 
-        self.json_ops.save_json("campaign-overview.json", campaign)
-
-        stat_changes = []
-        stat_consequences = []
-        timed_consequences = []
+        new_clock = f"{h:02d}:{m:02d}"
+        data["precise_time"] = new_clock
+        self.module_data_mgr.save("custom-stats", data)
 
         if elapsed_hours > 0:
-            result = self.tick(elapsed_hours, sleeping=sleeping)
-            stat_changes = result['stat_changes']
-            stat_consequences = result['stat_consequences']
+            print(f"\n⏰ {new_clock}, {date} (+{elapsed_hours:g}h)")
+        else:
+            print(f"\n⏰ {new_clock}, {date}")
 
-            timed_consequences = self._check_time_consequences(elapsed_hours)
-
-        print(f"\n[SUCCESS] Time updated to: {time_of_day} ({precise_time or 'no precise time'}), {date}")
         if elapsed_hours > 0:
-            print(f"Elapsed: {elapsed_hours:.2f} hours")
-
-        if timed_consequences:
-            print("\nTriggered Events:")
-            for tc in timed_consequences:
-                print(f"  ⚠️ {tc['event']}")
+            self.tick(elapsed_hours, sleeping=sleeping)
+            triggered = self._check_time_consequences(elapsed_hours)
+            if triggered:
+                print("\n⚠️  Timed Consequences Triggered:")
+                for tc in triggered:
+                    print(f"  [{tc.get('id', '?')}] {tc.get('consequence', tc.get('event', ''))}")
 
         return True
 
@@ -789,6 +789,12 @@ def main():
     time_parser.add_argument('--elapsed', type=float, default=0, help='Hours elapsed')
     time_parser.add_argument('--precise-time', help='HH:MM format for auto-elapsed calculation')
     time_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping')
+
+    hook_parser = subparsers.add_parser('time-post-hook', help='Post-hook for dm-time.sh')
+    hook_parser.add_argument('date', help='Date string')
+    hook_parser.add_argument('--elapsed', type=float, default=-1, help='Hours elapsed (-1=auto from set-time)')
+    hook_parser.add_argument('--set-time', help='Set precise time to HH:MM')
+    hook_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping')
 
     rate_parser = subparsers.add_parser('rate', help='Set rate modifier for a stat')
     rate_parser.add_argument('stat', help='Stat name')
@@ -905,11 +911,17 @@ def main():
             engine.list_effects()
 
         elif args.action == 'time':
-            engine.advance_time(
-                time_of_day=args.time_of_day,
+            engine.time_post_hook(
                 date=args.date,
                 elapsed_hours=args.elapsed,
-                precise_time=args.precise_time,
+                sleeping=args.sleeping
+            )
+
+        elif args.action == 'time-post-hook':
+            engine.time_post_hook(
+                date=args.date,
+                elapsed_hours=args.elapsed,
+                set_time=args.set_time,
                 sleeping=args.sleeping
             )
 

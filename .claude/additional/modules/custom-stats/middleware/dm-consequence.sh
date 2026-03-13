@@ -1,9 +1,8 @@
 #!/bin/bash
-# survival-stats middleware for dm-consequence.sh
+# custom-stats middleware for dm-consequence.sh
 # Handles: add ... --hours N (timed consequences with trigger_hours)
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Find project root
 _dir="$MODULE_DIR"
 while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
 PROJECT_ROOT="$_dir"
@@ -51,18 +50,24 @@ if [ -z "$HOURS_VAL" ]; then
 fi
 
 cd "$PROJECT_ROOT"
-uv run python - <<PYEOF
-import sys, uuid, json
+uv run python - "$DESC" "$TRIGGER" "$HOURS_VAL" <<'PYEOF'
+import sys, uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path("lib")))
 from json_ops import JsonOperations
+from campaign_manager import CampaignManager
 
-desc = """$DESC"""
-trigger = """$TRIGGER"""
-hours = float("$HOURS_VAL")
+desc = sys.argv[1]
+trigger = sys.argv[2]
+hours = float(sys.argv[3])
 
-json_ops = JsonOperations()
+campaign_dir = CampaignManager().get_active_campaign_dir()
+if not campaign_dir:
+    print("[ERROR] No active campaign", file=sys.stderr)
+    sys.exit(1)
+
+json_ops = JsonOperations(str(campaign_dir))
 data = json_ops.load_json("consequences.json")
 if not isinstance(data, dict) or 'active' not in data:
     data = {'active': [], 'resolved': []}

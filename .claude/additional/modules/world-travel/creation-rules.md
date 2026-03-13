@@ -69,16 +69,28 @@ bash tools/dm-location.sh add "Forest" "Dark woods" \
 Set terrain types and RGB colors for the GUI map. Store in `module-data/world-travel.json` under `terrain_colors`.
 Name the keys in the campaign's language (e.g. Russian campaign → Russian keys).
 
-**Palette by genre:**
-| Genre | Typical terrains + base colors |
-|-------|-------------------------------|
-| Fantasy/Medieval | forest [50,150,50], mountain [120,100,80], road [180,180,140], swamp [80,120,60], urban [160,160,160], river [60,120,200], plains [160,200,100] |
-| Sci-fi/Space | space [10,10,40], nebula [100,50,150], station [80,80,100], asteroid [100,90,70], void [5,5,20] |
-| Post-apo/STALKER | wasteland [140,120,80], radiation [100,160,60], ruins [100,90,80], anomaly [180,60,180], road [160,150,110] |
-| Horror | forest [30,60,30], swamp [50,70,40], road [100,90,80], ruins [80,70,60], mist [150,150,170] |
-| Stone Age | cave [80,70,60], river [60,120,200], forest [50,150,50], plains [160,200,100], mountain [120,100,80], beach [220,200,140], tundra [200,210,220] |
+**Palette by genre (world terrain + interior terrain):**
+| Genre | World terrains | Interior terrains |
+|-------|---------------|-------------------|
+| Fantasy/Medieval | forest [50,150,50], mountain [120,100,80], road [180,180,140], swamp [80,120,60], urban [160,160,160], river [60,120,200], plains [160,200,100] | outdoor [130,140,120], indoor [90,80,70] |
+| Sci-fi/Space | space [10,10,40], nebula [100,50,150], station [80,80,100], asteroid [100,90,70], void [5,5,20] | outdoor [60,70,90], indoor [50,50,70] |
+| Post-apo/STALKER | wasteland [140,120,80], radiation [100,160,60], ruins [100,90,80], anomaly [180,60,180], road [160,150,110] | outdoor [90,110,90], indoor [70,65,55] |
+| Horror | forest [30,60,30], swamp [50,70,40], road [100,90,80], ruins [80,70,60], mist [150,150,170] | outdoor [70,80,60], indoor [50,45,40] |
+| Stone Age | cave [80,70,60], river [60,120,200], forest [50,150,50], plains [160,200,100], mountain [120,100,80], beach [220,200,140], tundra [200,210,220] | outdoor [130,150,110], indoor [80,70,60] |
+
+**ALWAYS include `outdoor` and `indoor` interior terrain colors** alongside world terrains. These are used by compound interior views on the GUI map.
 
 Add only terrains that realistically appear on this map. Write into `terrain_colors` in `module-data/world-travel.json`.
+
+### Connection terrain ≠ destination terrain [MANDATORY]
+
+Connection `terrain` = what you WALK THROUGH on the path, NOT what the destination is.
+
+- **Right:** `Outpost → Anomaly Field: terrain=wasteland` (5km of wasteland to reach it)
+- **Wrong:** `Outpost → Anomaly Field: terrain=anomaly` (5km of anomaly makes no sense)
+
+Only use traversable surfaces as connection terrain: `wasteland`, `forest`, `road`, `swamp`, `plains`, `mountain`, `space`.
+Never use `anomaly`, `ruins`, `radiation`, `cave` on connections — these describe locations, not paths.
 
 ### Location Sizes [MANDATORY]
 
@@ -132,33 +144,91 @@ Ask: enable random encounters? If yes, write to `module-data/world-travel.json`:
 }
 ```
 
-## 6. Compounds (optional)
+## 6. Compounds [MANDATORY for settlements/buildings]
 
-If campaign has ships/cities/dungeons:
+Every named settlement, building, ship, or dungeon that the player can enter MUST be a compound with interior locations. Do NOT leave them as flat world-level points.
 
-```bash
-# Create compound
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Castle" --entry-points "Gate"
+### When to create compounds
 
-# Add rooms
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Gate" --parent "Castle" --entry-point --connections '[{"to": "Hall"}]'
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Hall" --parent "Castle"
+| Location type | Create compound? |
+|---------------|-----------------|
+| Settlement (village, outpost, city) | YES — gate/entrance + main area + key buildings |
+| Building (bar, lab, bunker) | YES if 2+ distinct areas inside |
+| Dungeon / cave system | YES — entry + rooms |
+| Ship / vehicle | YES with `--mobile` |
+| Wilderness point (forest, field) | NO — flat world location |
 
-# Mobile (ships)
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Ship" --mobile --entry-points "Airlock"
+### Compound structure pattern
 
-# Nested (castle inside city)
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Castle" --parent "City" --entry-points "Gate"
+Every compound needs:
+1. **Entry point** — the door/gate/airlock (connects inside to outside)
+2. **Hub area** — central outdoor/open space connecting to all rooms
+3. **Key rooms** — buildings, chambers, points of interest
 
-# Verify
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
+### Interior terrain colors [MANDATORY]
+
+Add `outdoor` and `indoor` terrain types to `terrain_colors` in `module-data/world-travel.json`. These control node colors on the GUI map.
+
+```json
+{
+  "terrain_colors": {
+    "outdoor": [90, 110, 90],
+    "indoor": [70, 65, 55]
+  }
+}
 ```
 
-Entry configs for guarded/hidden entrances:
+Set `"terrain": "outdoor"` on open areas (yards, gates, streets, rooftops).
+Set `"terrain": "indoor"` on enclosed spaces (rooms, shops, quarters).
+
+Genre-specific alternatives are fine (e.g. `corridor`, `hangar`, `cave-room`) — just add matching colors.
+
+### Creation example
+
+```bash
+# Create compound with entry point
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Outpost" --entry-points "Gate"
+
+# Add rooms with connections
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Gate" --parent "Outpost" --entry-point --connections '[{"to": "Yard"}]'
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Yard" --parent "Outpost" --connections '[{"to": "Gate"}, {"to": "Bar"}, {"to": "Barracks"}]'
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Bar" --parent "Outpost" --connections '[{"to": "Yard"}]'
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Barracks" --parent "Outpost" --connections '[{"to": "Yard"}]'
+```
+
+Then set terrain on each room:
+```python
+# Gate, Yard → outdoor; Bar, Barracks → indoor
+for name in ["Gate", "Yard"]:
+    locs[name]["terrain"] = "outdoor"
+for name in ["Bar", "Barracks"]:
+    locs[name]["terrain"] = "indoor"
+```
+
+### Mobile compounds (ships/vehicles)
+
+```bash
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Ship" --mobile --entry-points "Airlock"
+```
+
+### Nested compounds (castle inside city)
+
+```bash
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Castle" --parent "City" --entry-points "Castle Gate"
+```
+
+### Entry configs for guarded/hidden entrances
+
 ```bash
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Sewers" --parent "Castle" \
   --entry-point --entry-config '{"hidden": true, "on_enter": {"description": "Stealth DC 15"}}'
+```
+
+### Verify
+
+```bash
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
 ```
 
 ## 7. Show Map

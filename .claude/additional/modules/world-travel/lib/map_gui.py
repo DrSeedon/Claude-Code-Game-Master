@@ -21,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure
 
 from lib.json_ops import JsonOperations
 from module_data import ModuleDataManager
-from connection_utils import get_unique_edges, get_connections
+from connection_utils import get_unique_edges, get_connections, _segment_intersects_circle
 
 MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
@@ -521,11 +521,16 @@ class MapGUI:
             terrain = conn.get('terrain', 'default')
             color = self.terrain_colors.get(terrain, default_color)
             bg_color = tuple(int(c * 0.15 + self.COLOR_BG[i] * 0.85) for i, c in enumerate(color))
-            connection_lines.append({
-                'x1': coords_a['x'], 'y1': coords_a['y'],
-                'x2': coords_b['x'], 'y2': coords_b['y'],
-                'color': bg_color
-            })
+            waypoints = self._build_waypoints(
+                coords_a['x'], coords_a['y'], coords_b['x'], coords_b['y'],
+                loc_a, loc_b, global_locs
+            )
+            for i in range(len(waypoints) - 1):
+                connection_lines.append({
+                    'x1': waypoints[i][0], 'y1': waypoints[i][1],
+                    'x2': waypoints[i+1][0], 'y2': waypoints[i+1][1],
+                    'color': bg_color
+                })
 
         FOG_DISTANCE = 1000
         sample = max(4, int(max_dim / 5000))
@@ -622,27 +627,89 @@ class MapGUI:
     def draw_grid(self):
         pass
 
+    def _get_node_screen_radius(self, loc_data: Dict) -> int:
+        diameter_meters = loc_data.get('diameter_meters', 100)
+        return max(6, int((diameter_meters / 2) * self.zoom))
+
+    def _shorten_line_by_radii(self, x1, y1, x2, y2, r1, r2):
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < r1 + r2 + 2:
+            return x1, y1, x2, y2
+        ux, uy = dx / length, dy / length
+        return (int(x1 + ux * r1), int(y1 + uy * r1),
+                int(x2 - ux * r2), int(y2 - uy * r2))
+
+    def _build_waypoints(self, ax, ay, bx, by, loc_a, loc_b, global_locs):
+        obstacles = []
+        for name, data in global_locs.items():
+            if name == loc_a or name == loc_b:
+                continue
+            coords = data.get('coordinates')
+            if not coords:
+                continue
+            wx, wy = coords['x'], coords['y']
+            wr = data.get('diameter_meters', 100) / 2
+            if _segment_intersects_circle(ax, ay, bx, by, wx, wy, wr):
+                dist_sq = (wx - ax) ** 2 + (wy - ay) ** 2
+                obstacles.append((dist_sq, wx, wy))
+        if not obstacles:
+            return [(ax, ay), (bx, by)]
+        obstacles.sort()
+        points = [(ax, ay)]
+        for _, wx, wy in obstacles:
+            points.append((wx, wy))
+        points.append((bx, by))
+        return points
+
     def draw_connections(self):
         default_color = self.terrain_colors.get('default', (100, 150, 255))
         global_locs = {n: d for n, d in self.locations.items() if self._is_global_visible(n, d)}
+
+        node_world = {}
+        for name, data in global_locs.items():
+            coords = data.get('coordinates')
+            if coords:
+                node_world[name] = (coords['x'], coords['y'])
+
         for loc_a, loc_b, conn in get_unique_edges(global_locs):
-            coords_a = global_locs[loc_a].get('coordinates')
-            coords_b = global_locs.get(loc_b, {}).get('coordinates')
-            if not coords_a or not coords_b:
+            if loc_a not in node_world or loc_b not in node_world:
                 continue
-            x1, y1 = self.world_to_screen(coords_a['x'], coords_a['y'])
-            x2, y2 = self.world_to_screen(coords_b['x'], coords_b['y'])
+            ax, ay = node_world[loc_a]
+            bx, by = node_world[loc_b]
+
+            waypoints = self._build_waypoints(ax, ay, bx, by, loc_a, loc_b, global_locs)
+
             terrain = conn.get('terrain', 'default')
             is_highlighted = self.selected_location in (loc_a, loc_b)
             conn_color = self.COLOR_HIGHLIGHT if is_highlighted else self.terrain_colors.get(terrain, default_color)
             line_width = 4 if is_highlighted else 3
-            pygame.draw.line(self.screen, conn_color, (x1, y1), (x2, y2), line_width)
+
+            screen_pts = [self.world_to_screen(wx, wy) for wx, wy in waypoints]
+
+            for i in range(len(screen_pts) - 1):
+                sx, sy = screen_pts[i]
+                ex, ey = screen_pts[i + 1]
+                r_start = 0
+                r_end = 0
+                if i == 0:
+                    r_start = self._get_node_screen_radius(global_locs[loc_a])
+                if i == len(screen_pts) - 2:
+                    r_end = self._get_node_screen_radius(global_locs.get(loc_b, {}))
+                cx1, cy1, cx2, cy2 = self._shorten_line_by_radii(sx, sy, ex, ey, r_start, r_end)
+                pygame.draw.line(self.screen, conn_color, (cx1, cy1), (cx2, cy2), line_width)
 
             distance = conn.get('distance_meters', 0)
             if distance > 0:
+                mid_idx = len(screen_pts) // 2
+                if len(screen_pts) % 2 == 0:
+                    px, py = screen_pts[mid_idx - 1]
+                    qx, qy = screen_pts[mid_idx]
+                    mid_x, mid_y = (px + qx) // 2, (py + qy) // 2
+                else:
+                    mid_x, mid_y = screen_pts[mid_idx]
                 dist_km = distance / 1000
-                mid_x = (x1 + x2) // 2
-                mid_y = (y1 + y2) // 2
                 label = self.font.render(f"{dist_km:.1f}km", True, conn_color)
                 label_rect = label.get_rect(center=(mid_x, mid_y - 20))
                 bg_rect = label_rect.inflate(6, 4)
@@ -682,6 +749,15 @@ class MapGUI:
                 pygame.draw.polygon(surf, self.COLOR_BLOCKED, points)
             self.screen.blit(surf, (x - int(radius), y - int(radius)))
 
+    def _draw_compound_icon(self, x: int, y: int, radius: int, color):
+        s = max(4, radius // 3)
+        roof = [(x, y - s), (x - s, y - s // 3), (x + s, y - s // 3)]
+        pygame.draw.polygon(self.screen, color, roof)
+        body_rect = (x - s + s // 4, y - s // 3, s + s // 2, s)
+        pygame.draw.rect(self.screen, color, body_rect)
+        door_rect = (x - s // 5, y - s // 3 + s // 3, s // 3 + 1, s - s // 3)
+        pygame.draw.rect(self.screen, (30, 30, 40), door_rect)
+
     def _draw_node(self, x: int, y: int, radius: int, loc_name: str, loc_data: Dict,
                    is_entry: bool = False, is_neighbor: bool = False, label_text: str = "",
                    is_player_loc: bool = False):
@@ -700,25 +776,22 @@ class MapGUI:
         terrain_color = tuple(self.terrain_colors.get(terrain, self.COLOR_LOCATION)) if terrain else None
 
         if is_compound:
-            half = max(10, radius)
             color = self.COLOR_PLAYER if is_current else (terrain_color or self.COLOR_COMPOUND)
             if is_neighbor:
                 color = (200, 200, 100)
             if is_selected:
                 color = self.COLOR_HIGHLIGHT
             if is_hovered or is_selected:
-                pygame.draw.rect(self.screen, self.COLOR_HIGHLIGHT,
-                                 (x - half - 4, y - half - 4, (half + 4) * 2, (half + 4) * 2), 2)
+                pygame.draw.circle(self.screen, self.COLOR_HIGHLIGHT, (x, y), radius + 4, 2)
             elif is_neighbor:
-                pygame.draw.rect(self.screen, (200, 200, 100),
-                                 (x - half - 4, y - half - 4, (half + 4) * 2, (half + 4) * 2), 1)
+                pygame.draw.circle(self.screen, (200, 200, 100), (x, y), radius + 4, 1)
             if is_entry:
-                pygame.draw.rect(self.screen, self.COLOR_ENTRY,
-                                 (x - half - 2, y - half - 2, (half + 2) * 2, (half + 2) * 2), 2)
-            surf = pygame.Surface((half * 2, half * 2), pygame.SRCALPHA)
-            pygame.draw.rect(surf, (*color, 100), (0, 0, half * 2, half * 2))
-            self.screen.blit(surf, (x - half, y - half))
-            pygame.draw.rect(self.screen, color, (x - half, y - half, half * 2, half * 2), 2)
+                pygame.draw.circle(self.screen, self.COLOR_ENTRY, (x, y), radius + 2, 2)
+            surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*color, 100), (radius, radius), radius)
+            self.screen.blit(surf, (x - radius, y - radius))
+            pygame.draw.circle(self.screen, color, (x, y), radius, 2)
+            self._draw_compound_icon(x, y, radius, color)
         elif is_waypoint:
             color = (255, 150, 0)
             size = max(8, radius)
@@ -766,19 +839,12 @@ class MapGUI:
                 continue
             visible.append((loc_name, loc_data, coords))
 
-        diameters = [d.get('diameter_meters', 100) for _, d, _ in visible]
-        min_d = min(diameters) if diameters else 1
-        max_d = max(diameters) if diameters else 1
-        MIN_PX, MAX_PX = 8, 40
+        MIN_NODE_PX = 6
 
         for loc_name, loc_data, coords in visible:
             x, y = self.world_to_screen(coords['x'], coords['y'])
             diameter_meters = loc_data.get('diameter_meters', 100)
-            if max_d > min_d:
-                t = (diameter_meters - min_d) / (max_d - min_d)
-                node_radius = int(MIN_PX + t * (MAX_PX - MIN_PX))
-            else:
-                node_radius = int((MIN_PX + MAX_PX) / 2)
+            node_radius = max(MIN_NODE_PX, int((diameter_meters / 2) * self.zoom))
             margin = node_radius + 100
             if x < -margin or x > self.width + margin or y < -margin or y > self.height + margin:
                 continue
@@ -1004,8 +1070,11 @@ class MapGUI:
                 info_lines.append(line)
             info_lines.append("")
         loc_type = loc_data.get('type', '')
-        if loc_type:
+        if loc_type and loc_type not in ('interior',):
             info_lines.append(f"Type: {loc_type}")
+        terrain = loc_data.get('terrain', '')
+        if terrain:
+            info_lines.append(f"Terrain: {terrain}")
         parent = loc_data.get('parent', '')
         if parent:
             info_lines.append(f"Parent: {parent}")
