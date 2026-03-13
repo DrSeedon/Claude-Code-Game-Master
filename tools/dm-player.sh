@@ -61,13 +61,24 @@ case "$ACTION" in
         ;;
 
     "hp")
-        if [ -z "$1" ] || [ -z "$2" ]; then
-            echo "Usage: dm-player.sh hp <character_name> <+/-amount>"
-            echo "Example: dm-player.sh hp conan -3  (take 3 damage)"
-            echo "Example: dm-player.sh hp conan +5  (heal 5 HP)"
+        if [ -z "$1" ]; then
+            echo "Usage: dm-player.sh hp [character_name] <+/-amount>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "$1" "$2"
+        if [[ "$1" =~ ^(heal|damage)$ ]] && [ -n "$2" ]; then
+            if [ "$1" = "heal" ]; then
+                $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "_auto" "+$2"
+            else
+                $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "_auto" "-$2"
+            fi
+        elif [[ "$1" =~ ^[+-]?[0-9]+$ ]] && [ -z "$2" ]; then
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "_auto" "$1"
+        elif [ -z "$2" ]; then
+            echo "Usage: dm-player.sh hp [character_name] <+/-amount>"
+            exit 1
+        else
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp "$1" "$2"
+        fi
         ;;
 
     "get")
@@ -80,13 +91,10 @@ case "$ACTION" in
 
     "gold")
         if [ -z "$1" ]; then
-            echo "Usage: dm-player.sh gold <character_name> [+/-amount]"
-            echo "Example: dm-player.sh gold theron +50  (gain 50 gold)"
-            echo "Example: dm-player.sh gold theron -10  (spend 10 gold)"
-            echo "Example: dm-player.sh gold theron      (show current gold)"
-            exit 1
-        fi
-        if [ -z "$2" ]; then
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" gold "_auto"
+        elif [[ "$1" =~ ^[+-]?[0-9]+$ ]] && [ -z "$2" ]; then
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" gold "_auto" "$1"
+        elif [ -z "$2" ]; then
             $PYTHON_CMD "$LIB_DIR/player_manager.py" gold "$1"
         else
             $PYTHON_CMD "$LIB_DIR/player_manager.py" gold "$1" "$2"
