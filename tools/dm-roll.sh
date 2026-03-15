@@ -1,9 +1,8 @@
 #!/bin/bash
-# Dice rolling for D&D campaign
-# Thin CLI wrapper - logic in lib/dice.py
-
+# Dice rolling with labels, DC/AC checks
 source "$(dirname "$0")/common.sh"
 
-dispatch_middleware "dm-roll.sh" "$@" && exit $?
-
 $PYTHON_CMD "$LIB_DIR/dice.py" "$@"
+CORE_RC=$?
+dispatch_middleware_post "dm-roll.sh" "$@"
+exit $CORE_RC

@@ -174,6 +174,53 @@ class DiceRoller:
             return base
 
 
+def format_enhanced(result, label=None, dc=None, ac=None):
+    """Format roll result with label, DC/AC check, and verdict. Used by dm-roll.sh."""
+    rolls = result.get("kept", result["rolls"])
+    rolls_str = "+".join(str(r) for r in rolls)
+
+    mod = result.get("modifier", 0)
+    total = result["total"]
+    nat20 = result.get("natural_20", False)
+    nat1 = result.get("natural_1", False)
+
+    header = "🎲"
+    if label:
+        header += f" {label}"
+    if dc:
+        header += f" vs DC {dc}:"
+    elif ac:
+        header += f" vs AC {ac}:"
+    else:
+        header += ":"
+
+    roll_str = f"[{rolls_str}]"
+
+    if result["type"] in ("advantage", "disadvantage"):
+        discarded_str = "+".join(str(r) for r in result["discarded"])
+        roll_str += f" ~({discarded_str})~"
+
+    if mod != 0:
+        roll_str += f" {mod:+d}"
+    roll_str += f" = {total}"
+
+    if nat20:
+        verdict = "⚔ CRITICAL!"
+    elif nat1:
+        verdict = "💀 FUMBLE!"
+    elif dc:
+        verdict = "✓ SUCCESS" if total >= dc else "✗ FAIL"
+    elif ac:
+        verdict = "✓ HIT!" if total >= ac else "✗ MISS"
+    else:
+        verdict = ""
+
+    line = f"{header} {roll_str}"
+    if verdict:
+        line += f" — {verdict}"
+    return line
+
+
 # Module-level convenience functions
 _roller = DiceRoller()
 
@@ -194,18 +241,22 @@ def roll_formatted(notation: str) -> str:
 def main():
     """CLI interface for dice rolling"""
     import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: dice.py <notation>")
-        print("Examples: 1d20, 3d6+2, 2d20kh1 (advantage), 2d20kl1 (disadvantage)")
-        sys.exit(1)
-    
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Dice roller with labels and DC/AC checks")
+    parser.add_argument("notation", help="Dice notation (e.g. 1d20+5, 2d20kh1+3)")
+    parser.add_argument("--label", "-l", help="Roll description (e.g. 'Perception (Рекс)')")
+    parser.add_argument("--dc", type=int, help="Difficulty Class to check against")
+    parser.add_argument("--ac", type=int, help="Armor Class to check against")
+    args = parser.parse_args()
+
     roller = DiceRoller()
-    notation = sys.argv[1]
-    
     try:
-        result = roller.roll(notation)
-        print(roller.format_result(result))
+        result = roller.roll(args.notation)
+        if args.label or args.dc or args.ac:
+            print(format_enhanced(result, label=args.label, dc=args.dc, ac=args.ac))
+        else:
+            print(format_enhanced(result))
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
