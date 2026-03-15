@@ -100,18 +100,18 @@ class TestModifyGold:
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         result = mgr.modify_gold("Hero", 50)
-        assert result["current_gold"] == 150
+        assert result["current_gold"] == 10050  # 100gp migrated to 10000cp + 50cp
 
     def test_spend_gold(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         result = mgr.modify_gold("Hero", -30)
-        assert result["current_gold"] == 70
+        assert result["current_gold"] == 9970  # 10000cp - 30cp
 
     def test_gold_clamps_at_zero_not_negative(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
-        result = mgr.modify_gold("Hero", -9999)
+        result = mgr.modify_gold("Hero", -9999999)
         assert result["current_gold"] == 0
 
     def test_gold_show_without_amount(self, tmp_path):
@@ -119,73 +119,27 @@ class TestModifyGold:
         mgr = PlayerManager(ws)
         result = mgr.modify_gold("Hero")
         assert result["success"] is True
-        assert result["gold"] == 100
+        assert result["money"] == 10000  # 100gp = 10000cp
 
     def test_gold_persisted(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         mgr.modify_gold("Hero", +25)
         char = json.loads((camp / "character.json").read_text())
-        assert char["gold"] == 125
+        assert char["money"] == 10025  # 10000cp + 25cp
+        assert "gold" not in char
 
-
-class TestModifyInventory:
-    def test_add_item(self, tmp_path):
+    def test_string_amount_gp(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
-        result = mgr.modify_inventory("Hero", "add", "Iron Sword")
-        assert result["success"] is True
-        assert "Iron Sword" in result["equipment"]
+        result = mgr.modify_money("Hero", "5g")
+        assert result["current_gold"] == 10500  # 10000 + 500cp
 
-    def test_remove_item(self, tmp_path):
-        ws, camp = make_campaign(tmp_path, character={
-            "name": "Hero", "level": 1,
-            "hp": {"current": 20, "max": 20},
-            "gold": 0, "xp": 0,
-            "equipment": ["Iron Sword", "Shield"],
-        })
-        mgr = PlayerManager(ws)
-        result = mgr.modify_inventory("Hero", "remove", "Iron Sword")
-        assert result["success"] is True
-        assert "Iron Sword" not in result["equipment"]
-        assert "Shield" in result["equipment"]
-
-    def test_remove_item_partial_match(self, tmp_path):
-        ws, camp = make_campaign(tmp_path, character={
-            "name": "Hero", "level": 1,
-            "hp": {"current": 20, "max": 20},
-            "gold": 0, "xp": 0,
-            "equipment": ["Iron Sword"],
-        })
-        mgr = PlayerManager(ws)
-        result = mgr.modify_inventory("Hero", "remove", "sword")
-        assert result["success"] is True
-
-    def test_remove_nonexistent_item(self, tmp_path):
+    def test_string_negative_amount(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
-        result = mgr.modify_inventory("Hero", "remove", "Nonexistent Item")
-        assert result["success"] is False
-        assert result.get("error") == "item_not_found"
-
-    def test_list_inventory(self, tmp_path):
-        ws, camp = make_campaign(tmp_path, character={
-            "name": "Hero", "level": 1,
-            "hp": {"current": 20, "max": 20},
-            "gold": 0, "xp": 0,
-            "equipment": ["Dagger", "Rope"],
-        })
-        mgr = PlayerManager(ws)
-        result = mgr.modify_inventory("Hero", "list")
-        assert result["success"] is True
-        assert "Dagger" in result["equipment"]
-
-    def test_inventory_persisted(self, tmp_path):
-        ws, camp = make_campaign(tmp_path)
-        mgr = PlayerManager(ws)
-        mgr.modify_inventory("Hero", "add", "Magic Wand")
-        char = json.loads((camp / "character.json").read_text())
-        assert "Magic Wand" in char["equipment"]
+        result = mgr.modify_money("Hero", "-100")
+        assert result["current_gold"] == 9900  # 10000 - 100cp
 
 
 class TestModifyXp:

@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from currency import load_config, format_money, format_delta, parse_money, migrate_gold
 
 
 class PlayerManager(EntityManager):
@@ -165,8 +166,11 @@ class PlayerManager(EntityManager):
             return None
 
         hp = char.get('hp', {})
-        gold = char.get('gold', 0)
-        summary = f"{char.get('name', name)} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {gold})"
+        currency_config = load_config(self.campaign_dir)
+        raw_money = char.get('money', None)
+        if raw_money is None:
+            raw_money = migrate_gold(char.get('gold', 0), currency_config)
+        summary = f"{char.get('name', name)} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
         conditions = char.get('conditions', [])
         if conditions:
             summary += f" | Conditions: {', '.join(conditions)}"
@@ -176,14 +180,18 @@ class PlayerManager(EntityManager):
         """Get summaries for all players"""
         summaries = []
 
+        currency_config = load_config(self.campaign_dir)
+
         # New format: single character.json
         if self._is_using_single_character():
             char = self._load_character()
             if char:
                 hp = char.get('hp', {})
-                gold = char.get('gold', 0)
+                raw_money = char.get('money', None)
+                if raw_money is None:
+                    raw_money = migrate_gold(char.get('gold', 0), currency_config)
                 summaries.append(
-                    f"{char.get('name', 'Unknown')} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {gold})"
+                    f"{char.get('name', 'Unknown')} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
                 )
             return summaries
 
@@ -194,9 +202,11 @@ class PlayerManager(EntityManager):
                     with open(char_file, 'r', encoding='utf-8') as f:
                         char = json.load(f)
                     hp = char.get('hp', {})
-                    gold = char.get('gold', 0)
+                    raw_money = char.get('money', None)
+                    if raw_money is None:
+                        raw_money = migrate_gold(char.get('gold', 0), currency_config)
                     summaries.append(
-                        f"{char.get('name', char_file.stem)} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {gold})"
+                        f"{char.get('name', char_file.stem)} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
                     )
                 except (json.JSONDecodeError, IOError):
                     continue
@@ -357,10 +367,11 @@ class PlayerManager(EntityManager):
             'bloodied': 0 < new_hp <= max_hp // 4
         }
 
-    def modify_gold(self, name: str, amount: Optional[int] = None) -> Dict[str, Any]:
+    def modify_money(self, name: str, amount=None) -> Dict[str, Any]:
         """
-        Modify character gold or show current gold if no amount given
-        Returns dict with gold status info
+        Modify character money or show current balance if no amount given.
+        amount can be int (base units) or string like "2g 5s" or "+10" or "-50".
+        Returns dict with money status info.
         """
         char = self._load_character(name)
         if not char:
@@ -368,169 +379,62 @@ class PlayerManager(EntityManager):
             return {'success': False}
 
         char_name = char.get('name', name)
+        config = load_config(self.campaign_dir)
 
-        # Get current gold, handling migration from equipment string
-        current_gold = char.get('gold', 0)
-        if not isinstance(current_gold, (int, float)):
-            current_gold = 0
+        raw_money = char.get('money', None)
+        if raw_money is None:
+            raw_money = migrate_gold(char.get('gold', 0), config)
+            if not isinstance(raw_money, int):
+                raw_money = 0
+        current_money = raw_money
 
-        # If no amount specified, just show current gold
         if amount is None:
-            print(f"{char_name}: {current_gold} gold")
+            print(f"{char_name}: {format_money(current_money, config)}")
             return {
                 'success': True,
                 'name': char_name,
-                'gold': current_gold
+                'money': current_money
             }
 
-        # Apply change
-        new_gold = current_gold + amount
-        if new_gold < 0:
-            print(f"[WARNING] {char_name} only has {current_gold} gold (tried to spend {abs(amount)}). Set to 0.")
-            new_gold = 0
-        char['gold'] = new_gold
+        if isinstance(amount, str):
+            try:
+                delta = parse_money(amount, config)
+                if amount.lstrip().startswith('-'):
+                    delta = -abs(delta)
+            except ValueError:
+                print(f"[ERROR] Invalid money amount: {amount}")
+                return {'success': False}
+        else:
+            delta = int(amount)
 
-        # Save character
+        new_money = current_money + delta
+        if new_money < 0:
+            print(f"[WARNING] {char_name} only has {format_money(current_money, config)} (tried to spend {format_money(abs(delta), config)}). Set to 0.")
+            new_money = 0
+        char['money'] = new_money
+        char.pop('gold', None)
+
         if not self._save_character(name, char):
             return {'success': False}
 
-        # Report change
-        if amount > 0:
-            print(f"GOLD_GAINED {char_name} gained {amount} gold!")
-        elif amount < 0:
-            print(f"GOLD_SPENT {char_name} spent {abs(amount)} gold!")
+        if delta > 0:
+            print(f"GOLD_GAINED {char_name} gained {format_delta(delta, config)}!")
+        elif delta < 0:
+            print(f"GOLD_SPENT {char_name} spent {format_money(abs(delta), config)}!")
         else:
-            print(f"{char_name} gold unchanged.")
+            print(f"{char_name} money unchanged.")
 
-        print(f"Gold: {new_gold}")
+        print(f"Gold: {format_money(new_money, config)}")
 
         return {
             'success': True,
             'name': char_name,
-            'gold_change': amount,
-            'current_gold': new_gold
+            'gold_change': delta,
+            'current_gold': new_money
         }
 
-    def modify_inventory(self, name: str, action: str, item: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Add, remove, or list inventory items
-        action: 'add', 'remove', or 'list'
-        Returns dict with inventory status
-        """
-        char = self._load_character(name)
-        if not char:
-            print(f"[ERROR] Character '{name}' not found")
-            return {'success': False}
-
-        char_name = char.get('name', name)
-        equipment = char.get('equipment', [])
-
-        if action == 'list':
-            print(f"{char_name}'s Inventory:")
-            if equipment:
-                for i, eq in enumerate(equipment, 1):
-                    print(f"  {i}. {eq}")
-            else:
-                print("  (empty)")
-            return {
-                'success': True,
-                'name': char_name,
-                'equipment': equipment
-            }
-
-        if not item:
-            print(f"[ERROR] Item name required for {action}")
-            return {'success': False}
-
-        if action == 'add':
-            equipment.append(item)
-            char['equipment'] = equipment
-            if not self._save_character(name, char):
-                return {'success': False}
-            print(f"ITEM_ADDED {char_name} gained: {item}")
-            return {
-                'success': True,
-                'name': char_name,
-                'action': 'add',
-                'item': item,
-                'equipment': equipment
-            }
-
-        elif action == 'remove':
-            # Find item (case-insensitive partial match)
-            found_idx = None
-            for idx, eq in enumerate(equipment):
-                if item.lower() in eq.lower():
-                    found_idx = idx
-                    break
-
-            if found_idx is None:
-                print(f"[ERROR] Item '{item}' not found in inventory")
-                return {'success': False, 'error': 'item_not_found'}
-
-            removed_item = equipment.pop(found_idx)
-            char['equipment'] = equipment
-            if not self._save_character(name, char):
-                return {'success': False}
-            print(f"ITEM_REMOVED {char_name} lost: {removed_item}")
-            return {
-                'success': True,
-                'name': char_name,
-                'action': 'remove',
-                'item': removed_item,
-                'equipment': equipment
-            }
-
-        else:
-            print(f"[ERROR] Unknown inventory action: {action}")
-            return {'success': False}
-
-    def apply_loot(self, name: str, items: List[str], gold: int = 0) -> Dict[str, Any]:
-        """
-        Apply multiple loot items and gold in a single operation.
-        Loads character once, adds all items + gold, saves once.
-        Returns dict with loot summary.
-        """
-        char = self._load_character(name)
-        if not char:
-            print(f"[ERROR] Character '{name}' not found")
-            return {'success': False}
-
-        char_name = char.get('name', name)
-        equipment = char.get('equipment', [])
-        current_gold = char.get('gold', 0)
-        if not isinstance(current_gold, (int, float)):
-            current_gold = 0
-
-        # Add items
-        for item in items:
-            equipment.append(item)
-        char['equipment'] = equipment
-
-        # Add gold
-        if gold:
-            char['gold'] = current_gold + gold
-
-        # Save once
-        if not self._save_character(name, char):
-            return {'success': False}
-
-        # Print loot summary
-        print(f"LOOT {char_name} received:")
-        if gold > 0:
-            print(f"  + {gold} gold")
-        for item in items:
-            print(f"  + {item}")
-        print(f"Gold: {current_gold} -> {char.get('gold', current_gold)}")
-
-        return {
-            'success': True,
-            'name': char_name,
-            'items_added': items,
-            'gold_added': gold,
-            'total_gold': char.get('gold', current_gold),
-            'equipment': char['equipment']
-        }
+    def modify_gold(self, name: str, amount=None) -> Dict[str, Any]:
+        return self.modify_money(name, amount)
 
     def modify_condition(self, name: str, action: str, condition: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -633,22 +537,10 @@ def main():
     get_parser = subparsers.add_parser('get', help='Get full character JSON')
     get_parser.add_argument('name', help='Character name')
 
-    # Modify gold
-    gold_parser = subparsers.add_parser('gold', help='Modify or show character gold')
+    # Modify money (subcommand still called 'gold' for backward compat)
+    gold_parser = subparsers.add_parser('gold', help='Modify or show character money')
     gold_parser.add_argument('name', help='Character name')
-    gold_parser.add_argument('amount', nargs='?', help='Gold change (+50 to gain, -10 to spend). Omit to show current.')
-
-    # Manage inventory
-    inv_parser = subparsers.add_parser('inventory', help='Manage character inventory')
-    inv_parser.add_argument('name', help='Character name')
-    inv_parser.add_argument('inv_action', choices=['add', 'remove', 'list'], help='Action to perform')
-    inv_parser.add_argument('item', nargs='?', help='Item name (required for add/remove)')
-
-    # Batch loot
-    loot_parser = subparsers.add_parser('loot', help='Apply multiple items + gold at once')
-    loot_parser.add_argument('name', help='Character name')
-    loot_parser.add_argument('--gold', type=int, default=0, help='Gold to add')
-    loot_parser.add_argument('--items', nargs='+', default=[], help='Items to add')
+    gold_parser.add_argument('amount', nargs='?', help='Money change: +50 (base units), -10, "2g 5s", "-3gp". Omit to show current.')
 
     # Manage conditions
     cond_parser = subparsers.add_parser('condition', help='Manage character conditions')
@@ -726,33 +618,23 @@ def main():
             sys.exit(1)
 
     elif args.action == 'gold':
-        # Parse amount if provided
         amount = None
         if args.amount:
-            amount_str = args.amount
-            try:
-                if amount_str.startswith('+'):
-                    amount = int(amount_str[1:])
-                else:
-                    amount = int(amount_str)
-            except ValueError:
-                print(f"[ERROR] Invalid gold amount: {args.amount}")
-                sys.exit(1)
+            amount_str = args.amount.strip()
+            has_letters = any(c.isalpha() for c in amount_str)
+            if has_letters:
+                amount = amount_str
+            else:
+                try:
+                    if amount_str.startswith('+'):
+                        amount = int(amount_str[1:])
+                    else:
+                        amount = int(amount_str)
+                except ValueError:
+                    print(f"[ERROR] Invalid money amount: {args.amount}")
+                    sys.exit(1)
 
-        result = manager.modify_gold(args.name, amount)
-        if not result.get('success'):
-            sys.exit(1)
-
-    elif args.action == 'inventory':
-        result = manager.modify_inventory(args.name, args.inv_action, args.item)
-        if not result.get('success'):
-            sys.exit(1)
-
-    elif args.action == 'loot':
-        if not args.items and args.gold == 0:
-            print("[ERROR] Provide --items and/or --gold")
-            sys.exit(1)
-        result = manager.apply_loot(args.name, args.items, args.gold)
+        result = manager.modify_money(args.name, amount)
         if not result.get('success'):
             sys.exit(1)
 

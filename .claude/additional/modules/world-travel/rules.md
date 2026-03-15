@@ -10,13 +10,43 @@ bash tools/dm-session.sh move "Temple" --speed-multiplier 1.5
 Move = distance/time calc + clock advance + auto encounter check.
 **Multi-hop**: if no direct connection, BFS finds shortest route through intermediate locations. Each hop: stats tick → encounter check → arrive. DM gets narrative opportunity at each stop.
 
-### Connections [MANDATORY]
+### Adding World Locations [MANDATORY]
 
-When creating connections, **ALWAYS specify `--terrain`**. Default is `open` but DM should pick the correct terrain type for the area.
+**NEVER** use CORE `dm-location.sh add` for world-level locations — it creates locations WITHOUT coordinates, invisible on GUI map.
+
+**ALWAYS** use the world-travel navigation manager which auto-calculates coordinates from bearing + distance:
 
 ```bash
-bash tools/dm-location.sh connect "A" "B" "path desc" --terrain forest --distance 2000
+bash .claude/additional/modules/world-travel/tools/dm-navigation.sh add "New Place" "description" \
+  --from "Known Location" --bearing 45 --distance 800 --terrain forest
 ```
+
+This calculates coordinates from the origin location + bearing/distance, creates the connection, and ensures the location appears on the GUI map immediately.
+
+- `--from` — any existing location with coordinates
+- `--bearing` — degrees (0=N, 90=E, 180=S, 270=W)
+- `--distance` — meters
+- `--terrain` — terrain type for the connecting path
+
+### Connections [MANDATORY]
+
+**NEVER** use CORE `dm-location.sh connect` — it writes dict-format connections incompatible with world-travel's list format, resulting in invisible paths on GUI.
+
+Use the navigation manager for additional connections between existing locations:
+
+```bash
+bash .claude/additional/modules/world-travel/tools/dm-navigation.sh connect "A" "B" --terrain forest --distance 2000
+```
+
+If `dm-navigation.sh connect` is unavailable, add connections via `dm-navigation.sh add` (which auto-creates origin→new connection) or manually in `locations.json` using the list format:
+
+```json
+"connections": [
+  {"to": "Target", "path": "2000m на 45°", "distance_meters": 2000, "bearing": 45, "terrain": "forest"}
+]
+```
+
+**ALWAYS specify `--terrain`**. Default is `open` but DM should pick the correct terrain type for the area.
 
 **Route validation**: direct connections that pass through another location's radius are BLOCKED. Create intermediate connections instead (A→C, C→B).
 

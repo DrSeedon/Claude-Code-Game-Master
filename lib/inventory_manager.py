@@ -14,9 +14,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 
-PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
+sys.path.insert(0, str(Path(__file__).parent))
+# Infrastructure imports
+_infra_dir = Path(__file__).parent.parent / ".claude" / "additional" / "infrastructure"
+sys.path.insert(0, str(_infra_dir))
 from module_data import ModuleDataManager
+from currency import load_config, format_money, format_delta, parse_money, migrate_gold, can_afford
 
 
 ITEM_CATEGORIES = {
@@ -65,6 +68,7 @@ class InventoryManager:
         self.module_data_mgr = ModuleDataManager(campaign_path)
         self.npc_name = npc_name
         self.is_npc = npc_name is not None
+        self.currency_config = load_config(campaign_path)
         self.character = self._load_character()
         self.inventory = self._load_inventory()
         self.changes_log = []
@@ -79,6 +83,8 @@ class InventoryManager:
             raise FileNotFoundError(f"Character file not found: {self.character_file}")
         with open(self.character_file, 'r', encoding='utf-8') as f:
             char = json.load(f)
+        if char.get('money') is None:
+            char['money'] = migrate_gold(char.get('gold', 0), self.currency_config)
         cs_data = self.module_data_mgr.load("custom-stats")
         if cs_data:
             char['custom_stats'] = cs_data.get('character_stats', {})
@@ -95,6 +101,9 @@ class InventoryManager:
         if not npc.get('is_party_member'):
             raise ValueError(f"'{self.npc_name}' is not a party member. Use 'dm-npc.sh promote' first.")
         sheet = npc.get('character_sheet', {})
+        raw_money = sheet.get('money', None)
+        if raw_money is None:
+            raw_money = migrate_gold(sheet.get('gold', 0), self.currency_config)
         char = {
             'name': self.npc_name,
             'level': sheet.get('level', 1),
@@ -103,7 +112,7 @@ class InventoryManager:
             'hp': sheet.get('hp', {'current': 10, 'max': 10}),
             'ac': sheet.get('ac', 10),
             'stats': sheet.get('stats', {'str': 10, 'dex': 10, 'con': 10, 'int': 10, 'wis': 10, 'cha': 10}),
-            'gold': sheet.get('gold', 0),
+            'money': raw_money,
             'xp': sheet.get('xp', 0),
             'conditions': sheet.get('conditions', []),
         }
@@ -117,7 +126,7 @@ class InventoryManager:
             return
 
         custom_stats = self.character.pop('custom_stats', {})
-        save_data = {k: v for k, v in self.character.items() if k != "inventory"}
+        save_data = {k: v for k, v in self.character.items() if k not in ("inventory", "gold")}
         with open(self.character_file, 'w', encoding='utf-8') as f:
             json.dump(save_data, f, indent=2, ensure_ascii=False)
         if custom_stats:
@@ -132,7 +141,8 @@ class InventoryManager:
         sheet = npcs[self.npc_name].setdefault('character_sheet', {})
         sheet['hp'] = self.character.get('hp', {'current': 10, 'max': 10})
         sheet['ac'] = self.character.get('ac', 10)
-        sheet['gold'] = self.character.get('gold', 0)
+        sheet['money'] = self.character.get('money', 0)
+        sheet.pop('gold', None)
         xp = self.character.get('xp', {})
         sheet['xp'] = xp.get('current', 0) if isinstance(xp, dict) else xp
         sheet['stats'] = self.character.get('stats', {})
@@ -328,10 +338,10 @@ class InventoryManager:
         errors = []
 
         if 'gold' in operations:
-            current_gold = self.character.get("gold", 0)
-            new_gold = current_gold + operations['gold']
-            if new_gold < 0:
-                errors.append(f"Not enough gold: need {abs(operations['gold'])} gp, have {current_gold} gp")
+            current_money = self.character.get("money", 0)
+            delta = operations['gold']
+            if not can_afford(current_money, -delta) and delta < 0:
+                errors.append(f"Not enough money: need {format_money(abs(delta), self.currency_config)}, have {format_money(current_money, self.currency_config)}")
 
         if 'hp' in operations:
             hp = self.character.get("hp", {})
@@ -402,9 +412,9 @@ class InventoryManager:
             self.changes_log = []
 
             if 'gold' in operations:
-                old = self.character.get("gold", 0)
+                old = self.character.get("money", 0)
                 new = old + operations['gold']
-                self.character["gold"] = new
+                self.character["money"] = new
                 self.changes_log.append(("gold", old, new, operations['gold']))
 
             if 'hp' in operations:
@@ -530,9 +540,9 @@ class InventoryManager:
         print(f"\nWOULD APPLY ({who}):")
 
         if 'gold' in operations:
-            current = self.character.get("gold", 0)
+            current = self.character.get("money", 0)
             change = operations['gold']
-            print(f"  Gold: {current} gp → {current + change} gp ({change:+d})")
+            print(f"  Gold: {format_money(current, self.currency_config)} → {format_money(current + change, self.currency_config)} ({format_delta(change, self.currency_config)})")
 
         if 'hp' in operations:
             hp = self.character.get("hp", {})
@@ -586,7 +596,7 @@ class InventoryManager:
                 op = entry[0]
                 if op == "gold":
                     old, new, delta = entry[1:4]
-                    print(f"  Gold:     {old} gp → {new} gp ({delta:+d})")
+                    print(f"  Gold:     {format_money(old, self.currency_config)} → {format_money(new, self.currency_config)} ({format_delta(delta, self.currency_config)})")
                 elif op == "hp":
                     old, new, delta = entry[1:4]
                     hp = self.character.get("hp", {})
@@ -783,7 +793,7 @@ class InventoryManager:
     def show_inventory(self, category: Optional[str] = None):
         char = self.character
         name = char.get("name", "Character")
-        gold = char.get("gold", 0)
+        gold = char.get("money", 0)
         hp_data = char.get("hp", {})
         if isinstance(hp_data, dict):
             hp_cur = hp_data.get("current", 0)
@@ -806,7 +816,7 @@ class InventoryManager:
         print("=" * 68)
         print(f"  INVENTORY: {name}{npc_tag}")
         print("=" * 68)
-        print(f"  Gold: {gold} gp  |  HP: {hp_cur}/{hp_max}  |  XP: {xp_cur}/{xp_next}  |  Level: {level}")
+        print(f"  Gold: {format_money(gold, self.currency_config)}  |  HP: {hp_cur}/{hp_max}  |  XP: {xp_cur}/{xp_next}  |  Level: {level}")
         print(f"  Weight: {weight_info['total_weight']}/{weight_info['capacity']} kg  |  Status: {weight_info['status']}", end="")
         if weight_info['speed_penalty'] > 0 and not weight_info['immobile']:
             print(f"  |  Speed: −{weight_info['speed_penalty']} ft", end="")
@@ -978,7 +988,7 @@ def main():
 
     update_parser = subparsers.add_parser('update', help='Update inventory/stats')
     update_parser.add_argument('character', help='Character or NPC name')
-    update_parser.add_argument('--gold', type=int, help='Add/remove gold')
+    update_parser.add_argument('--gold', type=str, help='Add/remove money: int (base units) or "2g 5s", "-3gp"')
     update_parser.add_argument('--hp', type=int, help='Add/remove HP')
     update_parser.add_argument('--xp', type=int, help='Add/remove XP')
     update_parser.add_argument('--add', nargs='+', action='append', metavar='ITEM',
@@ -1015,7 +1025,7 @@ def main():
 
     loot_parser = subparsers.add_parser('loot', help='Quick loot')
     loot_parser.add_argument('character', help='Character or NPC name')
-    loot_parser.add_argument('--gold', type=int)
+    loot_parser.add_argument('--gold', type=str, help='Money to add: int (base units) or "2g 5s"')
     loot_parser.add_argument('--items', nargs='+', metavar='ITEM:QTY[:WEIGHT]')
     loot_parser.add_argument('--xp', type=int)
     loot_parser.add_argument('--test', action='store_true')
@@ -1065,7 +1075,13 @@ def main():
     elif args.command == 'update':
         operations = {}
         if args.gold:
-            operations['gold'] = args.gold
+            try:
+                operations['gold'] = parse_money(args.gold, manager.currency_config)
+                if str(args.gold).lstrip().startswith('-'):
+                    operations['gold'] = -abs(operations['gold'])
+            except ValueError:
+                print(f"[ERROR] Invalid gold amount: {args.gold}", file=sys.stderr)
+                sys.exit(1)
         if args.hp:
             operations['hp'] = args.hp
         if args.xp:
@@ -1110,7 +1126,13 @@ def main():
     elif args.command == 'loot':
         operations = {}
         if args.gold:
-            operations['gold'] = args.gold
+            try:
+                operations['gold'] = parse_money(args.gold, manager.currency_config)
+                if str(args.gold).lstrip().startswith('-'):
+                    operations['gold'] = -abs(operations['gold'])
+            except ValueError:
+                print(f"[ERROR] Invalid gold amount: {args.gold}", file=sys.stderr)
+                sys.exit(1)
         if args.xp:
             operations['xp'] = args.xp
         if args.items:

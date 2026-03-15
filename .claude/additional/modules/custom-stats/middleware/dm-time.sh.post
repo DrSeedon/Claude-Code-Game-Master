@@ -14,5 +14,10 @@ PROJECT_ROOT="$_dir"
 DATE="$2"
 shift 4 2>/dev/null || shift $#
 
+FILTERED_ARGS=()
+for arg in "$@"; do
+    case "$arg" in --resolve-actions) ;; *) FILTERED_ARGS+=("$arg") ;; esac
+done
+
 cd "$PROJECT_ROOT"
-uv run python "$MODULE_DIR/lib/survival_engine.py" time-post-hook "$DATE" "$@"
+uv run python "$MODULE_DIR/lib/survival_engine.py" time-post-hook "$DATE" "${FILTERED_ARGS[@]}"

@@ -1,6 +1,65 @@
 # Mass Combat — DM Rules
 
 Large-scale battle tracker. Every unit has individual HP, attacks individually, dies individually.
+Supports PEN/PROT armor penetration system.
+
+---
+
+## When to Use Mass Combat vs Firearms Combat
+
+**Both systems coexist in the same battle.**
+
+| Situation | Engine | Why |
+|-----------|--------|-----|
+| PC shoots at 1-3 enemies | `firearms-combat` | Full detail: ammo, fire modes, weapon choice |
+| PC alone vs 1-3 enemies, no allies | `firearms-combat` only | No mass combat needed |
+| NPC allies shoot at enemies | `mass-combat round` | Auto-resolve, fast |
+| NPC enemies shoot at other NPCs | `mass-combat round` | Auto-resolve, fast |
+| NPC enemies shoot at PC | `mass-combat attack` for roll, then `dm-player.sh hp` | Use NPC's PEN vs PC's PROT |
+| Large battle 10+ units, PC participating | Both: `firearms-combat` for PC turns, `mass-combat` for NPC turns |
+| Battle where PC is observer (Долг vs Свобода) | `mass-combat` only | PC not shooting |
+
+**Round flow in combined combat:**
+```
+1. next-round
+2. Enemy NPC groups fire (mass-combat round per group)
+   - Shots at PC → apply damage via dm-player.sh hp (respect PEN vs PC's PROT)
+   - Shots at allied NPCs → mass-combat handles it
+3. PC turn → firearms-combat (player chooses weapon, fire mode, target)
+4. Allied NPC groups fire (mass-combat round per group)
+5. status → show battlefield
+6. Narrate results
+```
+
+---
+
+## PEN/PROT — Armor Penetration
+
+Units can have `pen` (weapon penetration) and `prot` (armor protection). Both default to 0.
+
+### Damage Scaling
+
+| Condition | Damage | Tag |
+|-----------|--------|-----|
+| PEN > PROT | 100% (full) | `[FULL]` |
+| PROT/2 < PEN ≤ PROT | 50% (half) | `[HALF]` |
+| PEN ≤ PROT/2 | 25% (quarter) | `[QUARTER]` |
+
+Minimum 1 damage on hit. If both PEN and PROT are 0 (legacy units, unarmed) → full damage.
+
+### Where PEN/PROT Applies
+- `_resolve_attack()` — standard attacks (round, attack commands)
+- `_spray_fire()` — turret/heavy weapon spray uses source PEN vs each target's PROT
+- `aoe_damage()` — AOE uses `--pen` (CLI) or `source_pen` vs each target's PROT
+
+### Practical Examples
+```
+Бандит (PEN 1) → Наёмник (PROT 5): PEN ≤ PROT/2 → QUARTER damage
+Наёмник (PEN 4) → Бандит (PROT 1): PEN > PROT → FULL damage
+Слепой пёс (PEN 0) → Сталкер (PROT 2): PEN ≤ PROT/2 → QUARTER (claws vs armor)
+Слепой пёс (PEN 0) → Новичок (PROT 0): both 0 → FULL (claws vs bare skin)
+СВД (PEN 5) → Экзоскелет (PROT 6): PROT/2 < PEN ≤ PROT → HALF
+```
 
 ---
 
@@ -15,23 +74,21 @@ bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh init "Battle
 
 # 2. Add units from template (preferred — stats from module-data/mass-combat.json)
 bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh add \
-  --faction enemies --group B1-bridge --template B1 --count 6
+  --faction enemies --group Бандиты-север --template Бандит --count 6
 
 # 3. Add named units from template
 bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh add \
-  --faction allies --group clone-alpha --template Clone --count 1 --names "Хантер"
+  --faction allies --group Отряд --template Долговец --count 1 --names "Волк"
 
 # 4. Add custom units (no template needed)
 bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh add \
-  --faction allies --group heroes --type Jedi --count 1 \
-  --ac 16 --hp 38 --atk 7 --dmg "2d8+4" --names "Асока"
+  --faction allies --group Отряд --type Сталкер --count 1 \
+  --ac 14 --hp 30 --atk 6 --dmg "2d6+3" --pen 4 --prot 3 --names "Меченый"
 ```
 
 ---
 
 ## Round Flow
-
-Each round follows this pattern:
 
 ```
 1. DM: next-round
@@ -50,58 +107,59 @@ Each round follows this pattern:
 
 ### Group Attack — one group fires at enemy faction
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round B1-bridge
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round B1-bridge --count 4
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round B1-bridge --target-group clone-alpha
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round twilek-bravo --advantage
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round Бандиты-север --target-group Отряд
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round Бандиты-север --target-group Отряд --count 4
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh round Долговцы --target-faction enemies --advantage
 ```
 
 ### Single Attack — named unit picks targets
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Хантер --targets B1-01 B1-02
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Асока --targets B1-05 B1-06 --advantage
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Рекс --targets B1-03 --atk 5 --dmg "2d6"
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Волк --targets Бандит-01 Бандит-02
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Меченый --targets Снорк-01 --advantage
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh attack Снайпер-01 --targets Бандит-главарь-01 --atk 8 --dmg "2d10+4"
 ```
 
-### AOE — grenades, explosions, Force abilities
+### AOE — grenades, explosions, psi abilities
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh aoe "Thermal Detonator" \
-  --targets B1-01 B1-02 B1-03 --damage "3d6" --save-type DEX --save-dc 14
+# Граната Ф-1
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh aoe "Граната Ф-1" \
+  --targets Бандит-01 Бандит-02 Бандит-03 --damage "5d6" --save-type DEX --save-dc 14 --pen 5
 
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh aoe "Force Push (Асока)" \
-  --targets B1-04 B1-05 --damage "1d8" --save-type STR --save-dc 14
+# Удар землёй псевдогиганта (use turret command for aoe template units)
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh turret Псевдогигант-01 --target-group Отряд
+
+# Пси-волна контролёра
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh turret Контролёр-01 --target-group Сталкеры
 ```
 
 ### Direct Damage / Heal / Kill
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh damage Хантер 5
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh heal Рекс 8
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh kill B1-15
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh damage Волк 5
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh heal Меченый 8
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh kill Бандит-05
 ```
 
 ### Cover
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh cover clone-alpha
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh cover clone-alpha --remove
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh cover Отряд
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh cover Отряд --remove
 ```
 
-### Turret Fire (auto-pick targets, no repeats)
+### Turret Fire (AOE template units — auto-pick targets)
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh turret J1-01 --target-group alpha --targets 3
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh turret Пулемётчик-01 --target-group Бандиты --targets 3
 ```
 
 ### Move Units Between Groups
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh move B1-23 B1-24 --to J1-north
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh move Хантер Рекс --to gamma
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh move Снорк-01 Снорк-02 --to Отряд
 ```
 
 Move = reposition only, units skip their attack this turn (spent action moving).
 
 ### Test Mode (preview without saving)
 ```bash
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh --test round B1-patrol --target-group alpha
-bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh --test turret J1-01 --target-group bravo
+bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh --test round Бандиты --target-group Отряд
 ```
 
 ### Status / Round / End
@@ -116,7 +174,7 @@ bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh end
 ## DM Rules [MANDATORY]
 
 ### 1. Every Unit Attacks Individually
-Each unit in a group rolls its own d20. No grouped "the squad hits for 20 damage". Every B1, every clone, every fighter — individual roll.
+Each unit in a group rolls its own d20. No grouped "the squad hits for 20 damage". Individual rolls, individual PEN vs PROT.
 
 ### 2. One Group Per Command
 `round` fires ONE group. Not "all enemies". This gives space for player decisions between enemy actions.
@@ -125,92 +183,57 @@ Each unit in a group rolls its own d20. No grouped "the squad hits for 20 damage
 After each enemy group fires, check if the player wants to react. Cover, return fire, throw grenade, use ability.
 
 ### 4. Targeting by Unit Type [MANDATORY]
-Each template has a `targeting` field in module-data. Follow it:
+Each template has a `targeting` field. Follow it:
 
 | Targeting | Command | Used by | Why |
 |-----------|---------|---------|-----|
-| `random` | `round` | B1, militia, beasts | Dumb/untrained, fire at the crowd |
-| `aimed` | `attack` | Clones, heroes, commanders | Trained, pick specific targets |
-| `aoe` | `aoe` | Turrets, heavy weapons, grenades | Splash damage, DEX save for half |
+| `random` | `round` | Бандиты, мутанты, зомби, новички | Untrained, fire at the crowd |
+| `aimed` | `attack` | Военные, наёмники, долговцы, опытные сталкеры | Trained, pick specific targets |
+| `aoe` | `turret` | Пулемётчики, псевдогигант, контролёр, полтергейст | Splash damage, saves for half |
 
-**Never** use `attack` for B1 droids — they don't aim.
-**Never** use `round` for turrets — they splash.
-**Always** check template targeting before resolving attacks.
+### 5. PEN/PROT Determines Lethality [MANDATORY]
+Check PEN vs PROT before narrating. A бандит with ПМ (PEN 1) hitting a наёмник (PROT 5) does QUARTER damage — narrate the bullet bouncing off armor. A снайпер (PEN 5) hitting that same наёмник does FULL — narrate the armor getting punched through.
 
-### 5. Status After Every 2-3 Actions
+### 6. Status After Every 2-3 Actions
 Run `status` regularly so player sees the battlefield clearly.
 
-### 6. Cover Matters
-Groups in cover get +2 AC. Always declare cover BEFORE attacks resolve. Use `cover` command.
+### 7. Cover Matters
+Groups in cover get +2 AC. Always declare cover BEFORE attacks resolve.
 
-### 7. Templates Are Truth
-Unit stats come from `module-data/mass-combat.json` templates. Use `--template` when adding units. Only use manual `--type --ac --hp` for unique units not in templates (e.g. player character with custom stats from character.json).
+### 8. Templates Are Truth
+Unit stats come from `module-data/mass-combat.json` templates. Use `--template`. Only use manual stats for unique units not in templates.
 
-### 8. Zone Grouping [MANDATORY]
-Units that physically occupy the same area MUST be in the same group. When attackers fire at the group, random targeting distributes shots across ALL units in the zone — including vehicles, turrets, cover objects. AC naturally regulates hit probability (a turret at AC 18 gets hit much less than a B1 at AC 13 by the same attacker).
+### 9. Zone Grouping [MANDATORY]
+Units that physically occupy the same area MUST be in the same group. Random targeting distributes shots across ALL units in the zone. AC determines if the shot hits.
 
-**Examples:**
-- Turret + crew → same group. Shots randomly hit either crew or turret.
-- Soldiers behind sandbags → sandbags are a "unit" with high AC, low HP. Destroy them = no more cover.
-- BTR with exposed gunner → BTR (AC 19, HP 80) + gunner (AC 14, HP 20) in same group.
-- Explosive barrel near enemies → barrel (AC 8, HP 10) in the group. If hit → AOE on the group.
-
-**When the group attacks outward**, use `--count` to exclude non-combatant objects:
-```bash
-# Only 3 B1 crew shoot, not the turret itself
-round J1-west --target-group bravo --count 3
-# Turret fires separately as AOE
-turret J1-04 --target-group bravo
-```
-
-### 9. Attack Range [MANDATORY]
+### 10. Attack Range [MANDATORY]
 Units have `range`: `ranged` (default), `melee`, or `both`.
 
-- **ranged** — can attack any group (blasters, cannons)
-- **melee** — can ONLY attack targets in the SAME group (lightsabers, vibroswords). Must `move` to target group first!
-- **both** — can do either (BX commando droids)
+- **ranged** — can attack any group
+- **melee** — can ONLY attack targets in the SAME group. Must `move` first!
+- **both** — can do either
 
-Set via `--range melee` on add, or `"range"` in template/unit data. Melee units in `round` auto-skip if no enemies in their group. `attack` command blocks with error message.
+Melee units in `round` auto-skip if no enemies in their group.
 
-**Example:** Ahsoka (melee) wants to attack J1-north crew → must `move Асока --to J1-north` first (costs 1 round), then attack next round.
+### 11. Targeting Weight
+`weight` controls random targeting priority. Higher = more likely to be targeted by `round`. Default 1. Commanders and bosses typically weight 2-3.
 
-### 10. Targeting Weight [MANDATORY]
-Large objects absorb more incoming fire. `weight` controls how often a unit is randomly targeted by `round` and `turret` commands. `attack` (aimed shots) ignores weight — trained shooters pick their target.
-
-| Weight | Size | Examples |
-|--------|------|----------|
-| 1 | Person-sized (default) | B1, clone, tvi'lek, commander |
-| 2-3 | Vehicle/turret | J-1 cannon, speeder, mounted gun |
-| 4-5 | Large vehicle | AAT tank, AT-TE, dropship |
-
-Set via `--weight` on add or `"weight"` in template. Crew hiding behind turret (weight 3) gets targeted ~17% vs turret ~50% — instead of equal 25% each. AC still determines if the shot hits.
+### 12. PC Damage from Mass Combat
+When NPC hits PC via mass-combat:
+1. Note the raw damage from mass-combat output
+2. Apply PEN (attacker) vs PROT (PC's armor) scaling manually
+3. Use `dm-player.sh hp -X` to apply final damage
 
 ---
 
 ## Output Format
 
 ```
-═══ B1-bridge (6 units) ═══
-🎲 B1-01 → Хантер vs AC 14: [12]+3=15 — ✓ HIT → 1d6=[4]=4 dmg (HP→13)
-🎲 B1-02 → Рекс vs AC 14: [7]+3=10 — ✗ MISS
-🎲 B1-03 → Асока vs AC 16: [2]+3=5 — ✗ MISS
-🎲 B1-04 → Хантер vs AC 14: [18]+3=21 — ✓ HIT → 1d6=[3]=3 dmg (HP→10)
-🎲 B1-05 → Глюк vs AC 14: [1]+3=4 — 💀 FUMBLE
-🎲 B1-06 → Рекс vs AC 14: [15]+3=18 — ✓ HIT → 1d6=[5]=5 dmg (HP→23)
+═══ Бандиты-север (4 units) ═══
+🎲 Бандит-01 → Волк vs AC 15: [14]+3=17 — ✓ HIT → 1d6+1=[4]+1=5 PEN1vsPROT4[QUARTER] → 1 dmg (HP→25)
+🎲 Бандит-02 → Меченый vs AC 14: [7]+3=10 — ✗ MISS
+🎲 Бандит-03 → Долговец-01 vs AC 15: [18]+3=21 — ✓ HIT → 1d6+1=[5]+1=6 PEN1vsPROT4[QUARTER] → 1 dmg (HP→21)
+🎲 Бандит-04 → Волк vs AC 15: [1]+3=4 — 💀 FUMBLE
 ───
-Hits: 3/6 | Damage: 12 | Kills: 0
+Hits: 2/4 | Damage: 2 | Kills: 0
 ```
-
----
-
-## Stat Reference (Star Wars)
-
-| Unit | AC | HP | ATK | DMG | Notes |
-|------|----|----|-----|-----|-------|
-| B1 Battle Droid | 13 | 7 | +3 | 1d6 | Cheap, inaccurate |
-| B2 Super Battle Droid | 16 | 22 | +5 | 2d6 | Wrist blaster |
-| BX Commando Droid | 15 | 18 | +6 | 1d8+2 | Melee or ranged |
-| Tactical Droid | 15 | 40 | +5 | 2d6 | Commander |
-| Clone Trooper | 14 | 20 | +5 | 2d6 | DC-15S |
-| Tvi'lek Fighter | 12 | 10 | +3 | 1d6 | Light blaster |
-| J-1 Turret | 18 | 50 | +6 | 3d10 | Anti-air, slow |

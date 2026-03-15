@@ -134,6 +134,17 @@ class MassCombatEngine:
         return tmpl.get("range", "ranged")
 
     @staticmethod
+    def _apply_pen_prot(damage: int, pen: int, prot: int) -> Tuple[int, str]:
+        if pen == 0 and prot == 0:
+            return damage, ""
+        if pen > prot:
+            return max(1, damage), "FULL"
+        elif pen > prot / 2:
+            return max(1, damage // 2), "HALF"
+        else:
+            return max(1, damage // 4), "QUARTER"
+
+    @staticmethod
     def _roll_d20() -> int:
         return random.randint(1, 20)
 
@@ -181,7 +192,9 @@ class MassCombatEngine:
         dmg: str,
         names: Optional[List[str]] = None,
         weight: int = 1,
-        unit_range: Optional[str] = None
+        unit_range: Optional[str] = None,
+        pen: int = 0,
+        prot: int = 0
     ) -> str:
         self._load()
         if not self.state.get("active"):
@@ -217,6 +230,8 @@ class MassCombatEngine:
                 "max_hp": hp,
                 "atk": atk,
                 "dmg": dmg,
+                "pen": pen,
+                "prot": prot,
                 "weight": weight,
                 "alive": True,
                 "cover": False,
@@ -260,7 +275,8 @@ class MassCombatEngine:
         w = weight if weight is not None else tmpl.get("weight", 1)
         return self.add_units(
             faction, group, template_id, count,
-            tmpl["ac"], tmpl["hp"], tmpl["atk"], tmpl["dmg"], names, w
+            tmpl["ac"], tmpl["hp"], tmpl["atk"], tmpl["dmg"], names, w,
+            pen=tmpl.get("pen", 0), prot=tmpl.get("prot", 0)
         )
 
     def list_templates(self) -> str:
@@ -275,13 +291,16 @@ class MassCombatEngine:
             rng_c = C.BRED if rng == "melee" else (C.BMAGENTA if rng == "both" else C.DIM)
             atk_str = C.c(f"+{t['atk']}", C.BYELLOW)
             rng_tag = f" {C.c(rng, rng_c)}" if rng != "ranged" else ""
+            pen_val = t.get("pen", 0)
+            prot_val = t.get("prot", 0)
+            armor_str = f" {C.c('PEN', C.BYELLOW)}{C.c(pen_val, C.BYELLOW)}/{C.c('PROT', C.BCYAN)}{C.c(prot_val, C.BCYAN)}" if pen_val or prot_val else ""
             lines.append(
                 f"  {C.c(tid, C.BOLD):24s} "
                 f"AC {C.c(t['ac'], C.BCYAN):>14s} "
                 f"HP {C.c(t['hp'], C.BGREEN):>15s} "
                 f"ATK {atk_str} "
                 f"DMG {C.c(t['dmg'], C.BRED):>16s} "
-                f"[{C.c(tgt, tgt_c)}]{rng_tag} {C.c(notes, C.DIM)}"
+                f"[{C.c(tgt, tgt_c)}]{rng_tag}{armor_str} {C.c(notes, C.DIM)}"
             )
         return "\n".join(lines)
 
@@ -492,7 +511,8 @@ class MassCombatEngine:
         selected = self._weighted_sample(candidates, min(max_targets, len(candidates)))
         return self.aoe_damage(
             turret_name, selected, turret["dmg"],
-            save_type=save_type, save_dc=save_dc, half_on_save=True
+            save_type=save_type, save_dc=save_dc, half_on_save=True,
+            source_pen=turret.get("pen", 0)
         )
 
     def _spray_fire(
@@ -522,13 +542,19 @@ class MassCombatEngine:
             rolls_str = "+".join(str(r) for r in rolls)
             mod_str = f"{mod:+d}" if mod else ""
 
+            pen = source_unit.get("pen", 0)
+            prot = target.get("prot", 0)
+            dmg_after_armor, scaling = self._apply_pen_prot(dmg, pen, prot)
+
             save_roll = self._roll_d20()
             if save_roll >= save_dc:
-                actual = dmg // 2
+                actual = dmg_after_armor // 2
                 save_str = f" (save {C.c(f'[{save_roll}]', C.BGREEN)} vs DC {save_dc} ✓ → half)"
             else:
-                actual = dmg
+                actual = dmg_after_armor
                 save_str = f" (save {C.c(f'[{save_roll}]', C.BRED)} vs DC {save_dc} ✗)"
+
+            armor_str = f" {C.c('PEN', C.BYELLOW)}{pen}/{C.c('PROT', C.BCYAN)}{prot}[{scaling}]" if scaling else ""
 
             old_hp = target["hp"]
             target["hp"] -= actual
@@ -541,7 +567,7 @@ class MassCombatEngine:
             total_dmg += actual
             hp_c = C.hp_color(max(0, target["hp"]), target["max_hp"])
             lines.append(
-                f"  🔫 → {C.c(tgt_uid, C.BOLD)}: [{rolls_str}]{mod_str}={dmg}{save_str}"
+                f"  🔫 → {C.c(tgt_uid, C.BOLD)}: [{rolls_str}]{mod_str}={dmg}{armor_str}{save_str}"
                 f" → {C.c(actual, C.BYELLOW)} dmg (HP {old_hp}→{C.c(max(0, target['hp']), hp_c)}){killed}"
             )
 
@@ -561,7 +587,8 @@ class MassCombatEngine:
         damage_notation: str,
         save_type: Optional[str] = None,
         save_dc: Optional[int] = None,
-        half_on_save: bool = True
+        half_on_save: bool = True,
+        source_pen: int = 0
     ) -> str:
         self._load()
         if not self.state.get("active"):
@@ -580,7 +607,10 @@ class MassCombatEngine:
             if not target or not target["alive"]:
                 continue
 
-            actual_dmg = total
+            prot = target.get("prot", 0)
+            dmg_after_armor, scaling = self._apply_pen_prot(total, source_pen, prot)
+            actual_dmg = dmg_after_armor
+            armor_str = f" {C.c('PEN', C.BYELLOW)}{source_pen}/{C.c('PROT', C.BCYAN)}{prot}[{scaling}]" if scaling else ""
             save_result = ""
 
             if save_type and save_dc:
@@ -589,7 +619,7 @@ class MassCombatEngine:
                 save_total = save_roll + save_mod
                 if save_total >= save_dc:
                     if half_on_save:
-                        actual_dmg = total // 2
+                        actual_dmg = actual_dmg // 2
                     else:
                         actual_dmg = 0
                     save_result = f" (save {C.c(f'[{save_roll}]', C.BGREEN)} vs DC {save_dc} ✓ → {actual_dmg})"
@@ -605,7 +635,7 @@ class MassCombatEngine:
                 kills += 1
 
             hp_c = C.hp_color(max(0, target["hp"]), target["max_hp"])
-            lines.append(f"  {C.c(tname, C.BOLD)}: {C.c(actual_dmg, C.BYELLOW)} dmg → HP {old_hp}→{C.c(max(0, target['hp']), hp_c)}{save_result}{killed}")
+            lines.append(f"  {C.c(tname, C.BOLD)}:{armor_str} {C.c(actual_dmg, C.BYELLOW)} dmg → HP {old_hp}→{C.c(max(0, target['hp']), hp_c)}{save_result}{killed}")
 
         lines.append(C.c("───", C.DIM))
         kill_c = C.BRED if kills > 0 else C.DIM
@@ -747,7 +777,10 @@ class MassCombatEngine:
                     cover_mark = C.c(" 🛡", C.BCYAN) if u["cover"] else ""
                     rng = self._get_range(uid)
                     rng_tag = C.c(" ⚔", C.BMAGENTA) if rng == "melee" else ""
-                    lines.append(f"    {C.c(uid, C.BOLD, fc)}: HP {C.c(u['hp'], hp_c)}/{u['max_hp']} [{bar}]{cover_mark}{rng_tag}")
+                    pen_val = u.get("pen", 0)
+                    prot_val = u.get("prot", 0)
+                    armor_tag = f" {C.c('PEN', C.BYELLOW)}{C.c(pen_val, C.BYELLOW)}/{C.c('PROT', C.BCYAN)}{C.c(prot_val, C.BCYAN)}" if pen_val or prot_val else ""
+                    lines.append(f"    {C.c(uid, C.BOLD, fc)}: HP {C.c(u['hp'], hp_c)}/{u['max_hp']} [{bar}]{armor_tag}{cover_mark}{rng_tag}")
                 else:
                     lines.append(f"    {C.c(uid, C.DIM)}: 💀")
 
@@ -915,10 +948,22 @@ class MassCombatEngine:
                 if m:
                     dmg_notation = f"{int(m.group(1)) * 2}{m.group(2)}"
 
-            rolls, mod, damage = self._roll_damage(dmg_notation)
+            rolls, mod, raw_damage = self._roll_damage(dmg_notation)
             rolls_s = "+".join(str(r) for r in rolls)
             mod_s = f"{mod:+d}" if mod else ""
-            dmg_str = f" → {dmg_notation}=[{rolls_s}]{mod_s}={C.c(damage, C.BYELLOW)} dmg"
+
+            pen = attacker.get("pen", 0)
+            prot = defender.get("prot", 0)
+            damage, scaling = self._apply_pen_prot(raw_damage, pen, prot)
+
+            if scaling:
+                dmg_str = (
+                    f" → {dmg_notation}=[{rolls_s}]{mod_s}={raw_damage}"
+                    f" {C.c('PEN', C.BYELLOW)}{C.c(pen, C.BYELLOW)}vs{C.c('PROT', C.BCYAN)}{C.c(prot, C.BCYAN)}[{scaling}]"
+                    f" → {C.c(damage, C.BYELLOW)} dmg"
+                )
+            else:
+                dmg_str = f" → {dmg_notation}=[{rolls_s}]{mod_s}={C.c(damage, C.BYELLOW)} dmg"
 
             defender["hp"] -= damage
             if defender["hp"] <= 0:
@@ -979,6 +1024,8 @@ def main():
     p_add.add_argument("--names", nargs="*", help="Custom names for units")
     p_add.add_argument("--weight", type=int, default=None, help="Targeting weight (higher = more likely to be targeted)")
     p_add.add_argument("--range", dest="unit_range", choices=["melee", "ranged", "both"], help="Attack range")
+    p_add.add_argument("--pen", type=int, default=0, help="Weapon penetration rating")
+    p_add.add_argument("--prot", type=int, default=0, help="Armor protection rating")
 
     # templates
     sub.add_parser("templates")
@@ -1011,6 +1058,7 @@ def main():
     p_aoe.add_argument("--save-type", help="Save type (DEX, CON, etc)")
     p_aoe.add_argument("--save-dc", type=int, help="Save DC")
     p_aoe.add_argument("--no-half", action="store_true", help="No damage on save (instead of half)")
+    p_aoe.add_argument("--pen", type=int, default=0, help="Source penetration rating")
 
     # turret
     p_turret = sub.add_parser("turret")
@@ -1076,7 +1124,8 @@ def main():
                 args.faction, args.group, args.unit_type, args.count,
                 args.ac, args.hp, args.atk, args.dmg, args.names,
                 weight=args.weight or 1,
-                unit_range=args.unit_range
+                unit_range=args.unit_range,
+                pen=args.pen, prot=args.prot
             ))
         else:
             print("[ERROR] Use --template OR (--type --ac --hp --atk --dmg)")
@@ -1111,7 +1160,8 @@ def main():
             args.source, args.targets, args.damage,
             save_type=args.save_type,
             save_dc=args.save_dc,
-            half_on_save=not args.no_half
+            half_on_save=not args.no_half,
+            source_pen=args.pen
         ))
 
     elif args.command == "turret":

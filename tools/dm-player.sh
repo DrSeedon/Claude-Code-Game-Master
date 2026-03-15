@@ -104,46 +104,6 @@ case "$ACTION" in
         fi
         ;;
 
-    "inventory")
-        if [ -z "$1" ] || [ -z "$2" ]; then
-            echo "Usage: dm-player.sh inventory <character_name> <action> [item]"
-            echo ""
-            echo "Actions:"
-            echo "  add <item>    - Add item to inventory"
-            echo "  remove <item> - Remove item from inventory"
-            echo "  list          - Show all items"
-            echo ""
-            echo "Example: dm-player.sh inventory theron add \"Health Potion\""
-            echo "Example: dm-player.sh inventory theron remove \"Dagger\""
-            echo "Example: dm-player.sh inventory theron list"
-            exit 1
-        fi
-        if [ "$2" = "list" ]; then
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" inventory "$1" "$2"
-        else
-            if [ -z "$3" ]; then
-                echo "Error: Item name required for $2"
-                exit 1
-            fi
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" inventory "$1" "$2" "$3"
-        fi
-        ;;
-
-    "loot")
-        if [ -z "$1" ]; then
-            echo "Usage: dm-player.sh loot <character_name> --gold <amount> --items \"Item1\" \"Item2\" ..."
-            echo ""
-            echo "Examples:"
-            echo "  dm-player.sh loot Tandy --gold 4700 --items \"Silvered Shortsword\" \"Potion of Healing\""
-            echo "  dm-player.sh loot Tandy --items \"Scroll of Fireball\""
-            echo "  dm-player.sh loot Tandy --gold 10000"
-            echo ""
-            echo "Note: --gold value is in base currency units (copper pieces). 4700 cp = 47g 0s 0c"
-            exit 1
-        fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" loot "$@"
-        ;;
-
     "condition")
         if [ -z "$1" ] || [ -z "$2" ]; then
             echo "Usage: dm-player.sh condition <character_name> <action> [condition]"
@@ -181,9 +141,7 @@ case "$ACTION" in
         echo "  xp <name> +<amount>          - Award XP to character"
         echo "  hp <name> <+/-amount>        - Modify character HP"
         echo "  gold <name> [+/-amount]      - Modify or show character money (base units = copper)"
-        echo "  inventory <name> <action>    - Manage inventory (add/remove/list)"
         echo "  condition <name> <action>    - Manage conditions (add/remove/list)"
-        echo "  loot <name> --gold X --items - Batch add items + gold at once"
         echo "  level-check <name>           - Check XP and level status"
         echo "  save-json '<json>'           - Save complete character from JSON"
         echo ""

@@ -15,17 +15,26 @@ CHAR_FILE="$CAMPAIGN_DIR/character.json"
 
 [ -f "$INV_DATA" ] || exit 0
 
-uv run python - "$INV_DATA" "$CHAR_FILE" "$PARTY_DATA" << 'PYEOF'
+uv run python - "$INV_DATA" "$CHAR_FILE" "$PARTY_DATA" "$PROJECT_ROOT" << 'PYEOF'
 import json, sys, re, os
+from pathlib import Path
 
-inv_path, char_path, party_path = sys.argv[1], sys.argv[2], sys.argv[3]
+inv_path, char_path, party_path, project_root = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+sys.path.insert(0, str(Path(project_root) / "lib"))
+from currency import load_config, format_money, migrate_gold
+
+campaign_path = Path(char_path).parent
+currency_config = load_config(campaign_path)
 
 with open(inv_path) as f:
     inv = json.load(f)
 with open(char_path) as f:
     char = json.load(f)
 
-gold = char.get("gold", 0)
+raw_money = char.get("money", None)
+if raw_money is None:
+    raw_money = migrate_gold(char.get("gold", 0), currency_config)
 name = char.get("name", "?")
 hp = char.get("hp", {})
 hp_cur = hp.get("current", 0) if isinstance(hp, dict) else hp
@@ -69,7 +78,7 @@ else:
     status = "Immobile"
 
 print(f"🎒 INVENTORY — {name}")
-print(f"  HP: {hp_cur}/{hp_max} | LVL: {level} | XP: {xp_cur}/{xp_next} | Gold: {gold}")
+print(f"  HP: {hp_cur}/{hp_max} | LVL: {level} | XP: {xp_cur}/{xp_next} | Gold: {format_money(raw_money, currency_config)}")
 print(f"  Weight: {total_weight:.1f}/{capacity} kg ({status})")
 print()
 
