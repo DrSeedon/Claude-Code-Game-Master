@@ -90,16 +90,9 @@ case "$ACTION" in
             echo "Usage: dm-session.sh move <location>"
             exit 1
         fi
-        echo "Moving Party"
-        echo "============"
-        echo ""
         $PYTHON_CMD "$LIB_DIR/session_manager.py" move "$@"
         RESULT=$?
         if [ $RESULT -ne 0 ]; then exit $RESULT; fi
-
-        echo ""
-        echo "Pending Consequences:"
-        bash "$TOOLS_DIR/dm-consequence.sh" check
 
         # Auto-query RAG for new location context (DM-internal, minimal output)
         CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path 2>/dev/null)

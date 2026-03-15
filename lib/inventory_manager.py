@@ -585,62 +585,58 @@ class InventoryManager:
         who = self.character.get('name', 'Character')
         npc_tag = " [NPC]" if self.is_npc else ""
         print("=" * 68)
-        print(f"  INVENTORY UPDATE: {who}{npc_tag}")
-        print("=" * 68)
+        G = "\033[32m"
+        R = "\033[31m"
+        C = "\033[36m"
+        DM = "\033[2m"
+        RS = "\033[0m"
+        B = "\033[1m"
+
+        print(f"  {B}INVENTORY UPDATE:{RS} {who}{npc_tag}")
 
         stat_changes = [entry for entry in self.changes_log
                         if entry[0] in ("gold", "hp", "xp", "custom_stat")]
         if stat_changes:
-            print("\nCHANGES:")
             for entry in stat_changes:
                 op = entry[0]
                 if op == "gold":
                     old, new, delta = entry[1:4]
-                    print(f"  Gold:     {format_money(old, self.currency_config)} → {format_money(new, self.currency_config)} ({format_delta(delta, self.currency_config)})")
+                    color = G if delta >= 0 else R
+                    print(f"  💰 {format_money(old, self.currency_config)} → {C}{format_money(new, self.currency_config)}{RS} {color}({format_delta(delta, self.currency_config)}){RS}")
                 elif op == "hp":
                     old, new, delta = entry[1:4]
                     hp = self.character.get("hp", {})
                     max_hp = hp.get("max", hp) if isinstance(hp, dict) else self.character.get("max_hp", hp)
-                    print(f"  HP:       {old}/{max_hp} → {new}/{max_hp} ({delta:+d})")
+                    color = G if delta >= 0 else R
+                    print(f"  ❤️  {old}/{max_hp} → {C}{new}/{max_hp}{RS} {color}({delta:+d}){RS}")
                 elif op == "xp":
                     old, new, delta = entry[1:4]
-                    print(f"  XP:       {old} → {new} ({delta:+d})")
+                    print(f"  ⭐ {old} → {C}{new}{RS} {G}({delta:+d}){RS}")
                 elif op == "custom_stat":
                     stat_name, old, new, delta = entry[1:5]
-                    print(f"  {stat_name.capitalize()}: {old} → {new} ({delta:+d})")
+                    color = G if delta >= 0 else R
+                    print(f"  📊 {stat_name}: {old} → {C}{new}{RS} {color}({delta:+d}){RS}")
 
         adds = [data for op, *data in self.changes_log if op == "add"]
         if adds:
-            print("\nITEMS ADDED:")
             for item, old, new, qty in adds:
                 w = self._get_stackable_weight(item)
-                print(f"  + {item} x{qty} (total: {new}) [{w}kg ea]")
+                print(f"  {G}+{RS} {item} x{qty} {DM}[{w}kg ea]{RS}")
 
         removes = [data for op, *data in self.changes_log if op == "remove"]
         if removes:
-            print("\nITEMS REMOVED:")
             for item, old, new, qty in removes:
-                if new == 0:
-                    print(f"  - {item} x{qty} (depleted)")
-                else:
-                    print(f"  - {item} x{qty} (total: {old} → {new})")
+                print(f"  {R}−{RS} {item} x{qty}")
 
         unique_adds = [data for op, *data in self.changes_log if op == "add_unique"]
         if unique_adds:
-            print("\nUNIQUE ITEMS ADDED:")
             for item, *_ in unique_adds:
-                w = self._get_unique_weight(item)
-                print(f"  + {item} [{w}kg]")
+                print(f"  {G}+{RS} {item}")
 
         unique_removes = [data for op, *data in self.changes_log if op == "remove_unique"]
         if unique_removes:
-            print("\nUNIQUE ITEMS REMOVED:")
             for item, *_ in unique_removes:
-                print(f"  - {item}")
-
-        print("\n" + "=" * 68)
-        print("[SUCCESS] Transaction completed")
-        print("=" * 68)
+                print(f"  {R}−{RS} {item}")
 
     def _categorize_item(self, item_name: str) -> str:
         item_lower = item_name.lower()
@@ -787,6 +783,50 @@ class InventoryManager:
             )
         except Exception:
             pass
+
+    # --- Status (compact, for session start) ---
+
+    def show_status(self):
+        char = self.character
+        name = char.get("name", "Character")
+        money = char.get("money", 0)
+        hp = char.get("hp", {})
+        hp_cur = hp.get("current", 0) if isinstance(hp, dict) else hp
+        hp_max = hp.get("max", 0) if isinstance(hp, dict) else hp
+        xp = char.get("xp", {})
+        xp_cur = xp.get("current", 0) if isinstance(xp, dict) else xp
+        xp_next = xp.get("next_level", 300) if isinstance(xp, dict) else 300
+        level = char.get("level", 0)
+        weight_info = self.calculate_weight()
+
+        print(f"🎒 INVENTORY — {name}")
+        print(f"  HP: {hp_cur}/{hp_max} | LVL: {level} | XP: {xp_cur}/{xp_next} | Gold: {format_money(money, self.currency_config)}")
+        print(f"  Weight: {weight_info['total_weight']}/{weight_info['capacity']} kg ({weight_info['status']})")
+
+        stackable = self.inventory.get("stackable", {})
+        unique = self.inventory.get("unique", [])
+        if stackable:
+            print()
+            for item_name, val in stackable.items():
+                qty = val.get("qty", 0) if isinstance(val, dict) else val
+                w = val.get("weight", 0.5) if isinstance(val, dict) else 0.5
+                print(f"    {item_name:.<30s} x{qty}  ({w}kg ea = {qty*w:.1f}kg)")
+        if unique:
+            for item in unique:
+                print(f"    • {item}")
+
+        party_data = self.module_data_mgr.load("inventory-party")
+        if party_data:
+            print()
+            print("  Party Inventories:")
+            for pname, pdata in party_data.items():
+                p_stack = pdata.get("stackable", {})
+                p_uniq = pdata.get("unique", [])
+                p_w = sum(
+                    (v.get("qty", 0) * v.get("weight", 0.5) if isinstance(v, dict) else int(v) * 0.5)
+                    for v in p_stack.values()
+                )
+                print(f"    {pname}: {len(p_stack)} stackable, {len(p_uniq)} unique ({p_w:.1f}kg)")
 
     # --- Show ---
 
@@ -1030,6 +1070,8 @@ def main():
     loot_parser.add_argument('--xp', type=int)
     loot_parser.add_argument('--test', action='store_true')
 
+    subparsers.add_parser('status', help='Compact status for session start')
+
     drop_parser = subparsers.add_parser('drop', help='Drop item (combat)')
     drop_parser.add_argument('character', help='Character or NPC name')
     drop_parser.add_argument('item', help='Item to drop')
@@ -1049,6 +1091,11 @@ def main():
 
     campaign_name = active_campaign_file.read_text().strip()
     campaign_path = Path(f"world-state/campaigns/{campaign_name}")
+
+    if args.command == 'status':
+        manager = InventoryManager(campaign_path)
+        manager.show_status()
+        sys.exit(0)
 
     if args.command == 'party':
         manager = InventoryManager(campaign_path)

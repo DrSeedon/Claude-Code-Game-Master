@@ -605,7 +605,7 @@ class SurvivalEngine:
                 print(f"  ⚠️ {sc['name']}: {sc['message']}")
 
         if not stat_changes and not stat_consequences:
-            print("[OK] No survival effects triggered")
+            pass
 
     def _get_active_character_name(self) -> str:
         """Get active character name from campaign overview."""
@@ -703,10 +703,13 @@ class SurvivalEngine:
         data["precise_time"] = new_clock
         self.module_data_mgr.save("custom-stats", data)
 
+        C = "\033[36m"
+        DM = "\033[2m"
+        RS = "\033[0m"
         if elapsed_hours > 0:
-            print(f"\n⏰ {new_clock}, {date} (+{elapsed_hours:g}h)")
+            print(f"\n⏰ {C}{new_clock}{RS}, {date} {DM}(+{elapsed_hours:g}h){RS}")
         else:
-            print(f"\n⏰ {new_clock}, {date}")
+            print(f"\n⏰ {C}{new_clock}{RS}, {date}")
 
         if elapsed_hours > 0:
             self.tick(elapsed_hours, sleeping=sleeping)

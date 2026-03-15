@@ -31,7 +31,6 @@ class TimeManager:
             print(f"[ERROR] Failed to update time")
             return False
 
-        print(f"[SUCCESS] Time updated to: {time_of_day}, {date}")
         return True
 
     def get_time(self) -> dict:

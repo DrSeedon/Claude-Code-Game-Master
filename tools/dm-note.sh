@@ -24,7 +24,9 @@ if [ "$1" = "categories" ]; then
     exit $?
 elif [ "$#" -eq 2 ]; then
     $PYTHON_CMD -m lib.note_manager add "$1" "$2"
-    exit $?
+    CORE_RC=$?
+    dispatch_middleware_post "dm-note.sh" "$@"
+    exit $CORE_RC
 else
     echo "Usage: dm-note.sh <category> <fact>"
     exit 1

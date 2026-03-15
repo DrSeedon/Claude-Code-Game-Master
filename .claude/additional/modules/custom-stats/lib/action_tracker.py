@@ -9,7 +9,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from lib.campaign_manager import CampaignManager
 
 TRACKER_FILE = "module-data/action-tracker.json"
-WARN_THRESHOLD = 15
+WARN_THRESHOLD = 35
 
 
 def _get_campaign_dir():

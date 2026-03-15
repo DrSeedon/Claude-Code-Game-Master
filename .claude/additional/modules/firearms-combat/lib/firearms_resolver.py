@@ -517,9 +517,9 @@ class FirearmsCombatResolver:
         """Try to deduct ammo via inventory-system module, fall back to manual"""
         import subprocess
 
-        inventory_script = PROJECT_ROOT / ".claude" / "additional" / "modules" / "inventory-system" / "tools" / "dm-inventory.sh"
+        inventory_script = PROJECT_ROOT / "tools" / "dm-inventory.sh"
         if not inventory_script.exists():
-            print(f"[AMMO] inventory-system not available. Deduct manually: {quantity}x {ammo_type}")
+            print(f"[AMMO] dm-inventory.sh not found. Deduct manually: {quantity}x {ammo_type}")
             return
 
         try:

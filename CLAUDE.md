@@ -6,37 +6,55 @@
 - Tests: `uv run pytest`
 
 ## Architecture
-- `lib/` — upstream CORE only. No custom features.
+- `lib/` — CORE Python: dice, player, session, inventory, currency, NPCs, locations, plots, consequences, notes
 - `tools/` — thin bash wrappers + `dispatch_middleware` for module hooks
-- `.claude/additional/modules/` — self-contained gameplay modules (with module.json)
-- `.claude/additional/dm-slots/` — vanilla DM rules (27 slot files, loaded in advanced mode only)
-- `.claude/additional/infrastructure/` — advanced mode loaders (dm-active-modules-rules.sh, dm-campaign-rules.sh, dm-narrator.sh)
+- `.claude/additional/modules/` — optional gameplay modules (custom-stats, world-travel, mass-combat, firearms-combat)
+- `.claude/additional/dm-slots/` — DM rules (loaded into `/tmp/dm-rules.md`)
+- `.claude/additional/infrastructure/` — loaders (dm-active-modules-rules.sh, dm-campaign-rules.sh, dm-narrator.sh)
 - `.claude/additional/campaign-rules-templates/` — campaign rule templates
 - `.claude/additional/narrator-styles/` — narrator style definitions
 
-## Two gameplay modes
-- **Vanilla** (`/dm`): loads dm-slots via `dm-active-modules-rules.sh` → `/tmp/dm-rules.md` (pure vanilla slots, no module replacements)
-- **Advanced** (`/dm-continue`): loads dm-slots + module rules via `dm-active-modules-rules.sh` → `/tmp/dm-rules.md`, campaign rules via `dm-campaign-rules.sh`, narrator styles. Activated when `campaign-overview.json` has `"advanced_mode": true`
+## CORE tools (always available)
+| Tool | Lib | Purpose |
+|------|-----|---------|
+| `dm-roll.sh` | `dice.py` | Dice with `--label`, `--dc`, `--ac` |
+| `dm-inventory.sh` | `inventory_manager.py` | Items, weight, gold, HP/XP, transfers |
+| `dm-status.sh` | `inventory_manager.py status` | Compact inventory for session start |
+| `dm-player.sh` | `player_manager.py` | XP, HP, gold, conditions |
+| `dm-session.sh` | `session_manager.py` | Start/end, move, save/restore |
+| `dm-npc.sh` | `npc_manager.py` | NPCs, party, attitudes |
+| `dm-location.sh` | `location_manager.py` | Locations, connections |
+| `dm-note.sh` | `note_manager.py` | World facts |
+| `dm-plot.sh` | `plot_manager.py` | Quests, objectives |
+| `dm-consequence.sh` | `consequence_manager.py` | Timed events |
+| `dm-time.sh` | via middleware | Game clock |
+| `dm-campaign.sh` | `campaign_manager.py` | Campaign management |
 
-## Module pattern
+## Currency system
+- `lib/currency.py` — universal, configurable per campaign
+- Config in `campaign-overview.json` → `"currency"` section
+- Stored as single int in base units (copper for D&D)
+- `format_money(2537)` → `"25g 3s 7c"`, `parse_money("2gp 5sp")` → `250`
+
+## Module pattern (for optional modules)
 Each module in `.claude/additional/modules/<name>/`:
-- `middleware/<tool>.sh` — intercepts CORE tool calls, handles `--help`
+- `middleware/<tool>.sh` — intercepts CORE tool calls (pre-hook: exit 0 = handled)
+- `middleware/<tool>.sh.post` — runs after CORE (post-hook: always runs)
 - `lib/` — module Python code
 - `tools/` — module-specific CLI
-- `module.json` — metadata
+- `module.json` — metadata, replaces dm-slots
 
 ## Dev commands
 ```bash
 uv run pytest                                              # run all tests
 bash .claude/additional/infrastructure/tools/dm-module.sh list # list active modules
-git diff upstream/main -- lib/                              # check CORE purity
 ```
 
 ## Rules
 - CORE tools delegate to modules via `dispatch_middleware "tool.sh" "$ACTION" "$@" && exit $?`
-- `lib/` diff from upstream: only `ensure_ascii=False`, `require_active_campaign`, `name=None` auto-detect
-- Never add features to `lib/` — put them in modules
-- `/dm` vanilla: no external rules loaded. `/dm-continue` advanced: loads `.claude/additional/dm-slots/*.md` + module rules via `dm-active-modules-rules.sh`
+- Inventory data lives in `module-data/inventory-system.json` (not character.json)
+- Custom stats live in `module-data/custom-stats.json` (not character.json)
+- `campaign-overview.json` is for CORE data only (character, location, time, modules list, currency)
 
 ## Post-compaction recovery
 After context compaction, ALWAYS reload all DM rules before continuing gameplay:
@@ -47,4 +65,4 @@ bash .claude/additional/infrastructure/dm-active-modules-rules.sh --modules-only
 # Load campaign rules
 bash .claude/additional/infrastructure/dm-campaign-rules.sh | cat
 ```
-This ensures module-specific rules (inventory usage, combat mechanics, custom stats, etc.) are fresh in context and not forgotten after compaction.
+This ensures module-specific rules (combat mechanics, custom stats, etc.) are fresh in context and not forgotten after compaction.

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from currency import load_config, format_money, migrate_gold
 
 
 class SessionManager(EntityManager):
@@ -186,7 +187,7 @@ class SessionManager(EntityManager):
             "current_location": location
         }
 
-        print(f"[SUCCESS] Party moved from {old_location} to {location}")
+        print(f"📍 {old_location} → \033[1;36m{location}\033[0m")
         return result
 
     # ==================== Save System ====================
@@ -374,10 +375,14 @@ class SessionManager(EntityManager):
                 xp_val = xp.get('current', 0)
             else:
                 xp_val = xp
-            gold = char.get('gold', 0)
+            currency_config = load_config(self.campaign_dir)
+            raw_money = char.get('money', None)
+            if raw_money is None:
+                raw_money = migrate_gold(char.get('gold', 0), currency_config)
+            money_str = format_money(raw_money, currency_config)
             conditions = char.get('conditions', [])
             cond_str = ', '.join(conditions) if conditions else '(none)'
-            lines.append(f"{name} - Level {level} {race} {cls} | HP: {hp_cur}/{hp_max} | AC: {ac} | XP: {xp_val} | Gold: {gold}")
+            lines.append(f"{name} - Level {level} {race} {cls} | HP: {hp_cur}/{hp_max} | AC: {ac} | XP: {xp_val} | Gold: {money_str}")
             lines.append(f"Conditions: {cond_str}")
         else:
             lines.append("No character found.")
@@ -618,7 +623,7 @@ def main():
 
     if args.action == 'start':
         summary = manager.start_session()
-        print(json.dumps(summary, indent=2))
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
 
     elif args.action == 'end':
         summary_text = ' '.join(args.summary)
@@ -627,12 +632,11 @@ def main():
 
     elif args.action == 'status':
         status = manager.get_status()
-        print(json.dumps(status, indent=2))
+        print(json.dumps(status, indent=2, ensure_ascii=False))
 
     elif args.action == 'move':
         location = ' '.join(args.location)
-        result = manager.move_party(location)
-        print(json.dumps(result, indent=2))
+        manager.move_party(location)
 
     elif args.action == 'save':
         name = ' '.join(args.name)
@@ -645,7 +649,7 @@ def main():
     elif args.action == 'list-saves':
         saves = manager.list_saves()
         if saves:
-            print(json.dumps(saves, indent=2))
+            print(json.dumps(saves, indent=2, ensure_ascii=False))
         else:
             print("No saves found")
 

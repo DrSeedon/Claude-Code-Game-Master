@@ -174,8 +174,33 @@ class DiceRoller:
             return base
 
 
+def _dc_color(dc):
+    """DC difficulty gradient: green→yellow→orange→red→magenta→bold magenta."""
+    if dc <= 5:
+        return "\033[32m"
+    elif dc <= 10:
+        return "\033[92m"
+    elif dc <= 15:
+        return "\033[33m"
+    elif dc <= 20:
+        return "\033[91m"
+    elif dc <= 25:
+        return "\033[31m"
+    else:
+        return "\033[1;35m"
+
+
 def format_enhanced(result, label=None, dc=None, ac=None):
     """Format roll result with label, DC/AC check, and verdict. Used by dm-roll.sh."""
+    RS = "\033[0m"
+    C = "\033[36m"
+    G = "\033[32m"
+    BG = "\033[1;32m"
+    R = "\033[31m"
+    BR = "\033[1;31m"
+    BY = "\033[1;33m"
+    DM = "\033[2m"
+
     rolls = result.get("kept", result["rolls"])
     rolls_str = "+".join(str(r) for r in rolls)
 
@@ -184,34 +209,37 @@ def format_enhanced(result, label=None, dc=None, ac=None):
     nat20 = result.get("natural_20", False)
     nat1 = result.get("natural_1", False)
 
+    target = dc or ac
+    target_label = "DC" if dc else ("AC" if ac else None)
+
     header = "🎲"
     if label:
         header += f" {label}"
-    if dc:
-        header += f" vs DC {dc}:"
-    elif ac:
-        header += f" vs AC {ac}:"
+    if target_label:
+        tc = _dc_color(target)
+        header += f" vs {target_label} {tc}{target}{RS}:"
     else:
         header += ":"
 
-    roll_str = f"[{rolls_str}]"
+    roll_str = f"{C}[{rolls_str}]{RS}"
 
     if result["type"] in ("advantage", "disadvantage"):
         discarded_str = "+".join(str(r) for r in result["discarded"])
-        roll_str += f" ~({discarded_str})~"
+        roll_str += f" {DM}~({discarded_str})~{RS}"
 
     if mod != 0:
-        roll_str += f" {mod:+d}"
-    roll_str += f" = {total}"
+        mod_color = G if mod > 0 else R
+        roll_str += f" {mod_color}{mod:+d}{RS}"
+    roll_str += f" = {C}{total}{RS}"
 
     if nat20:
-        verdict = "⚔ CRITICAL!"
+        verdict = f"{BG}⚔ CRITICAL!{RS}"
     elif nat1:
-        verdict = "💀 FUMBLE!"
+        verdict = f"{BR}💀 FUMBLE!{RS}"
     elif dc:
-        verdict = "✓ SUCCESS" if total >= dc else "✗ FAIL"
+        verdict = f"{BG}✓ SUCCESS{RS}" if total >= dc else f"{BR}✗ FAIL{RS}"
     elif ac:
-        verdict = "✓ HIT!" if total >= ac else "✗ MISS"
+        verdict = f"{BG}✓ HIT!{RS}" if total >= ac else f"{BY}✗ MISS{RS}"
     else:
         verdict = ""
 
