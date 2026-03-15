@@ -631,7 +631,12 @@ class InventoryManager:
         unique_adds = [data for op, *data in self.changes_log if op == "add_unique"]
         if unique_adds:
             for item, *_ in unique_adds:
-                print(f"  {G}+{RS} {item}")
+                has_tag = bool(re.search(r'\[\d+(?:\.\d+)?kg\]', item))
+                if has_tag:
+                    print(f"  {G}+{RS} {item}")
+                else:
+                    w = self._get_unique_weight(item)
+                    print(f"  {G}+{RS} {item} {DM}[{w}kg]{RS}")
 
         unique_removes = [data for op, *data in self.changes_log if op == "remove_unique"]
         if unique_removes:
@@ -831,6 +836,15 @@ class InventoryManager:
     # --- Show ---
 
     def show_inventory(self, category: Optional[str] = None):
+        B = "\033[1m"
+        C = "\033[36m"
+        G = "\033[32m"
+        Y = "\033[33m"
+        R = "\033[31m"
+        DM = "\033[2m"
+        M = "\033[35m"
+        RS = "\033[0m"
+
         char = self.character
         name = char.get("name", "Character")
         gold = char.get("money", 0)
@@ -850,22 +864,25 @@ class InventoryManager:
             xp_next = 0
         level = char.get("level", 1)
 
-        weight_info = self.calculate_weight()
-        npc_tag = " [NPC]" if self.is_npc else ""
+        hp_pct = hp_cur / hp_max if hp_max > 0 else 1
+        hp_color = G if hp_pct > 0.5 else (Y if hp_pct > 0.25 else R)
 
-        print("=" * 68)
-        print(f"  INVENTORY: {name}{npc_tag}")
-        print("=" * 68)
-        print(f"  Gold: {format_money(gold, self.currency_config)}  |  HP: {hp_cur}/{hp_max}  |  XP: {xp_cur}/{xp_next}  |  Level: {level}")
-        print(f"  Weight: {weight_info['total_weight']}/{weight_info['capacity']} kg  |  Status: {weight_info['status']}", end="")
+        weight_info = self.calculate_weight()
+        w_status = weight_info['status']
+        w_color = G if w_status == "Normal" else (Y if w_status in ("Encumbered", "Heavy") else R)
+        npc_tag = f" {DM}[NPC]{RS}" if self.is_npc else ""
+
+        print(f"  {B}🎒 {name}{RS}{npc_tag}")
+        print(f"  {DM}────────────────────────────────────────{RS}")
+        print(f"  💰 {C}{format_money(gold, self.currency_config)}{RS}  │  ❤️  {hp_color}{hp_cur}/{hp_max}{RS}  │  ⭐ {C}{xp_cur}/{xp_next}{RS}  │  LVL {B}{level}{RS}")
+        print(f"  ⚖️  {w_color}{weight_info['total_weight']}/{weight_info['capacity']} kg{RS} ({w_color}{w_status}{RS})", end="")
         if weight_info['speed_penalty'] > 0 and not weight_info['immobile']:
-            print(f"  |  Speed: −{weight_info['speed_penalty']} ft", end="")
+            print(f"  │  {R}−{weight_info['speed_penalty']} ft{RS}", end="")
         if weight_info['disadvantage']:
-            print(f"  |  DISADVANTAGE", end="")
+            print(f"  │  {R}{B}DISADVANTAGE{RS}", end="")
         if weight_info['immobile']:
-            print(f"  |  CANNOT MOVE", end="")
+            print(f"  │  {R}{B}CANNOT MOVE{RS}", end="")
         print()
-        print("=" * 68)
 
         stackable = self.inventory.get("stackable", {})
         unique = self.inventory.get("unique", [])
@@ -875,14 +892,13 @@ class InventoryManager:
             if category not in list(ITEM_CATEGORIES.keys()) + ["misc"]:
                 print(f"[ERROR] Unknown category '{category}'.", file=sys.stderr)
                 return
-            print(f"  Filter: {category.upper()}")
-            print("-" * 68)
+            print(f"  {Y}Filter: {category.upper()}{RS}")
             stackable = {k: v for k, v in stackable.items()
                          if self._categorize_item(k) == category}
             unique = [i for i in unique if self._categorize_item(i) == category]
 
         if stackable:
-            print("\nSTACKABLE ITEMS:")
+            print(f"\n  {B}STACKABLE{RS}")
             items_display = []
             for item_name, val in sorted(stackable.items()):
                 qty = val.get("qty", 0) if isinstance(val, dict) else val
@@ -893,33 +909,36 @@ class InventoryManager:
                 max_len = max(len(n) for n, *_ in items_display)
                 for item_name, qty, w, total_w in items_display:
                     dots = '.' * (max_len + 3 - len(item_name))
-                    print(f"  {item_name} {dots} x{qty}  ({w}kg ea = {total_w}kg)")
-        else:
-            print("\nSTACKABLE ITEMS: (none)")
+                    print(f"  {item_name} {DM}{dots}{RS} {C}x{qty}{RS}  {DM}({w}kg ea = {total_w}kg){RS}")
 
         if unique:
-            print("\nUNIQUE ITEMS:")
+            print(f"\n  {B}UNIQUE{RS}")
             for item in unique:
                 w = self._get_unique_weight(item)
                 has_weight_tag = bool(re.search(r'\[\d+(?:\.\d+)?kg\]', item))
                 if has_weight_tag:
-                    print(f"  • {item}")
+                    print(f"  {M}•{RS} {item}")
                 else:
-                    print(f"  • {item} [{w}kg]")
-        else:
-            print("\nUNIQUE ITEMS: (none)")
+                    print(f"  {M}•{RS} {item} {DM}[{w}kg]{RS}")
+
+        if not stackable and not unique:
+            print(f"\n  {DM}(пусто){RS}")
 
         custom_stats = char.get("custom_stats", {})
         if custom_stats:
-            print("\nCUSTOM STATS:")
+            print(f"\n  {B}STATS{RS}")
             max_len = max(len(n) for n in custom_stats.keys())
             for stat_name, stat_data in custom_stats.items():
                 current = stat_data.get("current", stat_data.get("value", 0))
                 max_val = stat_data.get("max", 100)
-                dots = '.' * (max_len + 5 - len(stat_name))
-                print(f"  {stat_name.capitalize()} {dots} {current}/{max_val}")
+                pct = current / max_val if max_val > 0 else 0
+                bar_len = 10
+                filled = int(pct * bar_len)
+                bar = f"{C}{'█' * filled}{DM}{'░' * (bar_len - filled)}{RS}"
+                dots = '.' * (max_len + 3 - len(stat_name))
+                print(f"  {stat_name.capitalize()} {DM}{dots}{RS} {bar} {C}{current}{RS}/{max_val}")
 
-        print("\n" + "=" * 68)
+        print()
 
     def show_weight_breakdown(self):
         weight_info = self.calculate_weight()
