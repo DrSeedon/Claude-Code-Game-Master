@@ -90,6 +90,9 @@ case "$ACTION" in
         ;;
 
     "gold")
+        # Amount is in base currency units (copper pieces for D&D).
+        # Examples: gold <name> +250 (adds 250 cp = 2g 5s)
+        #           gold <name> +"2gp 5sp" (multi-denomination string)
         if [ -z "$1" ]; then
             $PYTHON_CMD "$LIB_DIR/player_manager.py" gold "_auto"
         elif [[ "$1" =~ ^[+-]?[0-9]+$ ]] && [ -z "$2" ]; then
@@ -131,9 +134,11 @@ case "$ACTION" in
             echo "Usage: dm-player.sh loot <character_name> --gold <amount> --items \"Item1\" \"Item2\" ..."
             echo ""
             echo "Examples:"
-            echo "  dm-player.sh loot Tandy --gold 47 --items \"Silvered Shortsword\" \"Potion of Healing\""
+            echo "  dm-player.sh loot Tandy --gold 4700 --items \"Silvered Shortsword\" \"Potion of Healing\""
             echo "  dm-player.sh loot Tandy --items \"Scroll of Fireball\""
-            echo "  dm-player.sh loot Tandy --gold 100"
+            echo "  dm-player.sh loot Tandy --gold 10000"
+            echo ""
+            echo "Note: --gold value is in base currency units (copper pieces). 4700 cp = 47g 0s 0c"
             exit 1
         fi
         $PYTHON_CMD "$LIB_DIR/player_manager.py" loot "$@"
@@ -175,7 +180,7 @@ case "$ACTION" in
         echo "  set <name>                   - Set character as current active PC"
         echo "  xp <name> +<amount>          - Award XP to character"
         echo "  hp <name> <+/-amount>        - Modify character HP"
-        echo "  gold <name> [+/-amount]      - Modify or show character gold"
+        echo "  gold <name> [+/-amount]      - Modify or show character money (base units = copper)"
         echo "  inventory <name> <action>    - Manage inventory (add/remove/list)"
         echo "  condition <name> <action>    - Manage conditions (add/remove/list)"
         echo "  loot <name> --gold X --items - Batch add items + gold at once"

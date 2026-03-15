@@ -15,6 +15,9 @@ CRITICAL HIT        → ⚔ CRITICAL!
 CRITICAL MISS       → 💀 FUMBLE!
 ```
 
+### Currency Display
+Format money using campaign's `currency.denominations` config from `campaign-overview.json`. Display as `Xg Ys Zc` (skip zero tiers if compact). Example: `2500 cp` → `25g 0s 0c`.
+
 ### Status Field Labels (Header Bar)
 Use in the STATUS position of scene headers:
 - `Normal` - No conditions
@@ -37,7 +40,7 @@ Use after enemy HP bars:
 ================================================================
   LOCATION: [Location Name]              TIME: [Time of Day] ([HH:MM] if available)
   ────────────────────────────────────────────────────────────
-  LVL: 5  │  HP: ████████░░░░ 18/24 ✓  │  XP: 1250  │  GP: 27  │  Normal
+  LVL: 5  │  HP: ████████░░░░ 18/24 ✓  │  XP: 1250  │  💰 27g 0s 0c  │  Normal
   [Custom Stats if present: Hunger: 72/100  │  Thirst: 58/100  │  Rad: 15/500]
 ================================================================
 
@@ -60,7 +63,7 @@ Use after enemy HP bars:
 ================================================================
   ⚔ COMBAT ⚔  [Location Name]             ROUND [#]
   ────────────────────────────────────────────────────────────
-  LVL: 5  │  HP: ██████░░░░░░ 14/24 ⚠  │  XP: 1250  │  GP: 27  │  Wounded
+  LVL: 5  │  HP: ██████░░░░░░ 14/24 ⚠  │  XP: 1250  │  💰 27g 0s 0c  │  Wounded
 ================================================================
 
   ENEMIES

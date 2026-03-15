@@ -2,7 +2,20 @@
 
 Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/HP/XP/stat changes — never edit JSON files manually.
 
-**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, gold, abilities, custom_stats) remain in `character.json`.
+**ALWAYS combine everything into ONE command.** Multiple flags in a single call — never split into separate invocations:
+```bash
+# ✅ RIGHT — one call
+bash .../dm-inventory.sh update "Char" --gold -810 --add-unique "АК-74 [3.5kg]" --add "Патроны" 30 0.01 --add "Аптечка" 1 0.3
+
+# ❌ WRONG — five separate calls for the same transaction
+bash .../dm-inventory.sh update "Char" --gold -810 ...
+bash .../dm-inventory.sh update "Char" --add "Патроны" 30 ...
+bash .../dm-inventory.sh update "Char" --add "Аптечка" 1 ...
+```
+
+**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, money, abilities, custom_stats) remain in `character.json`.
+
+**Currency:** Money is stored as a single integer in base units (copper pieces for D&D). Campaign denominations are defined in `campaign-overview.json` under `"currency"`. Display: `2537 cp` → `25g 3s 7c`. The `--gold` flag accepts base units (copper) or a string like `"2gp 5sp"`.
 
 ---
 
@@ -61,6 +74,7 @@ Dropped items are logged as `dm-note` at current location. Can be picked up late
 
 ```bash
 # All-in-one after combat (with optional weight per item)
+# --gold value is in base currency units (copper): 250 cp = 2g 5s 0c
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh loot "[char]" \
   --gold 250 --xp 150 --items "Medkit:2:0.3" "Ammo 5.56mm:60:0.02"
 ```
@@ -88,6 +102,7 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[
 ### Player buys / sells
 
 ```bash
+# --gold -500 = subtract 500 cp (= 5g); also accepts --gold "-5gp"
 bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh update "[char]" \
   --gold -500 --add-unique "Platemail Armor (AC 18) [30kg]"
 ```
@@ -117,7 +132,7 @@ bash .claude/additional/modules/inventory-system/tools/dm-inventory.sh weigh "[c
 
 | Flag | Purpose |
 |------|---------|
-| `--gold N` | Add/subtract gold (fails if insufficient) |
+| `--gold N` | Add/subtract money in base units (copper), or string `"2gp 5sp"` (fails if insufficient) |
 | `--hp N` | Modify HP (clamped to 0–max) |
 | `--xp N` | Add XP |
 | `--add "Item" N [W]` | Add stackable item (qty, optional weight in kg) |
