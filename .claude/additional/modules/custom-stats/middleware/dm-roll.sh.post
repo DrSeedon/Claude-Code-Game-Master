@@ -1,0 +1,16 @@
+#!/bin/bash
+# action-tracker post-hook for dm-roll.sh
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_dir="$MODULE_DIR"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+PROJECT_ROOT="$_dir"
+
+LABEL=""
+for arg in "$@"; do
+    if [ "$prev" = "--label" ]; then LABEL="$arg"; break; fi
+    prev="$arg"
+done
+[ -z "$LABEL" ] && LABEL="dice roll"
+
+cd "$PROJECT_ROOT"
+uv run python "$MODULE_DIR/lib/action_tracker.py" log "roll" "$LABEL" "dm-roll.sh" 2>/dev/null

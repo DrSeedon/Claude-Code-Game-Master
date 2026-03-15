@@ -1,0 +1,21 @@
+#!/bin/bash
+# action-tracker post-hook for dm-session.sh
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_dir="$MODULE_DIR"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+PROJECT_ROOT="$_dir"
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    move)
+        LOCATION="$*"
+        cd "$PROJECT_ROOT"
+        uv run python "$MODULE_DIR/lib/action_tracker.py" log "move" "→ $LOCATION" "dm-session.sh" 2>/dev/null
+        ;;
+    start)
+        cd "$PROJECT_ROOT"
+        uv run python "$MODULE_DIR/lib/action_tracker.py" log "session" "Session started" "dm-session.sh" 2>/dev/null
+        ;;
+esac

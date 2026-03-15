@@ -27,7 +27,12 @@
   ],
   "post_middleware": [
     "dm-time.sh.post",
-    "dm-consequence.sh.post"
+    "dm-consequence.sh.post",
+    "dm-roll.sh.post",
+    "dm-note.sh.post",
+    "dm-npc.sh.post",
+    "dm-plot.sh.post",
+    "dm-session.sh.post"
   ],
   "features": [
     "Define ANY custom stats — hunger, mana, sanity, reputation, fatigue, oxygen, fuel, stress...",
@@ -40,7 +45,8 @@
     "Dynamic rate modifiers — DM adjusts drain/regen speed on the fly (clothing, shelter, potions)",
     "Blocked-by conditions — positive rate blocked when prerequisite stat is too low",
     "Timed effects (buffs/debuffs) — temporary rate bonuses, per-hour changes, instant effects with auto-expiration",
-    "Timed consequences — dm-consequence.sh add ... --hours N auto-triggers after elapsed game time"
+    "Timed consequences — dm-consequence.sh add ... --hours N auto-triggers after elapsed game time",
+    "Action tracking — logs rolls, notes, NPC changes, quests, moves; warns after 15+ unresolved actions; dm-time.sh --resolve-actions clears pending"
   ],
   "adds_to_core": {
     "tools": [

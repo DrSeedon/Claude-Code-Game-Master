@@ -4,12 +4,18 @@
 
 ACTION="$1"
 
-[ "$ACTION" != "check" ] && exit 0
-
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _dir="$MODULE_DIR"
 while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
 PROJECT_ROOT="$_dir"
+
+if [ "$ACTION" = "add" ]; then
+    shift
+    cd "$PROJECT_ROOT"
+    uv run python "$MODULE_DIR/lib/action_tracker.py" log "consequence" "add: $*" "dm-consequence.sh" 2>/dev/null
+fi
+
+[ "$ACTION" != "check" ] && exit 0
 
 cd "$PROJECT_ROOT"
 uv run python - <<'PYEOF'

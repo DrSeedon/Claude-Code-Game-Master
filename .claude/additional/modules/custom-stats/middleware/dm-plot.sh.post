@@ -1,0 +1,16 @@
+#!/bin/bash
+# action-tracker post-hook for dm-plot.sh
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_dir="$MODULE_DIR"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+PROJECT_ROOT="$_dir"
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    add|update|complete|fail|objective)
+        cd "$PROJECT_ROOT"
+        uv run python "$MODULE_DIR/lib/action_tracker.py" log "quest" "$ACTION $*" "dm-plot.sh" 2>/dev/null
+        ;;
+esac

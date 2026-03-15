@@ -173,40 +173,6 @@
       "architecture": "Middleware hooks into dm-player.sh (show custom stats), dm-consequence.sh (timed consequences with --hours). Post-hooks on dm-time.sh (tick stats + check timed consequences) and dm-consequence.sh (show remaining hours on check). Zero hardcoded stat names — all defined in module-data/custom-stats.json.",
       "replaces": []
     },
-    "action-tracker": {
-      "id": "action-tracker",
-      "name": "Action Tracker",
-      "version": "1.0.0",
-      "author": "DM System",
-      "description": "Tracks DM actions and warns when too many happen without advancing game time. Prevents time desync.",
-      "category": "dm-tools",
-      "tags": [
-        "time",
-        "tracking",
-        "quality"
-      ],
-      "enabled_by_default": false,
-      "dependencies": [],
-      "incompatible_with": [],
-      "middleware": [],
-      "post_middleware": [
-        "dm-roll.sh.post",
-        "dm-session.sh.post",
-        "dm-note.sh.post",
-        "dm-npc.sh.post",
-        "dm-plot.sh.post",
-        "dm-consequence.sh.post",
-        "dm-time.sh.post"
-      ],
-      "features": [
-        "Logs every significant DM action to campaign action-tracker.json",
-        "Warns after 15+ unresolved actions that time should be advanced",
-        "dm-time.sh --resolve-actions moves pending to accounted with elapsed time",
-        "Full action history for session review"
-      ],
-      "adds_to_core": {},
-      "replaces": []
-    },
     "world-travel": {
       "id": "world-travel",
       "name": "World Travel (Navigation + Encounters)",
@@ -354,9 +320,7 @@
       ],
       "enabled_by_default": false,
       "dependencies": [],
-      "optional_dependencies": [
-        "inventory-system"
-      ],
+      "optional_dependencies": [],
       "incompatible_with": [],
       "middleware": [],
       "features": [
@@ -366,7 +330,7 @@
         "Critical hit mechanics (2× dice on nat 20)",
         "Multi-target distribution (full-auto)",
         "Auto XP tracking",
-        "Auto ammo deduction (via inventory-system if active)",
+        "Auto ammo deduction (via CORE dm-inventory.sh)",
         "Test mode for dry runs"
       ],
       "adds_to_core": {
