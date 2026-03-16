@@ -16,6 +16,7 @@ CHAR_FILE="$CAMPAIGN_DIR/character.json"
 
 uv run python - "$MODULE_DATA" "$CHAR_FILE" << 'PYEOF'
 import json, sys
+from pathlib import Path
 
 md_path, char_path = sys.argv[1], sys.argv[2]
 
@@ -38,8 +39,29 @@ try:
 except Exception:
     pass
 
-print("📊 CUSTOM STATS")
-print(f"  ⏰ Game Clock: {precise_time}")
+C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+G = "\033[32m"; Y = "\033[33m"; R = "\033[31m"
+
+game_date = md.get("game_date")
+cal_date_str = ""
+if game_date:
+    _project = next((p for p in Path(md_path).parents if (p / ".git").exists()), None)
+    if _project:
+        sys.path.insert(0, str(_project))
+        _campaign = Path(md_path).parent.parent
+        try:
+            from lib.calendar import load_config as _load_cal, format_date as _fmt_date, weekday as _wd
+            _cal = _load_cal(_campaign)
+            _d_str = _fmt_date(game_date, _cal)
+            _w_str = _wd(game_date, _cal)
+            cal_date_str = f"  📅 {Y}{_w_str}{RS}, {_d_str}" if _w_str else f"  📅 {_d_str}"
+        except Exception:
+            pass
+
+print(f"{B}📊 CUSTOM STATS{RS}")
+print(f"  ⏰ Game Clock: {C}{precise_time}{RS}")
+if cal_date_str:
+    print(cal_date_str)
 print()
 
 for name, info in stats.items():
@@ -55,18 +77,22 @@ for name, info in stats.items():
     per_h = rule.get("per_hour", 0)
     sleep_r = rule.get("sleep_rate", None)
 
-    rate_str = f"{per_h:+}/h"
+    def fmt_r(v):
+        if v == 0: return "0"
+        if abs(v) < 0.1: return f"{v*24:+.1f}/d"
+        return f"{v:+.1f}/h"
+    eff = per_h + mod
+    rate_str = fmt_r(eff)
     if sleep_r is not None:
-        rate_str += f" (sleep: {sleep_r:+}/h)"
-    if mod != 0:
-        rate_str += f" [modifier: {mod:+}]"
+        rate_str += f" (sleep: {fmt_r(sleep_r)})"
 
     pct = (cur - mn) / (mx - mn) * 100 if mx > mn else 0
     bar_len = 20
     filled = int(pct / 100 * bar_len)
-    bar = "█" * filled + "░" * (bar_len - filled)
+    bar_color = G if pct < 30 else Y if pct < 60 else R
+    bar = f"{bar_color}{'█' * filled}{DM}{'░' * (bar_len - filled)}{RS}"
 
-    print(f"  {name:12s} {bar} {int(cur):>3}/{mx}  rate: {rate_str}")
+    print(f"  {name:12s} {bar} {C}{int(cur):>3}{RS}/{mx}  rate: {DM}{rate_str}{RS}")
 
 if consequences:
     print()

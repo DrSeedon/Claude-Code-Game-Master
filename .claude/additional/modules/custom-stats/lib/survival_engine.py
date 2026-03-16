@@ -126,17 +126,21 @@ class SurvivalEngine:
             print(f"[INFO] {char_name} has no custom stats")
             return {}
 
-        print(f"Custom Stats for {char_name}:")
+        C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+        Y = "\033[33m"; R = "\033[31m"; G = "\033[32m"
+        print(f"  {B}📊 CUSTOM STATS:{RS} {char_name}")
         for stat_name, stat_data in custom_stats.items():
             current = stat_data['current']
             max_val = stat_data.get('max')
             if max_val is not None:
                 bar_len = 20
-                fill = int((current / max_val) * bar_len)
-                bar = '█' * fill + '░' * (bar_len - fill)
-                print(f"  {stat_name}: {bar} {current}/{max_val}")
+                pct = current / max_val if max_val > 0 else 0
+                fill = int(pct * bar_len)
+                bar_color = G if pct < 0.3 else Y if pct < 0.6 else R
+                bar = f"{bar_color}{'█' * fill}{DM}{'░' * (bar_len - fill)}{RS}"
+                print(f"  {stat_name:12s} {bar} {C}{int(current):>3}{RS}/{max_val}")
             else:
-                print(f"  {stat_name}: {current}")
+                print(f"  {stat_name}: {C}{current}{RS}")
 
         return custom_stats
 
@@ -329,13 +333,25 @@ class SurvivalEngine:
                 'blocked': blocked, 'effective': effective
             })
 
-        print(f"\nRate Table:")
-        print(f"  {'Stat':<12} {'Base':>6} {'Mod':>6} {'Effects':>8} {'Blocked':>8} {'Effective':>10}")
-        print(f"  {'─'*12} {'─'*6} {'─'*6} {'─'*8} {'─'*8} {'─'*10}")
+        def _fmt_rate(v):
+            if v == 0:
+                return "0"
+            if abs(v) < 0.1:
+                daily = v * 24
+                return f"{daily:+.1f}/d"
+            return f"{v:+.1f}/h"
+
+        C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+        G = "\033[32m"; R = "\033[31m"
+        print(f"\n  {B}Rate Table:{RS}")
+        print(f"  {'Stat':<12} {'Base':>8} {'Mod':>8} {'Effects':>8} {'Blocked':>8} {'Effective':>10}")
+        print(f"  {'─'*12} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*10}")
         for r in rows:
-            bl = 'YES' if r['blocked'] else ''
-            eff_str = f"{r['effect_bonus']:>+8.1f}" if r['effect_bonus'] != 0 else f"{'':>8}"
-            print(f"  {r['stat']:<12} {r['base']:>+6.1f} {r['modifier']:>+6.1f} {eff_str} {bl:>8} {r['effective']:>+10.1f}")
+            bl = f'{R}YES{RS}' if r['blocked'] else ''
+            eff_str = _fmt_rate(r['effect_bonus']) if r['effect_bonus'] != 0 else ''
+            eff_val = r['effective']
+            eff_color = G if eff_val < 0 else R if eff_val > 0 else DM
+            print(f"  {r['stat']:<12} {_fmt_rate(r['base']):>8} {_fmt_rate(r['modifier']):>8} {eff_str:>8} {bl:>8} {eff_color}{_fmt_rate(eff_val):>10}{RS}")
 
         return rows
 
@@ -593,16 +609,20 @@ class SurvivalEngine:
 
     def _print_report(self, stat_changes: list, stat_consequences: list):
         """Print survival tick report."""
+        C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; Y = "\033[33m"
+        B = "\033[1m"; RS = "\033[0m"
         if stat_changes:
-            print("\nSurvival Effects:")
+            print(f"\n  {B}⏱️  Survival Effects:{RS}")
             for change in stat_changes:
-                sign = '+' if change['change'] > 0 else ''
-                print(f"  {change['stat']}: {change['old']} → {change['new']} ({sign}{change['change']:.1f})")
+                delta = change['change']
+                color = R if delta > 0 else G
+                sign = '+' if delta > 0 else ''
+                print(f"  📊 {change['stat']}: {change['old']} → {C}{change['new']}{RS} {color}({sign}{delta:.1f}){RS}")
 
         if stat_consequences:
-            print("\nStat Consequences:")
+            print(f"\n  {B}⚠️  Stat Consequences:{RS}")
             for sc in stat_consequences:
-                print(f"  ⚠️ {sc['name']}: {sc['message']}")
+                print(f"  {Y}⚠ {sc['name']}:{RS} {sc['message']}")
 
         if not stat_changes and not stat_consequences:
             pass
@@ -670,10 +690,8 @@ class SurvivalEngine:
     def time_post_hook(self, date: str, elapsed_hours: float = -1,
                        set_time: str = None, sleeping: bool = False) -> bool:
         """
-        Post-hook for dm-time.sh. Updates precise clock in module-data,
-        ticks stats if elapsed, checks timed consequences.
-
-        Called from dm-time.sh.post with parsed args.
+        Post-hook for dm-time.sh. Updates precise clock + game_date in module-data,
+        auto-advances calendar days on midnight crossings, ticks stats.
         """
         data = self.module_data_mgr.load("custom-stats")
         if not data or not data.get('enabled'):
@@ -681,6 +699,21 @@ class SurvivalEngine:
 
         clock = data.get("precise_time", "08:00")
         old_h, old_m = map(int, clock.split(":"))
+
+        try:
+            from lib.calendar import load_config as load_cal, parse_date, format_date, advance_hours, weekday
+            campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+            cal_config = load_cal(campaign_dir) if campaign_dir else None
+        except Exception:
+            cal_config = None
+
+        game_date = data.get("game_date")
+        if not game_date and cal_config and date:
+            try:
+                game_date = parse_date(date, cal_config)
+                data["game_date"] = game_date
+            except (ValueError, KeyError):
+                pass
 
         if set_time:
             new_h, new_m = map(int, set_time.split(":"))
@@ -700,16 +733,46 @@ class SurvivalEngine:
             h, m = old_h, old_m
 
         new_clock = f"{h:02d}:{m:02d}"
+
+        if game_date and cal_config and elapsed_hours > 0:
+            new_date, new_clock = advance_hours(game_date, clock, elapsed_hours, cal_config)
+            game_date = new_date
+            data["game_date"] = game_date
+            h, m = map(int, new_clock.split(":"))
+
         data["precise_time"] = new_clock
         self.module_data_mgr.save("custom-stats", data)
+
+        if game_date and cal_config:
+            try:
+                from lib.campaign_manager import CampaignManager
+                from lib.json_ops import JsonOperations
+                campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+                if campaign_dir:
+                    json_ops = JsonOperations(str(campaign_dir))
+                    overview = json_ops.load_json("campaign-overview.json")
+                    overview["current_date"] = format_date(game_date, cal_config)
+                    overview["time_of_day"] = new_clock
+                    json_ops.save_json("campaign-overview.json", overview)
+            except Exception:
+                pass
 
         C = "\033[36m"
         DM = "\033[2m"
         RS = "\033[0m"
+        Y = "\033[33m"
+
+        date_display = format_date(game_date, cal_config) if (game_date and cal_config) else date
+        wd = ""
+        if game_date and cal_config:
+            wd_str = weekday(game_date, cal_config)
+            if wd_str:
+                wd = f"{Y}{wd_str}{RS}, "
+
         if elapsed_hours > 0:
-            print(f"\n⏰ {C}{new_clock}{RS}, {date} {DM}(+{elapsed_hours:g}h){RS}")
+            print(f"\n⏰ {C}{new_clock}{RS}, {wd}{date_display} {DM}(+{elapsed_hours:g}h){RS}")
         else:
-            print(f"\n⏰ {C}{new_clock}{RS}, {date}")
+            print(f"\n⏰ {C}{new_clock}{RS}, {wd}{date_display}")
 
         if elapsed_hours > 0:
             self.tick(elapsed_hours, sleeping=sleeping)
@@ -858,7 +921,9 @@ def main():
                 try:
                     amount = float(amount_str)
                     result = engine.modify_custom_stat(name=name, stat=stat, amount=amount)
-                    print(f"[SUCCESS] {stat}: {result['old_value']} → {result['new_value']} ({amount:+.1f})")
+                    C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; RS = "\033[0m"
+                    color = G if amount >= 0 else R
+                    print(f"  📊 {stat}: {result['old_value']} → {C}{result['new_value']}{RS} {color}({amount:+.1f}){RS}")
                 except ValueError:
                     print(f"[ERROR] Invalid amount: {amount_str}")
                     sys.exit(1)
@@ -875,19 +940,31 @@ def main():
         elif args.action == 'custom-stats-list':
             stats = engine.list_custom_stats(name=args.name)
             char_name = args.name or engine._get_active_character_name()
-            print(f"Custom Stats for {char_name}:")
+            C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+            G = "\033[32m"; Y = "\033[33m"; R = "\033[31m"
+            print(f"  {B}📊 CUSTOM STATS:{RS} {char_name}")
             for stat_name, stat_data in stats.items():
                 current = stat_data['current']
                 max_val = stat_data.get('max')
                 if max_val is not None:
-                    print(f"  {stat_name}: {current}/{max_val}")
+                    bar_len = 20
+                    pct = current / max_val if max_val > 0 else 0
+                    fill = int(pct * bar_len)
+                    bar_color = G if pct < 0.3 else Y if pct < 0.6 else R
+                    bar = f"{bar_color}{'█' * fill}{DM}{'░' * (bar_len - fill)}{RS}"
+                    print(f"  {stat_name:12s} {bar} {C}{int(current):>3}{RS}/{max_val}")
                 else:
-                    print(f"  {stat_name}: {current}")
+                    print(f"  {stat_name}: {C}{current}{RS}")
 
         elif args.action == 'rate':
             value_str = ' '.join(args.value)
             result = engine.set_rate_modifier(args.stat, value_str)
-            print(f"[SUCCESS] {args.stat} rate modifier: {result['old_modifier']:+.1f} → {result['new_modifier']:+.1f}")
+            C = "\033[36m"; Y = "\033[33m"; RS = "\033[0m"
+            def _fmt_r(v):
+                if v == 0: return "0"
+                if abs(v) < 0.1: return f"{v*24:+.1f}/d"
+                return f"{v:+.1f}/h"
+            print(f"  📊 {args.stat} rate: {_fmt_r(result['old_modifier'])} → {C}{_fmt_r(result['new_modifier'])}{RS}")
 
         elif args.action == 'rates':
             engine.show_rates()

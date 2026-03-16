@@ -135,12 +135,17 @@ def main():
 
     elif args.action == 'check':
         pending = manager.check_pending()
+        untimed = [c for c in pending if 'trigger_hours' not in c]
+        timed = [c for c in pending if 'trigger_hours' in c]
         if not pending:
             print("No pending consequences")
         else:
-            print(f"{len(pending)} pending consequences:")
-            for c in pending:
-                print(f"  [{c['id']}] {c['consequence']} (triggers: {c['trigger']})")
+            if untimed:
+                print(f"{len(untimed)} pending consequences:")
+                for c in untimed:
+                    print(f"  [{c['id']}] {c['consequence']} (triggers: {c['trigger']})")
+            if not untimed and timed:
+                print(f"{len(timed)} timed consequence(s) (see below)")
 
     elif args.action == 'resolve':
         if not manager.resolve(args.id):

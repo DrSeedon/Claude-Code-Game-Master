@@ -13,9 +13,9 @@ from typing import Dict, List, Optional, Union
 DEFAULT_CONFIG = {
     "base": "cp",
     "denominations": [
-        {"id": "cp", "name": "медяк", "symbol": "c", "rate": 1},
-        {"id": "sp", "name": "серебряк", "symbol": "s", "rate": 10},
-        {"id": "gp", "name": "золотой", "symbol": "g", "rate": 100},
+        {"id": "cp", "name": "copper", "symbol": "c", "rate": 1},
+        {"id": "sp", "name": "silver", "symbol": "s", "rate": 10},
+        {"id": "gp", "name": "gold", "symbol": "g", "rate": 100},
     ]
 }
 

@@ -61,7 +61,7 @@ bash tools/dm-campaign.sh switch "<CAMPAIGN_NAME>"
 
 **If Classic** → Write `"advanced_mode": false` to campaign-overview.json, then skip to PHASE 2.
 
-**If Advanced** → Write `"advanced_mode": true` to campaign-overview.json, then run PHASES 1.5–1.8 (below) before continuing to PHASE 2.
+**If Advanced** → Write `"advanced_mode": true` to campaign-overview.json, then run PHASES 1.5–1.9 (below) before continuing to PHASE 2.
 
 ---
 
@@ -241,6 +241,73 @@ The DM will load and enforce these rules every session via `/dm-continue`.
 If user describes custom mechanics not covered by templates:
 - Generate a `campaign-rules.md` manually based on their description
 - Follow the same section structure as built-in templates (eras/resources/combat/diplomacy etc.)
+
+---
+
+## PHASE 1.9: CURRENCY & CALENDAR (Advanced only)
+
+Configure campaign-specific currency and calendar systems. Both use the same pattern: config in `campaign-overview.json`, defaults if skipped.
+
+### Currency
+
+Ask the user what currency system fits the setting:
+
+```
+================================================================
+  CURRENCY SYSTEM
+  ────────────────────────────────────────────────────────────
+  Default: D&D standard (медяк/серебряк/золотой, 1:10:100)
+
+  Options:
+  [1] D&D standard (cp/sp/gp)
+  [2] Single currency (e.g. credits, caps, coins)
+  [3] Custom — define your own denominations
+
+  Type number or ENTER for default.
+================================================================
+```
+
+- **D&D standard**: skip, default already works
+- **Single currency**: write `"currency"` to campaign-overview.json with one denomination
+- **Custom**: ask user for denomination names, symbols, exchange rates. Write to `"currency"` section
+
+Format: `{"base": "<smallest_id>", "denominations": [{"id": "...", "name": "...", "symbol": "...", "rate": N}, ...]}`
+Rates are relative to base (smallest = 1).
+
+### Calendar
+
+Ask the user what calendar system fits the setting:
+
+```
+================================================================
+  CALENDAR SYSTEM
+  ────────────────────────────────────────────────────────────
+  Default: Earth standard (January-December, Mon-Sun)
+
+  Options:
+  [1] Earth standard (Gregorian)
+  [2] Warhammer Imperial Calendar
+  [3] Custom — define your own months and weekdays
+
+  Type number or ENTER for default.
+================================================================
+```
+
+- **Earth standard**: skip, default already works
+- **Warhammer**: write Warhammer calendar config to `"calendar"` in campaign-overview.json
+- **Custom**: ask user for month names + days per month, weekday names, epoch name. Write to `"calendar"` section
+
+Format: `{"epoch": "...", "months": [{"id": "...", "name": "...", "days": N}, ...], "weekdays": ["...", ...], "year_zero_weekday": 0}`
+
+Set initial date: `"current_date"` in campaign-overview.json.
+
+### Auto-detect from genre
+If campaign genre/setting suggests a specific system, recommend it:
+- Warhammer/Old World → Warhammer calendar + D&D-like currency
+- Sci-fi/Cyberpunk → single currency (credits) + Earth calendar
+- Post-apocalyptic → single currency (caps/barter) + Earth calendar
+- Historical → Earth calendar + period-appropriate currency
+- Custom fantasy → ask user
 
 ---
 
@@ -559,4 +626,6 @@ Before transitioning to character creation, verify:
 - [ ] `advanced_mode` written to campaign-overview.json
 - [ ] (Advanced only) Narrator style selected or skipped
 - [ ] (Advanced only) Campaign rules template applied or skipped
+- [ ] (Advanced only) Currency system configured or default accepted
+- [ ] (Advanced only) Calendar system configured or default accepted
 - [ ] (Advanced only) Module-specific creation steps completed
