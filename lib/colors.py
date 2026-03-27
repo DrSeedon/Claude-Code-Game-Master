@@ -14,12 +14,17 @@ Usage:
 class Colors:
     # Reset
     RESET = "\033[0m"
+    RS = RESET
 
     # Standard colors
     RED = "\033[31m"
     GREEN = "\033[32m"
     YELLOW = "\033[33m"
     CYAN = "\033[36m"
+
+    # Light variants
+    LIGHT_GREEN = "\033[92m"
+    LIGHT_RED = "\033[91m"
 
     # Bold variants
     BOLD = "\033[1m"
@@ -34,6 +39,18 @@ class Colors:
     # Magenta
     MAGENTA = "\033[35m"
     BOLD_MAGENTA = "\033[1;35m"
+
+    # Short aliases (used across lib/ files)
+    R = RED
+    G = GREEN
+    Y = YELLOW
+    C = CYAN
+    B = BOLD
+    BR = BOLD_RED
+    BG = BOLD_GREEN
+    BY = BOLD_YELLOW
+    BC = BOLD_CYAN
+    DM = DIM
 
 
 # --- Status tags ---

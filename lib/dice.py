@@ -18,17 +18,21 @@ except ImportError:
     except ImportError:
         # No colors available - use plain text
         class Colors:
-            RESET = ""
-            RED = ""
-            GREEN = ""
-            YELLOW = ""
-            CYAN = ""
-            BOLD = ""
-            BOLD_RED = ""
-            BOLD_GREEN = ""
-            BOLD_YELLOW = ""
-            BOLD_CYAN = ""
-            DIM = ""
+            RESET = RS = ""
+            RED = R = ""
+            GREEN = G = ""
+            YELLOW = Y = ""
+            CYAN = C = ""
+            BOLD = B = ""
+            BOLD_RED = BR = ""
+            BOLD_GREEN = BG = ""
+            BOLD_YELLOW = BY = ""
+            BOLD_CYAN = BC = ""
+            DIM = DM = ""
+            LIGHT_GREEN = ""
+            LIGHT_RED = ""
+            MAGENTA = ""
+            BOLD_MAGENTA = ""
 
         def format_roll_result(notation, rolls, total, is_crit=False, is_fumble=False):
             rolls_str = '+'.join(str(r) for r in rolls)
@@ -192,14 +196,14 @@ def _dc_color(dc):
 
 def format_enhanced(result, label=None, dc=None, ac=None):
     """Format roll result with label, DC/AC check, and verdict. Used by dm-roll.sh."""
-    RS = "\033[0m"
-    C = "\033[36m"
-    G = "\033[32m"
-    BG = "\033[1;32m"
-    R = "\033[31m"
-    BR = "\033[1;31m"
-    BY = "\033[1;33m"
-    DM = "\033[2m"
+    RS = Colors.RS
+    C = Colors.C
+    G = Colors.G
+    BG = Colors.BG
+    R = Colors.R
+    BR = Colors.BR
+    BY = Colors.BY
+    DM = Colors.DM
 
     rolls = result.get("kept", result["rolls"])
     rolls_str = "+".join(str(r) for r in rolls)
