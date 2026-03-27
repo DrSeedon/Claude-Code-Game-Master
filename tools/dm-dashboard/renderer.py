@@ -97,13 +97,25 @@ def render_inner_html() -> str:
     campaign_dir = ROOT / "world-state" / "campaigns" / campaign_name
 
     overview = load_json(campaign_dir / "campaign-overview.json") or {}
-    custom_stats_data = load_json(campaign_dir / "module-data" / "custom-stats.json") or {}
     world = _load_world(campaign_dir)
 
     player_nodes = _world_nodes(world, "player")
     player_node = player_nodes[0] if player_nodes else {}
     character = player_node.get("data", {})
     inventory_data = player_node.get("inventory", {})
+
+    # Economy data from campaign:economy node in world.json
+    economy_node = world.get("nodes", {}).get("campaign:economy", {})
+    economy_data = economy_node.get("data", {}) if economy_node else {}
+    # Build custom_stats_data compat layer from world.json
+    custom_stats_data = {
+        "character_stats": character.get("custom_stats", {}),
+        "stat_consequences": character.get("stat_thresholds", {}),
+        "recurring_expenses": economy_data.get("expenses", []),
+        "recurring_income": economy_data.get("income", []),
+        "recurring_production": economy_data.get("production", []),
+        "random_events": economy_data.get("random_events", {}),
+    }
 
     npc_nodes = _world_nodes(world, "npc")
     quest_nodes = _world_nodes(world, "quest")
