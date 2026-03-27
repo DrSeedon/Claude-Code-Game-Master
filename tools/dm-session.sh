@@ -105,6 +105,20 @@ case "$ACTION" in
         RESULT=$?
         if [ $RESULT -ne 0 ]; then exit $RESULT; fi
 
+        # Sync player location to world.json graph (find player node id dynamically)
+        PLAYER_NID=$($PYTHON_CMD -c "
+import sys, json
+from pathlib import Path
+sys.path.insert(0, '$LIB_DIR')
+from world_graph import WorldGraph
+g = WorldGraph()
+pid = g._player_id()
+print(pid or '')
+" 2>/dev/null)
+        if [ -n "$PLAYER_NID" ]; then
+            $PYTHON_CMD "$LIB_DIR/world_graph.py" update-node "$PLAYER_NID" --data "{\"current_location\": \"$MOVE_LOC\"}" 2>/dev/null || true
+        fi
+
         # Advance time if --elapsed was provided
         if [ -n "$MOVE_ELAPSED" ]; then
             OVERVIEW=$($PYTHON_CMD "$LIB_DIR/session_manager.py" status 2>/dev/null)
