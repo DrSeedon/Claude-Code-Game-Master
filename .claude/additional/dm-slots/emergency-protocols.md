@@ -1,4 +1,4 @@
-## Emergency Protocols
+## Emergency Protocols <!-- slot:emergency-protocols -->
 
 ### "I forgot enemy stats!"
 Quick assign: `AC 13, HP 15, Attack +3, Damage 1d6+1`

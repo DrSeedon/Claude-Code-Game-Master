@@ -1,4 +1,4 @@
-## First-Time Setup (Auto-Detect)
+## First-Time Setup (Auto-Detect) <!-- slot:first-time-setup-auto-detect -->
 
 **CRITICAL: Run these checks at the START of every session, BEFORE greeting the user.**
 

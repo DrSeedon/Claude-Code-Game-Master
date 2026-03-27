@@ -42,7 +42,7 @@ If `dm-navigation.sh connect` is unavailable, add connections via `dm-navigation
 
 ```json
 "connections": [
-  {"to": "Target", "path": "2000m на 45°", "distance_meters": 2000, "bearing": 45, "terrain": "forest"}
+  {"to": "Target", "path": "2000m at 45°", "distance_meters": 2000, "bearing": 45, "terrain": "forest"}
 ]
 ```
 
@@ -107,14 +107,14 @@ One flat `locations.json`, tree via `parent`/`children` fields.
 
 ```bash
 # Compound
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Город" --entry-points "Ворота"
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "City" --entry-points "Gate"
 
 # Rooms
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Ворота" --parent "Город" --entry-point
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Площадь" --parent "Город" --connections '[{"to": "Ворота"}]'
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Gate" --parent "City" --entry-point
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Square" --parent "City" --connections '[{"to": "Gate"}]'
 
 # Nested compound
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Замок" --parent "Город" --entry-points "Ворота замка"
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh create-compound "Castle" --parent "City" --entry-points "Castle Gate"
 ```
 
 ### Entry Points
@@ -127,8 +127,8 @@ Interior with `is_entry_point: true` + `entry_config`:
 ### Navigate
 
 ```bash
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh enter "Город" --via "Ворота"
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh move "Площадь"
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh enter "City" --via "Gate"
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh move "Square"
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh exit
 ```
 
@@ -136,7 +136,7 @@ bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh exit
 
 ```bash
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree
-bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree "Город"
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree "City"
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
 ```
 
@@ -144,7 +144,7 @@ bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
 
 Player MUST always be on `interior`, never on `compound` directly. Auto-resolves to first entry point on `dm-session.sh start`/`context`.
 
-`location_stack` tracks full path: `["Город", "Замок", "Тронный зал"]`.
+`location_stack` tracks full path: `["City", "Castle", "Throne Room"]`.
 
 NPCs use `tags.locations[]` — association tags, not positional tracking. DM decides sublocation by narrative.
 
@@ -197,8 +197,8 @@ Vehicles = compounds with `mobile: true`.
 ### Create
 
 ```bash
-bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh create kestrel spacecraft "Станция Кестрел"
-bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh add-room kestrel "Мостик" --from "Станция Кестрел" --bearing 90 --distance 10
+bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh create kestrel spacecraft "Kestrel Station"
+bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh add-room kestrel "Bridge" --from "Kestrel Station" --bearing 90 --distance 10
 ```
 
 `add-room` creates bidirectional connections automatically.
@@ -207,7 +207,7 @@ bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh add-room kestre
 
 ```bash
 bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh board kestrel
-bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh board kestrel --room "Мостик"
+bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh board kestrel --room "Bridge"
 bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh exit
 ```
 
@@ -216,7 +216,7 @@ Inside vehicle: `dm-session.sh move "Room"` is intercepted — no encounters, no
 ### Move Vehicle
 
 ```bash
-bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh move kestrel "Космостанция Зета-9"
+bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh move kestrel "Space Station Zeta-9"
 bash .claude/additional/modules/world-travel/tools/dm-vehicle.sh move kestrel --x 5000 --y 3200
 ```
 

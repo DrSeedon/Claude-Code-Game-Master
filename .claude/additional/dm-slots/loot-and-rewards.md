@@ -1,3 +1,4 @@
+<!-- slot:loot-and-rewards -->
 # Inventory System — DM Rules
 
 Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/HP/XP/stat changes — never edit JSON files manually.
@@ -5,17 +6,23 @@ Replaces core Loot & Rewards slot. Use `dm-inventory.sh` for ALL inventory/gold/
 **ALWAYS combine everything into ONE command.** Multiple flags in a single call — never split into separate invocations:
 ```bash
 # ✅ RIGHT — one call
-bash tools/dm-inventory.sh update "Char" --gold -810 --add-unique "АК-74 [3.5kg]" --add "Патроны" 30 0.01 --add "Аптечка" 1 0.3
+bash tools/dm-inventory.sh update "Char" --gold -810 --add-unique "Longsword +1 [3.5kg]" --add "Arrows" 30 0.01 --add "Healing Potion" 1 0.3
 
 # ❌ WRONG — five separate calls for the same transaction
 bash tools/dm-inventory.sh update "Char" --gold -810 ...
-bash tools/dm-inventory.sh update "Char" --add "Патроны" 30 ...
-bash tools/dm-inventory.sh update "Char" --add "Аптечка" 1 ...
+bash tools/dm-inventory.sh update "Char" --add "Arrows" 30 ...
+bash tools/dm-inventory.sh update "Char" --add "Healing Potion" 1 ...
 ```
 
-**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, money, abilities, custom_stats) remain in `character.json`.
+**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, money, abilities) remain in `character.json`. Custom stats live in `module-data/custom-stats.json`.
 
 **Currency:** Money is stored as a single integer in base units (copper pieces for D&D). Campaign denominations are defined in `campaign-overview.json` under `"currency"`. Display: `2537 cp` → `25g 3s 7c`. The `--gold` flag accepts base units (copper) or a string like `"2gp 5sp"`.
+
+**--reason flag:** ALWAYS use `--reason` to label inventory changes:
+```bash
+bash tools/dm-inventory.sh update "Char" --gold -50 --hp -3 --reason "ambush on the road"
+# Output: INVENTORY UPDATE: Char — ambush on the road
+```
 
 ---
 
@@ -37,12 +44,12 @@ Every item has weight in kilograms. Carry capacity = **STR × 7 kg**.
 
 **Stackable items** — stored as `{"qty": N, "weight": X}` (weight per unit in kg):
 ```json
-"Медпак": {"qty": 5, "weight": 0.3}
+"Medkit": {"qty": 5, "weight": 0.3}
 ```
 
 **Unique items** — weight tag `[Xkg]` at end of string:
 ```
-"DC-15A (штурмовая, 2d6+2, PEN 3) [4.5kg]"
+"Greatsword (2d6+3, heavy) [6kg]"
 ```
 
 **Default weights** (used when no explicit weight):
@@ -55,16 +62,16 @@ Every item has weight in kilograms. Carry capacity = **STR × 7 kg**.
 | artifact | 1.0 kg |
 | misc | 0.5 kg |
 
-### Drop in Combat
+### Remove Items
 
-If overloaded during combat — warn player and suggest dropping heavy items:
+To remove items from inventory (sold, destroyed, consumed, dropped):
 
 ```bash
-bash tools/dm-inventory.sh drop "[char]" "[item]" --qty 1
-bash tools/dm-inventory.sh drop "[char]" "[item]" --unique
+bash tools/dm-inventory.sh remove "[char]" "[item]" --qty 1
+bash tools/dm-inventory.sh remove "[char]" "[item]" --unique
 ```
 
-Dropped items are logged as `dm-note` at current location. Can be picked up later with `--add`.
+Items are permanently removed from inventory. If narratively dropped at a location, DM should note it with `dm-note.sh`.
 
 ---
 
@@ -76,7 +83,7 @@ Dropped items are logged as `dm-note` at current location. Can be picked up late
 # All-in-one after combat (with optional weight per item)
 # --gold value is in base currency units (copper): 250 cp = 2g 5s 0c
 bash tools/dm-inventory.sh loot "[char]" \
-  --gold 250 --xp 150 --items "Medkit:2:0.3" "Ammo 5.56mm:60:0.02"
+  --gold 250 --xp 150 --items "Medkit:2:0.3" "Arrows:60:0.02"
 ```
 
 Format: `Name:Qty` or `Name:Qty:WeightKg`
@@ -84,8 +91,7 @@ Format: `Name:Qty` or `Name:Qty:WeightKg`
 ### 2. Record & Advance
 ```bash
 bash tools/dm-note.sh "combat" "[Character] defeated [X] [enemies] at [location]"
-bash tools/dm-time.sh "[new_time]" "[date]"
-bash tools/dm-consequence.sh check
+bash tools/dm-time.sh "_" "[date]" --elapsed 0.5
 ```
 
 ---
@@ -159,14 +165,14 @@ Party members (promoted via `dm-npc.sh promote`) have full inventory + weight tr
 
 ### View NPC inventory
 ```bash
-bash tools/dm-inventory.sh show "Рекс CT-7567"
-bash tools/dm-inventory.sh weigh "Бумер CT-2224"
+bash tools/dm-inventory.sh show "Grimjaw"
+bash tools/dm-inventory.sh weigh "Silara"
 ```
 
 ### Modify NPC inventory
 ```bash
-bash tools/dm-inventory.sh update "Док CT-5597" \
-  --add "Медпак" 3 0.3 --remove "Бакта-инъектор" 1
+bash tools/dm-inventory.sh update "Healer" \
+  --add "Medkit" 3 0.3 --remove "Bandage" 1
 ```
 
 ### View entire party
@@ -182,16 +188,16 @@ Transfer items between player and NPC (real bidirectional):
 
 ```bash
 # Player → NPC
-bash tools/dm-inventory.sh transfer "Рекс CT-7567" \
-  --item "Медпак" 2 --unique "Макробинокль"
+bash tools/dm-inventory.sh transfer "Grimjaw" \
+  --item "Medkit" 2 --unique "Spyglass"
 
 # NPC → Player
-bash tools/dm-inventory.sh transfer "CT-7777 Хантер" \
-  --from "Рекс CT-7567" --item "Заряд DC-15S" 30
+bash tools/dm-inventory.sh transfer "Player" \
+  --from "Grimjaw" --item "Arrows" 30
 
 # NPC → NPC
-bash tools/dm-inventory.sh transfer "Бумер CT-2224" \
-  --from "Док CT-5597" --item "Медпак" 1
+bash tools/dm-inventory.sh transfer "Silara" \
+  --from "Healer" --item "Medkit" 1
 ```
 
 Items are actually moved — removed from source, added to target with weight preserved.
@@ -214,5 +220,5 @@ Categories: `weapon`, `ammo`, `food`, `medicine`, `artifact`, `misc`. Auto-detec
 ## Item Types
 
 - **Stackable** — consumables with quantity and weight: `{"qty": 5, "weight": 0.3}`
-- **Unique** — named items with stats and weight tag: `"AK-74 (5.56mm, 2d6+2, PEN 3) [3.5kg]"`
-- **Backward compatible** — old format `"Медпак": 5` still works, uses default weight by category
+- **Unique** — named items with stats and weight tag: `"Longsword +1 (1d8+3, versatile) [3.5kg]"`
+- **Backward compatible** — old format `"Medkit": 5` still works, uses default weight by category

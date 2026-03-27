@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from colors import tag_success, tag_error
 
 
 class LocationManager(EntityManager):
@@ -29,12 +30,12 @@ class LocationManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Check if location already exists
         if self._entity_exists(self.locations_file, name):
-            print(f"[ERROR] Location '{name}' already exists")
+            print(tag_error(f"Location '{name}' already exists"))
             return False
 
         # Create location data
@@ -47,7 +48,7 @@ class LocationManager(EntityManager):
 
         # Save to file
         if self._add_entity(self.locations_file, name, location_data):
-            print(f"[SUCCESS] Added location: {name} ({position})")
+            print(tag_success(f"Added location: {name} ({position})"))
             return True
         return False
 
@@ -59,7 +60,7 @@ class LocationManager(EntityManager):
         for loc in [from_loc, to_loc]:
             valid, error = self.validators.validate_name(loc)
             if not valid:
-                print(f"[ERROR] {error}")
+                print(tag_error(error))
                 return False
 
         # Load locations
@@ -67,16 +68,16 @@ class LocationManager(EntityManager):
 
         # Check both locations exist
         if from_loc not in locations:
-            print(f"[ERROR] Location '{from_loc}' not found")
+            print(tag_error(f"Location '{from_loc}' not found"))
             return False
         if to_loc not in locations:
-            print(f"[ERROR] Location '{to_loc}' not found")
+            print(tag_error(f"Location '{to_loc}' not found"))
             return False
 
         # Check if connection already exists
         existing_connections = [c['to'] for c in locations[from_loc].get('connections', [])]
         if to_loc in existing_connections:
-            print(f"[ERROR] Connection already exists between '{from_loc}' and '{to_loc}'")
+            print(tag_error(f"Connection already exists between '{from_loc}' and '{to_loc}'"))
             return False
 
         # Add bidirectional connection
@@ -95,7 +96,7 @@ class LocationManager(EntityManager):
         })
 
         if self._save_entities(self.locations_file, locations):
-            print(f"[SUCCESS] Connected {from_loc} <-> {to_loc} via {path}")
+            print(tag_success(f"Connected {from_loc} <-> {to_loc} via {path}"))
             return True
         return False
 
@@ -106,17 +107,17 @@ class LocationManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Check if location exists
         if not self._entity_exists(self.locations_file, name):
-            print(f"[ERROR] Location '{name}' not found")
+            print(tag_error(f"Location '{name}' not found"))
             return False
 
         # Update description
         if self._update_entity(self.locations_file, name, {'description': description}):
-            print(f"[SUCCESS] Updated description for {name}")
+            print(tag_success(f"Updated description for {name}"))
             return True
         return False
 
@@ -126,12 +127,12 @@ class LocationManager(EntityManager):
         """
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return None
 
         location = self._get_entity(self.locations_file, name)
         if not location:
-            print(f"[ERROR] Location '{name}' not found")
+            print(tag_error(f"Location '{name}' not found"))
             return None
 
         return location

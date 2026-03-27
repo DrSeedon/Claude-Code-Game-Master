@@ -5,9 +5,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Find project root
-_dir="$SCRIPT_DIR"
-while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
-PROJECT_ROOT="$_dir"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common-module.sh"
+PROJECT_ROOT="$(find_project_root "$SCRIPT_DIR")"
 
 ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
 [ -z "$ACTIVE" ] && exit 0

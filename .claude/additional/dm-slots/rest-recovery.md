@@ -1,4 +1,4 @@
-## Rest & Recovery
+## Rest & Recovery <!-- slot:rest-recovery -->
 
 ### Short Rest (1 Hour)
 ```bash

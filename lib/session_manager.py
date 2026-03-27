@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
 from currency import load_config, format_money, migrate_gold
+from colors import tag_success, tag_error
 
 
 class SessionManager(EntityManager):
@@ -70,7 +71,7 @@ class SessionManager(EntityManager):
         with open(self.session_log, 'a') as f:
             f.write(f"## Session Started: {summary['timestamp']}\n\n")
 
-        print(f"[SUCCESS] Session started at {summary['timestamp']}")
+        print(tag_success(f"Session started at {summary['timestamp']}"))
         return summary
 
     def end_session(self, summary: str) -> bool:
@@ -88,7 +89,7 @@ class SessionManager(EntityManager):
             f.write(f"{summary}\n\n")
             f.write("---\n\n")
 
-        print(f"[SUCCESS] Session {session_num} ended and logged")
+        print(tag_success(f"Session {session_num} ended and logged"))
         return True
 
     def get_status(self) -> Dict[str, Any]:
@@ -225,7 +226,7 @@ class SessionManager(EntityManager):
         with open(save_path, 'w', encoding='utf-8') as f:
             json.dump(save_data, f, indent=2, ensure_ascii=False)
 
-        print(f"[SUCCESS] Save created: {filename}")
+        print(tag_success(f"Save created: {filename}"))
         return filename
 
     def restore_save(self, name: str) -> bool:
@@ -238,7 +239,7 @@ class SessionManager(EntityManager):
         # Find the save file
         save_file = self._find_save(name)
         if not save_file:
-            print(f"[ERROR] Save point '{name}' not found")
+            print(tag_error(f"Save point '{name}' not found"))
             return False
 
         # Load save data directly from absolute path
@@ -246,7 +247,7 @@ class SessionManager(EntityManager):
             with open(save_file, 'r', encoding='utf-8') as f:
                 save_data = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"[ERROR] Failed to load save: {e}")
+            print(tag_error(f"Failed to load save: {e}"))
             return False
 
         snapshot = save_data.get('snapshot', {})
@@ -267,7 +268,7 @@ class SessionManager(EntityManager):
         if 'characters' in snapshot:
             self._restore_characters(snapshot['characters'])
 
-        print(f"[SUCCESS] Restored from save: {save_file.name}")
+        print(tag_success(f"Restored from save: {save_file.name}"))
         return True
 
     def list_saves(self) -> List[Dict[str, Any]]:
@@ -296,11 +297,11 @@ class SessionManager(EntityManager):
         """
         save_file = self._find_save(name)
         if not save_file:
-            print(f"[ERROR] Save point '{name}' not found")
+            print(tag_error(f"Save point '{name}' not found"))
             return False
 
         save_file.unlink()
-        print(f"[SUCCESS] Deleted save: {save_file.name}")
+        print(tag_success(f"Deleted save: {save_file.name}"))
         return True
 
     def get_history(self) -> List[str]:

@@ -1,4 +1,4 @@
-## Skill Checks
+## Skill Checks <!-- slot:skill-checks -->
 
 ### When to Roll
 **Roll when dice add fun:**
@@ -21,7 +21,7 @@
    ```
 2. **Roll the check**
    ```bash
-   uv run python lib/dice.py "1d20+[modifier]"
+   bash tools/dm-roll.sh "1d20+[modifier]" --label "[Skill] ([name])" --dc [DC]
    ```
 3. **Narrate based on margin**
 

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM Dashboard</title>
+<style>{{CSS_PLACEHOLDER}}</style>
+</head>
+<body>
+<div id="content">Loading...</div>
+<div class="wiki-overlay" id="wiki-overlay">
+  <div class="wiki-panel">
+    <div class="wiki-panel-header">
+      <span class="wiki-panel-title">Wiki</span>
+      <button class="wiki-close" onclick="toggleWiki()">Close</button>
+    </div>
+    <div id="wiki-content">Loading...</div>
+  </div>
+</div>
+<div class="footer" id="footer">
+  <div class="footer-left">
+    Last updated: <span id="ts">—</span>
+    <span id="cd-label" style="display:none">&bull; next in <span id="cd">5</span>s</span>
+  </div>
+  <div class="footer-right">
+    <div class="toggle-wrap" id="auto-toggle">
+      <span>Auto-refresh</span>
+      <div class="toggle-track" id="toggle-track">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+    <input type="number" class="interval-input" id="interval-input" min="1" max="60" value="5" title="Interval (seconds)">
+    <span>s</span>
+  </div>
+</div>
+<script>
+  let autoOn = false;
+  let interval = 5;
+  let cd = 5;
+  let prevBars = {};
+  let prevNums = {};
+  let prevSnap = {};
+  let animLock = new Set();
+
+  function saveScrolls() {
+    const scrolls = {};
+    document.querySelectorAll('.scroll-list').forEach((el, i) => { scrolls[i] = el.scrollTop; });
+    return scrolls;
+  }
+
+  function restoreScrolls(scrolls) {
+    document.querySelectorAll('.scroll-list').forEach((el, i) => {
+      if (scrolls[i] !== undefined) el.scrollTop = scrolls[i];
+    });
+  }
+
+  function snapshot(root) {
+    const snap = {};
+    root.querySelectorAll('[data-key]').forEach(el => {
+      snap[el.dataset.key] = el.dataset.val || el.textContent.trim();
+    });
+    return snap;
+  }
+
+  function captureBars(root) {
+    const bars = {};
+    root.querySelectorAll('[data-bar]').forEach(el => {
+      const p = el.closest('[data-key]');
+      if (p) bars[p.dataset.key] = parseFloat(el.dataset.bar);
+    });
+    return bars;
+  }
+
+  function captureNums(root) {
+    const nums = {};
+    root.querySelectorAll('[data-num]').forEach(el => {
+      const p = el.closest('[data-key]');
+      const key = p ? p.dataset.key : ('num-' + el.dataset.num);
+      nums[key] = parseFloat(el.dataset.num);
+    });
+    return nums;
+  }
+
+  function formatMoney(amount, denoms) {
+    if (!denoms || !denoms.length) return String(Math.round(amount));
+    const sorted = [...denoms].sort((a, b) => (b.rate || 1) - (a.rate || 1));
+    let remaining = Math.max(0, Math.round(amount));
+    const parts = [];
+    for (const d of sorted) {
+      const rate = d.rate || 1;
+      if (rate <= 0) continue;
+      const count = Math.floor(remaining / rate);
+      remaining = remaining % rate;
+      if (count > 0) parts.push(count + (d.symbol || '?'));
+    }
+    return parts.length ? parts.join(' ') : '0' + (sorted[sorted.length-1]?.symbol || '');
+  }
+
+  function animateNumber(el, from, to, duration, formatter) {
+    const start = performance.now();
+    const hasDecimals = String(el.dataset.num).includes('.');
+    const decimals = hasDecimals ? (String(el.dataset.num).split('.')[1] || '').length || 1 : 0;
+    return new Promise(resolve => {
+      function tick(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const val = from + (to - from) * eased;
+        if (formatter) {
+          el.textContent = formatter(val);
+        } else {
+          el.textContent = decimals > 0 ? val.toFixed(decimals) : String(Math.round(val));
+        }
+        if (t < 1) requestAnimationFrame(tick);
+        else resolve();
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function getMoneyFormatter(el) {
+    const raw = el.dataset.denoms;
+    if (!raw) return null;
+    try {
+      const denoms = JSON.parse(raw);
+      if (denoms.length) return (val) => formatMoney(val, denoms);
+    } catch(e) {}
+    return null;
+  }
+
+  function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function animateBar(barEl, fromPct, toPct) {
+    barEl.style.transition = 'none';
+    barEl.style.width = fromPct + '%';
+    barEl.offsetWidth;
+    barEl.style.transition = '';
+    barEl.style.width = toPct + '%';
+  }
+
+  function flashClass(el, cls) {
+    el.classList.remove(cls);
+    el.offsetWidth;
+    el.classList.add(cls);
+    return new Promise(resolve => {
+      el.addEventListener('animationend', () => { el.classList.remove(cls); resolve(); }, {once: true});
+      setTimeout(resolve, 4000);
+    });
+  }
+
+  function clearAnims(el) {
+    el.classList.remove('anim-changed', 'anim-up', 'anim-down', 'anim-added', 'anim-removed');
+  }
+
+  async function demoElement(el) {
+    const key = el.dataset.key;
+    if (!key || animLock.has(key)) return;
+    animLock.add(key);
+
+    const barEl = el.querySelector('[data-bar]');
+    const numEl = el.querySelector('[data-num]');
+    const realBar = barEl ? parseFloat(barEl.dataset.bar) : null;
+    const realNum = numEl ? parseFloat(numEl.dataset.num) : null;
+    const formatter = numEl ? getMoneyFormatter(numEl) : null;
+    const hasBar = realBar !== null;
+    const hasNum = realNum !== null;
+
+    clearAnims(el);
+    const downBar = hasBar ? Math.max(0, realBar - 30) : null;
+    const downNum = hasNum ? Math.max(0, realNum * 0.6) : null;
+    if (barEl && downBar !== null) animateBar(barEl, realBar, downBar);
+    if (numEl && downNum !== null) await animateNumber(numEl, realNum, downNum, 1200, formatter);
+    flashClass(el, 'anim-down');
+    await flashClass(el, 'anim-changed');
+    await wait(800);
+
+    clearAnims(el);
+    const upBar = hasBar ? Math.min(100, realBar + 20) : null;
+    const upNum = hasNum ? realNum * 1.4 : null;
+    if (barEl && upBar !== null) animateBar(barEl, downBar, upBar);
+    if (numEl && upNum !== null) await animateNumber(numEl, downNum, upNum, 1200, formatter);
+    flashClass(el, 'anim-up');
+    await flashClass(el, 'anim-changed');
+    await wait(800);
+
+    clearAnims(el);
+    await flashClass(el, 'anim-added');
+    await wait(600);
+
+    clearAnims(el);
+    if (barEl && realBar !== null && upBar !== null) animateBar(barEl, upBar, realBar);
+    if (numEl && realNum !== null && upNum !== null) await animateNumber(numEl, upNum, realNum, 1200, formatter);
+    await wait(400);
+    animLock.delete(key);
+  }
+
+  function applyAnimations(container, oldSnap, newSnap, oldBars, newBars, oldNums, newNums) {
+    const oldKeys = new Set(Object.keys(oldSnap));
+
+    container.querySelectorAll('[data-bar]').forEach(barEl => {
+      const p = barEl.closest('[data-key]');
+      if (!p) return;
+      const key = p.dataset.key;
+      const newPct = parseFloat(barEl.dataset.bar);
+      const oldPct = oldBars[key];
+      if (oldPct !== undefined && oldPct !== newPct) {
+        animateBar(barEl, oldPct, newPct);
+      }
+    });
+
+    container.querySelectorAll('[data-num]').forEach(numEl => {
+      const p = numEl.closest('[data-key]');
+      const key = p ? p.dataset.key : ('num-' + numEl.dataset.num);
+      const newVal = parseFloat(numEl.dataset.num);
+      const oldVal = oldNums[key];
+      if (oldVal !== undefined && oldVal !== newVal && !isNaN(oldVal) && !isNaN(newVal)) {
+        const formatter = getMoneyFormatter(numEl);
+        animateNumber(numEl, oldVal, newVal, 1600, formatter);
+      }
+    });
+
+    container.querySelectorAll('[data-key]').forEach(el => {
+      const key = el.dataset.key;
+      if (!oldKeys.has(key)) {
+        el.classList.add('anim-added');
+        el.addEventListener('animationend', () => el.classList.remove('anim-added'), {once: true});
+      } else if (oldSnap[key] !== newSnap[key]) {
+        el.classList.add('anim-changed');
+        el.addEventListener('animationend', () => el.classList.remove('anim-changed'), {once: true});
+        const oldNum = parseFloat(oldSnap[key]);
+        const newNum = parseFloat(newSnap[key]);
+        if (!isNaN(oldNum) && !isNaN(newNum) && oldNum !== newNum) {
+          el.classList.add(newNum > oldNum ? 'anim-up' : 'anim-down');
+          el.addEventListener('animationend', () => el.classList.remove('anim-up', 'anim-down'), {once: true});
+        }
+      }
+    });
+
+    for (const key of oldKeys) {
+      if (!(key in newSnap)) {
+        const ghost = document.createElement('div');
+        ghost.textContent = oldSnap[key];
+        ghost.className = 'anim-removed';
+        ghost.style.fontSize = '0.78rem';
+        ghost.style.color = 'var(--muted)';
+        const target = container.querySelector('[data-key]');
+        if (target && target.parentElement) {
+          target.parentElement.insertBefore(ghost, target);
+          ghost.addEventListener('animationend', () => ghost.remove(), {once: true});
+        }
+      }
+    }
+  }
+
+  async function refresh() {
+    if (animLock.size > 0) return;
+    try {
+      const scrolls = saveScrolls();
+      const content = document.getElementById('content');
+      const oldSnap = snapshot(content);
+      const oldBars = captureBars(content);
+      const oldNums = captureNums(content);
+
+      const r = await fetch('/data');
+      const d = await r.json();
+
+      const tmp = document.createElement('div');
+      tmp.innerHTML = d.html;
+      const newSnap = snapshot(tmp);
+      const newBars = captureBars(tmp);
+      const newNums = captureNums(tmp);
+
+      content.innerHTML = d.html;
+      restoreScrolls(scrolls);
+      bindClicks();
+
+      if (firstLoad) {
+        updateKnownEvTs(content);
+        firstLoad = false;
+      } else {
+        markNewEvents(content);
+        updateKnownEvTs(content);
+      }
+
+      if (Object.keys(oldSnap).length > 0) {
+        applyAnimations(content, oldSnap, newSnap, oldBars, newBars, oldNums, newNums);
+      }
+      prevSnap = newSnap;
+      prevBars = newBars;
+      prevNums = newNums;
+
+      const titleEl = document.querySelector('#page-title');
+      if (titleEl) document.title = titleEl.textContent + ' - DM Dashboard';
+
+      const ts = document.getElementById('ts');
+      if (ts) ts.textContent = d.ts || new Date().toLocaleTimeString();
+      cd = interval;
+    } catch(e) {}
+  }
+
+  let knownEvTs = new Set();
+  let firstLoad = true;
+
+  function captureEvTs(root) {
+    const ts = new Set();
+    root.querySelectorAll('[data-ev-ts]').forEach(el => ts.add(el.dataset.evTs));
+    return ts;
+  }
+
+  function markNewEvents(container) {
+    container.querySelectorAll('[data-ev-ts]').forEach(el => {
+      const ts = el.dataset.evTs;
+      if (!knownEvTs.has(ts)) {
+        el.classList.add('new');
+        el.addEventListener('mouseenter', () => el.classList.remove('new'), {once: true});
+      }
+    });
+  }
+
+  function updateKnownEvTs(container) {
+    container.querySelectorAll('[data-ev-ts]').forEach(el => {
+      knownEvTs.add(el.dataset.evTs);
+    });
+  }
+
+  function bindClicks() {
+    document.querySelectorAll('[data-key]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (el.closest('[data-key]') !== el && e.target.closest('[data-key]') !== el) return;
+        e.stopPropagation();
+        demoElement(el);
+      });
+    });
+  }
+
+  function tick() {
+    if (!autoOn || animLock.size > 0) return;
+    cd--;
+    const el = document.getElementById('cd');
+    if (el) el.textContent = cd;
+    if (cd <= 0) { cd = interval; refresh(); }
+  }
+
+  // --- wiki panel ---
+  let wikiLoaded = false;
+  async function toggleWiki() {
+    const overlay = document.getElementById('wiki-overlay');
+    if (overlay.classList.contains('open')) {
+      overlay.classList.remove('open');
+      return;
+    }
+    overlay.classList.add('open');
+    if (!wikiLoaded) {
+      try {
+        const r = await fetch('/wiki');
+        const d = await r.json();
+        document.getElementById('wiki-content').innerHTML = d.html;
+        wikiLoaded = true;
+      } catch(e) {
+        document.getElementById('wiki-content').innerHTML = '<div class="empty-state">Failed to load wiki</div>';
+      }
+    }
+  }
+  document.getElementById('wiki-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'wiki-overlay') toggleWiki();
+  });
+
+  // --- footer bindings (once, never re-bound) ---
+  document.getElementById('auto-toggle').onclick = () => {
+    autoOn = !autoOn;
+    document.getElementById('toggle-track').classList.toggle('on', autoOn);
+    document.getElementById('cd-label').style.display = autoOn ? '' : 'none';
+    if (autoOn) cd = interval;
+  };
+  document.getElementById('interval-input').onchange = (e) => {
+    const v = parseInt(e.target.value);
+    if (v >= 1 && v <= 60) { interval = v; cd = v; }
+  };
+
+  refresh();
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-## Conditions Quick Reference
+## Conditions Quick Reference <!-- slot:conditions-quick-reference -->
 
 | Condition | Effect |
 |-----------|--------|

@@ -1,4 +1,4 @@
-## Search Guide (CRITICAL)
+## Search Guide (CRITICAL) <!-- slot:search-guide-critical -->
 
 **All tool calls MUST use `bash tools/` prefix.** Never call bare `dm-search.sh`.
 

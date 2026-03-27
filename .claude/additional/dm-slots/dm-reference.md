@@ -1,4 +1,4 @@
-## DM Reference
+## DM Reference <!-- slot:dm-reference -->
 
 ### Quick Start
 
@@ -27,7 +27,7 @@
 | `dm-note.sh` | Record important facts about the world |
 | `dm-search.sh` | Search world state AND/OR source material (see Search Guide below) |
 | `dm-plot.sh` | Add, view, and update plot/quest progress |
-| `dm-player.sh` | Update PC stats (HP, XP, gold, inventory) |
+| `dm-player.sh` | Update PC stats (HP, XP, gold, conditions) |
 | `dm-session.sh` | Start/end sessions, move party, save/restore |
 | `dm-overview.sh` | Quick summary of world state |
 | `dm-time.sh` | Advance game time |
@@ -38,16 +38,39 @@ Each campaign in `world-state/campaigns/<name>/`:
 
 | File | Contains |
 |------|----------|
-| `campaign-overview.json` | Name, location, time, active character, **campaign-specific rules** (`campaign_rules` section — READ THIS AT SESSION START) |
+| `campaign-overview.json` | Name, location, time, precise_time, game_date, active character, modules, currency, calendar |
 | `npcs.json` | NPCs with descriptions, attitudes, events, tags |
 | `locations.json` | Locations with connections and descriptions |
-| `facts.json` | Established world facts by category |
+| `facts.json` | Narrative world facts (lore, events, rumors) — NO game mechanics |
+| `wiki.json` | Structured game mechanics: items, recipes, abilities, materials (with DC, ingredients, effects). Supports parent.child subentries (see below) |
 | `consequences.json` | Pending and resolved events |
-| `items.json` | Items and treasures |
 | `plots.json` | Plot hooks and quests |
 | `session-log.md` | Session history and summaries |
 | `character.json` | Player character sheet |
 | `saves/*.json` | Save point snapshots |
+| `module-data/inventory-system.json` | Player inventory (stackable + unique items) |
+| `module-data/custom-stats.json` | Custom stats values, rules, consequences |
+| `module-data/inventory-party.json` | Party NPC inventories |
+
+### Wiki Subentries (parent.child)
+
+Dot-separated IDs create automatic parent/child relationships. Use for books with chapters, skill trees with branches, recipe chains, or any hierarchical content.
+
+```
+liber-mortis          → parent (type: book)
+liber-mortis.i        → child  (type: chapter, auto-linked)
+liber-mortis.vi       → child  (type: chapter, auto-linked)
+```
+
+**Rules:**
+- Dot in ID = child. Parent ID = everything before the dot
+- `dm-wiki.sh show <parent>` → shows overview + CONTENTS list with status icons
+- `dm-wiki.sh show <parent.child>` → shows child + PARENT link
+- `dm-wiki.sh list` → hides children by default, shows parent with "(N parts)"
+- `dm-wiki.sh list --children` → shows all entries including children
+- Children should have `sequence` in mechanics for sort order
+- Status field in mechanics maps to icons: COMPLETE ✅, COMPLETE_WITH_GAPS ⚠️, PARTIAL 🔶, NOT_READ 🔒
+- Types: `book` for parents, `chapter` for children (or any valid type)
 
 ### Technical Notes
 
@@ -65,7 +88,8 @@ Claude Code has a persistent memory directory (`~/.claude/projects/.../memory/`)
 | Character stats | `character.json` |
 | NPC info | `npcs.json` via `dm-npc.sh` |
 | Locations | `locations.json` via `dm-location.sh` |
-| Facts & lore | `facts.json` via `dm-note.sh` |
+| Facts & lore (narrative) | `facts.json` via `dm-note.sh` |
+| Items, recipes, abilities (mechanics) | `wiki.json` via `dm-wiki.sh` |
 | Session history | `session-log.md` via `dm-session.sh` |
 | Tool usage patterns | This file (CLAUDE.md) |
 

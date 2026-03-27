@@ -5,9 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Find project root by walking up to .git
-_dir="$MODULE_DIR"
-while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
-PROJECT_ROOT="$_dir"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../infrastructure/common-module.sh"
+PROJECT_ROOT="$(find_project_root "$MODULE_DIR")"
 
 source "$PROJECT_ROOT/tools/common.sh"
 

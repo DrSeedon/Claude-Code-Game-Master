@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Module status for session start: full firearms-combat dump
 
-_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
-PROJECT_ROOT="$_dir"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../infrastructure/common-module.sh"
+PROJECT_ROOT="$(find_project_root "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
 
 ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
 [ -z "$ACTIVE" ] && exit 0

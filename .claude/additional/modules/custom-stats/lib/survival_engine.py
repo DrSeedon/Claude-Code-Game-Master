@@ -9,6 +9,7 @@ DM (Claude) calls this via dm-survival.sh after time advances.
 import argparse
 import copy
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure
 from lib.json_ops import JsonOperations
 from lib.player_manager import PlayerManager
 from lib.campaign_manager import CampaignManager
+from lib.currency import load_config as load_currency_config, format_money, migrate_gold
 from module_data import ModuleDataManager
 
 
@@ -101,9 +103,40 @@ class SurvivalEngine:
 
         self._print_report(stat_changes, stat_consequences)
 
+        triggered = self._check_time_consequences(elapsed_hours) if hasattr(self, '_check_time_consequences') else []
+        if triggered:
+            print("\n⚠️  Timed Consequences Triggered:")
+            for tc in triggered:
+                print(f"  [{tc.get('id', '?')}] {tc.get('consequence', tc.get('event', ''))}")
+
+        expense_results = self._process_recurring_expenses(elapsed_hours) if hasattr(self, '_process_recurring_expenses') else []
+        if expense_results:
+            self._print_expense_report(expense_results)
+
+        income_results = self._process_recurring_income(elapsed_hours) if hasattr(self, '_process_recurring_income') else []
+        if income_results:
+            self._print_income_report(income_results)
+            work_hours = sum(r.get('hours_spent', 0) for r in income_results)
+            if work_hours > 0:
+                work_stats = self._tick_stats_only(work_hours, sleeping=False)
+                if work_stats:
+                    B = "\033[1m"; RS = "\033[0m"
+                    print(f"\n  {B}⏱️  Work Time Effects ({work_hours}ч):{RS}")
+                    self._print_stat_changes(work_stats)
+
+        production_results = self._process_recurring_production(elapsed_hours) if hasattr(self, '_process_recurring_production') else []
+        if production_results:
+            self._print_production_report(production_results)
+
+        random_event = self._roll_random_event(elapsed_hours) if hasattr(self, '_roll_random_event') else None
+        if random_event:
+            self._print_random_event(random_event)
+
         return {
             'stat_changes': stat_changes,
-            'stat_consequences': stat_consequences
+            'stat_consequences': stat_consequences,
+            'expense_results': expense_results,
+            'random_event': random_event,
         }
 
     def status(self) -> dict:
@@ -199,8 +232,8 @@ class SurvivalEngine:
                 else:
                     cs = char_data.get('custom_stats', {}).get(stat)
                     if cs:
-                        cur = cs.get('current', cs.get('value', 0))
-                        new_val = cur + amount
+                        cur = round(cs.get('current', cs.get('value', 0)), 2)
+                        new_val = round(cur + amount, 2)
                         cs_max = cs.get('max')
                         cs_min = cs.get('min', 0)
                         if cs_max is not None:
@@ -240,26 +273,37 @@ class SurvivalEngine:
         char_data = self._load_char_with_stats()
         active_effects = char_data.get('active_effects', [])
 
+        C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+        G = "\033[32m"; Y = "\033[33m"; R = "\033[31m"; M = "\033[35m"
+
         if not active_effects:
-            print("[INFO] No active effects")
+            print(f"\n  {DM}No active effects{RS}")
             return []
 
-        print(f"\nActive Effects:")
-        print(f"  {'Name':<20} {'Remaining':>10} {'Duration':>10} {'Details'}")
-        print(f"  {'─'*20} {'─'*10} {'─'*10} {'─'*30}")
+        print(f"\n  {B}✦ Active Effects:{RS}")
+        print(f"  {DM}{'Name':<22} {'Remaining':>10} {'Duration':>10} {'Details'}{RS}")
+        print(f"  {DM}{'─'*22} {'─'*10} {'─'*10} {'─'*30}{RS}")
         for eff in active_effects:
             details = []
             for e in eff['effects']:
-                parts = [e['stat']]
+                parts = [f"{C}{e['stat']}{RS}"]
                 if 'rate_bonus' in e:
-                    parts.append(f"rate {e['rate_bonus']:+g}")
+                    v = e['rate_bonus']
+                    color = G if v < 0 else R
+                    parts.append(f"{color}rate {v:+g}{RS}")
                 if 'per_hour' in e:
-                    parts.append(f"{e['per_hour']:+g}/h")
+                    v = e['per_hour']
+                    color = G if v > 0 else R
+                    parts.append(f"{color}{v:+g}/h{RS}")
                 if 'instant' in e:
-                    parts.append(f"instant {e['instant']:+g}")
+                    v = e['instant']
+                    color = G if v > 0 else R
+                    parts.append(f"{color}instant {v:+g}{RS}")
                 details.append(' '.join(parts))
             detail_str = ', '.join(details)
-            print(f"  {eff['name']:<20} {eff['remaining_hours']:>9.1f}h {eff['duration_hours']:>9.1f}h {detail_str}")
+            rem = eff['remaining_hours']
+            rem_color = G if rem > 2 else Y if rem > 0.5 else R
+            print(f"  {M}{eff['name']:<22}{RS} {rem_color}{rem:>9.1f}h{RS} {DM}{eff['duration_hours']:>9.1f}h{RS} {detail_str}")
 
         return active_effects
 
@@ -342,16 +386,21 @@ class SurvivalEngine:
             return f"{v:+.1f}/h"
 
         C = "\033[36m"; B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
-        G = "\033[32m"; R = "\033[31m"
-        print(f"\n  {B}Rate Table:{RS}")
-        print(f"  {'Stat':<12} {'Base':>8} {'Mod':>8} {'Effects':>8} {'Blocked':>8} {'Effective':>10}")
-        print(f"  {'─'*12} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*10}")
+        G = "\033[32m"; R = "\033[31m"; Y = "\033[33m"; M = "\033[35m"
+
+        def _color_rate(v):
+            if v == 0:
+                return f"{DM}     —{RS}"
+            raw = _fmt_rate(v)
+            color = G if v < 0 else R
+            return f"{color}{raw:>6}{RS}"
+
+        print(f"\n  {B}⚙ Rate Table:{RS}")
+        print(f"  {DM}{'Stat':<14}{'Base':>6}  {'Mod':>6}  {'Effects':>6}  {'Blocked':>7}  {'Effective':>9}{RS}")
+        print(f"  {DM}{'─'*14}{'─'*6}──{'─'*6}──{'─'*6}──{'─'*7}──{'─'*9}{RS}")
         for r in rows:
-            bl = f'{R}YES{RS}' if r['blocked'] else ''
-            eff_str = _fmt_rate(r['effect_bonus']) if r['effect_bonus'] != 0 else ''
-            eff_val = r['effective']
-            eff_color = G if eff_val < 0 else R if eff_val > 0 else DM
-            print(f"  {r['stat']:<12} {_fmt_rate(r['base']):>8} {_fmt_rate(r['modifier']):>8} {eff_str:>8} {bl:>8} {eff_color}{_fmt_rate(eff_val):>10}{RS}")
+            bl = f"{R}BLOCKED{RS}" if r['blocked'] else f"{DM}      —{RS}"
+            print(f"  {C}{r['stat']:<14}{RS}{_color_rate(r['base'])}  {_color_rate(r['modifier'])}  {_color_rate(r['effect_bonus'])}  {bl}  {_color_rate(r['effective'])}")
 
         return rows
 
@@ -487,8 +536,8 @@ class SurvivalEngine:
                         if cs_entry:
                             cs_max = cs_entry.get('max')
                             cs_min = cs_entry.get('min', 0)
-                            cur = cs_entry.get('current', cs_entry.get('value', 0))
-                            new_val = cur + diff
+                            cur = round(cs_entry.get('current', cs_entry.get('value', 0)), 2)
+                            new_val = round(cur + diff, 2)
                             if cs_max is not None:
                                 new_val = min(new_val, cs_max)
                             if cs_min is not None:
@@ -617,7 +666,7 @@ class SurvivalEngine:
                 delta = change['change']
                 color = R if delta > 0 else G
                 sign = '+' if delta > 0 else ''
-                print(f"  📊 {change['stat']}: {change['old']} → {C}{change['new']}{RS} {color}({sign}{delta:.1f}){RS}")
+                print(f"  📊 {change['stat']}: {change['old']} → {C}{change['new']}{RS} {color}({sign}{delta:.2f}){RS}")
 
         if stat_consequences:
             print(f"\n  {B}⚠️  Stat Consequences:{RS}")
@@ -626,6 +675,429 @@ class SurvivalEngine:
 
         if not stat_changes and not stat_consequences:
             pass
+
+    def _process_recurring_expenses(self, elapsed_hours: float) -> list:
+        if elapsed_hours <= 0:
+            return []
+
+        data = self.module_data_mgr.load("custom-stats")
+        if not data:
+            return []
+        expenses = data.get('recurring_expenses', [])
+        if not expenses:
+            return []
+
+        char = self.json_ops.load_json("character.json")
+        if not char:
+            return []
+
+        money = char.get('money')
+        if money is None:
+            money = migrate_gold(char)
+
+        try:
+            campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+            currency_cfg = load_currency_config(campaign_dir) if campaign_dir else None
+        except Exception:
+            currency_cfg = None
+
+        results = []
+        for exp in expenses:
+            exp['accumulated_hours'] = exp.get('accumulated_hours', 0) + elapsed_hours
+            interval = exp.get('interval_hours', 24)
+            triggers = int(exp['accumulated_hours'] / interval)
+            if triggers < 1:
+                continue
+
+            exp['accumulated_hours'] = exp['accumulated_hours'] % interval
+
+            cost_dice = exp.get('cost_dice')
+            if cost_dice:
+                from dice import roll as _dice_roll
+                total_cost = sum(_dice_roll(cost_dice) for _ in range(triggers))
+            elif 'cost_min' in exp and 'cost_max' in exp:
+                total_cost = sum(random.randint(exp['cost_min'], exp['cost_max']) for _ in range(triggers))
+            else:
+                total_cost = exp.get('cost', 0) * triggers
+
+            if total_cost <= 0:
+                continue
+
+            if money >= total_cost:
+                money -= total_cost
+                results.append({
+                    'name': exp.get('name', '?'),
+                    'cost': total_cost,
+                    'triggers': triggers,
+                    'success': True,
+                    'remaining': money,
+                    'currency_cfg': currency_cfg,
+                })
+            else:
+                results.append({
+                    'name': exp.get('name', '?'),
+                    'cost': total_cost,
+                    'triggers': triggers,
+                    'success': False,
+                    'remaining': money,
+                    'currency_cfg': currency_cfg,
+                })
+
+        self.module_data_mgr.save("custom-stats", data)
+        char['money'] = money
+        if 'gold' in char:
+            del char['gold']
+        self.json_ops.save_json("character.json", char)
+
+        return results
+
+    def _print_expense_report(self, results: list):
+        C = "\033[36m"; R = "\033[31m"; Y = "\033[33m"
+        B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+
+        print(f"\n  {B}🍞 Recurring Expenses:{RS}")
+        for exp in results:
+            cfg = exp.get('currency_cfg')
+            cost_str = format_money(exp['cost'], cfg)
+            rem_str = format_money(exp['remaining'], cfg)
+            name = exp['name']
+            if exp['success']:
+                print(f"  🍞 {name}: {R}-{cost_str}{RS} {DM}({C}{rem_str}{RS}{DM} remaining){RS}")
+            else:
+                print(f"  {Y}⚠ {name}: НЕ ХВАТАЕТ! Нужно {cost_str}, есть {rem_str}{RS}")
+
+    def _tick_stats_only(self, hours: float, sleeping: bool = False) -> list:
+        time_effects = self._load_module_config()
+        if not time_effects.get('enabled'):
+            return []
+        campaign = self.json_ops.load_json("campaign-overview.json")
+        char_name = campaign.get('current_character')
+        if not char_name:
+            return []
+        return self._apply_time_effects(hours, time_effects, char_name, sleeping=sleeping)
+
+    def _print_stat_changes(self, changes: list):
+        C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; RS = "\033[0m"
+        for ch in changes:
+            color = G if ch['change'] < 0 else R if ch['change'] > 0 else C
+            print(f"  📊 {ch['stat']}: {ch['old']} → {C}{ch['new']}{RS} {color}({ch['change']:+.2f}){RS}")
+
+    def _process_recurring_income(self, elapsed_hours: float) -> list:
+        if elapsed_hours <= 0:
+            return []
+        data = self.module_data_mgr.load("custom-stats")
+        if not data:
+            return []
+        incomes = data.get('recurring_income', [])
+        if not incomes:
+            return []
+
+        char = self.json_ops.load_json("character.json")
+        if not char:
+            return []
+        money = char.get('money', 0)
+
+        try:
+            campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+            currency_cfg = load_currency_config(campaign_dir) if campaign_dir else None
+        except Exception:
+            currency_cfg = None
+
+        from dice import roll as dice_roll
+
+        results = []
+        for inc in incomes:
+            inc['accumulated_hours'] = inc.get('accumulated_hours', 0) + elapsed_hours
+            interval = inc.get('interval_hours', 168)
+            triggers = int(inc['accumulated_hours'] / interval)
+            if triggers < 1:
+                continue
+            inc['accumulated_hours'] = inc['accumulated_hours'] % interval
+
+            checks_per = inc.get('checks_per_interval', 1)
+            for _ in range(triggers):
+              for check_num in range(1, checks_per + 1):
+                check = inc.get('check')
+                if check:
+                    result = self._resolve_income_check(inc, check, dice_roll)
+                    if checks_per > 1:
+                        result['check_label'] = f"день {check_num}/{checks_per}"
+                else:
+                    raw = inc.get('income_dice', inc.get('income', 0))
+                    if isinstance(raw, str) and 'd' in raw.lower():
+                        total = dice_roll(raw)
+                        result = {'income': total, 'detail': f"🎲{raw}={total}", 'outcome': 'success', 'hint': None}
+                    else:
+                        total = int(raw)
+                        result = {'income': total, 'detail': None, 'outcome': 'success', 'hint': None}
+
+                hours_per = inc.get('hours_per_check', 0)
+                if hours_per:
+                    result['hours_spent'] = hours_per
+
+                money += result['income']
+                if money < 0:
+                    result['debt'] = abs(money)
+                    money = 0
+                result['remaining'] = money
+                result['name'] = inc.get('name', '?')
+                result['currency_cfg'] = currency_cfg
+                results.append(result)
+
+        self.module_data_mgr.save("custom-stats", data)
+        char['money'] = money
+        char.pop('gold', None)
+        self.json_ops.save_json("character.json", char)
+        return results
+
+    def _resolve_income_check(self, inc: dict, check: dict, dice_roll) -> dict:
+        dice_expr = check.get('dice', '1d20')
+        modifier = check.get('modifier', 0)
+        dc = check.get('dc', 10)
+        outcomes = inc.get('outcomes', {})
+
+        raw_roll = dice_roll(dice_expr)
+        total_roll = raw_roll + modifier
+        is_nat1 = (raw_roll == 1)
+        is_nat20 = (raw_roll == 20)
+
+        if is_nat1:
+            outcome_key = 'crit_fail'
+        elif is_nat20:
+            outcome_key = 'crit_success'
+        elif total_roll < dc:
+            outcome_key = 'fail'
+        else:
+            outcome_key = 'success'
+
+        outcome = outcomes.get(outcome_key, outcomes.get('success', {'income': 0}))
+        multiplier = inc.get('income_multiplier', 1)
+
+        raw_income = outcome.get('income_dice', outcome.get('income', 0))
+        if isinstance(raw_income, str) and 'd' in raw_income.lower():
+            income = dice_roll(raw_income) * multiplier
+        else:
+            income = int(raw_income) * multiplier
+
+        if outcome_key in ('fail', 'crit_fail'):
+            inc['fail_streak'] = inc.get('fail_streak', 0) + 1
+        else:
+            inc['fail_streak'] = 0
+
+        streak_warn = None
+        threshold = inc.get('streak_threshold', 0)
+        if threshold > 0 and inc.get('fail_streak', 0) >= threshold:
+            streak_warn = inc.get('streak_hint', 'Consecutive failures!')
+
+        detail = f"🎲[{raw_roll}]+{modifier}={total_roll} vs DC {dc}"
+        outcome_emoji = {'crit_fail': '💀', 'fail': '✗', 'success': '✓', 'crit_success': '⚔'}
+        detail += f" — {outcome_emoji.get(outcome_key, '?')} {outcome_key.upper()}"
+
+        return {
+            'income': income,
+            'detail': detail,
+            'outcome': outcome_key,
+            'hint': outcome.get('hint'),
+            'streak_warn': streak_warn,
+            'raw_roll': raw_roll,
+        }
+
+    def _print_income_report(self, results: list):
+        C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; Y = "\033[33m"
+        B = "\033[1m"; RS = "\033[0m"; DM = "\033[2m"
+        print(f"\n  {B}💰 Recurring Income:{RS}")
+        for inc in results:
+            cfg = inc.get('currency_cfg')
+            amount = inc['income']
+            rem_str = format_money(inc['remaining'], cfg)
+            detail = f" {inc['detail']}" if inc.get('detail') else ""
+
+            label = inc['name']
+            if inc.get('check_label'):
+                label += f" ({inc['check_label']})"
+            if amount >= 0:
+                amt_str = format_money(amount, cfg)
+                print(f"  💰 {label}: {G}+{amt_str}{RS}{detail} {DM}({C}{rem_str}{RS}{DM} remaining){RS}")
+            else:
+                amt_str = format_money(abs(amount), cfg)
+                print(f"  💸 {label}: {R}-{amt_str}{RS}{detail} {DM}({C}{rem_str}{RS}{DM} remaining){RS}")
+
+            if inc.get('hours_spent'):
+                print(f"     ⏱️  {inc['hours_spent']}ч потрачено")
+            if inc.get('hint'):
+                print(f"     {DM}[DM: {inc['hint']}]{RS}")
+            if inc.get('debt'):
+                debt_str = format_money(inc['debt'], cfg)
+                print(f"     {R}⚠ ДОЛГ: не хватило {debt_str}! Обнулено до 0.{RS}")
+                print(f"     {DM}[DM: нарративные последствия долга — кредитор, голод, потеря репутации]{RS}")
+            if inc.get('streak_warn'):
+                print(f"     {Y}⚠ STREAK: {inc['streak_warn']}{RS}")
+
+    def _process_recurring_production(self, elapsed_hours: float) -> list:
+        if elapsed_hours <= 0:
+            return []
+        data = self.module_data_mgr.load("custom-stats")
+        if not data:
+            return []
+        productions = data.get('recurring_production', [])
+        if not productions:
+            return []
+
+        from dice import roll as dice_roll
+        sys_path = next(p for p in Path(__file__).parents if (p / ".git").exists())
+        sys.path.insert(0, str(sys_path / "lib"))
+        from inventory_manager import InventoryManager
+
+        results = []
+        for prod in productions:
+            prod['accumulated_hours'] = prod.get('accumulated_hours', 0) + elapsed_hours
+            interval = prod.get('interval_hours', 24)
+            triggers = int(prod['accumulated_hours'] / interval)
+            if triggers < 1:
+                continue
+            prod['accumulated_hours'] = prod['accumulated_hours'] % interval
+
+            target = prod.get('target_inventory', 'Мастерская')
+            check = prod.get('check', {})
+            outcomes = prod.get('outcomes', {})
+            worker = prod.get('worker', prod.get('name', '?'))
+
+            worker_count = prod.get('workers_count', 1)
+            for _ in range(triggers):
+             for w_num in range(1, worker_count + 1):
+                w_label = f" #{w_num}" if worker_count > 1 else ""
+                raw_roll = dice_roll(check.get('dice', '1d20'))
+                modifier = check.get('modifier', 0)
+                dc = check.get('dc', 10)
+                total_roll = raw_roll + modifier
+
+                if raw_roll == 1:
+                    outcome_key = 'crit_fail'
+                elif raw_roll == 20:
+                    outcome_key = 'crit_success'
+                elif total_roll < dc:
+                    outcome_key = 'fail'
+                else:
+                    outcome_key = 'success'
+
+                outcome = outcomes.get(outcome_key, outcomes.get('success', {}))
+                produce = outcome.get('produce', {})
+                consume = outcome.get('consume', {})
+                hint = outcome.get('hint', '')
+
+                produced_items = {}
+                for item, qty_expr in produce.items():
+                    if isinstance(qty_expr, str) and 'd' in qty_expr.lower():
+                        produced_items[item] = dice_roll(qty_expr)
+                    else:
+                        produced_items[item] = int(qty_expr)
+
+                consumed_items = {}
+                for item, qty_expr in consume.items():
+                    if isinstance(qty_expr, str) and 'd' in qty_expr.lower():
+                        consumed_items[item] = dice_roll(qty_expr)
+                    else:
+                        consumed_items[item] = int(qty_expr)
+
+                try:
+                    campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+                    mgr = InventoryManager(campaign_dir, npc_name=target)
+                    ops = {}
+                    if produced_items:
+                        ops['add'] = {k: v for k, v in produced_items.items()}
+                    if consumed_items:
+                        ops['remove'] = {k: v for k, v in consumed_items.items()}
+                    if ops:
+                        mgr.reason = f"{worker}: production"
+                        mgr.apply_transaction(ops)
+                except Exception:
+                    pass
+
+                emoji = {'crit_fail': '💀', 'fail': '✗', 'success': '✓', 'crit_success': '⚔'}
+                results.append({
+                    'worker': f"{worker}{w_label}",
+                    'roll': f"[{raw_roll}]+{modifier}={total_roll} vs DC {dc}",
+                    'outcome': outcome_key,
+                    'emoji': emoji.get(outcome_key, '?'),
+                    'produced': produced_items,
+                    'consumed': consumed_items,
+                    'hint': hint,
+                })
+
+        self.module_data_mgr.save("custom-stats", data)
+        return results
+
+    def _print_production_report(self, results: list):
+        B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"
+        G = "\033[32m"; R = "\033[31m"; DM = "\033[2m"
+        print(f"\n  {B}🏭 Production:{RS}")
+        for r in results:
+            color = G if r['outcome'] in ('success', 'crit_success') else R
+            print(f"  {r['emoji']} {r['worker']}: 🎲{r['roll']} — {color}{r['outcome'].upper()}{RS}")
+            if r['produced']:
+                for item, qty in r['produced'].items():
+                    print(f"     {G}+{qty}{RS} {item}")
+            if r['consumed']:
+                for item, qty in r['consumed'].items():
+                    print(f"     {R}-{qty}{RS} {item}")
+            if r['hint']:
+                print(f"     {DM}[DM: {r['hint']}]{RS}")
+
+    def _roll_random_event(self, elapsed_hours: float) -> dict | None:
+        data = self.module_data_mgr.load("custom-stats")
+        if not data:
+            return None
+        event_config = data.get('random_events')
+        if not event_config or not event_config.get('enabled', False):
+            return None
+
+        interval = event_config.get('interval_hours', 168)
+        event_config['accumulated_hours'] = event_config.get('accumulated_hours', 0) + elapsed_hours
+        if event_config['accumulated_hours'] < interval:
+            self.module_data_mgr.save("custom-stats", data)
+            return None
+
+        event_config['accumulated_hours'] = event_config['accumulated_hours'] % interval
+        self.module_data_mgr.save("custom-stats", data)
+
+        roll = random.randint(1, 100)
+        categories = event_config.get('categories', [
+            {"range": [1, 10], "type": "disaster", "emoji": "💀"},
+            {"range": [11, 25], "type": "negative", "emoji": "⚠️"},
+            {"range": [26, 50], "type": "neutral", "emoji": "📰"},
+            {"range": [51, 75], "type": "opportunity", "emoji": "💡"},
+            {"range": [76, 95], "type": "positive", "emoji": "🎁"},
+            {"range": [96, 100], "type": "windfall", "emoji": "🌟"},
+        ])
+
+        event_type = "neutral"
+        emoji = "📰"
+        for cat in categories:
+            r = cat['range']
+            if r[0] <= roll <= r[1]:
+                event_type = cat['type']
+                emoji = cat.get('emoji', '📰')
+                break
+
+        scope_roll = random.randint(1, 6)
+        scopes = event_config.get('scopes', [
+            "personal", "workshop", "npc", "city", "threat", "opportunity"
+        ])
+        scope = scopes[min(scope_roll - 1, len(scopes) - 1)]
+
+        return {
+            'roll': roll,
+            'type': event_type,
+            'emoji': emoji,
+            'scope': scope,
+            'scope_roll': scope_roll,
+        }
+
+    def _print_random_event(self, event: dict):
+        B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"; Y = "\033[33m"
+        print(f"\n  {B}🎲 RANDOM EVENT:{RS} {event['emoji']} {Y}{event['type'].upper()}{RS} (d100={C}{event['roll']}{RS})")
+        print(f"  Scope: {event['scope']} (d6={event['scope_roll']})")
+        print(f"  {B}[DM: narrate an event based on type+scope above]{RS}")
 
     def _get_active_character_name(self) -> str:
         """Get active character name from campaign overview."""
@@ -662,8 +1134,8 @@ class SurvivalEngine:
         if cs is None:
             raise RuntimeError(f"Custom stat '{stat}' not found for {name}")
 
-        old_val = cs.get('current', cs.get('value', 0))
-        new_val = old_val + amount
+        old_val = round(cs.get('current', cs.get('value', 0)), 2)
+        new_val = round(old_val + amount, 2)
         cs_max = cs.get('max')
         cs_min = cs.get('min', 0)
         if cs_max is not None:
@@ -686,123 +1158,6 @@ class SurvivalEngine:
             if isinstance(stat_data, dict) and 'current' not in stat_data and 'value' in stat_data:
                 stat_data['current'] = stat_data['value']
         return custom_stats
-
-    def time_post_hook(self, date: str, elapsed_hours: float = -1,
-                       set_time: str = None, sleeping: bool = False) -> bool:
-        """
-        Post-hook for dm-time.sh. Updates precise clock + game_date in module-data,
-        auto-advances calendar days on midnight crossings, ticks stats.
-        """
-        data = self.module_data_mgr.load("custom-stats")
-        if not data or not data.get('enabled'):
-            return True
-
-        clock = data.get("precise_time", "08:00")
-        old_h, old_m = map(int, clock.split(":"))
-
-        try:
-            from lib.calendar import load_config as load_cal, parse_date, format_date, advance_hours, weekday
-            campaign_dir = self.campaign_mgr.get_active_campaign_dir()
-            cal_config = load_cal(campaign_dir) if campaign_dir else None
-        except Exception:
-            cal_config = None
-
-        game_date = data.get("game_date")
-        if not game_date and cal_config and date:
-            try:
-                game_date = parse_date(date, cal_config)
-                data["game_date"] = game_date
-            except (ValueError, KeyError):
-                pass
-
-        if set_time:
-            new_h, new_m = map(int, set_time.split(":"))
-            if elapsed_hours < 0:
-                old_total = old_h * 60 + old_m
-                new_total = new_h * 60 + new_m
-                diff_min = new_total - old_total
-                if diff_min < 0:
-                    diff_min += 24 * 60
-                elapsed_hours = diff_min / 60.0
-            h, m = new_h, new_m
-        elif elapsed_hours > 0:
-            total_min = old_h * 60 + old_m + int(elapsed_hours * 60)
-            h = (total_min // 60) % 24
-            m = total_min % 60
-        else:
-            h, m = old_h, old_m
-
-        new_clock = f"{h:02d}:{m:02d}"
-
-        if game_date and cal_config and elapsed_hours > 0:
-            new_date, new_clock = advance_hours(game_date, clock, elapsed_hours, cal_config)
-            game_date = new_date
-            data["game_date"] = game_date
-            h, m = map(int, new_clock.split(":"))
-
-        data["precise_time"] = new_clock
-        self.module_data_mgr.save("custom-stats", data)
-
-        if game_date and cal_config:
-            try:
-                from lib.campaign_manager import CampaignManager
-                from lib.json_ops import JsonOperations
-                campaign_dir = self.campaign_mgr.get_active_campaign_dir()
-                if campaign_dir:
-                    json_ops = JsonOperations(str(campaign_dir))
-                    overview = json_ops.load_json("campaign-overview.json")
-                    overview["current_date"] = format_date(game_date, cal_config)
-                    overview["time_of_day"] = new_clock
-                    json_ops.save_json("campaign-overview.json", overview)
-            except Exception:
-                pass
-
-        C = "\033[36m"
-        DM = "\033[2m"
-        RS = "\033[0m"
-        Y = "\033[33m"
-
-        date_display = format_date(game_date, cal_config) if (game_date and cal_config) else date
-        wd = ""
-        if game_date and cal_config:
-            wd_str = weekday(game_date, cal_config)
-            if wd_str:
-                wd = f"{Y}{wd_str}{RS}, "
-
-        if elapsed_hours > 0:
-            print(f"\n⏰ {C}{new_clock}{RS}, {wd}{date_display} {DM}(+{elapsed_hours:g}h){RS}")
-        else:
-            print(f"\n⏰ {C}{new_clock}{RS}, {wd}{date_display}")
-
-        if elapsed_hours > 0:
-            self.tick(elapsed_hours, sleeping=sleeping)
-            triggered = self._check_time_consequences(elapsed_hours)
-            if triggered:
-                print("\n⚠️  Timed Consequences Triggered:")
-                for tc in triggered:
-                    print(f"  [{tc.get('id', '?')}] {tc.get('consequence', tc.get('event', ''))}")
-
-        return True
-
-    def _calculate_elapsed_hours(self, prev_time: str, new_time: str, prev_date: str, new_date: str) -> float:
-        """Calculate elapsed hours between two precise times and dates."""
-        def parse_time(t: str) -> float:
-            parts = t.split(':')
-            return float(parts[0]) + float(parts[1]) / 60
-
-        prev_hours = parse_time(prev_time)
-        new_hours = parse_time(new_time)
-
-        date_diff = 0
-        if new_date != prev_date:
-            try:
-                prev_day = int(prev_date.split()[0].rstrip('stndrdth'))
-                new_day = int(new_date.split()[0].rstrip('stndrdth'))
-                date_diff = (new_day - prev_day) * 24
-            except (ValueError, IndexError):
-                date_diff = 0
-
-        return date_diff + (new_hours - prev_hours)
 
     def _check_time_consequences(self, elapsed_hours: float) -> list:
         """Check and trigger time-based consequences (trigger_hours field)."""
@@ -845,22 +1200,10 @@ def main():
     custom_stat_parser.add_argument('name', nargs='?', help='Character name (optional, auto-detects)')
     custom_stat_parser.add_argument('stat', help='Stat name')
     custom_stat_parser.add_argument('amount', nargs='?', help='Amount to modify (+/- prefix)')
+    custom_stat_parser.add_argument('--reason', '-r', help='Reason for change (shown in output)')
 
     list_parser = subparsers.add_parser('custom-stats-list', help='List all custom stats')
     list_parser.add_argument('name', nargs='?', help='Character name (optional, auto-detects)')
-
-    time_parser = subparsers.add_parser('time', help='Advance time with survival effects')
-    time_parser.add_argument('time_of_day', help='Time of day label (Morning, Afternoon, etc.)')
-    time_parser.add_argument('date', help='Date string')
-    time_parser.add_argument('--elapsed', type=float, default=0, help='Hours elapsed')
-    time_parser.add_argument('--precise-time', help='HH:MM format for auto-elapsed calculation')
-    time_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping')
-
-    hook_parser = subparsers.add_parser('time-post-hook', help='Post-hook for dm-time.sh')
-    hook_parser.add_argument('date', help='Date string')
-    hook_parser.add_argument('--elapsed', type=float, default=-1, help='Hours elapsed (-1=auto from set-time)')
-    hook_parser.add_argument('--set-time', help='Set precise time to HH:MM')
-    hook_parser.add_argument('--sleeping', action='store_true', help='Character is sleeping')
 
     rate_parser = subparsers.add_parser('rate', help='Set rate modifier for a stat')
     rate_parser.add_argument('stat', help='Stat name')
@@ -921,9 +1264,10 @@ def main():
                 try:
                     amount = float(amount_str)
                     result = engine.modify_custom_stat(name=name, stat=stat, amount=amount)
-                    C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; RS = "\033[0m"
+                    C = "\033[36m"; G = "\033[32m"; R = "\033[31m"; DM = "\033[2m"; RS = "\033[0m"
                     color = G if amount >= 0 else R
-                    print(f"  📊 {stat}: {result['old_value']} → {C}{result['new_value']}{RS} {color}({amount:+.1f}){RS}")
+                    reason_str = f" {DM}— {args.reason}{RS}" if getattr(args, 'reason', None) else ""
+                    print(f"  📊 {stat}: {result['old_value']} → {C}{result['new_value']}{RS} {color}({amount:+.2f}){RS}{reason_str}")
                 except ValueError:
                     print(f"[ERROR] Invalid amount: {amount_str}")
                     sys.exit(1)
@@ -989,21 +1333,6 @@ def main():
 
         elif args.action == 'effects':
             engine.list_effects()
-
-        elif args.action == 'time':
-            engine.time_post_hook(
-                date=args.date,
-                elapsed_hours=args.elapsed,
-                sleeping=args.sleeping
-            )
-
-        elif args.action == 'time-post-hook':
-            engine.time_post_hook(
-                date=args.date,
-                elapsed_hours=args.elapsed,
-                set_time=args.set_time,
-                sleeping=args.sleeping
-            )
 
     except RuntimeError as e:
         print(f"[ERROR] {e}")

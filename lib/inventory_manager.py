@@ -9,7 +9,7 @@ Party inventory: module-data/inventory-party.json
 import json
 import sys
 import re
-import subprocess
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
@@ -20,6 +20,7 @@ _infra_dir = Path(__file__).parent.parent / ".claude" / "additional" / "infrastr
 sys.path.insert(0, str(_infra_dir))
 from module_data import ModuleDataManager
 from currency import load_config, format_money, format_delta, parse_money, migrate_gold, can_afford
+from dice import roll as dice_roll, roll_formatted as dice_roll_formatted
 
 
 ITEM_CATEGORIES = {
@@ -407,6 +408,7 @@ class InventoryManager:
 
         original_character = deepcopy(self.character)
         original_inventory = deepcopy(self.inventory)
+        self._dice_rolls = operations.pop('_dice_rolls', {})
 
         try:
             self.changes_log = []
@@ -488,14 +490,14 @@ class InventoryManager:
             for stat_name, change in operations.get('custom_stats', {}).items():
                 stat = self.character["custom_stats"][stat_name]
                 key = "current" if "current" in stat else "value"
-                old = stat[key]
-                new = old + change
+                old = round(stat[key], 2)
+                new = round(old + change, 2)
                 min_val = stat.get("min", 0)
                 max_val = stat.get("max")
                 new = max(min_val, new)
                 if max_val is not None:
                     new = min(max_val, new)
-                stat[key] = new
+                stat[key] = round(new, 2)
                 self.changes_log.append(("custom_stat", stat_name, old, new, change))
 
             self._save_character()
@@ -592,7 +594,8 @@ class InventoryManager:
         RS = "\033[0m"
         B = "\033[1m"
 
-        print(f"  {B}INVENTORY UPDATE:{RS} {who}{npc_tag}")
+        reason_str = f" {DM}— {self.reason}{RS}" if getattr(self, 'reason', None) else ""
+        print(f"  {B}INVENTORY UPDATE:{RS} {who}{npc_tag}{reason_str}")
 
         stat_changes = [entry for entry in self.changes_log
                         if entry[0] in ("gold", "hp", "xp", "custom_stat")]
@@ -615,7 +618,9 @@ class InventoryManager:
                 elif op == "custom_stat":
                     stat_name, old, new, delta = entry[1:5]
                     color = G if delta >= 0 else R
-                    print(f"  📊 {stat_name}: {old} → {C}{new}{RS} {color}({delta:+d}){RS}")
+                    dice_info = getattr(self, '_dice_rolls', {}).get(stat_name)
+                    dice_str = f" 🎲{dice_info[0]}={delta:+d}" if dice_info else ""
+                    print(f"  📊 {stat_name}: {old} → {C}{new}{RS} {color}({delta:+d}){RS}{dice_str}")
 
         adds = [data for op, *data in self.changes_log if op == "add"]
         if adds:
@@ -737,7 +742,15 @@ class InventoryManager:
 
     # --- Drop (combat) ---
 
-    def drop_item(self, item_name: str, quantity: Optional[int] = None, is_unique: bool = False) -> bool:
+    def remove_item(self, item_name: str, quantity: Optional[int] = None, is_unique: bool = False) -> bool:
+        R = "\033[31m"
+        C = "\033[36m"
+        B = "\033[1m"
+        DM = "\033[2m"
+        RS = "\033[0m"
+        who = self.character.get('name', 'Character')
+        npc_tag = f" {DM}[NPC]{RS}" if self.is_npc else ""
+
         if is_unique:
             unique = self.inventory.get("unique", [])
             found = None
@@ -749,10 +762,10 @@ class InventoryManager:
                 print(f"[ERROR] Unique item '{item_name}' not found", file=sys.stderr)
                 return False
             unique.remove(found)
-            w = self._get_unique_weight(found)
             self._save_inventory()
-            print(f"[DROPPED] {found} [{w}kg] — on the ground")
-            self._log_drop(found, w)
+            print("=" * 68)
+            print(f"  {B}INVENTORY REMOVE:{RS} {who}{npc_tag}")
+            print(f"  {R}\u2212{RS} {found}")
             return True
 
         current_qty = self._get_stackable_qty(item_name)
@@ -760,38 +773,34 @@ class InventoryManager:
             print(f"[ERROR] Item '{item_name}' not found in inventory", file=sys.stderr)
             return False
 
-        drop_qty = quantity if quantity else current_qty
-        if drop_qty > current_qty:
-            drop_qty = current_qty
+        rm_qty = quantity if quantity else current_qty
+        if rm_qty > current_qty:
+            rm_qty = current_qty
 
         w_each = self._get_stackable_weight(item_name)
-        new_qty = current_qty - drop_qty
+        new_qty = current_qty - rm_qty
         self._set_stackable(item_name, new_qty, w_each)
         self._save_inventory()
 
-        total_w = round(drop_qty * w_each, 2)
-        print(f"[DROPPED] {item_name} x{drop_qty} [{total_w}kg] — on the ground")
+        print("=" * 68)
+        print(f"  {B}INVENTORY REMOVE:{RS} {who}{npc_tag}")
+        print(f"  {R}\u2212{RS} {item_name} x{rm_qty} {DM}[{w_each}kg ea]{RS}")
         if new_qty > 0:
-            print(f"  Remaining: {new_qty}")
-
-        self._log_drop(f"{item_name} x{drop_qty}", total_w)
+            print(f"  {DM}Remaining: {new_qty}{RS}")
         return True
-
-    def _log_drop(self, item_desc: str, weight: float):
-        location = self.character.get("current_location", "unknown")
-        who = self.character.get('name', 'Unknown')
-        try:
-            subprocess.run(
-                ["bash", "tools/dm-note.sh", "dropped_item",
-                 f"{who} dropped: {item_desc} [{weight}kg] at {location}"],
-                cwd=str(PROJECT_ROOT), capture_output=True, timeout=5
-            )
-        except Exception:
-            pass
 
     # --- Status (compact, for session start) ---
 
     def show_status(self):
+        B = "\033[1m"
+        C = "\033[36m"
+        G = "\033[32m"
+        Y = "\033[33m"
+        R = "\033[31m"
+        DM = "\033[2m"
+        M = "\033[35m"
+        RS = "\033[0m"
+
         char = self.character
         name = char.get("name", "Character")
         money = char.get("money", 0)
@@ -804,21 +813,33 @@ class InventoryManager:
         level = char.get("level", 0)
         weight_info = self.calculate_weight()
 
-        print(f"🎒 INVENTORY — {name}")
-        print(f"  HP: {hp_cur}/{hp_max} | LVL: {level} | XP: {xp_cur}/{xp_next} | Gold: {format_money(money, self.currency_config)}")
-        print(f"  Weight: {weight_info['total_weight']}/{weight_info['capacity']} kg ({weight_info['status']})")
+        hp_pct = hp_cur / hp_max if hp_max > 0 else 1
+        hp_color = G if hp_pct > 0.5 else (Y if hp_pct > 0.25 else R)
+        w_status = weight_info['status']
+        w_color = G if w_status == "Normal" else (Y if w_status in ("Encumbered", "Heavy") else R)
+
+        print(f"{B}🎒 {name}{RS}")
+        print(f"  ❤️  {hp_color}{hp_cur}/{hp_max}{RS}  │  LVL {B}{level}{RS}  │  ⭐ {C}{xp_cur}/{xp_next}{RS}  │  💰 {C}{format_money(money, self.currency_config)}{RS}")
+        print(f"  ⚖️  {w_color}{weight_info['total_weight']}/{weight_info['capacity']} kg{RS} ({w_color}{w_status}{RS})")
 
         stackable = self.inventory.get("stackable", {})
         unique = self.inventory.get("unique", [])
         if stackable:
             print()
+            items_display = []
             for item_name, val in stackable.items():
                 qty = val.get("qty", 0) if isinstance(val, dict) else val
                 w = val.get("weight", 0.5) if isinstance(val, dict) else 0.5
-                print(f"    {item_name:.<30s} x{qty}  ({w}kg ea = {qty*w:.1f}kg)")
+                items_display.append((item_name, qty, w))
+            if items_display:
+                max_len = max(len(n) for n, *_ in items_display)
+                for item_name, qty, w in items_display:
+                    dots = '.' * (max_len + 3 - len(item_name))
+                    total_w = round(qty * w, 2)
+                    print(f"    {item_name} {DM}{dots}{RS} {C}x{qty}{RS}  {DM}({w}kg ea = {total_w}kg){RS}")
         if unique:
             for item in unique:
-                print(f"    • {item}")
+                print(f"    {M}•{RS} {item}")
 
         party_data = self.module_data_mgr.load("inventory-party")
         if party_data:
@@ -1047,7 +1068,7 @@ def main():
 
     update_parser = subparsers.add_parser('update', help='Update inventory/stats')
     update_parser.add_argument('character', help='Character or NPC name')
-    update_parser.add_argument('--gold', type=str, help='Add/remove money: int (base units) or "2g 5s", "-3gp"')
+    update_parser.add_argument('--gold', type=str, action='append', help='Add/remove money: int (base units) or "2g 5s", "-3gp". Can specify multiple times.')
     update_parser.add_argument('--hp', type=int, help='Add/remove HP')
     update_parser.add_argument('--xp', type=int, help='Add/remove XP')
     update_parser.add_argument('--add', nargs='+', action='append', metavar='ITEM',
@@ -1065,6 +1086,7 @@ def main():
     update_parser.add_argument('--stat', nargs=2, action='append', metavar=('NAME', 'CHANGE'),
                               help='Modify custom stat')
     update_parser.add_argument('--test', action='store_true', help='Test mode')
+    update_parser.add_argument('--reason', '-r', help='Reason for change (shown in output)')
 
     show_parser = subparsers.add_parser('show', help='Show inventory')
     show_parser.add_argument('character', help='Character or NPC name')
@@ -1084,18 +1106,30 @@ def main():
 
     loot_parser = subparsers.add_parser('loot', help='Quick loot')
     loot_parser.add_argument('character', help='Character or NPC name')
-    loot_parser.add_argument('--gold', type=str, help='Money to add: int (base units) or "2g 5s"')
+    loot_parser.add_argument('--gold', type=str, action='append', help='Money to add: int (base units) or "2g 5s". Can specify multiple times.')
     loot_parser.add_argument('--items', nargs='+', metavar='ITEM:QTY[:WEIGHT]')
     loot_parser.add_argument('--xp', type=int)
     loot_parser.add_argument('--test', action='store_true')
+    loot_parser.add_argument('--reason', '-r', help='Reason for loot (shown in output)')
 
     subparsers.add_parser('status', help='Compact status for session start')
 
-    drop_parser = subparsers.add_parser('drop', help='Drop item (combat)')
-    drop_parser.add_argument('character', help='Character or NPC name')
-    drop_parser.add_argument('item', help='Item to drop')
-    drop_parser.add_argument('--qty', type=int)
-    drop_parser.add_argument('--unique', action='store_true')
+    remove_parser = subparsers.add_parser('remove', help='Remove item from inventory (sold, destroyed, consumed)')
+    remove_parser.add_argument('character', help='Character or NPC name')
+    remove_parser.add_argument('item', help='Item to remove')
+    remove_parser.add_argument('--qty', type=int)
+    remove_parser.add_argument('--unique', action='store_true')
+
+    use_parser = subparsers.add_parser('use', help='Use consumable (auto-lookup wiki for effects)')
+    use_parser.add_argument('character', help='Character or NPC name')
+    use_parser.add_argument('item', help='Item name to use')
+    use_parser.add_argument('--qty', type=int, default=1, help='Quantity to use (default: 1)')
+
+    craft_parser = subparsers.add_parser('craft', help='Craft item from wiki recipe (auto-check ingredients, roll skill)')
+    craft_parser.add_argument('character', help='Character or NPC name')
+    craft_parser.add_argument('item', help='Wiki item ID or name to craft')
+    craft_parser.add_argument('--qty', type=int, default=1, help='How many to craft (default: 1)')
+    craft_parser.add_argument('--check', action='store_true', help='Only check if craftable, do not craft')
 
     args = parser.parse_args()
 
@@ -1124,6 +1158,7 @@ def main():
     char_name = getattr(args, 'character', None) or getattr(args, 'source', None)
     npc_name = _resolve_target(campaign_path, char_name) if char_name else None
     manager = InventoryManager(campaign_path, npc_name=npc_name)
+    manager.reason = getattr(args, 'reason', None)
 
     if args.command == 'show':
         manager.show_inventory(getattr(args, 'category', None))
@@ -1131,23 +1166,29 @@ def main():
     elif args.command == 'weigh':
         manager.show_weight_breakdown()
 
-    elif args.command == 'drop':
-        success = manager.drop_item(args.item, args.qty, args.unique)
-        weight_info = manager.calculate_weight()
-        if weight_info['status'] == 'Normal':
-            print(f"  Weight now: {weight_info['total_weight']}/{weight_info['capacity']} kg — Normal")
-        sys.exit(0 if success else 1)
+    elif args.command == 'remove':
+        if manager.remove_item(args.item, args.qty, args.unique):
+            G = "\033[32m"
+            DM = "\033[2m"
+            RS = "\033[0m"
+            weight_info = manager.calculate_weight()
+            print(f"  {DM}⚖️  {G}{weight_info['total_weight']}/{weight_info['capacity']} kg{RS} {DM}({weight_info['status']}){RS}")
+            print("=" * 68)
 
     elif args.command == 'update':
         operations = {}
         if args.gold:
-            try:
-                operations['gold'] = parse_money(args.gold, manager.currency_config)
-                if str(args.gold).lstrip().startswith('-'):
-                    operations['gold'] = -abs(operations['gold'])
-            except ValueError:
-                print(f"[ERROR] Invalid gold amount: {args.gold}", file=sys.stderr)
-                sys.exit(1)
+            total_gold = 0
+            for g in args.gold:
+                try:
+                    val = parse_money(g, manager.currency_config)
+                    if str(g).lstrip().startswith('-'):
+                        val = -abs(val)
+                    total_gold += val
+                except ValueError:
+                    print(f"[ERROR] Invalid gold amount: {g}", file=sys.stderr)
+                    sys.exit(1)
+            operations['gold'] = total_gold
         if args.hp:
             operations['hp'] = args.hp
         if args.xp:
@@ -1184,7 +1225,22 @@ def main():
             operations['remove_unique'] = args.remove_unique
 
         if args.stat:
-            operations['custom_stats'] = {stat: int(val) for stat, val in args.stat}
+            _dice_re = re.compile(r'\d*d\d+', re.IGNORECASE)
+            custom_stats = {}
+            dice_rolls = {}
+            for stat, val in args.stat:
+                negate = val.startswith('neg') or val.startswith('NEG')
+                clean_val = val[3:] if negate else val
+                if _dice_re.search(clean_val):
+                    roll_result = dice_roll(clean_val)
+                    if negate:
+                        roll_result = -roll_result
+                    custom_stats[stat] = roll_result
+                    dice_rolls[stat] = (f"-{clean_val}" if negate else clean_val, roll_result)
+                else:
+                    custom_stats[stat] = int(val)
+            operations['custom_stats'] = custom_stats
+            operations['_dice_rolls'] = dice_rolls
 
         success = manager.apply_transaction(operations, test_mode=args.test)
         sys.exit(0 if success else 1)
@@ -1192,13 +1248,17 @@ def main():
     elif args.command == 'loot':
         operations = {}
         if args.gold:
-            try:
-                operations['gold'] = parse_money(args.gold, manager.currency_config)
-                if str(args.gold).lstrip().startswith('-'):
-                    operations['gold'] = -abs(operations['gold'])
-            except ValueError:
-                print(f"[ERROR] Invalid gold amount: {args.gold}", file=sys.stderr)
-                sys.exit(1)
+            total_gold = 0
+            for g in args.gold:
+                try:
+                    val = parse_money(g, manager.currency_config)
+                    if str(g).lstrip().startswith('-'):
+                        val = -abs(val)
+                    total_gold += val
+                except ValueError:
+                    print(f"[ERROR] Invalid gold amount: {g}", file=sys.stderr)
+                    sys.exit(1)
+            operations['gold'] = total_gold
         if args.xp:
             operations['xp'] = args.xp
         if args.items:
@@ -1229,6 +1289,243 @@ def main():
         unique_items = args.unique or []
         success = source_mgr.transfer_to(args.target, items, unique_items, args.test)
         sys.exit(0 if success else 1)
+
+    elif args.command == 'use':
+        from wiki_manager import WikiManager
+        wiki = WikiManager(str(campaign_path))
+        _use_consumable(manager, wiki, args.item, args.qty)
+        sys.exit(0)
+
+    elif args.command == 'craft':
+        from wiki_manager import WikiManager
+        wiki = WikiManager(str(campaign_path))
+        _craft_item(manager, wiki, args.item, args.qty, args.check)
+        sys.exit(0)
+
+
+def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = False) -> bool:
+    B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"; G = "\033[32m"
+    R = "\033[31m"; DM = "\033[2m"; Y = "\033[33m"
+
+    entity = wiki.show(item_id)
+    if not entity:
+        print(f"[ERROR] '{item_id}' not found in wiki", file=sys.stderr)
+        return False
+
+    recipe = entity.get('recipe')
+    if not recipe:
+        print(f"[ERROR] '{entity.get('name', item_id)}' has no recipe in wiki", file=sys.stderr)
+        return False
+
+    name = entity.get('name', item_id)
+    eid = entity.get('_id', item_id)
+    dc = recipe.get('dc', 10)
+    skill_name = recipe.get('skill', 'алхимия')
+    ingredients = recipe.get('ingredients', {})
+
+    char = manager.character
+    skills = char.get('skills', {})
+    skill_data = skills.get(skill_name, {})
+    if isinstance(skill_data, dict):
+        skill_bonus = skill_data.get('total', 0)
+        dc_mod = skill_data.get('dc_mod', 0)
+    else:
+        skill_bonus = int(skill_data)
+        dc_mod = 0
+
+    effective_dc = dc + dc_mod
+
+    missing = []
+    inv = manager.inventory
+    stackable = inv.get('stackable', {})
+    for ing_id, ing_qty in ingredients.items():
+        needed = ing_qty * qty
+        ing_entity = wiki.show(ing_id)
+        ing_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
+        have = 0
+        for inv_name, inv_data in stackable.items():
+            if inv_name.lower() == ing_name.lower() or ing_name.lower().startswith(inv_name.lower()) or inv_name.lower().startswith(ing_name.lower().split('(')[0].strip()):
+                have = inv_data if isinstance(inv_data, int) else inv_data.get('qty', 0)
+                break
+        if have < needed:
+            missing.append(f"{ing_name}: нужно {needed}, есть {have}")
+
+    print(f"{'=' * 60}")
+    print(f"  {B}CRAFT: {name}{RS}" + (f" x{qty}" if qty > 1 else ""))
+    print(f"  {DM}Skill: {skill_name} +{skill_bonus}, DC: {dc}{'+' + str(dc_mod) if dc_mod else ''} = {effective_dc}{RS}")
+    print(f"  Ингредиенты:")
+    for ing_id, ing_qty in ingredients.items():
+        ing_entity = wiki.show(ing_id)
+        ing_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
+        needed = ing_qty * qty
+        have = 0
+        for inv_name, inv_data in stackable.items():
+            if inv_name.lower() == ing_name.lower() or ing_name.lower().startswith(inv_name.lower()) or inv_name.lower().startswith(ing_name.lower().split('(')[0].strip()):
+                have = inv_data if isinstance(inv_data, int) else inv_data.get('qty', 0)
+                break
+        status = f"{G}✓{RS}" if have >= needed else f"{R}✗{RS}"
+        print(f"    {status} {ing_name}: {needed} (есть {have})")
+
+    auto = (1 + skill_bonus) >= effective_dc
+    if auto:
+        print(f"  {G}→ АВТОУСПЕХ (1+{skill_bonus} >= {effective_dc}){RS}")
+    else:
+        min_roll = effective_dc - skill_bonus
+        chance = max(0, min(100, (21 - min_roll) * 5))
+        print(f"  {Y}→ Бросок нужен (мин. {min_roll} на d20, шанс {chance}%){RS}")
+
+    if missing:
+        print(f"\n  {R}НЕ ХВАТАЕТ:{RS}")
+        for m in missing:
+            print(f"    {R}✗ {m}{RS}")
+        print(f"{'=' * 60}")
+        return False
+
+    if check_only:
+        print(f"\n  {Y}[CHECK ONLY — не крафтим]{RS}")
+        print(f"{'=' * 60}")
+        return True
+
+    def _resolve_ing_names():
+        names = {}
+        for ing_id in ingredients:
+            ing_entity = wiki.show(ing_id)
+            wiki_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
+            matched_inv_name = wiki_name
+            for inv_name in stackable:
+                if inv_name.lower() == wiki_name.lower() or wiki_name.lower().startswith(inv_name.lower()) or inv_name.lower().startswith(wiki_name.lower().split('(')[0].strip()):
+                    matched_inv_name = inv_name
+                    break
+            names[ing_id] = matched_inv_name
+        return names
+
+    ing_names = _resolve_ing_names()
+
+    if auto:
+        print()
+        ops = {'remove': {}, 'add': {}}
+        for ing_id, ing_qty in ingredients.items():
+            ops['remove'][ing_names[ing_id]] = ing_qty * qty
+        ops['add'][name] = qty
+        manager.reason = f"скрафтил {name}" + (f" x{qty}" if qty > 1 else "")
+        manager.apply_transaction(ops)
+        print(f"{'=' * 60}")
+        return True
+
+    successes = 0
+    crits = 0
+    failures = 0
+    fumbles = 0
+    print()
+    for i in range(1, qty + 1):
+        label = f"({i}/{qty}) " if qty > 1 else ""
+        roll = dice_roll("1d20")
+        total_roll = roll + skill_bonus
+        if roll == 1:
+            print(f"  {label}🎲 [{roll}]+{skill_bonus}={total_roll} vs DC {effective_dc} — {R}💀 FUMBLE{RS}")
+            print(f"     {DM}[DM: что-то сломалось/взорвалось/пролилось, двойной расход]{RS}")
+            fumbles += 1
+        elif total_roll < effective_dc:
+            print(f"  {label}🎲 [{roll}]+{skill_bonus}={total_roll} vs DC {effective_dc} — {R}✗ FAIL{RS}")
+            print(f"     {DM}[DM: не вышло, ингредиенты потеряны]{RS}")
+            failures += 1
+        elif roll == 20:
+            print(f"  {label}🎲 [{roll}]+{skill_bonus}={total_roll} vs DC {effective_dc} — {G}✓ SUCCESS ⚔ CRIT!{RS}")
+            print(f"     {DM}[DM: идеальная варка! Бонусная порция из тех же ингредиентов]{RS}")
+            successes += 1
+            crits += 1
+        else:
+            print(f"  {label}🎲 [{roll}]+{skill_bonus}={total_roll} vs DC {effective_dc} — {G}✓ SUCCESS{RS}")
+            successes += 1
+
+    ingredient_cost = successes + failures + fumbles * 2
+    produced = successes + crits
+
+    ops = {'remove': {}}
+    for ing_id, ing_qty in ingredients.items():
+        ops['remove'][ing_names[ing_id]] = ing_qty * ingredient_cost
+    if produced > 0:
+        ops['add'] = {name: produced}
+
+    parts = []
+    if successes:
+        parts.append(f"{successes} успех")
+    if crits:
+        parts.append(f"+{crits} бонус (крит)")
+    if failures:
+        parts.append(f"{failures} провал")
+    if fumbles:
+        parts.append(f"{fumbles} фамбл (x2 расход)")
+    manager.reason = f"крафт {name}: {', '.join(parts)}"
+    manager.apply_transaction(ops)
+    print(f"{'=' * 60}")
+    return successes > 0
+
+
+def _use_consumable(manager, wiki, item_name: str, qty: int = 1) -> bool:
+    B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"; G = "\033[32m"
+    R = "\033[31m"; DM = "\033[2m"; Y = "\033[33m"
+
+    entity = wiki.show(item_name)
+    if not entity:
+        print(f"[ERROR] '{item_name}' not found in wiki", file=sys.stderr)
+        return False
+
+    use_data = entity.get('use')
+    if not use_data:
+        print(f"[ERROR] '{entity.get('name', item_name)}' has no 'use' data in wiki", file=sys.stderr)
+        return False
+
+    name = entity.get('name', item_name)
+    consume = use_data.get('consume', True)
+    effects = use_data.get('effects', [])
+    hint = use_data.get('hint', '')
+
+    operations = {}
+    if consume:
+        operations['remove'] = {name: qty}
+
+    dice_rolls = {}
+    custom_stats = {}
+    for eff in effects:
+        stat = eff.get('stat')
+        if not stat:
+            continue
+        dice_expr = eff.get('dice')
+        fixed = eff.get('value')
+        if dice_expr:
+            _dice_re = re.compile(r'\d*d\d+', re.IGNORECASE)
+            negate = dice_expr.startswith('neg')
+            clean = dice_expr[3:] if negate else dice_expr
+            if _dice_re.search(clean):
+                val = dice_roll(clean)
+                if negate:
+                    val = -val
+                custom_stats[stat] = val * qty
+                dice_rolls[stat] = (f"-{clean}" if negate else clean, val * qty)
+            else:
+                custom_stats[stat] = int(dice_expr) * qty
+        elif fixed is not None:
+            custom_stats[stat] = int(fixed) * qty
+
+    hp_effect = use_data.get('hp')
+    if hp_effect:
+        if isinstance(hp_effect, str) and re.search(r'\d*d\d+', hp_effect, re.IGNORECASE):
+            operations['hp'] = dice_roll(hp_effect) * qty
+        else:
+            operations['hp'] = int(hp_effect) * qty
+
+    if custom_stats:
+        operations['custom_stats'] = custom_stats
+        operations['_dice_rolls'] = dice_rolls
+
+    manager.reason = f"использовал {name}" + (f" x{qty}" if qty > 1 else "")
+    success = manager.apply_transaction(operations)
+
+    if success and hint:
+        print(f"  {DM}[{hint}]{RS}")
+
+    return success
 
 
 if __name__ == "__main__":

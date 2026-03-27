@@ -87,20 +87,37 @@ case "$ACTION" in
 
     move)
         if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-session.sh move <location>"
+            echo "Usage: dm-session.sh move <location> [--elapsed N]"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/session_manager.py" move "$@"
+        # Extract location and --elapsed flag
+        MOVE_LOC="$1"
+        shift
+        MOVE_ELAPSED=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --elapsed) MOVE_ELAPSED="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+
+        $PYTHON_CMD "$LIB_DIR/session_manager.py" move "$MOVE_LOC"
         RESULT=$?
         if [ $RESULT -ne 0 ]; then exit $RESULT; fi
+
+        # Advance time if --elapsed was provided
+        if [ -n "$MOVE_ELAPSED" ]; then
+            OVERVIEW=$($PYTHON_CMD "$LIB_DIR/session_manager.py" status 2>/dev/null)
+            CURRENT_DATE=$(echo "$OVERVIEW" | grep -o '"current_date": "[^"]*"' | cut -d'"' -f4)
+            [ -z "$CURRENT_DATE" ] && CURRENT_DATE="_"
+            bash "$TOOLS_DIR/dm-time.sh" "_" "$CURRENT_DATE" --elapsed "$MOVE_ELAPSED"
+        fi
 
         # Auto-query RAG for new location context (DM-internal, minimal output)
         CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path 2>/dev/null)
         if [ -d "$CAMPAIGN_DIR/vectors" ]; then
             echo ""
-            # Minimal DM context - silently queries/auto-enhances
-            # Note: scene command is quiet when no RAG exists; real errors will show
-            CONTEXT=$(bash "$TOOLS_DIR/dm-enhance.sh" scene "$@")
+            CONTEXT=$(bash "$TOOLS_DIR/dm-enhance.sh" scene "$MOVE_LOC")
             if [ -n "$CONTEXT" ]; then
                 echo "$CONTEXT"
             fi

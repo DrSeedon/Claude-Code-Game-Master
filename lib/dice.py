@@ -266,23 +266,162 @@ def roll_formatted(notation: str) -> str:
     return _roller.format_result(result)
 
 
+def _load_character():
+    """Load active character from campaign."""
+    from pathlib import Path
+    root = next(p for p in Path(__file__).parents if (p / ".git").exists())
+    active_file = root / "world-state" / "active-campaign.txt"
+    if not active_file.exists():
+        return None
+    campaign = active_file.read_text().strip()
+    char_file = root / "world-state" / "campaigns" / campaign / "character.json"
+    if not char_file.exists():
+        return None
+    import json
+    with open(char_file) as f:
+        return json.load(f)
+
+
+def _resolve_skill(char, skill_name):
+    """Get skill modifier and dc_mod from character."""
+    skills = char.get('skills', {})
+    for name, data in skills.items():
+        if name.lower() == skill_name.lower():
+            if isinstance(data, dict):
+                return data.get('total', 0), data.get('dc_mod', 0), name
+            return int(data), 0, name
+    return None, None, None
+
+
+def _resolve_save(char, save_name):
+    """Get save modifier from character."""
+    saves = char.get('saves', {})
+    for name, val in saves.items():
+        if name.lower() == save_name.lower():
+            return int(val), name
+    stats = char.get('stats', {})
+    stat_mods = {
+        'str': (stats.get('str', 10) - 10) // 2,
+        'dex': (stats.get('dex', 10) - 10) // 2,
+        'con': (stats.get('con', 10) - 10) // 2,
+        'int': (stats.get('int', 10) - 10) // 2,
+        'wis': (stats.get('wis', 10) - 10) // 2,
+        'cha': (stats.get('cha', 10) - 10) // 2,
+    }
+    for abbr, mod in stat_mods.items():
+        if abbr == save_name.lower()[:3]:
+            return mod, abbr
+    return None, None
+
+
+def _resolve_attack(char, weapon_name=None):
+    """Get attack bonus and damage from equipped weapon."""
+    equipment = char.get('equipment', {})
+    weapons = equipment.get('weapons', [])
+    stats = char.get('stats', {})
+    proficiency = 2 if char.get('level', 1) < 5 else 3 if char.get('level', 1) < 9 else 4
+
+    target_weapon = None
+    if weapon_name:
+        for w in weapons:
+            if weapon_name.lower() in w.get('name', '').lower():
+                target_weapon = w
+                break
+    if not target_weapon:
+        for w in weapons:
+            if w.get('equipped'):
+                target_weapon = w
+                break
+    if not target_weapon and weapons:
+        target_weapon = weapons[0]
+
+    if target_weapon:
+        stat_name = target_weapon.get('stat', 'str')
+        stat_val = stats.get(stat_name, 10)
+        stat_mod = (stat_val - 10) // 2
+        prof_bonus = proficiency if target_weapon.get('proficient') else 0
+        weapon_bonus = target_weapon.get('bonus', 0)
+        total = stat_mod + prof_bonus + weapon_bonus
+        name = target_weapon.get('name', '?')
+        damage = target_weapon.get('damage', '1d4')
+        return total, name, damage
+
+    skills = char.get('skills', {})
+    melee = skills.get('ближний бой', {})
+    mod = melee.get('total', 0) if isinstance(melee, dict) else int(melee) if melee else 0
+    return mod, 'ближний бой', '1d4'
+
+
 def main():
     """CLI interface for dice rolling"""
     import sys
     import argparse
 
     parser = argparse.ArgumentParser(description="Dice roller with labels and DC/AC checks")
-    parser.add_argument("notation", help="Dice notation (e.g. 1d20+5, 2d20kh1+3)")
+    parser.add_argument("notation", nargs="?", default=None, help="Dice notation (e.g. 1d20+5, 2d20kh1+3)")
     parser.add_argument("--label", "-l", help="Roll description (e.g. 'Perception (Рекс)')")
     parser.add_argument("--dc", type=int, help="Difficulty Class to check against")
     parser.add_argument("--ac", type=int, help="Armor Class to check against")
+    parser.add_argument("--skill", "-s", help="Skill name (auto-lookup modifier from character.json)")
+    parser.add_argument("--save", help="Save name: str/dex/con/int/wis/cha or Russian abbrev")
+    parser.add_argument("--attack", nargs="?", const="", help="Attack roll (optional: weapon/skill name)")
+    parser.add_argument("--advantage", "--adv", action="store_true", help="Roll with advantage (2d20kh1)")
+    parser.add_argument("--disadvantage", "--dis", action="store_true", help="Roll with disadvantage (2d20kl1)")
     args = parser.parse_args()
+
+    char = None
+    notation = args.notation
+    label = args.label
+    dc = args.dc
+    ac = args.ac
+
+    if args.skill or args.save or args.attack is not None:
+        char = _load_character()
+        if not char:
+            print("Error: No active character found", file=sys.stderr)
+            sys.exit(1)
+        char_name = char.get('name', '?')
+
+    if args.skill:
+        mod, dc_mod, skill_name = _resolve_skill(char, args.skill)
+        if mod is None:
+            print(f"Error: Skill '{args.skill}' not found", file=sys.stderr)
+            sys.exit(1)
+        notation = f"1d20+{mod}"
+        if not label:
+            label = f"{skill_name} ({char_name})"
+        if dc and dc_mod:
+            dc = dc + dc_mod
+
+    elif args.save is not None:
+        mod, save_name = _resolve_save(char, args.save)
+        if mod is None:
+            print(f"Error: Save '{args.save}' not found", file=sys.stderr)
+            sys.exit(1)
+        notation = f"1d20+{mod}" if mod >= 0 else f"1d20{mod}"
+        if not label:
+            label = f"{save_name.upper()} Save ({char_name})"
+
+    elif args.attack is not None:
+        mod, atk_name, atk_damage = _resolve_attack(char, args.attack if args.attack else None)
+        notation = f"1d20+{mod}" if mod >= 0 else f"1d20{mod}"
+        if not label:
+            label = f"Attack: {atk_name} ({char_name}) [dmg: {atk_damage}]"
+
+    if args.advantage and notation and 'd20' in notation:
+        notation = notation.replace('1d20', '2d20kh1')
+    elif args.disadvantage and notation and 'd20' in notation:
+        notation = notation.replace('1d20', '2d20kl1')
+
+    if not notation:
+        parser.print_help()
+        sys.exit(1)
 
     roller = DiceRoller()
     try:
-        result = roller.roll(args.notation)
-        if args.label or args.dc or args.ac:
-            print(format_enhanced(result, label=args.label, dc=args.dc, ac=args.ac))
+        result = roller.roll(notation)
+        if label or dc or ac:
+            print(format_enhanced(result, label=label, dc=dc, ac=ac))
         else:
             print(format_enhanced(result))
     except ValueError as e:

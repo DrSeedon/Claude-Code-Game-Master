@@ -1,4 +1,4 @@
-## Spell Casting
+## Spell Casting <!-- slot:spell-casting -->
 
 ### When a Player Casts a Spell
 

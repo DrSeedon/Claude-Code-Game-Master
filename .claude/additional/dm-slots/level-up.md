@@ -1,4 +1,4 @@
-## Level Up
+## Level Up <!-- slot:level-up -->
 
 ### Trigger
 When `dm-player.sh xp` outputs **"LEVEL_UP"**, immediately perform the ceremony.

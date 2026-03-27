@@ -31,6 +31,44 @@ class Colors:
     # Dim for secondary info
     DIM = "\033[2m"
 
+    # Magenta
+    MAGENTA = "\033[35m"
+    BOLD_MAGENTA = "\033[1;35m"
+
+
+# --- Status tags ---
+
+def tag_success(text: str = "") -> str:
+    s = f"{Colors.BOLD_GREEN}[SUCCESS]{Colors.RESET}"
+    return f"{s} {text}" if text else s
+
+def tag_error(text: str = "") -> str:
+    s = f"{Colors.BOLD_RED}[ERROR]{Colors.RESET}"
+    return f"{s} {text}" if text else s
+
+def tag_info(text: str = "") -> str:
+    s = f"{Colors.BOLD_CYAN}[INFO]{Colors.RESET}"
+    return f"{s} {text}" if text else s
+
+def tag_warning(text: str = "") -> str:
+    s = f"{Colors.BOLD_YELLOW}[WARNING]{Colors.RESET}"
+    return f"{s} {text}" if text else s
+
+
+# --- Attitude colors ---
+
+ATTITUDE_COLORS = {
+    "friendly": Colors.GREEN,
+    "neutral": Colors.YELLOW,
+    "unfriendly": Colors.RED,
+    "hostile": Colors.BOLD_RED,
+    "suspicious": Colors.MAGENTA,
+}
+
+def attitude_colored(attitude: str) -> str:
+    color = ATTITUDE_COLORS.get(attitude.lower(), Colors.DIM)
+    return f"{color}{attitude}{Colors.RESET}"
+
 
 def hp_color(current: int, max_hp: int) -> str:
     """Return the appropriate color code based on HP percentage."""

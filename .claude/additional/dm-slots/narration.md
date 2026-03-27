@@ -1,4 +1,4 @@
-## Narration
+## Narration <!-- slot:narration -->
 
 ### The Three-Layer Approach
 

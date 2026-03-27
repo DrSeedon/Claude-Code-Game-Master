@@ -1,13 +1,38 @@
+<!-- slot:dice-rolling -->
 # Dice Rolling
 
 Use `bash tools/dm-roll.sh` for ALL dice rolls.
 
 ---
 
-## Usage
+## Auto-Lookup (PREFERRED)
+
+Auto-lookup reads character.json for skill totals, dc_mod, saves, and weapon stats. No manual +N needed. 1d20 is the default die — no need to specify it.
 
 ```bash
-# Skill check with label and DC
+# Skill check — auto-reads total + dc_mod from character.json
+bash tools/dm-roll.sh --skill "Perception" --dc 15
+
+# Saving throw — auto-reads save modifier
+bash tools/dm-roll.sh --save "INT" --dc 14
+
+# Attack roll — auto-reads weapon stats
+bash tools/dm-roll.sh --attack "Longsword" --ac 16
+
+# Advantage/disadvantage with auto-lookup
+bash tools/dm-roll.sh --skill "Stealth" --dc 12 --advantage
+bash tools/dm-roll.sh --save "DEX" --dc 14 --disadvantage
+```
+
+Use auto-lookup for ALL player character rolls. Fall back to manual notation only for:
+- NPC/monster rolls (no character.json entry)
+- Custom/situational rolls (damage, healing, random tables)
+- Rolls with ad-hoc modifiers not in character.json
+
+## Manual Notation (for NPCs, damage, custom rolls)
+
+```bash
+# NPC skill check with label and DC
 bash tools/dm-roll.sh "1d20+4" --label "Perception (Grimjaw)" --dc 15
 
 # Attack roll vs AC
@@ -90,7 +115,12 @@ Damage has no pass/fail — just `--label`. No `--dc` or `--ac` needed.
 
 | Flag | Purpose | When to Use |
 |------|---------|-------------|
-| `--label "text"` | Who and what | Every roll |
+| `--skill "name"` | Auto-lookup skill total + dc_mod from character.json | Player skill checks (preferred) |
+| `--save "name"` | Auto-lookup save modifier from character.json | Player saving throws (preferred) |
+| `--attack "weapon"` | Auto-lookup weapon stats from character.json | Player attack rolls (preferred) |
+| `--advantage` | Roll 2d20, keep highest | Advantage |
+| `--disadvantage` | Roll 2d20, keep lowest | Disadvantage |
+| `--label "text"` | Who and what | NPC/monster/custom rolls |
 | `--dc N` | Difficulty Class | Skill checks, saving throws |
 | `--ac N` | Armor Class | Attack rolls |
 

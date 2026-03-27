@@ -11,6 +11,10 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime, timezone
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from colors import tag_success, tag_error, tag_warning
+
 
 class CampaignManager:
     """Manage multiple D&D campaigns"""
@@ -64,7 +68,7 @@ class CampaignManager:
                         "level": char.get("level", 1)
                     }
                 except (json.JSONDecodeError, IOError) as e:
-                    print(f"[WARNING] Could not read character for {campaign_dir.name}: {e}", file=sys.stderr)
+                    print(tag_warning(f"Could not read character for {campaign_dir.name}: {e}"), file=sys.stderr)
 
             campaigns.append(campaign_info)
 
@@ -95,15 +99,15 @@ class CampaignManager:
         """
         campaign_path = self.campaigns_dir / name
         if not campaign_path.is_dir():
-            print(f"[ERROR] Campaign '{name}' does not exist")
+            print(tag_error(f"Campaign '{name}' does not exist"))
             return False
 
         try:
             self.active_file.write_text(name)
-            print(f"[SUCCESS] Active campaign set to: {name}")
+            print(tag_success(f"Active campaign set to: {name}"))
             return True
         except IOError as e:
-            print(f"[ERROR] Failed to set active campaign: {e}")
+            print(tag_error(f"Failed to set active campaign: {e}"))
             return False
 
     def create(self, name: str, campaign_name: str = None) -> Optional[Path]:
@@ -118,7 +122,7 @@ class CampaignManager:
         campaign_path = self.campaigns_dir / safe_name
 
         if campaign_path.exists():
-            print(f"[ERROR] Campaign '{safe_name}' already exists")
+            print(tag_error(f"Campaign '{safe_name}' already exists"))
             return None
 
         try:
@@ -130,10 +134,10 @@ class CampaignManager:
             # Initialize empty state files
             self._init_empty_files(campaign_path, campaign_name or f"{name}'s Adventure")
 
-            print(f"[SUCCESS] Created campaign: {safe_name}")
+            print(tag_success(f"Created campaign: {safe_name}"))
             return campaign_path
         except IOError as e:
-            print(f"[ERROR] Failed to create campaign: {e}")
+            print(tag_error(f"Failed to create campaign: {e}"))
             # Clean up on failure
             if campaign_path.exists():
                 shutil.rmtree(campaign_path)
@@ -148,11 +152,11 @@ class CampaignManager:
         campaign_path = self.campaigns_dir / name
 
         if not campaign_path.is_dir():
-            print(f"[ERROR] Campaign '{name}' does not exist")
+            print(tag_error(f"Campaign '{name}' does not exist"))
             return False
 
         if not confirm:
-            print(f"[WARNING] This will permanently delete campaign '{name}'")
+            print(tag_warning(f"This will permanently delete campaign '{name}'"))
             print(f"  Path: {campaign_path}")
             print("  Use confirm=True to proceed")
             return False
@@ -163,10 +167,10 @@ class CampaignManager:
                 self.active_file.unlink(missing_ok=True)
 
             shutil.rmtree(campaign_path)
-            print(f"[SUCCESS] Deleted campaign: {name}")
+            print(tag_success(f"Deleted campaign: {name}"))
             return True
         except IOError as e:
-            print(f"[ERROR] Failed to delete campaign: {e}")
+            print(tag_error(f"Failed to delete campaign: {e}"))
             return False
 
     def get_campaign_path(self, name: str = None) -> Optional[Path]:
@@ -203,12 +207,12 @@ class CampaignManager:
         if name is None:
             name = self.get_active()
             if name is None:
-                print("[ERROR] No active campaign set")
+                print(tag_error("No active campaign set"))
                 return None
 
         campaign_path = self.campaigns_dir / name
         if not campaign_path.is_dir():
-            print(f"[ERROR] Campaign '{name}' does not exist")
+            print(tag_error(f"Campaign '{name}' does not exist"))
             return None
 
         info = {
@@ -224,7 +228,7 @@ class CampaignManager:
                 with open(overview_file, 'r', encoding='utf-8') as f:
                     info["overview"] = json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"[WARNING] Could not read campaign overview for {name}: {e}", file=sys.stderr)
+                print(tag_warning(f"Could not read campaign overview for {name}: {e}"), file=sys.stderr)
 
         # Read character
         char_file = campaign_path / "character.json"
@@ -233,7 +237,7 @@ class CampaignManager:
                 with open(char_file, 'r', encoding='utf-8') as f:
                     info["character"] = json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"[WARNING] Could not read character for {name}: {e}", file=sys.stderr)
+                print(tag_warning(f"Could not read character for {name}: {e}"), file=sys.stderr)
 
         # Count NPCs, locations, etc.
         for filename in ["npcs.json", "locations.json", "facts.json"]:
@@ -247,7 +251,7 @@ class CampaignManager:
                     elif isinstance(data, list):
                         info[filename.replace('.json', '_count')] = len(data)
                 except (json.JSONDecodeError, IOError) as e:
-                    print(f"[WARNING] Could not read {filename} for {name}: {e}", file=sys.stderr)
+                    print(tag_warning(f"Could not read {filename} for {name}: {e}"), file=sys.stderr)
 
         # Count saves
         saves_dir = campaign_path / "saves"
@@ -323,6 +327,19 @@ class CampaignManager:
         if not preserve_existing or not consequences_path.exists():
             with open(consequences_path, 'w', encoding='utf-8') as f:
                 json.dump({"active": [], "resolved": []}, f, indent=2, ensure_ascii=False)
+
+        # campaign-rules.md - campaign-specific DM rules (ability costs, setting mechanics, etc.)
+        rules_path = campaign_path / "campaign-rules.md"
+        if not preserve_existing or not rules_path.exists():
+            if not rules_path.exists():
+                with open(rules_path, 'w', encoding='utf-8') as f:
+                    f.write(f"# Campaign Rules — {campaign_name}\n\n")
+                    f.write("Campaign-specific rules for the DM. Add setting mechanics, ability costs, faction rules, etc.\n\n")
+                    f.write("---\n\n")
+                    f.write("## Ability Costs\n\n")
+                    f.write("<!-- List custom stat costs per ability here -->\n\n")
+                    f.write("## Setting Rules\n\n")
+                    f.write("<!-- Campaign-specific mechanics -->\n\n")
 
         # session-log.md - ALWAYS preserve if exists (append only)
         session_log_path = campaign_path / "session-log.md"

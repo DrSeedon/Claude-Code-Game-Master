@@ -67,7 +67,7 @@ bash tools/dm-location.sh add "Forest" "Dark woods" \
 ### Terrain & Colors [MANDATORY]
 
 Set terrain types and RGB colors for the GUI map. Store in `module-data/world-travel.json` under `terrain_colors`.
-Name the keys in the campaign's language (e.g. Russian campaign → Russian keys).
+Name the keys in English — terrain type names are code identifiers used in JSON and CLI flags.
 
 **Palette by genre (world terrain + interior terrain):**
 | Genre | World terrains | Interior terrains |

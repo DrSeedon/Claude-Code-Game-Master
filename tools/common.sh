@@ -2,6 +2,9 @@
 # common.sh - Common utilities and environment setup for all DM tools
 # This file should be sourced by all other scripts: source "$(dirname "$0")/common.sh"
 
+# Clear inherited VIRTUAL_ENV to prevent uv warnings
+unset VIRTUAL_ENV
+
 # Detect Python executable - prefer uv, fallback to python3/python
 find_python() {
     # Try to find uv first

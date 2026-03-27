@@ -1,4 +1,4 @@
-## XP & Rewards
+## XP & Rewards <!-- slot:xp-rewards -->
 
 ### Award XP [MANDATORY]
 ```bash

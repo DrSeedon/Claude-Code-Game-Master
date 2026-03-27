@@ -1,4 +1,4 @@
-## Specialist Agents
+## Specialist Agents <!-- slot:specialist-agents -->
 
 **PROACTIVELY spawn these in context:**
 

@@ -4,9 +4,8 @@
 # Get MODULE_ROOT (this script is in .claude/additional/modules/world-travel/tools/)
 MODULE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Find project root
-_dir="$MODULE_ROOT"
-while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
-PROJECT_ROOT="$_dir"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../infrastructure/common-module.sh"
+PROJECT_ROOT="$(find_project_root "$MODULE_ROOT")"
 
 # Source common.sh from CORE
 source "$PROJECT_ROOT/tools/common.sh"

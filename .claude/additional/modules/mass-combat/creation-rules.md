@@ -29,7 +29,7 @@ Mass combat works standalone, but pairs well with **firearms-combat** module.
 | NPC-vs-NPC uses mass-combat engine | All combat uses mass-combat engine |
 | Consistent lethality model across both systems | Self-contained PEN/PROT within mass-combat |
 
-If both modules are active, keep PEN/PROT values **consistent** between `firearms-combat.json` (weapon penetration, armor protection) and `mass-combat.json` (unit pen/prot). A unit armed with an AK-74 (PEN 3 in firearms-combat) should have `"pen": 3` in its mass-combat template.
+If both modules are active, keep PEN/PROT values **consistent** between `firearms-combat.json` (weapon penetration, armor protection) and `mass-combat.json` (unit pen/prot). A unit armed with a Longbow (PEN 2 in firearms-combat) should have `"pen": 2` in its mass-combat template.
 
 ---
 
@@ -55,7 +55,7 @@ If both modules are active, keep PEN/PROT values **consistent** between `firearm
 
 ```json
 "HeavyWeapon": {
-  "name": "Grenade Launcher",
+  "name": "Catapult Crew",
   "ac": 14,
   "hp": 40,
   "atk": 5,
@@ -74,8 +74,8 @@ If both modules are active, keep PEN/PROT values **consistent** between `firearm
 ### AOE Unit (spray mode — individual rolls per target)
 
 ```json
-"MachineGunner": {
-  "name": "Machine Gunner",
+"VolleyArcher": {
+  "name": "Volley Archer",
   "ac": 14,
   "hp": 35,
   "atk": 5,
@@ -87,7 +87,7 @@ If both modules are active, keep PEN/PROT values **consistent** between `firearm
   "aoe_save_dc": 13,
   "aoe_targets": 3,
   "aoe_mode": "spray",
-  "notes": "Suppressive fire, each target rolled individually"
+  "notes": "Rain of arrows, each target rolled individually"
 }
 ```
 
@@ -95,7 +95,7 @@ If both modules are active, keep PEN/PROT values **consistent** between `firearm
 
 ```json
 "Beast": {
-  "name": "Mutant Dog",
+  "name": "War Hound",
   "ac": 12,
   "hp": 10,
   "atk": 4,
@@ -157,22 +157,22 @@ Minimum 1 damage on hit. If both PEN and PROT are 0 → full damage (legacy comp
 
 | PEN | Weapon class | Examples |
 |-----|-------------|---------|
-| 0 | Unarmed / claws / improvised | Mutant claws, fists, rocks |
-| 1 | Pistols, shotguns (low) | PM, sawed-off, hunting rifle |
-| 2 | SMGs, shotguns (military) | MP5, SPAS-12 |
-| 3 | Assault rifles (standard) | AK-74, M4A1 |
-| 4 | Battle rifles, marksman | SVD, FAL, G3 |
-| 5 | Anti-material, AP rounds | Gauss rifle, PKM, .50 BMG |
+| 0 | Unarmed / claws / improvised | Fists, teeth, thrown rocks |
+| 1 | Light blades, shortbow | Dagger, shortbow, sling |
+| 2 | Standard weapons | Shortsword, longbow, handaxe |
+| 3 | Military weapons | Longsword, war pick, heavy crossbow |
+| 4 | Heavy weapons, marksman | Greataxe, lance, sniper crossbow |
+| 5 | Siege / armor-piercing | Ballista bolt, siege hammer, magical piercing |
 
 | PROT | Armor class | Examples |
 |------|------------|---------|
-| 0 | Unarmored | Civilian clothes, mutant hide (thin) |
-| 1 | Light jacket | Leather jacket, basic outfit |
-| 2 | Light armor | Bandit armor, stalker suit |
-| 3 | Medium armor | Military vest, Sunrise suit |
-| 4 | Heavy armor | SEVA, military exo (light) |
-| 5 | Powered armor | Exoskeleton (full), heavy military |
-| 6 | Fortress | APC plating, bunker |
+| 0 | Unarmored | Civilian clothes, bare hide |
+| 1 | Light cover | Thick robes, padded armor |
+| 2 | Light armor | Leather armor, studded leather |
+| 3 | Medium armor | Chain mail, breastplate |
+| 4 | Heavy armor | Half plate, full plate |
+| 5 | Exceptional armor | Enchanted plate, dragon-scale armor |
+| 6 | Fortress | Stone walls, iron plating, siege fortification |
 
 ---
 
@@ -180,11 +180,11 @@ Minimum 1 damage on hit. If both PEN and PROT are 0 → full damage (legacy comp
 
 ### Quick Scaling
 
-- **Fodder** (rookies, zombies, weak mutants): AC 11-13, HP 5-15, ATK +3, DMG 1d6, PEN 0-1, PROT 0-1
-- **Regular** (soldiers, trained stalkers): AC 13-15, HP 15-30, ATK +4-5, DMG 1d8+2, PEN 2-3, PROT 2-3
-- **Elite** (veterans, spec ops, alpha mutants): AC 15-17, HP 30-60, ATK +5-7, DMG 1d10+3, PEN 3-4, PROT 3-5
-- **Boss** (commanders, unique mutants): AC 16-19, HP 60-120, ATK +7-9, DMG 2d10+5, PEN 4-5, PROT 4-6
-- **Vehicle/Turret**: AC 17-20, HP 50-150, ATK +5-8, DMG 3d10+, targeting=aoe, PEN 5+, PROT 5+
+- **Fodder** (conscripts, skeletons, goblins): AC 11-13, HP 5-15, ATK +3, DMG 1d6, PEN 0-1, PROT 0-1
+- **Regular** (soldiers, trained militia): AC 13-15, HP 15-30, ATK +4-5, DMG 1d8+2, PEN 2-3, PROT 2-3
+- **Elite** (veterans, knights, alpha predators): AC 15-17, HP 30-60, ATK +5-7, DMG 1d10+3, PEN 3-4, PROT 3-5
+- **Boss** (commanders, monsters): AC 16-19, HP 60-120, ATK +7-9, DMG 2d10+5, PEN 4-5, PROT 4-6
+- **Vehicle/Siege**: AC 17-20, HP 50-150, ATK +5-8, DMG 3d10+, targeting=aoe, PEN 5+, PROT 5+
 
 ### D&D 5e Reference
 
@@ -203,16 +203,16 @@ Minimum 1 damage on hit. If both PEN and PROT are 0 → full damage (legacy comp
 
 | Type | When to use | Examples |
 |------|-------------|---------|
-| `random` | Undisciplined or untrained — fire at the crowd | Bandits, rookies, zombies, weak mutants, militia |
-| `aimed` | Trained combatants who pick targets | Veterans, spec ops, snipers, experienced stalkers |
-| `aoe` | Area weapons, suppressive fire, psi abilities | Machine guns, grenade launchers, psi blasts, ground pounds |
+| `random` | Undisciplined or untrained — fire at the crowd | Bandits, conscripts, skeletons, goblins, militia |
+| `aimed` | Trained combatants who pick targets | Veterans, knights, snipers, elite archers |
+| `aoe` | Area weapons, suppressive fire, magical abilities | Catapults, fire mages, ballistas, ground pounds |
 
 ### AOE Modes
 
 | Mode | Mechanic | Best for |
 |------|----------|----------|
-| `blast` | One damage roll, apply to all targets. Save for half | Explosions, psi waves, ground pounds, grenades |
-| `spray` | Individual attack roll per target. Save for half | Machine guns, turrets, suppressive fire |
+| `blast` | One damage roll, apply to all targets. Save for half | Explosions, fireball, ground pounds, grenades |
+| `spray` | Individual attack roll per target. Save for half | Volley fire, turrets, suppressive arrow rain |
 
 ---
 
@@ -220,8 +220,8 @@ Minimum 1 damage on hit. If both PEN and PROT are 0 → full damage (legacy comp
 
 | Range | Behavior | Examples |
 |-------|----------|---------|
-| `ranged` (default) | Can attack any group | Firearms, bows, thrown weapons |
-| `melee` | Can ONLY attack targets in same group. Must `move` first | Claws, fangs, melee weapons, charging beasts |
+| `ranged` (default) | Can attack any group | Bows, crossbows, thrown weapons, spells |
+| `melee` | Can ONLY attack targets in same group. Must `move` first | Claws, fangs, swords, charging beasts |
 | `both` | Can do either ranged or melee | Armed humanoids with backup melee |
 
 ---
@@ -233,7 +233,7 @@ Minimum 1 damage on hit. If both PEN and PROT are 0 → full damage (legacy comp
   "cover": "+2 AC while in cover.",
   "surprise_round": "Ambushing side gets one free round.",
   "morale": "When group loses 50%+ units, remaining may flee (WIS DC 12).",
-  "turret_crew": "Turret needs at least 1 crew alive to fire.",
+  "siege_crew": "Siege weapon needs at least 1 crew alive to fire.",
   "reinforcements": "Can add units mid-battle with 'add' command."
 }
 ```
@@ -242,67 +242,44 @@ Customize per campaign. These are DM reference — the engine does not enforce t
 
 ---
 
-## Example: Post-Apocalyptic Campaign (STALKER-style)
-
-```json
-{
-  "unit_templates": {
-    "Бандит-шестёрка": {
-      "name": "Бандит-шестёрка", "ac": 11, "hp": 8, "atk": 3, "dmg": "1d6",
-      "pen": 1, "prot": 0, "targeting": "random",
-      "notes": "ПМ, без брони, трусливый"
-    },
-    "Военный": {
-      "name": "Военный", "ac": 15, "hp": 22, "atk": 5, "dmg": "1d8+2",
-      "pen": 3, "prot": 3, "targeting": "random",
-      "notes": "АК-74, бронежилет, дисциплинирован"
-    },
-    "Снайпер-военный": {
-      "name": "Снайпер", "ac": 14, "hp": 20, "atk": 7, "dmg": "2d8+3",
-      "pen": 4, "prot": 2, "targeting": "aimed", "weight": 1,
-      "notes": "СВД, приоритет — опасные цели"
-    },
-    "Пулемётчик": {
-      "name": "Пулемётчик", "ac": 14, "hp": 35, "atk": 5, "dmg": "2d6+2",
-      "pen": 3, "prot": 3, "targeting": "aoe",
-      "aoe_save_type": "DEX", "aoe_save_dc": 13, "aoe_targets": 3,
-      "aoe_mode": "spray",
-      "notes": "ПКМ, подавляющий огонь"
-    },
-    "Снорк": {
-      "name": "Снорк", "ac": 14, "hp": 25, "atk": 5, "dmg": "2d6+2",
-      "pen": 2, "prot": 1, "range": "melee", "targeting": "random",
-      "notes": "Прыгающий мутант, быстрый, ближний бой"
-    },
-    "Контролёр": {
-      "name": "Контролёр", "ac": 13, "hp": 60, "atk": 6, "dmg": "3d6",
-      "pen": 0, "prot": 1, "targeting": "aoe",
-      "aoe_save_type": "WIS", "aoe_save_dc": 15, "aoe_targets": 4,
-      "aoe_mode": "blast",
-      "notes": "Пси-атака, игнорирует физ.броню"
-    }
-  },
-  "combat_rules": {
-    "cover": "+2 AC while in cover.",
-    "surprise_round": "Ambushing side gets one free round.",
-    "morale": "When group loses 50%+ units, remaining may flee (WIS DC 12).",
-    "radiation_zone": "Units without PROT ≥ 2 take 1d4 damage per round in irradiated areas.",
-    "psi_resistance": "WIS save vs psi attacks. Helmets may grant advantage."
-  }
-}
-```
-
----
-
 ## Example: Fantasy Campaign
 
 ```json
 {
   "unit_templates": {
-    "Goblin": {
-      "name": "Goblin", "ac": 13, "hp": 7, "atk": 4, "dmg": "1d6+2",
-      "pen": 0, "prot": 0, "targeting": "random",
-      "notes": "Nimble, cowardly"
+    "BanditRaider": {
+      "name": "Bandit Raider", "ac": 11, "hp": 8, "atk": 3, "dmg": "1d6",
+      "pen": 1, "prot": 0, "targeting": "random",
+      "notes": "Shortsword, no armor, cowardly"
+    },
+    "RoyalGuard": {
+      "name": "Royal Guard", "ac": 15, "hp": 22, "atk": 5, "dmg": "1d8+2",
+      "pen": 3, "prot": 3, "targeting": "random",
+      "notes": "Longsword, chain mail, disciplined"
+    },
+    "EliteArcher": {
+      "name": "Elite Archer", "ac": 14, "hp": 20, "atk": 7, "dmg": "2d8+3",
+      "pen": 4, "prot": 2, "targeting": "aimed", "weight": 1,
+      "notes": "Heavy crossbow, priority — high-value targets"
+    },
+    "VolleyArcher": {
+      "name": "Volley Archer", "ac": 14, "hp": 35, "atk": 5, "dmg": "2d6+2",
+      "pen": 3, "prot": 3, "targeting": "aoe",
+      "aoe_save_type": "DEX", "aoe_save_dc": 13, "aoe_targets": 3,
+      "aoe_mode": "spray",
+      "notes": "Rain of arrows, suppressive fire"
+    },
+    "GoblinBerserker": {
+      "name": "Goblin Berserker", "ac": 14, "hp": 25, "atk": 5, "dmg": "2d6+2",
+      "pen": 2, "prot": 1, "range": "melee", "targeting": "random",
+      "notes": "Leaping attacker, fast, melee only"
+    },
+    "Necromancer": {
+      "name": "Necromancer", "ac": 13, "hp": 60, "atk": 6, "dmg": "3d6",
+      "pen": 0, "prot": 1, "targeting": "aoe",
+      "aoe_save_type": "WIS", "aoe_save_dc": 15, "aoe_targets": 4,
+      "aoe_mode": "blast",
+      "notes": "Fear wave, bypasses physical armor"
     },
     "Knight": {
       "name": "Knight", "ac": 18, "hp": 52, "atk": 5, "dmg": "1d10+3",
@@ -316,10 +293,17 @@ Customize per campaign. These are DM reference — the engine does not enforce t
       "aoe_mode": "blast",
       "notes": "Siege weapon, splash"
     }
+  },
+  "combat_rules": {
+    "cover": "+2 AC while in cover.",
+    "surprise_round": "Ambushing side gets one free round.",
+    "morale": "When group loses 50%+ units, remaining may flee (WIS DC 12).",
+    "siege_crew": "Siege weapon needs at least 1 crew alive to fire.",
+    "magic_resistance": "WIS save vs fear/mind effects. Certain enchanted helms may grant advantage."
   }
 }
 ```
 
 In fantasy settings, PEN/PROT maps to weapon vs armor quality:
-- PEN 0 = fists/claws, PEN 1 = dagger, PEN 2 = sword, PEN 3 = greataxe, PEN 4 = lance/ballista, PEN 5 = siege
-- PROT 0 = unarmored, PROT 1 = leather, PROT 2 = chain, PROT 3 = half plate, PROT 4 = full plate, PROT 5 = magical plate
+- PEN 0 = fists/claws, PEN 1 = dagger/shortbow, PEN 2 = sword/longbow, PEN 3 = greataxe/heavy crossbow, PEN 4 = lance/ballista, PEN 5 = siege
+- PROT 0 = unarmored, PROT 1 = padded/robes, PROT 2 = leather, PROT 3 = chain mail, PROT 4 = full plate, PROT 5 = magical plate

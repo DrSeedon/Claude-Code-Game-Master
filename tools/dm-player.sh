@@ -81,6 +81,21 @@ case "$ACTION" in
         fi
         ;;
 
+    "hp-max")
+        if [ -z "$1" ]; then
+            echo "Usage: dm-player.sh hp-max [character_name] <+/-amount>"
+            exit 1
+        fi
+        if [[ "$1" =~ ^[+-]?[0-9]+$ ]] && [ -z "$2" ]; then
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp-max "_auto" "$1"
+        elif [ -n "$2" ]; then
+            $PYTHON_CMD "$LIB_DIR/player_manager.py" hp-max "$1" "$2"
+        else
+            echo "Usage: dm-player.sh hp-max [character_name] <+/-amount>"
+            exit 1
+        fi
+        ;;
+
     "get")
         if [ -z "$1" ]; then
             echo "Usage: dm-player.sh get <character_name>"
@@ -140,6 +155,7 @@ case "$ACTION" in
         echo "  set <name>                   - Set character as current active PC"
         echo "  xp <name> +<amount>          - Award XP to character"
         echo "  hp <name> <+/-amount>        - Modify character HP"
+        echo "  hp-max <name> <+/-amount>    - Modify max HP (level up: +6, curse: -5)"
         echo "  gold <name> [+/-amount]      - Modify or show character money (base units = copper)"
         echo "  condition <name> <action>    - Manage conditions (add/remove/list)"
         echo "  level-check <name>           - Check XP and level status"

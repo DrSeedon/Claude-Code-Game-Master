@@ -1,4 +1,4 @@
-## Dungeon Exploration
+## Dungeon Exploration <!-- slot:dungeon-exploration -->
 
 ### Two Modes
 

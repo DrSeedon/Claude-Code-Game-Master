@@ -51,8 +51,13 @@ bash tools/dm-search.sh "[destination_name]"
 
 **For overland/normal movement:**
 ```bash
+# Move + advance time in one call (PREFERRED)
+bash tools/dm-session.sh move "[new_location]" --elapsed 0.5
+
+# Move without time advance (rare — teleportation, same-area)
 bash tools/dm-session.sh move "[new_location]"
 ```
+- `--elapsed N` advances game clock and ticks custom stats automatically
 - Auto-creates destination if it doesn't exist
 - Auto-creates bidirectional connections from previous location
 - Auto-checks consequences
@@ -76,18 +81,18 @@ bash tools/dm-session.sh move "[location_name]"
 - Prevents accidental auto-connections to wrong places
 - Allows setting specific distance (stairs = 10m, long corridor = 100m)
 
-**Time advancement (if needed):**
+**Time advancement (when NOT using move --elapsed):**
 ```bash
-# Option A: Advance by hours (clock auto-advances)
-bash tools/dm-time.sh "Утро" "18 октября 2024" --elapsed 2
+# Option A: Advance by hours
+bash tools/dm-time.sh "_" "18 October 2024" --elapsed 2
 
 # Option B: Advance to exact time (auto-calculates elapsed)
-bash tools/dm-time.sh "_" "18 октября 2024" --to 14:30
+bash tools/dm-time.sh "_" "18 October 2024" --to 14:30
 
-# Option C: Set exact clock without elapsed
-bash tools/dm-time.sh "09:00" "18 октября 2024"
+# Option C: Sleep (uses sleep_rate for custom stats)
+bash tools/dm-time.sh "_" "19 October 2024" --elapsed 8 --sleeping
 ```
-**NOTE:** See State Persistence for time/consequence tick rules.
+**NOTE:** `move --elapsed` is preferred for travel — combines move + time in one call.
 
 ### Phase 3.5: Arrival Awareness (Optional)
 Use when arriving at dangerous/unfamiliar locations or where ambush is likely.

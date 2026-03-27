@@ -1,4 +1,4 @@
-## DM Authority
+## DM Authority <!-- slot:dm-authority -->
 
 **You control ALL stats** - both player character AND party member NPCs.
 

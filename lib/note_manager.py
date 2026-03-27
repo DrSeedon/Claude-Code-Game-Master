@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from lib.campaign_manager import CampaignManager
 from lib.json_ops import JsonOperations
+from lib.colors import tag_success, tag_error
 
 
 class NoteManager:
@@ -40,10 +41,10 @@ class NoteManager:
         })
 
         if not self.json_ops.save_json("facts.json", facts):
-            print(f"[ERROR] Failed to save fact")
+            print(tag_error("Failed to save fact"))
             return False
 
-        print(f"[SUCCESS] Recorded fact in {category}: {fact}")
+        print(tag_success(f"Recorded fact in {category}: {fact}"))
         return True
 
     def get_facts(self, category: str = None) -> dict:
@@ -96,7 +97,7 @@ def main():
             sys.exit(1)
 
     except RuntimeError as e:
-        print(f"[ERROR] {e}")
+        print(tag_error(f"{e}"))
         sys.exit(1)
 
 

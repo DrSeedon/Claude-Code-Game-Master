@@ -1,4 +1,4 @@
-## Session Meta
+## Session Meta <!-- slot:session-meta -->
 
 ### The Core Loop
 

@@ -1,4 +1,4 @@
-## The Art of Dungeon Mastering
+## The Art of Dungeon Mastering <!-- slot:the-art-of-dungeon-mastering -->
 
 *These aren't rules — they're wisdom from a DM who loves the craft. Internalize them, then forget them. The best DM moments happen when you stop thinking about technique and just play.*
 

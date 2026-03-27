@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from colors import tag_success, tag_error
 
 
 class ConsequenceManager(EntityManager):
@@ -50,7 +51,33 @@ class ConsequenceManager(EntityManager):
         data['active'].append(consequence)
 
         if self.json_ops.save_json(self.consequences_file, data):
-            print(f"[SUCCESS] Added consequence [{consequence_id}]: {description} (triggers: {trigger})")
+            print(tag_success(f"Added consequence [{consequence_id}]: {description} (triggers: {trigger})"))
+            return consequence_id
+        return ""
+
+    def add_timed_consequence(self, description: str, trigger: str, hours: float) -> str:
+        """
+        Add a timed consequence with trigger_hours field
+        Returns the consequence ID
+        """
+        data = self.json_ops.load_json(self.consequences_file)
+
+        consequence_id = str(uuid.uuid4())[:8]
+        consequence = {
+            'id': consequence_id,
+            'consequence': description,
+            'trigger': trigger,
+            'trigger_hours': hours,
+            'hours_elapsed': 0,
+            'created': self.json_ops.get_timestamp()
+        }
+
+        if 'active' not in data:
+            data['active'] = []
+        data['active'].append(consequence)
+
+        if self.json_ops.save_json(self.consequences_file, data):
+            print(tag_success(f"Added timed consequence [{consequence_id}]: {description} (triggers: {trigger}, after {hours}h)"))
             return consequence_id
         return ""
 
@@ -83,10 +110,10 @@ class ConsequenceManager(EntityManager):
         if resolved:
             data['active'] = remaining
             if self.json_ops.save_json(self.consequences_file, data):
-                print(f"[SUCCESS] Resolved: {resolved['consequence']}")
+                print(tag_success(f"Resolved: {resolved['consequence']}"))
                 return True
         else:
-            print(f"[ERROR] Consequence '{consequence_id}' not found")
+            print(tag_error(f"Consequence '{consequence_id}' not found"))
 
         return False
 

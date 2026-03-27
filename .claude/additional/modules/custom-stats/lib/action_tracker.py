@@ -54,10 +54,10 @@ def log_action(action_type, detail, tool=None):
         for a in data["pending"][-5:]:
             actions_summary.append(f"  {a['type']}: {a['detail']}")
         recent = "\n".join(actions_summary)
-        print(f"\n⏰ ACTION TRACKER: {pending_count} действий без учёта времени!")
-        print(f"Последние:")
+        print(f"\n⏰ ACTION TRACKER: {pending_count} unresolved actions!")
+        print(f"Recent:")
         print(recent)
-        print(f"Оцени сколько прошло → bash tools/dm-time.sh \"<время>\" \"<дата>\" --elapsed N --resolve-actions\n")
+        print(f"Advance time to resolve → bash tools/dm-time.sh \"<time>\" \"<date>\" --elapsed N\n")
 
 
 def resolve_actions(elapsed_hours, time_label=None):

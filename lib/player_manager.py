@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
 from currency import load_config, format_money, format_delta, parse_money, migrate_gold
+from colors import tag_success, tag_error, tag_warning
 
 
 class PlayerManager(EntityManager):
@@ -85,7 +86,7 @@ class PlayerManager(EntityManager):
                 with open(self.character_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"[ERROR] Failed to load character: {e}")
+                print(tag_error(f"Failed to load character: {e}"))
                 return None
 
         # Legacy format: need name to find file
@@ -103,7 +104,7 @@ class PlayerManager(EntityManager):
             with open(char_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"[ERROR] Failed to load character: {e}")
+            print(tag_error(f"Failed to load character: {e}"))
             return None
 
     def _save_character(self, name: str, data: Dict) -> bool:
@@ -136,7 +137,7 @@ class PlayerManager(EntityManager):
         """Get full player character data"""
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return None
         return char
 
@@ -162,7 +163,7 @@ class PlayerManager(EntityManager):
         """Get formatted player summary"""
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return None
 
         hp = char.get('hp', {})
@@ -216,14 +217,14 @@ class PlayerManager(EntityManager):
         """Set character as current active PC in campaign"""
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return False
 
         # Get actual name from character file
         actual_name = char.get('name', name)
 
         if self.json_ops.update_json(self.campaign_file, {'current_character': actual_name}):
-            print(f"[SUCCESS] Set current character to: {actual_name}")
+            print(tag_success(f"Set current character to: {actual_name}"))
             return True
         return False
 
@@ -234,7 +235,7 @@ class PlayerManager(EntityManager):
         """
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return {'success': False}
 
         # Normalize XP structure
@@ -287,7 +288,7 @@ class PlayerManager(EntityManager):
         """Get XP and level status for character"""
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return None
 
         # Normalize XP structure
@@ -327,7 +328,7 @@ class PlayerManager(EntityManager):
         """
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return {'success': False}
 
         hp = char.get('hp', {})
@@ -367,6 +368,32 @@ class PlayerManager(EntityManager):
             'bloodied': 0 < new_hp <= max_hp // 4
         }
 
+    def set_hp_max(self, name: str, amount: int) -> Dict[str, Any]:
+        char = self._load_character(name)
+        if not char:
+            print(tag_error(f"Character '{name}' not found"))
+            return {'success': False}
+
+        hp = char.get('hp', {})
+        old_max = hp.get('max', 0)
+        new_max = old_max + amount
+        if new_max < 1:
+            new_max = 1
+        char['hp']['max'] = new_max
+        if char['hp']['current'] > new_max:
+            char['hp']['current'] = new_max
+        if amount > 0:
+            char['hp']['current'] = min(char['hp']['current'] + amount, new_max)
+
+        if not self._save_character(name, char):
+            return {'success': False}
+
+        char_name = char.get('name', name)
+        sign = f"+{amount}" if amount > 0 else str(amount)
+        print(f"HP_MAX {char_name}: {old_max} → {new_max} ({sign})")
+        print(f"HP: {char['hp']['current']}/{new_max}")
+        return {'success': True, 'old_max': old_max, 'new_max': new_max, 'current_hp': char['hp']['current']}
+
     def modify_money(self, name: str, amount=None) -> Dict[str, Any]:
         """
         Modify character money or show current balance if no amount given.
@@ -375,7 +402,7 @@ class PlayerManager(EntityManager):
         """
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return {'success': False}
 
         char_name = char.get('name', name)
@@ -402,14 +429,14 @@ class PlayerManager(EntityManager):
                 if amount.lstrip().startswith('-'):
                     delta = -abs(delta)
             except ValueError:
-                print(f"[ERROR] Invalid money amount: {amount}")
+                print(tag_error(f"Invalid money amount: {amount}"))
                 return {'success': False}
         else:
             delta = int(amount)
 
         new_money = current_money + delta
         if new_money < 0:
-            print(f"[WARNING] {char_name} only has {format_money(current_money, config)} (tried to spend {format_money(abs(delta), config)}). Set to 0.")
+            print(tag_warning(f"{char_name} only has {format_money(current_money, config)} (tried to spend {format_money(abs(delta), config)}). Set to 0."))
             new_money = 0
         char['money'] = new_money
         char.pop('gold', None)
@@ -443,7 +470,7 @@ class PlayerManager(EntityManager):
         """
         char = self._load_character(name)
         if not char:
-            print(f"[ERROR] Character '{name}' not found")
+            print(tag_error(f"Character '{name}' not found"))
             return {'success': False}
 
         char_name = char.get('name', name)
@@ -464,7 +491,7 @@ class PlayerManager(EntityManager):
             return {'success': True, 'name': char_name, 'conditions': conditions}
 
         if not condition:
-            print(f"[ERROR] Condition name required for {action}")
+            print(tag_error(f"Condition name required for {action}"))
             return {'success': False}
 
         if action == 'add':
@@ -487,7 +514,7 @@ class PlayerManager(EntityManager):
                     found_idx = idx
                     break
             if found_idx is None:
-                print(f"[ERROR] Condition '{condition}' not found on {char_name}")
+                print(tag_error(f"Condition '{condition}' not found on {char_name}"))
                 return {'success': False}
             removed = conditions.pop(found_idx)
             char['conditions'] = conditions
@@ -497,7 +524,7 @@ class PlayerManager(EntityManager):
             return {'success': True, 'name': char_name, 'conditions': conditions}
 
         else:
-            print(f"[ERROR] Unknown condition action: {action}")
+            print(tag_error(f"Unknown condition action: {action}"))
             return {'success': False}
 
 
@@ -532,6 +559,11 @@ def main():
     hp_parser = subparsers.add_parser('hp', help='Modify character HP')
     hp_parser.add_argument('name', help='Character name')
     hp_parser.add_argument('amount', help='HP change (+5 to heal, -3 for damage)')
+
+    # Modify HP max
+    hpmax_parser = subparsers.add_parser('hp-max', help='Modify character max HP')
+    hpmax_parser.add_argument('name', help='Character name')
+    hpmax_parser.add_argument('amount', help='Max HP change (+6 for level up, -5 for curse)')
 
     # Get full character JSON
     get_parser = subparsers.add_parser('get', help='Get full character JSON')
@@ -583,7 +615,7 @@ def main():
         try:
             amount = int(amount_str)
         except ValueError:
-            print(f"[ERROR] Invalid XP amount: {args.amount}")
+            print(tag_error(f"Invalid XP amount: {args.amount}"))
             sys.exit(1)
 
         result = manager.award_xp(args.name, amount)
@@ -603,10 +635,24 @@ def main():
             else:
                 amount = int(amount_str)
         except ValueError:
-            print(f"[ERROR] Invalid HP amount: {args.amount}")
+            print(tag_error(f"Invalid HP amount: {args.amount}"))
             sys.exit(1)
 
         result = manager.modify_hp(args.name, amount)
+        if not result.get('success'):
+            sys.exit(1)
+
+    elif args.action == 'hp-max':
+        amount_str = args.amount
+        try:
+            if amount_str.startswith('+'):
+                amount = int(amount_str[1:])
+            else:
+                amount = int(amount_str)
+        except ValueError:
+            print(tag_error(f"Invalid HP max amount: {args.amount}"))
+            sys.exit(1)
+        result = manager.set_hp_max(args.name, amount)
         if not result.get('success'):
             sys.exit(1)
 
@@ -631,7 +677,7 @@ def main():
                     else:
                         amount = int(amount_str)
                 except ValueError:
-                    print(f"[ERROR] Invalid money amount: {args.amount}")
+                    print(tag_error(f"Invalid money amount: {args.amount}"))
                     sys.exit(1)
 
         result = manager.modify_money(args.name, amount)

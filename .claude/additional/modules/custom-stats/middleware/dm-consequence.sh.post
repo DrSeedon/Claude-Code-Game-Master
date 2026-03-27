@@ -37,16 +37,24 @@ timed = [c for c in data.get('active', []) if 'trigger_hours' in c]
 if not timed:
     sys.exit(0)
 
+RED = "\033[31m"
+YEL = "\033[33m"
+GRN = "\033[32m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+RST = "\033[0m"
+
 print("\n⏱️  Timed consequences:")
 for c in timed:
     remaining = c['trigger_hours'] - c.get('hours_elapsed', 0)
     if remaining <= 0:
-        status = "⚠️  TRIGGERED"
+        color, icon, label = RED + BOLD, "⚠️ ", "TRIGGERED"
     elif remaining <= 2:
-        status = f"🔴 {remaining:.1f}h remaining"
+        color, icon, label = RED, "🔴", f"{remaining:.1f}h"
     elif remaining <= 6:
-        status = f"🟡 {remaining:.1f}h remaining"
+        color, icon, label = YEL, "🟡", f"{remaining:.1f}h"
     else:
-        status = f"🟢 {remaining:.1f}h remaining"
-    print(f"  [{c['id']}] {c['consequence']} — {status}")
+        color, icon, label = GRN, "🟢", f"{remaining:.0f}h"
+    print(f"  {DIM}[{c['id']}]{RST} {c['consequence']}")
+    print(f"       {color}{icon} {label} remaining{RST}")
 PYEOF

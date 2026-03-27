@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from colors import tag_success, tag_error
 
 
 class PlotManager(EntityManager):
@@ -61,16 +62,16 @@ class PlotManager(EntityManager):
                  objectives: List[str] = None) -> bool:
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(f"{error}"))
             return False
 
         if self._entity_exists(self.plots_file, name):
-            print(f"[ERROR] Plot '{name}' already exists")
+            print(tag_error(f"Plot '{name}' already exists"))
             return False
 
         valid_types = ['main', 'side', 'mystery', 'threat']
         if plot_type.lower() not in valid_types:
-            print(f"[ERROR] Invalid type '{plot_type}'. Valid: {', '.join(valid_types)}")
+            print(tag_error(f"Invalid type '{plot_type}'. Valid: {', '.join(valid_types)}"))
             return False
 
         obj_list = []
@@ -89,7 +90,7 @@ class PlotManager(EntityManager):
         }
 
         if self._add_entity(self.plots_file, name, plot_data):
-            print(f"[SUCCESS] Created plot '{name}' (type: {plot_type})")
+            print(tag_success(f"Created plot '{name}' (type: {plot_type})"))
             return True
         return False
 
@@ -97,7 +98,7 @@ class PlotManager(EntityManager):
                          action: str = "complete") -> bool:
         actual_name = self._find_entity_name(self.plots_file, plot_name)
         if not actual_name:
-            print(f"[ERROR] Plot '{plot_name}' not found")
+            print(tag_error(f"Plot '{plot_name}' not found"))
             return False
 
         plots = self._load_entities(self.plots_file)
@@ -117,19 +118,19 @@ class PlotManager(EntityManager):
                 break
 
         if not found:
-            print(f"[ERROR] Objective '{objective_text}' not found in plot '{actual_name}'")
+            print(tag_error(f"Objective '{objective_text}' not found in plot '{actual_name}'"))
             return False
 
         if self._save_entities(self.plots_file, plots):
             status = "completed" if action == "complete" else "incomplete"
-            print(f"[SUCCESS] Objective '{objective_text}' marked as {status}")
+            print(tag_success(f"Objective '{objective_text}' marked as {status}"))
             return True
         return False
 
     def add_objective(self, plot_name: str, objective_text: str) -> bool:
         actual_name = self._find_entity_name(self.plots_file, plot_name)
         if not actual_name:
-            print(f"[ERROR] Plot '{plot_name}' not found")
+            print(tag_error(f"Plot '{plot_name}' not found"))
             return False
 
         plots = self._load_entities(self.plots_file)
@@ -138,7 +139,7 @@ class PlotManager(EntityManager):
         plots[actual_name]['objectives'] = objectives
 
         if self._save_entities(self.plots_file, plots):
-            print(f"[SUCCESS] Added objective '{objective_text}' to plot '{actual_name}'")
+            print(tag_success(f"Added objective '{objective_text}' to plot '{actual_name}'"))
             return True
         return False
 
@@ -195,7 +196,7 @@ class PlotManager(EntityManager):
         """
         actual_name = self._find_entity_name(self.plots_file, name)
         if not actual_name:
-            print(f"[ERROR] Plot '{name}' not found")
+            print(tag_error(f"Plot '{name}' not found"))
             return False
 
         plots = self._load_entities(self.plots_file)
@@ -216,7 +217,7 @@ class PlotManager(EntityManager):
             plots[actual_name]['status'] = 'active'
 
         if self._save_entities(self.plots_file, plots):
-            print(f"[SUCCESS] Updated plot '{actual_name}': {event}")
+            print(tag_success(f"Updated plot '{actual_name}': {event}"))
             return True
         return False
 
@@ -226,7 +227,7 @@ class PlotManager(EntityManager):
         """
         actual_name = self._find_entity_name(self.plots_file, name)
         if not actual_name:
-            print(f"[ERROR] Plot '{name}' not found")
+            print(tag_error(f"Plot '{name}' not found"))
             return False
 
         plots = self._load_entities(self.plots_file)
@@ -245,7 +246,7 @@ class PlotManager(EntityManager):
         })
 
         if self._save_entities(self.plots_file, plots):
-            print(f"[SUCCESS] Completed plot '{actual_name}'")
+            print(tag_success(f"Completed plot '{actual_name}'"))
             if outcome:
                 print(f"  Outcome: {outcome}")
             return True
@@ -257,7 +258,7 @@ class PlotManager(EntityManager):
         """
         actual_name = self._find_entity_name(self.plots_file, name)
         if not actual_name:
-            print(f"[ERROR] Plot '{name}' not found")
+            print(tag_error(f"Plot '{name}' not found"))
             return False
 
         plots = self._load_entities(self.plots_file)
@@ -276,7 +277,7 @@ class PlotManager(EntityManager):
         })
 
         if self._save_entities(self.plots_file, plots):
-            print(f"[SUCCESS] Failed plot '{actual_name}'")
+            print(tag_success(f"Failed plot '{actual_name}'"))
             if reason:
                 print(f"  Reason: {reason}")
             return True
@@ -324,7 +325,7 @@ class PlotManager(EntityManager):
         """
         plot = self.get_plot(name)
         if not plot:
-            print(f"[ERROR] Plot '{name}' not found")
+            print(tag_error(f"Plot '{name}' not found"))
             return None
 
         lines = [f"=== {plot.get('name', name)} ===", ""]

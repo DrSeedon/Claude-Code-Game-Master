@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
+from colors import tag_success, tag_error, tag_info, tag_warning, attitude_colored
 
 
 # Default character sheet for new party members
@@ -48,17 +49,17 @@ class NPCManager(EntityManager):
         # Validate inputs
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         valid, error = self.validators.validate_attitude(attitude)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Check if NPC already exists
         if self._entity_exists(self.npcs_file, name):
-            print(f"[ERROR] NPC {name} already exists")
+            print(tag_error(f"NPC {name} already exists"))
             return False
 
         # Create NPC data
@@ -75,7 +76,7 @@ class NPCManager(EntityManager):
 
         # Save to file
         if self._add_entity(self.npcs_file, name, npc_data):
-            print(f"[SUCCESS] Created NPC: {name} - {description} ({attitude})")
+            print(tag_success(f"Created NPC: {name} - {description} ({attitude_colored(attitude)})"))
             return True
         return False
 
@@ -86,12 +87,12 @@ class NPCManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Check if NPC exists
         if not self._entity_exists(self.npcs_file, name):
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return False
 
         # Add event
@@ -101,7 +102,7 @@ class NPCManager(EntityManager):
         }
 
         if self.json_ops.append_to_list(self.npcs_file, event_data, [name, 'events']):
-            print(f"[SUCCESS] Updated {name}: {event}")
+            print(tag_success(f"Updated {name}: {event}"))
             return True
         return False
 
@@ -112,12 +113,12 @@ class NPCManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return None
 
         npc = self._get_entity(self.npcs_file, name)
         if not npc:
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return None
 
         return npc
@@ -134,7 +135,7 @@ class NPCManager(EntityManager):
 
         # Basic info
         lines.append(f"Description: {npc.get('description', 'No description')}")
-        lines.append(f"Attitude: {npc.get('attitude', 'unknown')}")
+        lines.append(f"Attitude: {attitude_colored(npc.get('attitude', 'unknown'))}")
 
         # Party member status
         if npc.get('is_party_member'):
@@ -209,18 +210,18 @@ class NPCManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Check if NPC exists
         if not self._entity_exists(self.npcs_file, name):
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return False
 
         # Update description
         updates = {'description': enhanced_description}
         if self._update_entity(self.npcs_file, name, updates):
-            print(f"[SUCCESS] Enhanced description for {name}")
+            print(tag_success(f"Enhanced description for {name}"))
             return True
         return False
 
@@ -267,13 +268,13 @@ class NPCManager(EntityManager):
         # Validate name
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         # Get current NPC data
         npcs = self._load_entities(self.npcs_file)
         if name not in npcs:
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return False
 
         # Ensure tags structure exists as dict (migrate from list if needed)
@@ -294,7 +295,7 @@ class NPCManager(EntityManager):
         npcs[name]['tags'][tag_type] = list(current_tags)
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {action_word} {tag_type} tags for {name}: {', '.join(tags)}")
+            print(tag_success(f"{action_word} {tag_type} tags for {name}: {', '.join(tags)}"))
             return True
         return False
 
@@ -308,16 +309,16 @@ class NPCManager(EntityManager):
         """
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return None, None
 
         npcs = self._load_entities(self.npcs_file)
         if name not in npcs:
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return None, None
 
         if not npcs[name].get('is_party_member'):
-            print(f"[ERROR] {name} is not a party member. Use 'dm-npc.sh promote \"{name}\"' first.")
+            print(tag_error(f"{name} is not a party member. Use 'dm-npc.sh promote \"{name}\"' first."))
             return None, None
 
         return npcs, name
@@ -329,16 +330,16 @@ class NPCManager(EntityManager):
         """
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         npcs = self._load_entities(self.npcs_file)
         if name not in npcs:
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return False
 
         if npcs[name].get('is_party_member'):
-            print(f"[INFO] {name} is already a party member")
+            print(tag_info(f"{name} is already a party member"))
             return True
 
         # Check if NPC already has a character sheet (was previously a party member)
@@ -351,7 +352,7 @@ class NPCManager(EntityManager):
             hp = existing_sheet.get('hp', {'current': 10, 'max': 10})
             ac = existing_sheet.get('ac', 10)
             if self._save_entities(self.npcs_file, npcs):
-                print(f"[SUCCESS] {name} rejoined the party (HP: {hp['current']}/{hp['max']}, AC: {ac})")
+                print(tag_success(f"{name} rejoined the party (HP: {hp['current']}/{hp['max']}, AC: {ac})"))
                 return True
         else:
             # Create new character sheet with defaults
@@ -366,7 +367,7 @@ class NPCManager(EntityManager):
             npcs[name]['character_sheet']['conditions'] = PARTY_MEMBER_DEFAULTS['conditions'].copy()
 
             if self._save_entities(self.npcs_file, npcs):
-                print(f"[SUCCESS] {name} is now a party member (HP: 10/10, AC: 10)")
+                print(tag_success(f"{name} is now a party member (HP: 10/10, AC: 10)"))
                 return True
 
         return False
@@ -377,22 +378,22 @@ class NPCManager(EntityManager):
         """
         valid, error = self.validators.validate_name(name)
         if not valid:
-            print(f"[ERROR] {error}")
+            print(tag_error(error))
             return False
 
         npcs = self._load_entities(self.npcs_file)
         if name not in npcs:
-            print(f"[ERROR] NPC {name} not found")
+            print(tag_error(f"NPC {name} not found"))
             return False
 
         if not npcs[name].get('is_party_member'):
-            print(f"[INFO] {name} is not a party member")
+            print(tag_info(f"{name} is not a party member"))
             return True
 
         npcs[name]['is_party_member'] = False
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} is no longer a party member")
+            print(tag_success(f"{name} is no longer a party member"))
             return True
         return False
 
@@ -422,9 +423,9 @@ class NPCManager(EntityManager):
 
         if self._save_entities(self.npcs_file, npcs):
             action = "healed" if amount > 0 else "damaged"
-            print(f"[SUCCESS] {name} {action}: {old_hp} → {hp['current']}/{hp['max']} HP")
+            print(tag_success(f"{name} {action}: {old_hp} → {hp['current']}/{hp['max']} HP"))
             if hp['current'] == 0:
-                print(f"[WARNING] {name} is at 0 HP!")
+                print(tag_warning(f"{name} is at 0 HP!"))
             return True
         return False
 
@@ -442,7 +443,7 @@ class NPCManager(EntityManager):
         npcs[name]['character_sheet']['xp'] = new_xp
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} XP: {old_xp} → {new_xp}")
+            print(tag_success(f"{name} XP: {old_xp} → {new_xp}"))
             return True
         return False
 
@@ -465,7 +466,7 @@ class NPCManager(EntityManager):
                 cleaned = str(val).strip()
                 return int(cleaned)
             except ValueError:
-                print(f"[ERROR] Invalid integer value for {field_name}: '{val}'")
+                print(tag_error(f"Invalid integer value for {field_name}: '{val}'"))
                 return None
 
         if field == 'hp_max':
@@ -489,14 +490,14 @@ class NPCManager(EntityManager):
         elif field in ['class', 'race', 'damage']:
             sheet[field] = str(value)
         else:
-            print(f"[ERROR] Unknown field: {field}")
+            print(tag_error(f"Unknown field: {field}"))
             print("Valid fields: ac, level, class, race, attack, damage, hp_max")
             return False
 
         npcs[name]['character_sheet'] = sheet
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} {field} set to {value}")
+            print(tag_success(f"{name} {field} set to {value}"))
             return True
         return False
 
@@ -513,24 +514,24 @@ class NPCManager(EntityManager):
 
         if action == 'add':
             if item in equipment:
-                print(f"[INFO] {name} already has {item}")
+                print(tag_info(f"{name} already has {item}"))
                 return True
             equipment.append(item)
             action_word = "equipped"
         elif action == 'remove':
             if item not in equipment:
-                print(f"[INFO] {name} doesn't have {item}")
+                print(tag_info(f"{name} doesn't have {item}"))
                 return True
             equipment.remove(item)
             action_word = "unequipped"
         else:
-            print(f"[ERROR] Unknown action: {action}. Use 'add' or 'remove'.")
+            print(tag_error(f"Unknown action: {action}. Use 'add' or 'remove'."))
             return False
 
         npcs[name]['character_sheet']['equipment'] = equipment
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} {action_word}: {item}")
+            print(tag_success(f"{name} {action_word}: {item}"))
             return True
         return False
 
@@ -547,24 +548,24 @@ class NPCManager(EntityManager):
 
         if action == 'add':
             if condition in conditions:
-                print(f"[INFO] {name} already has condition: {condition}")
+                print(tag_info(f"{name} already has condition: {condition}"))
                 return True
             conditions.append(condition)
             action_word = "now has"
         elif action == 'remove':
             if condition not in conditions:
-                print(f"[INFO] {name} doesn't have condition: {condition}")
+                print(tag_info(f"{name} doesn't have condition: {condition}"))
                 return True
             conditions.remove(condition)
             action_word = "no longer has"
         else:
-            print(f"[ERROR] Unknown action: {action}. Use 'add' or 'remove'.")
+            print(tag_error(f"Unknown action: {action}. Use 'add' or 'remove'."))
             return False
 
         npcs[name]['character_sheet']['conditions'] = conditions
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} {action_word} {condition}")
+            print(tag_success(f"{name} {action_word} {condition}"))
             return True
         return False
 
@@ -581,24 +582,24 @@ class NPCManager(EntityManager):
 
         if action == 'add':
             if feature in features:
-                print(f"[INFO] {name} already has feature: {feature}")
+                print(tag_info(f"{name} already has feature: {feature}"))
                 return True
             features.append(feature)
             action_word = "gained"
         elif action == 'remove':
             if feature not in features:
-                print(f"[INFO] {name} doesn't have feature: {feature}")
+                print(tag_info(f"{name} doesn't have feature: {feature}"))
                 return True
             features.remove(feature)
             action_word = "lost"
         else:
-            print(f"[ERROR] Unknown action: {action}. Use 'add' or 'remove'.")
+            print(tag_error(f"Unknown action: {action}. Use 'add' or 'remove'."))
             return False
 
         npcs[name]['character_sheet']['features'] = features
 
         if self._save_entities(self.npcs_file, npcs):
-            print(f"[SUCCESS] {name} {action_word} feature: {feature}")
+            print(tag_success(f"{name} {action_word} feature: {feature}"))
             return True
         return False
 

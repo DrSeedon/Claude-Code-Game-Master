@@ -36,7 +36,7 @@ bash tools/dm-note.sh "combat" "Combat: [party] vs [enemies] at [location]"
 ### Phase 2: Initiative
 ```bash
 # Roll for each combatant
-uv run python lib/dice.py "1d20+[dex_mod]"
+bash tools/dm-roll.sh "1d20+[dex_mod]" --label "Initiative ([name])"
 ```
 Track turn order in memory (highest to lowest).
 
@@ -45,14 +45,14 @@ Track turn order in memory (highest to lowest).
 **Player Turn (Standard D&D):**
 1. Ask: "Your turn. What do you do?"
 2. Resolve action (Attack, Cast Spell, Dash, Dodge, Help, Hide, Ready)
-3. Roll attack: `uv run python lib/dice.py "1d20+[attack_bonus]"` vs stated AC
-4. If hit, roll damage: `uv run python lib/dice.py "[damage_dice]"`
+3. Roll attack: `bash tools/dm-roll.sh "1d20+[attack_bonus]" --label "[weapon] Attack ([name])" --ac [AC]` vs stated AC
+4. If hit, roll damage: `bash tools/dm-roll.sh "[damage_dice]" --label "[weapon] Damage"`
 5. Update enemy HP and narrate
 
 **Enemy Turn:**
 1. Choose target (usually nearest/most damaged)
 2. State player AC before rolling
-3. Roll attack: `uv run python lib/dice.py "1d20+[enemy_attack_bonus]"`
+3. Roll attack: `bash tools/dm-roll.sh "1d20+[enemy_attack_bonus]" --label "Attack ([enemy])" --ac [AC]`
 4. If hit, roll damage and update player HP
 5. Narrate dramatically
 

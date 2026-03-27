@@ -42,8 +42,8 @@ Based on your [GENRE] campaign, here are stat suggestions:
 - Strategy/Civilization: Population, Food, Materials, Knowledge, Faith, Culture
 - Custom: ask user what stats matter in their world
 
-> **ВАЖНО**: Любые статы — персонажные, цивилизационные, фракционные — все пишутся в `character.json` в поле `custom_stats`.
-> Не создавай отдельных полей типа `civilization_stats` в campaign-overview. Единый источник правды — `custom_stats`.
+> **IMPORTANT**: All stats — character, civilization, faction — go into `module-data/custom-stats.json` under `character_stats`.
+> Do NOT create separate fields like `civilization_stats` in campaign-overview. Single source of truth — `character_stats`.
 
 ---
 
@@ -143,7 +143,7 @@ Use `per_hour_formula` instead of `per_hour` — the engine evaluates it each ti
 {
   "stat": "food",
   "per_hour_formula": "-(population * 2) / 24",
-  "description": "Расход еды: population чел * 2 порции / 24ч"
+  "description": "Food consumption: population people * 2 portions / 24h"
 }
 ```
 
@@ -156,6 +156,61 @@ Use `per_hour_formula` instead of `per_hour` — the engine evaluates it each ti
 ```bash
 bash .claude/additional/modules/custom-stats/tools/dm-survival.sh custom-stat food +[amount]
 ```
+
+---
+
+## Recurring Expenses During World-Building
+
+After setting up custom stats, ask the player about living costs. Propose defaults based on setting:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RECURRING EXPENSES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  These auto-deduct from your money as game time passes:
+
+  [1] Food & Water — 2-4 copper/day (random)
+  [2] Room Rent — 30 copper/month
+  [3] Custom — define your own
+
+  → Type numbers to enable, or SKIP for no expenses.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Genre presets:**
+- Fantasy (D&D): Food 2-4c/day, Room 20-50c/month
+- Survival (STALKER): Food 5-10c/day, Shelter 30c/week, Ammo upkeep 10c/day
+- Sci-fi: Life support 5c/day, Fuel 20c/week, Docking fees 50c/month
+- Civilization: Food scaled by population (use custom stat formula instead)
+
+Write to `module-data/custom-stats.json` under `recurring_expenses`:
+
+```json
+"recurring_expenses": [
+  {
+    "name": "Food & Water",
+    "interval_hours": 24,
+    "cost_min": 2,
+    "cost_max": 4,
+    "accumulated_hours": 0
+  },
+  {
+    "name": "Room Rent",
+    "interval_hours": 720,
+    "cost": 30,
+    "accumulated_hours": 0
+  }
+]
+```
+
+**Fields:**
+- `interval_hours` — deduction interval (24 = daily, 168 = weekly, 720 = monthly)
+- `cost` — fixed amount in base currency units (copper)
+- `cost_min` / `cost_max` — random range per trigger (use instead of `cost`)
+- `accumulated_hours` — always starts at 0
+
+All costs in base currency units. Auto-deducted every `tick(--elapsed N)`. If not enough money → warning printed, DM decides consequences (debt, hunger, eviction).
 
 ---
 

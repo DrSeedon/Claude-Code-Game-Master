@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from json_ops import JsonOperations
 from campaign_manager import CampaignManager
+from colors import tag_success, tag_error, tag_info
 
 
 # Query templates for each entity type
@@ -106,7 +107,7 @@ class EntityEnhancer:
                 self._embedder = LocalEmbedder()
                 return True
             except ImportError as e:
-                print(f"[ERROR] RAG components not available: {e}")
+                print(tag_error(f"RAG components not available: {e}"))
                 return False
         return True
 
@@ -210,12 +211,12 @@ class EntityEnhancer:
             List of passage dicts with 'text', 'distance', 'metadata'
         """
         if not self._ensure_rag():
-            print("[ERROR] RAG not available - no vector store found")
+            print(tag_error("RAG not available - no vector store found"))
             return []
 
         # Check if vector store has data
         if self._vector_store.count() == 0:
-            print("[INFO] Vector store is empty - import a document first")
+            print(tag_info("Vector store is empty - import a document first"))
             return []
 
         results = self._vector_store.query_by_text(
@@ -265,12 +266,12 @@ class EntityEnhancer:
             List of passage dicts with 'text', 'distance', 'metadata'
         """
         if not self._ensure_rag():
-            print("[ERROR] RAG not available - no vector store found")
+            print(tag_error("RAG not available - no vector store found"))
             return []
 
         # Check if vector store has data
         if self._vector_store.count() == 0:
-            print("[INFO] Vector store is empty - import a document first")
+            print(tag_info("Vector store is empty - import a document first"))
             return []
 
         passages = []
@@ -399,13 +400,13 @@ class EntityEnhancer:
 
         filename = filename_map.get(entity_type)
         if not filename:
-            print(f"[ERROR] Unknown entity type: {entity_type}")
+            print(tag_error(f"Unknown entity type: {entity_type}"))
             return False
 
         # Load current data
         data = self.json_ops.load_json(filename)
         if entity_name not in data:
-            print(f"[ERROR] Entity '{entity_name}' not found in {filename}")
+            print(tag_error(f"Entity '{entity_name}' not found in {filename}"))
             return False
 
         entity = data[entity_name]
@@ -453,7 +454,7 @@ class EntityEnhancer:
         # Save
         data[entity_name] = entity
         if self.json_ops.save_json(filename, data):
-            print(f"[SUCCESS] Enhanced {entity_type}: {entity_name}")
+            print(tag_success(f"Enhanced {entity_type}: {entity_name}"))
             print(f"  - Context passages: {len(entity['context'])}")
             return True
 

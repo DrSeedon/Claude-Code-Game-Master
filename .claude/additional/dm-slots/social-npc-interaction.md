@@ -1,4 +1,4 @@
-## Social (NPC Interaction)
+## Social (NPC Interaction) <!-- slot:social-npc-interaction -->
 
 ### Trigger Conditions
 - "I talk to [name]"
@@ -73,13 +73,13 @@ If NPC has no established personality, roll or pick:
 ### Phase 5: Consequences
 ```bash
 # Positive: NPC might help later
-bash tools/dm-consequence.sh add "[NPC] assists party" "next meeting"
+bash tools/dm-consequence.sh add "[NPC] assists party" "next meeting" --hours 8
 
 # Negative: NPC might hinder later
-bash tools/dm-consequence.sh add "[NPC] spreads rumors" "next day"
+bash tools/dm-consequence.sh add "[NPC] spreads rumors" "next day" --hours 24
 
 # Information gained
-bash tools/dm-note.sh "npc_info" "[NPC] revealed [information]"
+bash tools/dm-note.sh "npc_relations" "[NPC] revealed [information]"
 ```
 
 ---

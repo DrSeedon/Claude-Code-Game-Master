@@ -46,7 +46,7 @@
     "Blocked-by conditions — positive rate blocked when prerequisite stat is too low",
     "Timed effects (buffs/debuffs) — temporary rate bonuses, per-hour changes, instant effects with auto-expiration",
     "Timed consequences — dm-consequence.sh add ... --hours N auto-triggers after elapsed game time",
-    "Action tracking — logs rolls, notes, NPC changes, quests, moves; warns after 15+ unresolved actions; dm-time.sh --resolve-actions clears pending"
+    "Action tracking — logs rolls, notes, NPC changes, quests, moves; warns after 35+ unresolved actions; auto-resolves on dm-time.sh --elapsed"
   ],
   "adds_to_core": {
     "tools": [
