@@ -149,8 +149,11 @@ case "$ACTION" in
             exit 1
         fi
         if [ -n "$DELTA" ]; then
-            RFLAG=""; [ -n "$REASON" ] && RFLAG="--reason $REASON"
-            $WG custom-stat "$STAT" "$DELTA" $RFLAG
+            if [ -n "$REASON" ]; then
+                $WG custom-stat "$STAT" "$DELTA" --reason "$REASON"
+            else
+                $WG custom-stat "$STAT" "$DELTA"
+            fi
         else
             $WG custom-stat "$STAT"
         fi
