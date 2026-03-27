@@ -328,10 +328,12 @@ def _resolve_skill(char, skill_name):
 
 
 def _resolve_save(char, save_name):
-    """Get save modifier from character."""
+    """Get save modifier from character. Supports flat (int) and structured (dict with total) formats."""
     saves = char.get('saves', {})
     for name, val in saves.items():
         if name.lower() == save_name.lower():
+            if isinstance(val, dict):
+                return val.get('total', 0), name
             return int(val), name
     stats = char.get('stats', {})
     stat_mods = {
