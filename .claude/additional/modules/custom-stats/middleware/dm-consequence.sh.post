@@ -1,23 +1,11 @@
 #!/bin/bash
 # custom-stats post-hook for dm-consequence.sh
-# After CORE 'check': show remaining hours for timed consequences.
 
 ACTION="$1"
-
-MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-_dir="$MODULE_DIR"
-while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
-PROJECT_ROOT="$_dir"
-
-if [ "$ACTION" = "add" ]; then
-    shift
-    cd "$PROJECT_ROOT"
-    uv run python "$MODULE_DIR/lib/action_tracker.py" log "consequence" "add: $*" "dm-consequence.sh" 2>/dev/null
-fi
-
 [ "$ACTION" != "check" ] && exit 0
 
-cd "$PROJECT_ROOT"
-# WorldGraph consequence-check already shows timed consequences
-# This post-hook now only adds formatted timed display if needed
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
+
+cd "$_dir"
 uv run python lib/world_graph.py consequence-check 2>/dev/null

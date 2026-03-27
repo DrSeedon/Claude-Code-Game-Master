@@ -1,22 +1,16 @@
 #!/bin/bash
 # custom-stats post-hook for dm-time.sh
-# CORE handles clock. This hook only ticks stats + action tracker.
-#
-# Called by dispatch_middleware_post with: $1=time_of_day $2=date $3+ flags
-# We extract --elapsed and --sleeping from the args.
+# Ticks custom stats, production, expenses, income, consequences via WorldGraph.
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 _dir="$MODULE_DIR"
 while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")"; done
 PROJECT_ROOT="$_dir"
 
-TIME_LABEL="$1 $2"
 shift 2 2>/dev/null || shift $#
-# Skip duplicated time/date args from dispatch
 shift 2 2>/dev/null || shift $#
 
 ELAPSED=0
-SLEEPING=""
 TICK_ARGS=()
 
 prev=""
@@ -26,7 +20,6 @@ for arg in "$@"; do
         TICK_ARGS+=("--elapsed" "$arg")
     fi
     if [ "$arg" = "--sleeping" ]; then
-        SLEEPING="--sleeping"
         TICK_ARGS+=("--sleeping")
     fi
     prev="$arg"
@@ -37,15 +30,4 @@ if [ "$ELAPSED" = "0" ] || [ -z "$ELAPSED" ]; then
 fi
 
 cd "$PROJECT_ROOT"
-
-# Tick via WorldGraph (custom stats, production, expenses, income, consequences)
-uv run python "$PROJECT_ROOT/lib/world_graph.py" tick "${TICK_ARGS[@]}" 2>/dev/null
-
-# Fallback: tick via old survival engine if world.json not available
-CAMPAIGN_DIR=$(uv run python -c "from lib.campaign_manager import CampaignManager; cm=CampaignManager(); print(cm.get_active_campaign_path() or '')" 2>/dev/null)
-if [ -n "$CAMPAIGN_DIR" ] && [ ! -f "$CAMPAIGN_DIR/world.json" ]; then
-    uv run python "$MODULE_DIR/lib/survival_engine.py" tick "${TICK_ARGS[@]}" 2>/dev/null
-fi
-
-# Resolve action tracker
-uv run python "$MODULE_DIR/lib/action_tracker.py" resolve "$ELAPSED" "$TIME_LABEL" 2>/dev/null
+uv run python lib/world_graph.py tick "${TICK_ARGS[@]}"
