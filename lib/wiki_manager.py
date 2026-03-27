@@ -16,7 +16,7 @@ from difflib import SequenceMatcher
 sys.path.insert(0, str(Path(__file__).parent))
 
 ENTITY_TYPES = [
-    "potion", "material", "artifact", "ability", "technique",
+    "potion", "material", "artifact", "ability", "technique", "spell", "cantrip",
     "effect", "tool", "weapon", "armor", "book", "chapter", "creature", "misc"
 ]
 

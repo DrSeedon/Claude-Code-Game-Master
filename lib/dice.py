@@ -382,6 +382,40 @@ def _resolve_attack(char, weapon_name=None):
     return mod, 'ближний бой', '1d4'
 
 
+def _load_spell(name):
+    """Load spell/ability from wiki.json by ID or fuzzy name match."""
+    import json
+    campaign_dir = _get_campaign_path()
+    if not campaign_dir:
+        return None
+    wiki_file = campaign_dir / "wiki.json"
+    if not wiki_file.exists():
+        return None
+    with open(wiki_file) as f:
+        wiki = json.load(f)
+    name_lower = name.lower()
+    spell_types = {"spell", "ability", "technique", "cantrip"}
+    if name_lower in wiki and wiki[name_lower].get("type") in spell_types:
+        return wiki[name_lower]
+    for eid, data in wiki.items():
+        if not isinstance(data, dict) or data.get("type") not in spell_types:
+            continue
+        if name_lower in eid.lower() or name_lower in data.get("name", "").lower():
+            return data
+    return None
+
+
+def _resolve_spell_attack(char):
+    """Get spellcasting attack bonus: casting stat mod + proficiency."""
+    stats = char.get('stats', {})
+    level = char.get('level', 1)
+    proficiency = 2 if level < 5 else 3 if level < 9 else 4 if level < 13 else 5 if level < 17 else 6
+    casting_stat = char.get('casting_stat', 'int')
+    stat_val = stats.get(casting_stat, 10)
+    stat_mod = (stat_val - 10) // 2
+    return stat_mod + proficiency, stat_mod, proficiency
+
+
 def main():
     """CLI interface for dice rolling"""
     import sys
@@ -395,6 +429,7 @@ def main():
     parser.add_argument("--skill", "-s", help="Skill name (auto-lookup modifier from character.json)")
     parser.add_argument("--save", help="Save name: str/dex/con/int/wis/cha or Russian abbrev")
     parser.add_argument("--attack", nargs="?", const="", help="Attack roll (optional: weapon/skill name)")
+    parser.add_argument("--spell", help="Spell/ability name (auto-lookup from wiki: attack or save-based)")
     parser.add_argument("--target", "-t", help="Target creature (auto-lookup AC from wiki, auto-damage on hit)")
     parser.add_argument("--defend", action="store_true", help="Creature attacks player (use with --from)")
     parser.add_argument("--from", dest="from_creature", help="Creature attacking (auto-lookup attack+damage from wiki)")
@@ -441,6 +476,40 @@ def main():
         if not label:
             label = f"Attack: {atk_name} ({char_name}) [dmg: {atk_damage}]"
 
+    spell_data = None
+    spell_save_dc = None
+
+    if args.spell:
+        spell_data = _load_spell(args.spell)
+        if not spell_data:
+            print(f"Error: Spell '{args.spell}' not found in wiki", file=sys.stderr)
+            sys.exit(1)
+        if not char:
+            char = _load_character()
+        if not char:
+            print("Error: No active character found", file=sys.stderr)
+            sys.exit(1)
+        char_name = char.get('name', '?')
+        spell_name = spell_data.get('name', args.spell)
+        s_mechanics = spell_data.get('mechanics', {})
+        spell_damage = s_mechanics.get('damage', None)
+        spell_attack_type = s_mechanics.get('attack_type', s_mechanics.get('type', 'save'))
+        spell_save_type = s_mechanics.get('save_type', s_mechanics.get('save', None))
+
+        if spell_attack_type in ('ranged', 'melee', 'attack', 'spell_attack'):
+            spell_mod, _, _ = _resolve_spell_attack(char)
+            notation = f"1d20+{spell_mod}" if spell_mod >= 0 else f"1d20{spell_mod}"
+            if not label:
+                dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
+                label = f"Spell: {spell_name} ({char_name}){dmg_tag}"
+        elif spell_save_type:
+            pass
+        else:
+            if spell_damage:
+                notation = spell_damage
+                if not label:
+                    label = f"Spell: {spell_name} ({char_name})"
+
     creature_data = None
     damage_dice = None
 
@@ -451,15 +520,61 @@ def main():
             sys.exit(1)
         mechanics = creature_data.get('mechanics', {})
         creature_ac = int(mechanics.get('ac', mechanics.get('AC', 10)))
-        ac = creature_ac
         creature_name = creature_data.get('name', args.target)
-        if args.attack is not None:
+
+        if spell_data:
+            s_mechanics = spell_data.get('mechanics', {})
+            spell_name = spell_data.get('name', args.spell)
+            spell_damage = s_mechanics.get('damage', None)
+            spell_attack_type = s_mechanics.get('attack_type', s_mechanics.get('type', 'save'))
+            spell_save_type = s_mechanics.get('save_type', s_mechanics.get('save', None))
+
+            if spell_attack_type in ('ranged', 'melee', 'attack', 'spell_attack'):
+                ac = creature_ac
+                if not label:
+                    dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
+                    label = f"Spell: {spell_name} → {creature_name} ({char_name}){dmg_tag}"
+                damage_dice = spell_damage
+            elif spell_save_type:
+                if not char:
+                    char = _load_character()
+                if char:
+                    spell_mod, stat_mod, prof = _resolve_spell_attack(char)
+                    spell_save_dc = 8 + spell_mod
+                save_abbr = spell_save_type.lower()[:3]
+                creature_saves = mechanics.get('saves', {})
+                if isinstance(creature_saves, str):
+                    import json as _json
+                    try:
+                        creature_saves = _json.loads(creature_saves)
+                    except Exception:
+                        creature_saves = {}
+                creature_save_mod = 0
+                for k, v in creature_saves.items():
+                    if k.lower()[:3] == save_abbr:
+                        creature_save_mod = int(v)
+                        break
+                notation = f"1d20+{creature_save_mod}" if creature_save_mod >= 0 else f"1d20{creature_save_mod}"
+                dc = spell_save_dc
+                if not label:
+                    dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
+                    label = f"{creature_name} {spell_save_type.upper()} Save vs {spell_name}{dmg_tag}"
+                damage_dice = spell_damage
+            else:
+                if spell_damage:
+                    notation = spell_damage
+                    if not label:
+                        label = f"Spell: {spell_name} → {creature_name} ({char_name})"
+                    damage_dice = None
+        elif args.attack is not None:
+            ac = creature_ac
             if not label:
                 label = f"Attack: {atk_name} → {creature_name} ({char_name})"
             damage_dice = atk_damage
         elif args.skill:
             pass
         else:
+            ac = creature_ac
             if not char:
                 char = _load_character()
             if char:
@@ -514,12 +629,16 @@ def main():
         print(line)
 
         is_hit = False
+        is_save_fail = False
         if ac:
             is_hit = result['total'] >= ac or result.get('natural_20', False)
+        if dc and spell_data and spell_data.get('mechanics', {}).get('save_type', spell_data.get('mechanics', {}).get('save')):
+            is_save_fail = result['total'] < dc and not result.get('natural_20', False)
         is_crit = result.get('natural_20', False)
         is_fumble = result.get('natural_1', False)
 
-        if damage_dice and is_hit and not is_fumble:
+        should_damage = (is_hit or is_save_fail) and not is_fumble
+        if damage_dice and should_damage:
             if is_crit:
                 parts = damage_dice.split('+')
                 dice_part = parts[0]
