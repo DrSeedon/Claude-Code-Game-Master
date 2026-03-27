@@ -9,7 +9,7 @@
   "tags": ["combat", "mass-battle", "unit-tracking", "wargame"],
   "enabled_by_default": false,
   "dependencies": [],
-  "optional_dependencies": ["enhanced-dice"],
+  "optional_dependencies": [],
   "incompatible_with": [],
   "middleware": [],
   "features": [

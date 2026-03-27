@@ -23,9 +23,7 @@
       ],
       "enabled_by_default": false,
       "dependencies": [],
-      "optional_dependencies": [
-        "enhanced-dice"
-      ],
+      "optional_dependencies": [],
       "incompatible_with": [],
       "middleware": [],
       "features": [
@@ -328,19 +326,17 @@
       ],
       "enabled_by_default": false,
       "dependencies": [],
-      "optional_dependencies": [
-        "inventory-system"
-      ],
+      "optional_dependencies": [],
       "incompatible_with": [],
       "middleware": [],
       "features": [
         "Single, burst, and full-auto fire modes",
         "Penetration vs Protection damage scaling",
-        "Subclass bonuses (Стрелок sharpshooter)",
+        "Subclass bonuses (sharpshooter)",
         "Critical hit mechanics (2× dice on nat 20)",
         "Multi-target distribution (full-auto)",
         "Auto XP tracking",
-        "Auto ammo deduction (via inventory-system if active)",
+        "Auto ammo deduction via CORE inventory",
         "Test mode for dry runs"
       ],
       "adds_to_core": {

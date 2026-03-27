@@ -7,46 +7,55 @@
 | Subcommand | Action |
 |------------|--------|
 | (none) | Continue to MANDATORY STARTUP CHECKLIST |
-| save | Jump to SAVE SESSION |
+| save | Run `/dm-save` skill |
 | character | Jump to CHARACTER DISPLAY |
 | overview | Jump to CAMPAIGN OVERVIEW |
 | status | Run `bash tools/dm-overview.sh` and display |
-| end | Jump to ENDING SESSION |
+| end | Run `/dm-save` skill |
 
 ---
 
 ## 🔒 MANDATORY STARTUP CHECKLIST
 
-**Execute ALL steps before presenting the scene. Do not skip.**
+### Hook Context Architecture
 
-### Step 1: Load Full Context
+The UserPromptSubmit hooks have loaded into your context:
+- **Campaign state** (location, time, character, custom stats, module status)
+- **Session context** (consequences, active quests, last session summary, session handoff)
+- **Rules pointer** — DM rules compiled to `/tmp/dm-rules.md` (NOT in context — must read)
+
+### Step 1: Load Rules + Register Session (TWO tool calls, parallel)
 ```bash
-bash .claude/additional/infrastructure/dm-active-modules-rules.sh 2>/dev/null > /tmp/dm-rules.md
-bash .claude/additional/infrastructure/dm-campaign-rules.sh read 2>/dev/null >> /tmp/dm-rules.md
+# Call 1: Read compiled rules (85KB — rules, campaign rules, narrator style)
+Read /tmp/dm-rules.md
+
+# Call 2: Register session
 bash tools/dm-session.sh start
-bash tools/dm-session.sh context
-bash .claude/additional/infrastructure/tools/dm-module-status.sh
-```
-Then use the **Read tool** to read `/tmp/dm-rules.md` — this ensures the FULL rules are loaded (Bash output gets truncated, Read does not).
-
-Read and internalize ALL of it: DM rules, character stats, party, pending consequences, campaign rules, location, time, **module status data** (inventory weight, custom stats, game clock, encounter config, etc.).
-
-**⚠️ Campaign Rules:** The `campaign-rules.md` is appended above — enforce ALL campaign-specific rules (stat formulas, tech bonuses, population structure, era mechanics) throughout the session.
-
-### Step 2: Verify Location
-```bash
-tail -30 world-state/campaigns/[campaign-name]/session-log.md
-```
-- Find LAST session's ending location
-- Compare to Step 1 location
-- **If mismatch**: session log is truth → `bash tools/dm-session.sh move "[correct location]"`
-
-### Step 3: Party Context (if needed)
-```bash
-bash tools/dm-npc.sh status "[name]"
 ```
 
-### Step 4: Mental Model
+Both calls run in parallel. Do NOT run anything else.
+
+Do NOT run ANY of these — they are ALREADY in hook context:
+- ❌ `dm-overview.sh` — already loaded
+- ❌ `dm-player.sh show` — already loaded
+- ❌ `dm-plot.sh list` — already loaded
+- ❌ `dm-consequence.sh check` — already in hook + dm-session.sh start output
+- ❌ `dm-npc.sh party` — already loaded
+- ❌ `tail session-log.md` / `cat session-log.md` — use handoff or hook context
+- ❌ `cat session-handoff.md` — already loaded by hook
+- ❌ `cat campaign-overview.json` — already loaded
+
+If you run ANY of the above, you are wasting tokens and ignoring this rule.
+
+### Step 2: Internalize Context (NO TOOL CALLS — JUST READ)
+Read the hook output + /tmp/dm-rules.md. The session handoff (if present) is the previous DM's briefing — character nuances, relationship states, player intent. **It overrides assumptions from JSON data.**
+
+### Step 3: Verify Location (TOOL CALL ONLY IF MISMATCH)
+Compare the location from `dm-session.sh start` output with the session handoff location.
+- **If mismatch**: handoff is truth → `bash tools/dm-session.sh move "[correct location]"`
+- **If match or no handoff**: do nothing. Do NOT read session-log.md.
+
+### Step 4: Mental Model (from hook context, NO TOOL CALLS)
 - [ ] WHERE is the party?
 - [ ] WHEN is it?
 - [ ] WHO is present?
@@ -79,44 +88,9 @@ Repeat.
 
 ---
 
-## ENDING SESSION
+## ENDING SESSION / SAVE SESSION
 
-```bash
-bash tools/dm-session.sh end "[brief summary]"
-```
-
-```
-================================================================
-  SESSION COMPLETE
-  [Character] rests at [location]. Progress saved.
-  Until next time, adventurer.
-  /dm save · /dm-continue character · /help
-================================================================
-```
-
----
-
-## SAVE SESSION
-
-### 1. End with summary
-```bash
-bash tools/dm-session.sh end "[summary]"
-```
-
-### 2. Verify persisted
-- HP → `dm-player.sh hp`
-- Inventory → `dm-player.sh inventory`
-- Gold → `dm-player.sh gold`
-- NPCs → `dm-npc.sh update`
-- Location → `dm-session.sh move`
-- Consequences → `dm-consequence.sh add`
-- Facts → `dm-note.sh`
-
-### 3. Verify
-```bash
-bash tools/dm-session.sh status
-bash tools/dm-consequence.sh check
-```
+Run `/dm-save` — it handles everything: save state, consistency check, fix issues, write handoff.
 
 ---
 

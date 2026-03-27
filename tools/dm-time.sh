@@ -56,7 +56,7 @@ else
     exit $CORE_RC
 fi
 
-# Post-hook for modules (custom-stats tick, action-tracker)
+# Post-hook for modules (custom-stats tick, action tracking)
 if [ -n "$ELAPSED_VAL" ] && [ "$ELAPSED_VAL" != "0" ] && [ "$ELAPSED_VAL" != "0.000000" ]; then
     POST_ARGS="--elapsed $ELAPSED_VAL"
     [ -n "$SLEEPING_VAL" ] && POST_ARGS="$POST_ARGS --sleeping"

@@ -63,8 +63,8 @@ Natural 20 on any shot -> double damage dice (modifiers unchanged). Natural 1 ->
 
 The resolver automatically:
 1. **Writes XP** to character file (25 XP per kill)
-2. **Deducts ammo** via inventory-system module (if active)
-3. If inventory-system is not available, prints manual deduction note
+2. **Deducts ammo** via CORE inventory (dm-inventory.sh)
+3. If inventory is not available, prints manual deduction note
 
 ---
 
@@ -80,7 +80,7 @@ ALL firearms config lives in `module-data/firearms-combat.json` inside the campa
 - `penetration_vs_armor` — damage scaling rules (PEN vs PROT)
 - `combat_style` — hybrid_lethal config
 
-The module writes XP to `character.json` and deducts ammo via inventory-system.
+The module writes XP to `character.json` and deducts ammo via CORE inventory.
 
 **Nothing stored in campaign-overview.json** — all data in module-data/.
 

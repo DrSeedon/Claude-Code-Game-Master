@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/dm-load-rules.sh",
+            "statusMessage": "Loading DM rules..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/dm-load-campaign.sh",
+            "statusMessage": "Loading campaign context..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/dm-load-session.sh",
+            "statusMessage": "Loading session context..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-language-policy.sh",
+            "statusMessage": "Checking language policy..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-language-policy.sh",
+            "statusMessage": "Checking language policy..."
+          }
+        ]
+      }
+    ]
+  }
+}

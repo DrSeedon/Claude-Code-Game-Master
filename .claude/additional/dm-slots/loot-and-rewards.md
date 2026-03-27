@@ -14,7 +14,7 @@ bash tools/dm-inventory.sh update "Char" --add "Arrows" 30 ...
 bash tools/dm-inventory.sh update "Char" --add "Healing Potion" 1 ...
 ```
 
-**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json`. Character stats (HP, XP, money, abilities) remain in `character.json`. Custom stats live in `module-data/custom-stats.json`.
+**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json` (CORE). Character stats (HP, XP, money, abilities) remain in `character.json`. Custom stats live in `module-data/custom-stats.json`.
 
 **Currency:** Money is stored as a single integer in base units (copper pieces for D&D). Campaign denominations are defined in `campaign-overview.json` under `"currency"`. Display: `2537 cp` → `25g 3s 7c`. The `--gold` flag accepts base units (copper) or a string like `"2gp 5sp"`.
 
