@@ -7,10 +7,10 @@ Use `bash tools/dm-roll.sh` for ALL dice rolls.
 
 ## Auto-Lookup (PREFERRED)
 
-Auto-lookup reads character.json for skill totals, dc_mod, saves, and weapon stats. No manual +N needed. 1d20 is the default die — no need to specify it.
+Auto-lookup reads the player node in world.json for skill totals, dc_mod, saves, and weapon stats. No manual +N needed. 1d20 is the default die — no need to specify it.
 
 ```bash
-# Skill check — auto-reads total + dc_mod from character.json
+# Skill check — auto-reads total + dc_mod from player node in world.json
 bash tools/dm-roll.sh --skill "Perception" --dc 15
 
 # Saving throw — auto-reads save modifier
@@ -25,22 +25,22 @@ bash tools/dm-roll.sh --save "DEX" --dc 14 --disadvantage
 ```
 
 Use auto-lookup for ALL player character rolls. Fall back to manual notation only for:
-- NPC/monster rolls (no character.json entry)
+- NPC/monster rolls (no player node entry)
 - Custom/situational rolls (damage, healing, random tables)
-- Rolls with ad-hoc modifiers not in character.json
+- Rolls with ad-hoc modifiers not in world.json player node
 
 ## Auto-Combat (creatures from wiki)
 
-Creatures stored in wiki.json as type `creature` with mechanics (hp, ac, attack_bonus, damage). Auto-combat rolls attack + damage in one call.
+Creatures stored in world.json as type `creature` with mechanics (hp, ac, attack_bonus, damage). Auto-combat rolls attack + damage in one call.
 
 ```bash
-# Player attacks creature — weapon from character.json, AC from wiki, auto-damage on hit
+# Player attacks creature — weapon from player node in world.json, AC from creature node in world.json, auto-damage on hit
 bash tools/dm-roll.sh --attack "Longsword" --target "goblin"
 
 # Same but auto-picks equipped weapon
 bash tools/dm-roll.sh --target "goblin"
 
-# Creature attacks player — attack_bonus+damage from wiki, player AC from character.json
+# Creature attacks player — attack_bonus+damage from creature node in world.json, player AC from player node in world.json
 bash tools/dm-roll.sh --defend --from "goblin"
 
 # With advantage/disadvantage
@@ -143,10 +143,10 @@ Damage has no pass/fail — just `--label`. No `--dc` or `--ac` needed.
 
 | Flag | Purpose | When to Use |
 |------|---------|-------------|
-| `--skill "name"` | Auto-lookup skill total + dc_mod from character.json | Player skill checks (preferred) |
-| `--save "name"` | Auto-lookup save modifier from character.json | Player saving throws (preferred) |
-| `--attack "weapon"` | Auto-lookup weapon stats from character.json | Player attack rolls (preferred) |
-| `--target "creature"` | Auto-lookup creature AC from wiki, auto-damage on hit | Combat: player attacks creature |
+| `--skill "name"` | Auto-lookup skill total + dc_mod from player node in world.json | Player skill checks (preferred) |
+| `--save "name"` | Auto-lookup save modifier from player node in world.json | Player saving throws (preferred) |
+| `--attack "weapon"` | Auto-lookup weapon stats from player node in world.json | Player attack rolls (preferred) |
+| `--target "creature"` | Auto-lookup creature AC from world.json, auto-damage on hit | Combat: player attacks creature |
 | `--defend` | Creature attacks player | Combat: creature turn |
 | `--from "creature"` | Creature doing the attacking (with --defend) | Combat: creature turn |
 | `--advantage` | Roll 2d20, keep highest | Advantage |

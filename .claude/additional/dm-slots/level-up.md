@@ -48,7 +48,7 @@ When `dm-player.sh xp` outputs **"LEVEL_UP"**, immediately perform the ceremony.
 
 ### Handle Level-Up Choices
 
-**ASI/Feat (levels 4, 8, 12, 16, 19):** Wait for player choice, then manually edit `abilities` in character.json
+**ASI/Feat (levels 4, 8, 12, 16, 19):** Wait for player choice, then update `abilities` in the player node of world.json via dm-player.sh
 
 **Spellcaster with new spells:** List available spells for their level, use `spell-caster` agent if needed, wait for selection
 

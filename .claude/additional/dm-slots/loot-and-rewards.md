@@ -14,7 +14,7 @@ bash tools/dm-inventory.sh update "Char" --add "Arrows" 30 ...
 bash tools/dm-inventory.sh update "Char" --add "Healing Potion" 1 ...
 ```
 
-**Data storage:** Inventory (stackable + unique items) is stored in `module-data/inventory-system.json` (CORE). Character stats (HP, XP, money, abilities) remain in `character.json`. Custom stats live in `module-data/custom-stats.json`.
+**Data storage:** Inventory (stackable + unique items) is stored in `world.json (player node inventory)`. Character stats (HP, XP, money, abilities) are in the player node of `world.json`. Custom stats live in `world.json (player node custom_stats + campaign:economy node)`.
 
 **Currency:** Money is stored as a single integer in base units (copper pieces for D&D). Campaign denominations are defined in `campaign-overview.json` under `"currency"`. Display: `2537 cp` → `25g 3s 7c`. The `--gold` flag accepts base units (copper) or a string like `"2gp 5sp"`.
 
@@ -161,7 +161,7 @@ After adding items, system warns if encumbered but does NOT block the transactio
 
 ## Party NPC Inventories
 
-Party members (promoted via `dm-npc.sh promote`) have full inventory + weight tracking. Data stored in `module-data/inventory-party.json`.
+Party members (promoted via `dm-npc.sh promote`) have full inventory + weight tracking. Data stored in `world.json (npc node inventory)`.
 
 ### View NPC inventory
 ```bash

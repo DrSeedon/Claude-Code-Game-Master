@@ -6,7 +6,7 @@
 - Any location change
 
 ### Phase 0: Check for Dungeon
-Is current location a dungeon room (has `dungeon` field in locations.json)?
+Is current location a dungeon room (has `dungeon` field in world.json location node)?
 - **Yes** → Use [Dungeon Exploration](#dungeon-exploration)
 - **No** → Continue with standard movement
 

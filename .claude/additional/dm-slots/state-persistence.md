@@ -2,9 +2,9 @@
 
 **THE RULE**: If it happened, persist it BEFORE describing it to the player.
 
-**Self-check after every state change:** "Did I WRITE it to a file, or just SAY it in narration?" If the answer is "just said it" — STOP and persist NOW. Skills → `character.json`. Abilities → `character.json`. Stats → `dm-player.sh` (custom stats via module dm-survival.sh if enabled). Items → `dm-inventory.sh`. Quests → `dm-plot.sh`. NPCs → `dm-npc.sh`. Facts → `dm-note.sh`.
+**Self-check after every state change:** "Did I WRITE it to a file, or just SAY it in narration?" If the answer is "just said it" — STOP and persist NOW. Skills → `world.json (player node)`. Abilities → `world.json (player node)`. Stats → `dm-player.sh` (custom stats via `dm-player.sh custom-stat`). Items → `dm-inventory.sh`. Quests → `dm-plot.sh`. NPCs → `dm-npc.sh`. Facts → `dm-note.sh`.
 
-**Ability costs MUST be charged immediately.** Every ability in `character.json` has a `"cost"` field. When the player uses an ability — charge the cost BEFORE narrating. Custom stat costs → `dm-player.sh custom-stat "<stat>" +N --reason "<ability used>"`. Do NOT forget costs during practice sessions — training uses abilities too.
+**Ability costs MUST be charged immediately.** Every ability in the player node of `world.json` has a `"cost"` field. When the player uses an ability — charge the cost BEFORE narrating. Custom stat costs → `dm-player.sh custom-stat "<stat>" +N --reason "<ability used>"`. Do NOT forget costs during practice sessions — training uses abilities too.
 
 ### State Persistence Commands
 
@@ -49,7 +49,7 @@
 - **Quest resolved** → `dm-plot.sh complete` or `dm-plot.sh fail` with outcome description.
 - **Every quest MUST have at least one objective.** A quest without objectives has no trackable progress.
 - **Use `dm-plot.sh threads`** at session start to review active storylines and catch stale quests.
-- Quests live in `plots.json`. Do NOT store quest/plot data in `facts.json` via `dm-note.sh`.
+- Quests live in `world.json (quest nodes)`. Do NOT store quest/plot data in fact nodes via `dm-note.sh`.
 
 ### Note Categories (ALLOWED)
 
@@ -63,16 +63,16 @@ Facts = **permanent truths about the world**. NOT a session diary.
 | `economy` | Prices, jobs, trade routes, recurring income | "Brenczel: 2 days/week, 1g/day" |
 | `rumors` | Unverified info the party heard | "Mueller's sheep gnawed at night" |
 | `rules` | Campaign-specific homebrew rules | "Silver +1 vs undead in this setting" |
-| `location` | Permanent location facts not in locations.json | "Wortbad catacombs — under cemetery, 2 levels" |
+| `location` | Permanent location facts not in world.json location nodes | "Wortbad catacombs — under cemetery, 2 levels" |
 | `training` | Skills gained, teachers, training progress | "Hanna: knives +2, Otto: herbalism +2" |
 
 **DO NOT write to facts:**
 - Session events ("Wilhelm defeated the strig") → goes in `session-log.md` via `dm-session.sh end`
 - Combat logs ("Combat: X vs Y") → goes in `session-log.md`
-- Quest progress → goes in `plots.json` via `dm-plot.sh update`
-- NPC events → goes in `npcs.json` via `dm-npc.sh update`
+- Quest progress → goes in `world.json (quest nodes)` via `dm-plot.sh update`
+- NPC events → goes in `world.json (npc nodes)` via `dm-npc.sh update`
 
-**Plot/quest data belongs in `plots.json` via `dm-plot.sh`, NOT in notes.**
+**Plot/quest data belongs in `world.json (quest nodes)` via `dm-plot.sh`, NOT in notes.**
 
 ### --reason Flag (MANDATORY for inventory)
 

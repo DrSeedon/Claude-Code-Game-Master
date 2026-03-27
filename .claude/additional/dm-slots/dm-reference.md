@@ -38,19 +38,11 @@ Each campaign in `world-state/campaigns/<name>/`:
 
 | File | Contains |
 |------|----------|
-| `campaign-overview.json` | Name, location, time, precise_time, game_date, active character, modules, currency, calendar |
-| `npcs.json` | NPCs with descriptions, attitudes, events, tags |
-| `locations.json` | Locations with connections and descriptions |
-| `facts.json` | Narrative world facts (lore, events, rumors) — NO game mechanics |
-| `wiki.json` | Structured game mechanics: items, recipes, abilities, materials (with DC, ingredients, effects). Supports parent.child subentries (see below) |
-| `consequences.json` | Pending and resolved events |
-| `plots.json` | Plot hooks and quests |
+| `world.json` | ALL game entities: player, NPCs, locations, items, creatures, facts, quests, consequences, spells, economy |
+| `campaign-overview.json` | Campaign metadata: time, date, calendar, modules, narrator style |
+| `campaign-rules.md` | Per-campaign rules |
 | `session-log.md` | Session history and summaries |
-| `character.json` | Player character sheet |
 | `saves/*.json` | Save point snapshots |
-| `module-data/inventory-system.json` | Player inventory (stackable + unique items) |
-| `module-data/custom-stats.json` | Custom stats values, rules, consequences |
-| `module-data/inventory-party.json` | Party NPC inventories |
 
 ### Wiki Subentries (parent.child)
 
@@ -85,11 +77,11 @@ Claude Code has a persistent memory directory (`~/.claude/projects/.../memory/`)
 
 | Data | Where it lives |
 |------|---------------|
-| Character stats | `character.json` |
-| NPC info | `npcs.json` via `dm-npc.sh` |
-| Locations | `locations.json` via `dm-location.sh` |
-| Facts & lore (narrative) | `facts.json` via `dm-note.sh` |
-| Items, recipes, abilities (mechanics) | `wiki.json` via `dm-wiki.sh` |
+| Character stats | `world.json (player node)` |
+| NPC info | `world.json (npc nodes)` via `dm-npc.sh` |
+| Locations | `world.json (location nodes)` via `dm-location.sh` |
+| Facts & lore (narrative) | `world.json (fact nodes)` via `dm-note.sh` |
+| Items, recipes, abilities (mechanics) | `world.json (item/creature/spell nodes)` via `dm-wiki.sh` |
 | Session history | `session-log.md` via `dm-session.sh` |
 | Tool usage patterns | This file (CLAUDE.md) |
 

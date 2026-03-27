@@ -18,7 +18,7 @@ bash tools/dm-campaign.sh list
   - "Create from scratch?" → Route to `/new-game`
 
 ### Step 3: Check for Character
-- If active campaign exists but no `character.json` → Route to `/create-character`
+- If active campaign exists but no player node in `world.json` → Route to `/create-character`
 
 ### Step 4: Ready to Play
 - If all checks pass → Greet and offer `/dm`

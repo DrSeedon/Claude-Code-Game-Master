@@ -90,8 +90,8 @@ bash .claude/additional/infrastructure/tools/dm-module.sh list-verbose
   ────────────────────────────────────────────────────────────
   💡 RECOMMENDED FOR THIS CAMPAIGN:
   Based on campaign name and tone, suggest which modules make
-  sense. E.g. for survival/STALKER → custom-stats + firearms.
-  For classic D&D → inventory only. For open world → world-travel.
+  sense. E.g. for survival/STALKER → firearms-combat + world-travel.
+  For classic D&D → no extras. For open world → world-travel + mass-combat.
   Write 1-2 sentences why each suggested module fits the vibe.
   ────────────────────────────────────────────────────────────
   Type numbers to toggle (e.g. "1 2") or ENTER to keep current.
@@ -123,10 +123,9 @@ bash .claude/additional/infrastructure/dm-active-modules-creation-rules.sh
 ```
 
 These rules tell you HOW to handle world-building for each active module:
-- **custom-stats**: Which stats to propose, how to configure them
 - **world-travel**: How to generate locations with coordinates and encounters
-- **inventory-system**: Starting equipment philosophy and item initialization
 - **firearms-combat**: Weapon presets and firearms system configuration
+- **mass-combat**: Unit templates and battle setup
 
 **The creation rules augment (not replace) the phases below.**
 Follow module-specific instructions when they apply to that phase.
