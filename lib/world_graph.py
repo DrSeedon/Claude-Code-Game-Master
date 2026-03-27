@@ -9,6 +9,7 @@ Data lives in world.json per campaign.
 
 import json
 import os
+import random
 import re
 import sys
 import argparse
@@ -958,6 +959,742 @@ class WorldGraph:
                 print(f"  {G_}+{RS} {B}{xp}{RS} XP")
         return True
 
+    # ─────────────────────────────────────────────
+    # Custom stat domain (player node)
+    # ─────────────────────────────────────────────
+
+    def _player_data(self, w: dict) -> Optional[dict]:
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return None
+        return w["nodes"][pid].get("data", {})
+
+    def custom_stat_get(self, stat_name: str) -> Optional[dict]:
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return None
+        node = self.get_node(pid)
+        cs = node.get("data", {}).get("custom_stats", {})
+        return cs.get(stat_name)
+
+    def custom_stat_set(self, stat_name: str, delta: float = None, absolute: float = None, reason: str = "") -> bool:
+        B, RS, C, G, R = Colors.B, Colors.RESET, Colors.C, Colors.G, Colors.R
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return False
+        w = self._load()
+        d = w["nodes"][pid].get("data", {})
+        cs = d.setdefault("custom_stats", {})
+        if stat_name not in cs:
+            print(f"  Stat '{stat_name}' not found", file=sys.stderr)
+            return False
+        stat = cs[stat_name]
+        old_val = round(stat.get("value", 0), 2)
+        if absolute is not None:
+            new_val = round(float(absolute), 2)
+        elif delta is not None:
+            new_val = round(old_val + delta, 2)
+        else:
+            print("  Provide delta or absolute", file=sys.stderr)
+            return False
+        mn = stat.get("min", 0)
+        mx = stat.get("max")
+        if mn is not None:
+            new_val = max(mn, new_val)
+        if mx is not None:
+            new_val = min(mx, new_val)
+        new_val = round(new_val, 2)
+        stat["value"] = new_val
+        w["nodes"][pid]["data"] = d
+        ok = self._save(w)
+        if ok:
+            diff = round(new_val - old_val, 2)
+            color = G if diff < 0 else R if diff > 0 else C
+            reason_str = f"  — {reason}" if reason else ""
+            print(f"  📊 {stat_name}: {old_val} → {C}{new_val}{RS} {color}({diff:+g}){RS}{reason_str}")
+        return ok
+
+    def custom_stat_list(self) -> List[dict]:
+        B, RS, C, G, R, DM, Y = Colors.B, Colors.RESET, Colors.C, Colors.G, Colors.R, Colors.DIM, Colors.Y
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return []
+        node = self.get_node(pid)
+        cs = node.get("data", {}).get("custom_stats", {})
+        if not cs:
+            print(f"  {DM}(no custom stats){RS}")
+            return []
+        print(f"  {B}📊 CUSTOM STATS:{RS}")
+        result = []
+        for name, stat in cs.items():
+            val = stat.get("value", 0)
+            mx = stat.get("max")
+            mn = stat.get("min", 0)
+            rate = stat.get("rate", 0)
+            sleep_rate = stat.get("sleep_rate")
+            if mx:
+                bar_len = 20
+                pct = (val - mn) / (mx - mn) if mx != mn else 0
+                fill = int(pct * bar_len)
+                bar_color = G if pct < 0.3 else Y if pct < 0.7 else R
+                bar = f"{bar_color}{'█' * fill}{DM}{'░' * (bar_len - fill)}{RS}"
+                rate_str = f"  {DM}rate:{rate:+g}/h{RS}" if rate else ""
+                sleep_str = f"  {DM}sleep:{sleep_rate:+g}/h{RS}" if sleep_rate is not None else ""
+                print(f"  {name:16s} {bar} {C}{val:.1f}{RS}/{mx}{rate_str}{sleep_str}")
+            else:
+                print(f"  {name}: {C}{val}{RS}")
+            result.append({"name": name, **stat})
+        return result
+
+    def custom_stat_define(self, stat_name: str, value: float = 0,
+                           max: float = 100, min: float = 0,
+                           max_val: float = None, min_val: float = None,
+                           rate: float = 0, sleep_rate: float = None) -> bool:
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return False
+        resolved_max = max_val if max_val is not None else max
+        resolved_min = min_val if min_val is not None else min
+        w = self._load()
+        d = w["nodes"][pid].get("data", {})
+        cs = d.setdefault("custom_stats", {})
+        entry: dict = {"value": value, "max": resolved_max, "min": resolved_min, "rate": rate}
+        if sleep_rate is not None:
+            entry["sleep_rate"] = sleep_rate
+        cs[stat_name] = entry
+        w["nodes"][pid]["data"] = d
+        ok = self._save(w)
+        if ok:
+            print(f"  ✓ Defined stat: {stat_name} = {value} (max {resolved_max}, rate {rate:+g}/h)")
+        return ok
+
+    # ─────────────────────────────────────────────
+    # Timed effects (player node)
+    # ─────────────────────────────────────────────
+
+    def timed_effect_add(self, name: str, stat: str = None, rate_mod: float = 0,
+                         instant: float = 0, hours: float = 1) -> bool:
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return False
+        w = self._load()
+        d = w["nodes"][pid].get("data", {})
+        effects = d.setdefault("timed_effects", [])
+        effect: dict = {"name": name, "hours_left": hours}
+        if stat:
+            effect["stat"] = stat
+        if rate_mod:
+            effect["rate_mod"] = rate_mod
+        if instant:
+            effect["instant"] = instant
+            if stat:
+                cs = d.get("custom_stats", {}).get(stat)
+                if cs:
+                    old = cs.get("value", 0)
+                    new_v = round(old + instant, 2)
+                    mn = cs.get("min", 0)
+                    mx = cs.get("max")
+                    if mn is not None:
+                        new_v = max(mn, new_v)
+                    if mx is not None:
+                        new_v = min(mx, new_v)
+                    cs["value"] = round(new_v, 2)
+        effects.append(effect)
+        w["nodes"][pid]["data"] = d
+        ok = self._save(w)
+        if ok:
+            print(f"  ✓ Timed effect '{name}': {hours}h" +
+                  (f", {stat} rate_mod {rate_mod:+g}/h" if rate_mod and stat else "") +
+                  (f", instant {instant:+g}" if instant else ""))
+        return ok
+
+    def timed_effect_list(self) -> List[dict]:
+        B, RS, C, DM, G, Y, R = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.G, Colors.Y, Colors.R
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return []
+        node = self.get_node(pid)
+        effects = node.get("data", {}).get("timed_effects", [])
+        if not effects:
+            print(f"  {DM}(no active timed effects){RS}")
+            return []
+        print(f"  {B}✦ Timed Effects:{RS}")
+        for eff in effects:
+            hrs = eff.get("hours_left", 0)
+            color = G if hrs > 2 else Y if hrs > 0.5 else R
+            parts = []
+            if eff.get("stat"):
+                parts.append(f"{C}{eff['stat']}{RS}")
+            if eff.get("rate_mod"):
+                v = eff["rate_mod"]
+                parts.append(f"rate_mod {'+' if v > 0 else ''}{v:g}/h")
+            if eff.get("instant"):
+                parts.append(f"instant {eff['instant']:+g}")
+            detail = "  " + " ".join(parts) if parts else ""
+            print(f"  {B}{eff['name']:<22}{RS} {color}{hrs:.1f}h{RS}{detail}")
+        return effects
+
+    # ─────────────────────────────────────────────
+    # Tick engine
+    # ─────────────────────────────────────────────
+
+    def _tick_custom_stats(self, w: dict, elapsed_hours: float, sleeping: bool) -> List[dict]:
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid].get("data", {})
+        cs = d.get("custom_stats", {})
+        if not cs:
+            return []
+
+        effects = d.get("timed_effects", [])
+        rate_mods: Dict[str, float] = {}
+        for eff in effects:
+            if eff.get("hours_left", 0) > 0 and eff.get("stat") and eff.get("rate_mod"):
+                rate_mods[eff["stat"]] = rate_mods.get(eff["stat"], 0) + eff["rate_mod"]
+
+        changes = []
+        for name, stat in cs.items():
+            base_rate = stat.get("sleep_rate", stat.get("rate", 0)) if sleeping else stat.get("rate", 0)
+            effective_rate = base_rate + rate_mods.get(name, 0)
+            if abs(effective_rate) < 0.0001:
+                continue
+            old_val = round(stat.get("value", 0), 2)
+            raw_change = round(effective_rate * elapsed_hours, 4)
+            new_val = round(old_val + raw_change, 4)
+            mn = stat.get("min", 0)
+            mx = stat.get("max")
+            if mn is not None:
+                new_val = max(mn, new_val)
+            if mx is not None:
+                new_val = min(mx, new_val)
+            new_val = round(new_val, 2)
+            actual_change = round(new_val - old_val, 2)
+            if abs(actual_change) < 0.001:
+                continue
+            stat["value"] = new_val
+            changes.append({"stat": name, "old": old_val, "new": new_val, "change": actual_change})
+
+        return changes
+
+    def _tick_timed_effects(self, w: dict, elapsed_hours: float) -> List[str]:
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid].get("data", {})
+        effects = d.get("timed_effects", [])
+        if not effects:
+            return []
+        expired = []
+        surviving = []
+        for eff in effects:
+            eff["hours_left"] = round(eff.get("hours_left", 0) - elapsed_hours, 4)
+            if eff["hours_left"] <= 0:
+                expired.append(eff["name"])
+            else:
+                surviving.append(eff)
+        d["timed_effects"] = surviving
+        return expired
+
+    def _check_stat_thresholds(self, w: dict) -> List[dict]:
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid].get("data", {})
+        cs = d.get("custom_stats", {})
+        thresholds = d.get("stat_thresholds", {})
+        warnings = []
+        for stat_name, stat in cs.items():
+            val = stat.get("value", 0)
+            mn = stat.get("min")
+            mx = stat.get("max")
+            if mn is not None and val <= mn:
+                warnings.append({"stat": stat_name, "msg": f"{stat_name} at minimum ({mn})"})
+            if mx is not None and val >= mx:
+                warnings.append({"stat": stat_name, "msg": f"{stat_name} at maximum ({mx})"})
+        for stat_name, checks in thresholds.items():
+            val = cs.get(stat_name, {}).get("value", 0) if stat_name in cs else None
+            if val is None:
+                continue
+            for check in checks:
+                at = check.get("at", 0)
+                direction = check.get("direction", "above")
+                effect = check.get("effect", "")
+                triggered = (direction == "above" and val >= at) or (direction == "below" and val <= at)
+                if triggered:
+                    warnings.append({"stat": stat_name, "msg": f"{stat_name} {direction} {at}: {effect}"})
+        return warnings
+
+    def _tick_production(self, w: dict, elapsed_hours: float) -> dict:
+        def _roll(expr: str) -> int:
+            try:
+                from dice import roll as _dice_roll
+                return _dice_roll(str(expr))
+            except Exception:
+                m = re.match(r"(\d+)d(\d+)([+-]\d+)?", str(expr).lower())
+                if m:
+                    n, d_, mod = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+                    return sum(random.randint(1, d_) for _ in range(n)) + mod
+                return int(expr)
+
+        results: dict = {}
+        for nid, node in w["nodes"].items():
+            if node.get("type") != "location":
+                continue
+            productions = node.get("data", {}).get("production", [])
+            if not productions:
+                continue
+            loc_results = []
+            for prod in productions:
+                interval = prod.get("interval_hours", 0)
+                if interval > 0:
+                    acc_key = "_acc_hours"
+                    prod[acc_key] = prod.get(acc_key, 0) + elapsed_hours
+                    triggers = int(prod[acc_key] / interval)
+                    if triggers < 1:
+                        continue
+                    prod[acc_key] = prod[acc_key] % interval
+                else:
+                    triggers = 1 if elapsed_hours > 0 else 0
+                    if triggers < 1:
+                        continue
+
+                worker = prod.get("worker", "?")
+                qty_dice = prod.get("qty_dice", "1")
+                item = prod.get("item", "?")
+                dc = prod.get("skill_dc", 0)
+                bonus = prod.get("skill_bonus", 0)
+                target_id = prod.get("inventory_target")
+                consumes: dict = prod.get("consumes", {})
+
+                for _ in range(triggers):
+                    qty = _roll(str(qty_dice))
+                    raw = random.randint(1, 20)
+                    total = raw + bonus
+                    success = total >= dc if dc else True
+                    outcome = "success" if success else "fail"
+
+                    if success:
+                        produced = {item: qty}
+                        consumed = dict(consumes)
+                        if target_id and target_id in w["nodes"]:
+                            w["nodes"][target_id].setdefault("inventory", {"stackable": {}, "unique": []})
+                            inv = w["nodes"][target_id]["inventory"]["stackable"]
+                            inv.setdefault(item, {"qty": 0, "weight": 0.5})
+                            inv[item]["qty"] += qty
+                            for ci, cq in consumes.items():
+                                if ci in inv:
+                                    inv[ci]["qty"] = max(0, inv[ci].get("qty", 0) - cq)
+                    else:
+                        produced = {}
+                        consumed = {}
+
+                    loc_results.append({
+                        "worker": worker,
+                        "item": item,
+                        "qty": qty,
+                        "raw": raw,
+                        "bonus": bonus,
+                        "total": total,
+                        "dc": dc,
+                        "outcome": outcome,
+                        "produced": produced,
+                        "consumed": consumed,
+                        "target": target_id,
+                    })
+            if loc_results:
+                results[nid] = loc_results
+        return results
+
+    def _tick_expenses(self, w: dict, elapsed_hours: float) -> List[dict]:
+        economy_id = "campaign:economy"
+        if economy_id not in w["nodes"]:
+            return []
+        econ = w["nodes"][economy_id].get("data", {})
+        expenses = econ.get("expenses", [])
+        if not expenses:
+            return []
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid]["data"]
+        money = d.get("money", 0)
+
+        try:
+            from currency import load_config as _lc, format_money as _fm
+            cfg = _lc(self.campaign_dir)
+        except Exception:
+            cfg = None
+            def _fm(amount, conf=None, **kw):
+                return f"{amount}c"
+
+        results = []
+        for exp in expenses:
+            exp["_acc"] = exp.get("_acc", 0) + elapsed_hours
+            per_hours = exp.get("per_hours", 24)
+            triggers = int(exp["_acc"] / per_hours)
+            if triggers < 1:
+                continue
+            exp["_acc"] = exp["_acc"] % per_hours
+            cost = exp.get("cost", 0) * triggers
+            name = exp.get("name", "?")
+            if money >= cost:
+                money -= cost
+                results.append({"name": name, "cost": cost, "success": True, "remaining": money,
+                                 "cfg": cfg, "fmt": _fm})
+            else:
+                results.append({"name": name, "cost": cost, "success": False, "remaining": money,
+                                 "cfg": cfg, "fmt": _fm})
+
+        d["money"] = money
+        return results
+
+    def _tick_income(self, w: dict, elapsed_hours: float) -> List[dict]:
+        economy_id = "campaign:economy"
+        if economy_id not in w["nodes"]:
+            return []
+        econ = w["nodes"][economy_id].get("data", {})
+        incomes = econ.get("income", [])
+        if not incomes:
+            return []
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid]["data"]
+        money = d.get("money", 0)
+
+        def _roll(expr: str) -> int:
+            try:
+                from dice import roll as _dice_roll
+                return _dice_roll(str(expr))
+            except Exception:
+                m = re.match(r"(\d+)d(\d+)([+-]\d+)?", str(expr).lower())
+                if m:
+                    n, s, mod = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+                    return sum(random.randint(1, s) for _ in range(n)) + mod
+                return int(expr)
+
+        try:
+            from currency import load_config as _lc, format_money as _fm
+            cfg = _lc(self.campaign_dir)
+        except Exception:
+            cfg = None
+            def _fm(amount, conf=None, **kw):
+                return f"{amount}c"
+
+        results = []
+        for inc in incomes:
+            inc["_acc"] = inc.get("_acc", 0) + elapsed_hours
+            per_hours = inc.get("per_hours", 24)
+            triggers = int(inc["_acc"] / per_hours)
+            if triggers < 1:
+                continue
+            inc["_acc"] = inc["_acc"] % per_hours
+
+            name = inc.get("name", "?")
+            dice_expr = inc.get("dice", "")
+            dc = inc.get("dc")
+            pay_success = inc.get("pay_success", 0)
+            pay_fail = inc.get("pay_fail", 0)
+
+            for _ in range(triggers):
+                if dice_expr and dc is not None:
+                    raw = random.randint(1, 20)
+                    modifier = int(re.search(r"[+-]\d+", dice_expr).group()) if re.search(r"[+-]\d+", dice_expr) else 0
+                    total = raw + modifier
+                    success = total >= dc
+                    earned = pay_success if success else pay_fail
+                    detail = f"🎲[{raw}]{modifier:+g}={total} vs DC {dc} — {'✓ SUCCESS' if success else '✗ FAIL'}"
+                elif dice_expr:
+                    earned = _roll(dice_expr)
+                    detail = f"🎲{dice_expr}={earned}"
+                else:
+                    earned = inc.get("amount", 0)
+                    detail = ""
+
+                money += earned
+                results.append({"name": name, "earned": earned, "detail": detail,
+                                 "remaining": money, "cfg": cfg, "fmt": _fm})
+
+        d["money"] = money
+        return results
+
+    def _tick_random_events(self, w: dict, elapsed_hours: float) -> List[dict]:
+        economy_id = "campaign:economy"
+        if economy_id not in w["nodes"]:
+            return []
+        econ = w["nodes"][economy_id].get("data", {})
+        re_cfg = econ.get("random_events", {})
+        if not re_cfg or not re_cfg.get("enabled"):
+            return []
+
+        days = elapsed_hours / 24.0
+        chance = re_cfg.get("chance_per_day", 10) * days
+        if random.random() * 100 > chance:
+            return []
+
+        types = re_cfg.get("types", {"neutral": 100})
+        pool = []
+        for t, w_ in types.items():
+            pool.extend([t] * int(w_))
+        if not pool:
+            return []
+        chosen = random.choice(pool)
+        scope_roll = random.randint(1, 6)
+        return [{"type": chosen, "scope_roll": scope_roll, "roll": random.randint(1, 100)}]
+
+    def _tick_consequences_elapsed(self, w: dict, elapsed_hours: float) -> List[dict]:
+        triggered = []
+        for nid, node in w["nodes"].items():
+            if node.get("type") != "consequence":
+                continue
+            d = node.get("data", {})
+            if "hours_elapsed" not in d and "trigger_hours" not in d:
+                continue
+            d["hours_elapsed"] = round(d.get("hours_elapsed", 0) + elapsed_hours, 4)
+            trigger_hours = d.get("trigger_hours")
+            if trigger_hours is not None and d["hours_elapsed"] >= trigger_hours:
+                d["status"] = d.get("status", "triggered")
+                triggered.append({"id": nid, **node})
+        return triggered
+
+    def _find_economy_node(self, w: dict) -> Optional[dict]:
+        for nid, node in w["nodes"].items():
+            if "economy" in nid.lower():
+                return node.get("data", {})
+        return None
+
+    def _tick_expenses_from_world(self, w: dict, elapsed_hours: float) -> List[dict]:
+        econ = self._find_economy_node(w)
+        if not econ:
+            return []
+        expenses = econ.get("expenses", [])
+        if not expenses:
+            return []
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid]["data"]
+        money = d.get("money", 0)
+
+        try:
+            from currency import load_config as _lc, format_money as _fm
+            cfg = _lc(self.campaign_dir)
+        except Exception:
+            cfg = None
+            def _fm(amount, conf=None, **kw):
+                return f"{amount}c"
+
+        results = []
+        for exp in expenses:
+            exp["_acc"] = exp.get("_acc", 0) + elapsed_hours
+            interval = exp.get("interval_hours", exp.get("per_hours", 24))
+            triggers = int(exp["_acc"] / interval)
+            if triggers < 1:
+                continue
+            exp["_acc"] = exp["_acc"] % interval
+            cost_per = exp.get("amount", exp.get("cost", 0))
+            cost = cost_per * triggers
+            name = exp.get("name", "?")
+            if money >= cost:
+                money -= cost
+                results.append({"name": name, "cost": cost, "success": True,
+                                 "remaining": money, "cfg": cfg, "fmt": _fm})
+            else:
+                results.append({"name": name, "cost": cost, "success": False,
+                                 "remaining": money, "cfg": cfg, "fmt": _fm})
+
+        d["money"] = money
+        return results
+
+    def _tick_income_from_world(self, w: dict, elapsed_hours: float) -> List[dict]:
+        econ = self._find_economy_node(w)
+        if not econ:
+            return []
+        incomes = econ.get("income", [])
+        if not incomes:
+            return []
+        pid = self._player_id()
+        if not pid or pid not in w["nodes"]:
+            return []
+        d = w["nodes"][pid]["data"]
+        money = d.get("money", 0)
+
+        def _roll(expr: str) -> int:
+            try:
+                from dice import roll as _dice_roll
+                return _dice_roll(str(expr))
+            except Exception:
+                m = re.match(r"(\d+)d(\d+)([+-]\d+)?", str(expr).lower())
+                if m:
+                    n, s, mod = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+                    return sum(random.randint(1, s) for _ in range(n)) + mod
+                return int(expr)
+
+        try:
+            from currency import load_config as _lc, format_money as _fm
+            cfg = _lc(self.campaign_dir)
+        except Exception:
+            cfg = None
+            def _fm(amount, conf=None, **kw):
+                return f"{amount}c"
+
+        results = []
+        for inc in incomes:
+            inc["_acc"] = inc.get("_acc", 0) + elapsed_hours
+            per_hours = inc.get("per_hours", inc.get("interval_hours", 24))
+            triggers = int(inc["_acc"] / per_hours)
+            if triggers < 1:
+                continue
+            inc["_acc"] = inc["_acc"] % per_hours
+            name = inc.get("name", "?")
+            dice_expr = inc.get("dice", "")
+            dc = inc.get("dc")
+            pay_success = inc.get("pay_success", 0)
+            pay_fail = inc.get("pay_fail", 0)
+
+            for _ in range(triggers):
+                if dice_expr and dc is not None:
+                    raw = random.randint(1, 20)
+                    modifier = 0
+                    m = re.search(r"[+-]\d+", dice_expr)
+                    if m:
+                        modifier = int(m.group())
+                    total = raw + modifier
+                    success = total >= dc
+                    earned = pay_success if success else pay_fail
+                    detail = f"🎲[{raw}]{modifier:+g}={total} vs DC {dc} — {'✓ SUCCESS' if success else '✗ FAIL'}"
+                elif dice_expr:
+                    earned = _roll(dice_expr)
+                    detail = f"🎲{dice_expr}={earned}"
+                else:
+                    earned = inc.get("amount", 0)
+                    detail = ""
+                money += earned
+                results.append({"name": name, "earned": earned, "detail": detail,
+                                 "remaining": money, "cfg": cfg, "fmt": _fm})
+
+        d["money"] = money
+        return results
+
+    def _tick_random_events_from_world(self, w: dict, elapsed_hours: float) -> List[dict]:
+        econ = self._find_economy_node(w)
+        if not econ:
+            return []
+        re_cfg = econ.get("random_events", {})
+        if not re_cfg or not re_cfg.get("enabled"):
+            return []
+        days = elapsed_hours / 24.0
+        chance = re_cfg.get("chance_per_day", 10) * days
+        if random.random() * 100 > chance:
+            return []
+        types = re_cfg.get("types", {"neutral": 100})
+        pool = []
+        for t, wt in types.items():
+            pool.extend([t] * int(wt))
+        if not pool:
+            return []
+        chosen = random.choice(pool)
+        return [{"type": chosen, "scope_roll": random.randint(1, 6),
+                 "roll": random.randint(1, 100)}]
+
+    def tick(self, elapsed_hours: float, sleeping: bool = False) -> dict:
+        B, RS, C, G, R, Y, DM = Colors.B, Colors.RESET, Colors.C, Colors.G, Colors.R, Colors.Y, Colors.DIM
+        w = self._load()
+
+        stat_changes_list = self._tick_custom_stats(w, elapsed_hours, sleeping)
+        expired_effects = self._tick_timed_effects(w, elapsed_hours)
+        production = self._tick_production(w, elapsed_hours)
+        self._tick_consequences_elapsed(w, elapsed_hours)
+        expenses = self._tick_expenses_from_world(w, elapsed_hours)
+        income = self._tick_income_from_world(w, elapsed_hours)
+        events = self._tick_random_events_from_world(w, elapsed_hours)
+        threshold_warnings = self._check_stat_thresholds(w)
+        self._save(w)
+
+        consequences_triggered = self.consequence_tick(elapsed_hours)
+
+        stat_changes: dict = {ch["stat"]: ch for ch in stat_changes_list}
+
+        if stat_changes_list:
+            print(f"\n{B}⏱️  Survival Effects:{RS}")
+            for ch in stat_changes_list:
+                diff = ch["change"]
+                color = R if diff > 0 else G
+                print(f"  📊 {ch['stat']}: {ch['old']} → {C}{ch['new']}{RS} {color}({diff:+g}){RS} — decay")
+
+        if expired_effects:
+            for name in expired_effects:
+                print(f"  {DM}[EXPIRED]{RS} effect '{name}' has worn off")
+
+        if threshold_warnings:
+            print(f"\n{B}⚠️  Threshold Warnings:{RS}")
+            for warn in threshold_warnings:
+                print(f"  {Y}⚠{RS} {warn['msg']}")
+
+        if production:
+            print(f"\n{B}🏭 Production:{RS}")
+            for loc_id, prods in production.items():
+                for p in prods:
+                    color = G if p["outcome"] == "success" else R
+                    mark = "✓" if p["outcome"] == "success" else "✗"
+                    dc_str = f" vs DC {p['dc']}" if p["dc"] else ""
+                    print(f"  {mark} {p['worker']}: 🎲[{p['raw']}]+{p['bonus']}={p['total']}{dc_str} — {color}{p['outcome'].upper()}{RS}")
+                    for item, qty in p["produced"].items():
+                        print(f"     {G}+{qty}{RS} {item}")
+                    for item, qty in p["consumed"].items():
+                        print(f"     {R}-{qty}{RS} {item}")
+
+        if income:
+            print(f"\n{B}💰 Recurring Income:{RS}")
+            for inc in income:
+                _fm = inc["fmt"]
+                cfg = inc["cfg"]
+                amt_str = _fm(inc["earned"], cfg)
+                rem_str = _fm(inc["remaining"], cfg)
+                detail = f" {inc['detail']}" if inc.get("detail") else ""
+                print(f"  💰 {inc['name']}: {G}+{amt_str}{RS}{detail} {DM}({C}{rem_str}{RS}{DM} remaining){RS}")
+
+        if expenses:
+            print(f"\n{B}🍞 Recurring Expenses:{RS}")
+            for exp in expenses:
+                _fm = exp["fmt"]
+                cfg = exp["cfg"]
+                cost_str = _fm(exp["cost"], cfg)
+                rem_str = _fm(exp["remaining"], cfg)
+                if exp["success"]:
+                    print(f"  🍞 {exp['name']}: {R}-{cost_str}{RS} {DM}({C}{rem_str}{RS}{DM} remaining){RS}")
+                else:
+                    print(f"  {Y}⚠{RS} {exp['name']}: НЕ ХВАТАЕТ! Нужно {cost_str}, есть {rem_str}")
+
+        if consequences_triggered:
+            print(f"\n{B}⚠️  Consequences Triggered:{RS}")
+            for con in consequences_triggered:
+                print(f"  {R}[{con['id']}]{RS} {con['data'].get('description', '')} → {con['data'].get('trigger', '')}")
+
+        if events:
+            print(f"\n{B}🎲 Random Events:{RS}")
+            for ev in events:
+                print(f"  {Y}{ev['type'].upper()}{RS} (d100={ev['roll']}, scope d6={ev['scope_roll']})")
+                print(f"  {DM}[DM: narrate based on event type above]{RS}")
+
+        return {
+            "stat_changes": stat_changes,
+            "expired_effects": expired_effects,
+            "expenses_paid": [e for e in expenses if e["success"]],
+            "production": production,
+            "income": income,
+            "events": events,
+            "warnings": threshold_warnings,
+            "consequences": consequences_triggered,
+        }
+
     def wiki_recipe(self, entity_id: str) -> str:
         B, RS, C, DM, G = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.G
         node = self.get_node(entity_id)
@@ -1211,6 +1948,35 @@ def main():
 
     p = sub.add_parser("wiki-remove", help="Remove wiki entity")
     p.add_argument("id")
+
+    # ── Tick / Custom stats ───────────────────────────────────────────────────
+    p = sub.add_parser("tick", help="Advance time and tick all systems")
+    p.add_argument("--elapsed", type=float, required=True, help="Hours elapsed")
+    p.add_argument("--sleeping", action="store_true", help="Use sleep rates for stats")
+
+    p = sub.add_parser("custom-stat", help="Get or modify a custom stat")
+    p.add_argument("name", help="Stat name")
+    p.add_argument("delta", nargs="?", default=None, help="Delta value (+/-N) or absolute (=N)")
+    p.add_argument("--reason", default="", help="Reason for the change")
+
+    sub.add_parser("custom-stat-list", help="List all custom stats")
+
+    p = sub.add_parser("custom-stat-define", help="Define a new custom stat")
+    p.add_argument("name", help="Stat name")
+    p.add_argument("--value", type=float, default=0)
+    p.add_argument("--max", type=float, default=100, dest="max_val")
+    p.add_argument("--min", type=float, default=0, dest="min_val")
+    p.add_argument("--rate", type=float, default=0)
+    p.add_argument("--sleep-rate", type=float, default=None, dest="sleep_rate")
+
+    p = sub.add_parser("timed-effect-add", help="Add a timed effect to player")
+    p.add_argument("name", help="Effect name")
+    p.add_argument("--stat", default=None, help="Target stat")
+    p.add_argument("--rate-mod", type=float, default=0, dest="rate_mod")
+    p.add_argument("--instant", type=float, default=0)
+    p.add_argument("--hours", type=float, default=1)
+
+    sub.add_parser("timed-effect-list", help="List active timed effects")
 
     # ─────────────────────────────────────────────────────────────────────────
     args = parser.parse_args()
@@ -1669,6 +2435,46 @@ def main():
             print(f"  ✓ Removed: {args.id}")
         else:
             sys.exit(1)
+
+    # ── Tick handlers ─────────────────────────────────────────────────────────
+    elif args.command == "tick":
+        g.tick(args.elapsed, args.sleeping)
+
+    elif args.command == "custom-stat":
+        stat = g.custom_stat_get(args.name)
+        if args.delta is None:
+            if stat:
+                print(f"  {args.name}: {Colors.C}{stat.get('value', 0)}{Colors.RESET}"
+                      f"  (max {stat.get('max')}, rate {stat.get('rate', 0):+g}/h)")
+            else:
+                print(f"  Stat '{args.name}' not found", file=sys.stderr)
+                sys.exit(1)
+        else:
+            raw = args.delta
+            if raw.startswith("="):
+                ok = g.custom_stat_set(args.name, absolute=float(raw[1:]), reason=args.reason)
+            else:
+                ok = g.custom_stat_set(args.name, delta=float(raw), reason=args.reason)
+            if not ok:
+                sys.exit(1)
+
+    elif args.command == "custom-stat-list":
+        g.custom_stat_list()
+
+    elif args.command == "custom-stat-define":
+        ok = g.custom_stat_define(args.name, value=args.value, max_val=args.max_val,
+                                  min_val=args.min_val, rate=args.rate,
+                                  sleep_rate=args.sleep_rate)
+        if not ok:
+            sys.exit(1)
+
+    elif args.command == "timed-effect-add":
+        ok = g.timed_effect_add(args.name, args.stat, args.rate_mod, args.instant, args.hours)
+        if not ok:
+            sys.exit(1)
+
+    elif args.command == "timed-effect-list":
+        g.timed_effect_list()
 
 
 if __name__ == "__main__":
