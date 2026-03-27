@@ -38,8 +38,14 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# Tick custom stats
-uv run python "$MODULE_DIR/lib/survival_engine.py" tick "${TICK_ARGS[@]}"
+# Tick via WorldGraph (custom stats, production, expenses, income, consequences)
+uv run python "$PROJECT_ROOT/lib/world_graph.py" tick "${TICK_ARGS[@]}" 2>/dev/null
+
+# Fallback: tick via old survival engine if world.json not available
+CAMPAIGN_DIR=$(uv run python -c "from lib.campaign_manager import CampaignManager; cm=CampaignManager(); print(cm.get_active_campaign_path() or '')" 2>/dev/null)
+if [ -n "$CAMPAIGN_DIR" ] && [ ! -f "$CAMPAIGN_DIR/world.json" ]; then
+    uv run python "$MODULE_DIR/lib/survival_engine.py" tick "${TICK_ARGS[@]}" 2>/dev/null
+fi
 
 # Resolve action tracker
 uv run python "$MODULE_DIR/lib/action_tracker.py" resolve "$ELAPSED" "$TIME_LABEL" 2>/dev/null

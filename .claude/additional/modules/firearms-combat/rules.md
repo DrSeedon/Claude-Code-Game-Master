@@ -1,4 +1,4 @@
-# Firearms Combat — DM Rules
+# Firearms Combat — DM Rules [DEPRECATED — uses old managers, pending WorldGraph migration]
 
 ---
 

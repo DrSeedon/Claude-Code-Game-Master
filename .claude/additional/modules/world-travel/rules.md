@@ -1,4 +1,4 @@
-# World Travel — DM Rules
+# World Travel — DM Rules [DEPRECATED — uses old managers, pending WorldGraph migration]
 
 ## Navigation
 
