@@ -49,11 +49,4 @@ if [ -z "$HOURS_VAL" ]; then
 fi
 
 cd "$PROJECT_ROOT"
-uv run python -c "
-import sys
-sys.path.insert(0, 'lib')
-from consequence_manager import ConsequenceManager
-m = ConsequenceManager()
-result = m.add_timed_consequence(sys.argv[1], sys.argv[2], float(sys.argv[3]))
-sys.exit(0 if result else 1)
-" "$DESC" "$TRIGGER" "$HOURS_VAL"
+uv run python lib/world_graph.py consequence-add "$DESC" "$TRIGGER" --hours "$HOURS_VAL"

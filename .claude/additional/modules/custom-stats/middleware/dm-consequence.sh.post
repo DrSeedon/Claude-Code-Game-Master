@@ -18,43 +18,6 @@ fi
 [ "$ACTION" != "check" ] && exit 0
 
 cd "$PROJECT_ROOT"
-uv run python - <<'PYEOF'
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path("lib")))
-from json_ops import JsonOperations
-from campaign_manager import CampaignManager
-
-campaign_dir = CampaignManager().get_active_campaign_dir()
-if not campaign_dir:
-    sys.exit(0)
-
-json_ops = JsonOperations(str(campaign_dir))
-data = json_ops.load_json("consequences.json")
-
-timed = [c for c in data.get('active', []) if 'trigger_hours' in c]
-if not timed:
-    sys.exit(0)
-
-RED = "\033[31m"
-YEL = "\033[33m"
-GRN = "\033[32m"
-BOLD = "\033[1m"
-DIM = "\033[2m"
-RST = "\033[0m"
-
-print("\n⏱️  Timed consequences:")
-for c in timed:
-    remaining = c['trigger_hours'] - c.get('hours_elapsed', 0)
-    if remaining <= 0:
-        color, icon, label = RED + BOLD, "⚠️ ", "TRIGGERED"
-    elif remaining <= 2:
-        color, icon, label = RED, "🔴", f"{remaining:.1f}h"
-    elif remaining <= 6:
-        color, icon, label = YEL, "🟡", f"{remaining:.1f}h"
-    else:
-        color, icon, label = GRN, "🟢", f"{remaining:.0f}h"
-    print(f"  {DIM}[{c['id']}]{RST} {c['consequence']}")
-    print(f"       {color}{icon} {label} remaining{RST}")
-PYEOF
+# WorldGraph consequence-check already shows timed consequences
+# This post-hook now only adds formatted timed display if needed
+uv run python lib/world_graph.py consequence-check 2>/dev/null
