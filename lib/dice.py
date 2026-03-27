@@ -328,26 +328,37 @@ def _resolve_skill(char, skill_name):
 
 
 def _resolve_save(char, save_name):
-    """Get save modifier from character. Supports flat (int) and structured (dict with total) formats."""
-    saves = char.get('saves', {})
-    for name, val in saves.items():
-        if name.lower() == save_name.lower():
-            if isinstance(val, dict):
-                return val.get('total', 0), name
-            return int(val), name
+    """Auto-calculate save modifier from stats + proficiency. No saves field needed in character.json."""
     stats = char.get('stats', {})
-    stat_mods = {
-        'str': (stats.get('str', 10) - 10) // 2,
-        'dex': (stats.get('dex', 10) - 10) // 2,
-        'con': (stats.get('con', 10) - 10) // 2,
-        'int': (stats.get('int', 10) - 10) // 2,
-        'wis': (stats.get('wis', 10) - 10) // 2,
-        'cha': (stats.get('cha', 10) - 10) // 2,
+    level = char.get('level', 1)
+    proficiency = 2 if level < 5 else 3 if level < 9 else 4 if level < 13 else 5 if level < 17 else 6
+    save_profs = [s.lower() for s in char.get('save_proficiencies', [])]
+
+    stat_map = {
+        'str': 'str', 'сил': 'str',
+        'dex': 'dex', 'лов': 'dex',
+        'con': 'con', 'вын': 'con',
+        'int': 'int', 'инт': 'int',
+        'wis': 'wis', 'мдр': 'wis',
+        'cha': 'cha', 'хар': 'cha',
     }
-    for abbr, mod in stat_mods.items():
-        if abbr == save_name.lower()[:3]:
-            return mod, abbr
-    return None, None
+    display_map = {
+        'str': 'СИЛ', 'dex': 'ЛОВ', 'con': 'ВЫН',
+        'int': 'ИНТ', 'wis': 'МДР', 'cha': 'ХАР',
+    }
+
+    key = save_name.lower()[:3]
+    stat_key = stat_map.get(key)
+    if not stat_key:
+        return None, None
+
+    stat_val = stats.get(stat_key, 10)
+    mod = (stat_val - 10) // 2
+    if key in save_profs or stat_key in save_profs:
+        mod += proficiency
+
+    display = display_map.get(stat_key, stat_key.upper())
+    return mod, display
 
 
 def _resolve_attack(char, weapon_name=None):
