@@ -8,14 +8,18 @@
 ### Phase 1: Initialization
 
 #### Step 1: Get Enemy Stats [MANDATORY - NEVER SKIP]
+
+**Preferred: Add creature to wiki** (reusable across encounters):
 ```bash
-# Option A: Official D&D monster
-uv run python features/dnd-api/monsters/dnd_monster.py "[creature]" --combat
+bash tools/dm-wiki.sh add "goblin" --name "Goblin" --type creature \
+  --stat "hp:7" --stat "ac:13" --stat "attack_bonus:4" --stat "damage:1d6+1" \
+  --stat "speed:30" --stat "xp:50"
+```
 
-# Option B: Launch monster-manual agent for complex encounters
-# Use Task tool with subagent_type=monster-manual
+Once in wiki, auto-combat works with `--target` and `--defend --from`.
 
-# Option C: Quick NPC stats
+**Fallback: Quick NPC stats** (no wiki entry needed):
+```
 echo "Enemy: [Name] | HP: [X] | AC: [Y] | Attack: +[Z] | Damage: [dice]"
 ```
 
@@ -42,19 +46,39 @@ Track turn order in memory (highest to lowest).
 
 ### Phase 3: Combat Rounds
 
-**Player Turn (Standard D&D):**
+**Player Turn — Auto-Combat (PREFERRED):**
 1. Ask: "Your turn. What do you do?"
-2. Resolve action (Attack, Cast Spell, Dash, Dodge, Help, Hide, Ready)
-3. Roll attack: `bash tools/dm-roll.sh "1d20+[attack_bonus]" --label "[weapon] Attack ([name])" --ac [AC]` vs stated AC
-4. If hit, roll damage: `bash tools/dm-roll.sh "[damage_dice]" --label "[weapon] Damage"`
-5. Update enemy HP and narrate
+2. Resolve action:
+```bash
+# Melee/ranged attack — auto-lookup weapon + creature AC + auto-damage on hit
+bash tools/dm-roll.sh --attack "Longsword" --target "goblin"
+bash tools/dm-roll.sh --target "goblin"                          # auto-picks equipped weapon
 
-**Enemy Turn:**
+# Ranged with distance — auto-disadvantage beyond normal range
+bash tools/dm-roll.sh --attack "Shortbow" --target "goblin" --range 120
+
+# Spell attack — spell attack bonus + creature AC + auto-damage
+bash tools/dm-roll.sh --spell "fire-bolt" --target "goblin"
+
+# Save-based spell — creature rolls save vs spell DC + auto-damage on fail
+bash tools/dm-roll.sh --spell "shyish-bolt" --target "goblin"
+```
+3. Ranged weapons with `ammo_type` auto-deduct ammo from inventory. No ammo = cannot fire.
+4. Update enemy HP and narrate
+
+**Enemy Turn — Auto-Combat (PREFERRED):**
 1. Choose target (usually nearest/most damaged)
-2. State player AC before rolling
-3. Roll attack: `bash tools/dm-roll.sh "1d20+[enemy_attack_bonus]" --label "Attack ([enemy])" --ac [AC]`
-4. If hit, roll damage and update player HP
-5. Narrate dramatically
+```bash
+# Creature attacks player — auto-lookup creature attack + player AC + auto-damage
+bash tools/dm-roll.sh --defend --from "goblin"
+```
+2. If hit, update player HP and narrate
+
+**Fallback (no wiki entry):** Manual rolls as before:
+```bash
+bash tools/dm-roll.sh "1d20+4" --label "Goblin Attack" --ac 14
+bash tools/dm-roll.sh "1d6+1" --label "Goblin Damage"
+```
 
 **Party NPC Combat:**
 ```bash

@@ -626,6 +626,21 @@ def main():
     w_range_n = atk_range_n
     w_range_l = atk_range_l
 
+    if weapon_ammo and (args.attack is not None or args.target):
+        campaign_dir = _get_campaign_path()
+        if campaign_dir and char:
+            import subprocess
+            check = subprocess.run(
+                ["bash", "tools/dm-inventory.sh", "show", char.get('name', '')],
+                capture_output=True, text=True,
+                cwd=str(campaign_dir.parent.parent.parent)
+            )
+            if weapon_ammo not in check.stdout:
+                RS = "\033[0m"
+                BR = "\033[1;31m"
+                print(f"  {BR}\u26a0\ufe0f No {weapon_ammo}! Cannot fire.{RS}")
+                sys.exit(0)
+
     if args.range and w_range_n:
         max_range = int(w_range_l) if w_range_l else int(w_range_n) * 4
         if args.range > max_range:
