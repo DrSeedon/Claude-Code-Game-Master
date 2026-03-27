@@ -119,9 +119,9 @@ def render_inner_html() -> str:
     # --- D&D core stats ---
     ac = character.get("ac", "—")
     raw_stats = character.get("stats", {})
-    char_saves = character.get("saves", {})
     char_skills = character.get("skills", {})
     prof_bonus = 2 + (char_level - 1) // 4 if isinstance(char_level, int) else 2
+    save_proficiencies = [s.lower() for s in character.get("save_proficiencies", [])]
 
     def mod(score: int) -> str:
         m = (score - 10) // 2
@@ -287,16 +287,20 @@ def render_inner_html() -> str:
           <div class="ab-mod">{m}</div>
         </div>"""
 
-    # --- Saves ---
-    save_label_map = {"сил":"STR","лов":"DEX","вын":"CON","инт":"INT","мдр":"WIS","хар":"CHA",
-                      "str":"STR","dex":"DEX","con":"CON","int":"INT","wis":"WIS","cha":"CHA"}
+    # --- Saves (auto-calculated from stats + proficiency) ---
+    save_stat_order = [("STR", "str", "сил"), ("DEX", "dex", "лов"), ("CON", "con", "вын"),
+                       ("INT", "int", "инт"), ("WIS", "wis", "мдр"), ("CHA", "cha", "хар")]
     saves_html = ""
-    if isinstance(char_saves, dict):
-        for key, val in char_saves.items():
-            label = save_label_map.get(key, key.upper())
-            sign = f"+{val}" if int(val) >= 0 else str(val)
-            color = "#a78bfa" if abs(int(val)) >= 4 else ("var(--text)" if int(val) >= 0 else "var(--muted)")
-            saves_html += f'<div class="sv-row" data-key="save-{key}" data-val="{val}"><span class="sv-label">{label}</span><span class="sv-val" style="color:{color}">{sign}</span></div>'
+    for label, stat_key, ru_key in save_stat_order:
+        score = raw_stats.get(stat_key, 10)
+        save_mod = (score - 10) // 2
+        is_prof = ru_key in save_proficiencies or stat_key in save_proficiencies
+        if is_prof:
+            save_mod += prof_bonus
+        sign = f"+{save_mod}" if save_mod >= 0 else str(save_mod)
+        prof_dot = "●" if is_prof else "○"
+        color = "#a78bfa" if is_prof else ("var(--text)" if save_mod >= 0 else "var(--muted)")
+        saves_html += f'<div class="sv-row" data-key="save-{stat_key}" data-val="{save_mod}"><span class="sv-label">{prof_dot} {label}</span><span class="sv-val" style="color:{color}">{sign}</span></div>'
 
     # --- Skills ---
     skills_html = ""
