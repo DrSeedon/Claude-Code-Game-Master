@@ -1,67 +1,66 @@
 #!/bin/bash
-# dm-plot.sh - Manage plot hooks and storylines
-# Uses Python modules for validation and data operations
+# dm-plot.sh - Quest/plot management (delegates to world_graph.py)
 
-# Source common utilities
 source "$(dirname "$0")/common.sh"
-
-# Usage: dm-plot.sh <action> [args]
 
 if [ "$#" -lt 1 ]; then
     echo "Usage: dm-plot.sh <action> [args]"
     echo ""
     echo "=== Plot Management ==="
-    echo "  add <name> [options]             Create a new plot"
-    echo "  list [--type X] [--status Y]     List plots (filter by type/status)"
-    echo "  show <name>                      Show full plot details"
-    echo "  search <query>                   Search plots by name, NPCs, locations"
-    echo "  update <name> <event>            Add progress event to plot"
-    echo "  complete <name> [outcome]        Mark plot as completed"
-    echo "  fail <name> [reason]             Mark plot as failed"
-    echo "  objective <name> <obj> [action]  Manage objectives (complete/incomplete/add)"
-    echo "  threads                          Active story threads (DM dashboard)"
-    echo "  counts                           Show plot statistics"
+    echo "  add <name> [--type X] [--desc ...]       Create a new quest"
+    echo "  list [--status Y]                        List quests (filter by status)"
+    echo "  show <name>                              Show full quest details"
+    echo "  complete <name>                          Mark quest as completed"
+    echo "  fail <name>                              Mark quest as failed"
+    echo "  objective <name> add <text>              Add objective to quest"
+    echo "  objective <name> complete <idx>          Mark objective as done"
     echo ""
     echo "Types: main, side, mystery, threat"
-    echo "Status: active, completed, failed, dormant"
+    echo "Status: active, completed, failed"
     echo ""
     echo "Examples:"
-    echo "  dm-plot.sh add \"Side Quest\" --type side --description \"Find the artifact\""
-    echo "  dm-plot.sh add \"Main Quest\" --type main --objectives \"Find key,Open door\""
-    echo "  dm-plot.sh objective \"Main Quest\" \"Find key\" complete"
-    echo "  dm-plot.sh objective \"Main Quest\" \"New task\" add"
-    echo "  dm-plot.sh list --type main --status active"
-    echo "  dm-plot.sh update \"Murder Mystery\" \"Found first clue at docks\""
+    echo "  dm-plot.sh add \"Side Quest\" --type side --desc \"Find the artifact\""
+    echo "  dm-plot.sh objective \"Main Quest\" add \"Find key\""
+    echo "  dm-plot.sh objective \"Main Quest\" complete 0"
+    echo "  dm-plot.sh list --status active"
     exit 1
 fi
 
 require_active_campaign
 
 ACTION="$1"
-shift  # Remove action from arguments
+shift
 
 dispatch_middleware "dm-plot.sh" "$ACTION" "$@" && exit $?
 
-# Delegate to Python module based on action
+WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
+
 case "$ACTION" in
     add)
         if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-plot.sh add <name> [--type X] [--description \"...\"] [--npcs \"a,b\"] [--objectives \"x,y\"]"
+            echo "Usage: dm-plot.sh add <name> [--type X] [--desc ...]"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" add "$@"
-        ;;
-
-    objective)
-        if [ "$#" -lt 2 ]; then
-            echo "Usage: dm-plot.sh objective <plot_name> <objective_text> [complete|incomplete|add]"
-            exit 1
+        NAME="$1"
+        shift
+        TYPE="side"
+        DESC=""
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --type)   TYPE="$2"; shift 2 ;;
+                --desc|--description) DESC="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        if [ -n "$DESC" ]; then
+            $WG quest-create "$NAME" --type "$TYPE" --desc "$DESC"
+        else
+            $WG quest-create "$NAME" --type "$TYPE"
         fi
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" objective "$@"
         ;;
 
     list)
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" list "$@"
+        $WG quest-list "$@"
         ;;
 
     show)
@@ -69,59 +68,46 @@ case "$ACTION" in
             echo "Usage: dm-plot.sh show <name>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" show "$1"
+        $WG quest-show "$1"
         ;;
 
-    search)
-        if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-plot.sh search <query>"
-            exit 1
-        fi
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" search "$1"
-        ;;
-
-    update)
+    objective)
         if [ "$#" -lt 2 ]; then
-            echo "Usage: dm-plot.sh update <name> <event>"
+            echo "Usage: dm-plot.sh objective <quest_name> add <text>"
+            echo "       dm-plot.sh objective <quest_name> complete <idx>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" update "$1" "$2"
+        QUEST="$1"
+        OBJ_ACTION="$2"
+        VALUE="$3"
+        case "$OBJ_ACTION" in
+            add)
+                $WG quest-objective "$QUEST" add "$VALUE"
+                ;;
+            complete)
+                $WG quest-objective "$QUEST" complete "$VALUE"
+                ;;
+            *)
+                echo "Error: objective action must be 'add' or 'complete'"
+                exit 1
+                ;;
+        esac
         ;;
 
     complete)
         if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-plot.sh complete <name> [outcome]"
+            echo "Usage: dm-plot.sh complete <name>"
             exit 1
         fi
-        NAME="$1"
-        OUTCOME="${2:-}"
-        if [ -n "$OUTCOME" ]; then
-            $PYTHON_CMD "$LIB_DIR/plot_manager.py" complete "$NAME" "$OUTCOME"
-        else
-            $PYTHON_CMD "$LIB_DIR/plot_manager.py" complete "$NAME"
-        fi
+        $WG quest-complete "$1"
         ;;
 
     fail)
         if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-plot.sh fail <name> [reason]"
+            echo "Usage: dm-plot.sh fail <name>"
             exit 1
         fi
-        NAME="$1"
-        REASON="${2:-}"
-        if [ -n "$REASON" ]; then
-            $PYTHON_CMD "$LIB_DIR/plot_manager.py" fail "$NAME" "$REASON"
-        else
-            $PYTHON_CMD "$LIB_DIR/plot_manager.py" fail "$NAME"
-        fi
-        ;;
-
-    counts)
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" counts
-        ;;
-
-    threads)
-        $PYTHON_CMD "$LIB_DIR/plot_manager.py" threads
+        $WG quest-fail "$1"
         ;;
 
     *)

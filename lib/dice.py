@@ -295,17 +295,35 @@ def _load_character():
 
 
 def _load_creature(name):
-    """Load creature stats from wiki.json by ID or fuzzy name match."""
+    """Load creature stats from world.json (WorldGraph) with wiki.json fallback."""
     import json
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
         return None
+    name_lower = name.lower()
+
+    world_file = campaign_dir / "world.json"
+    if world_file.exists():
+        with open(world_file) as f:
+            world = json.load(f)
+        nodes = world.get("nodes", {})
+        for prefix in (f"creature:{name_lower}", name_lower):
+            if prefix in nodes and nodes[prefix].get("type") == "creature":
+                node = nodes[prefix]
+                return {"type": "creature", "name": node.get("name", name),
+                        "mechanics": node.get("mechanics", node.get("data", {}))}
+        for nid, node in nodes.items():
+            if node.get("type") != "creature":
+                continue
+            if name_lower in nid.lower() or name_lower in node.get("name", "").lower():
+                return {"type": "creature", "name": node.get("name", name),
+                        "mechanics": node.get("mechanics", node.get("data", {}))}
+
     wiki_file = campaign_dir / "wiki.json"
     if not wiki_file.exists():
         return None
     with open(wiki_file) as f:
         wiki = json.load(f)
-    name_lower = name.lower()
     if name_lower in wiki and wiki[name_lower].get("type") == "creature":
         return wiki[name_lower]
     for eid, data in wiki.items():
@@ -403,18 +421,42 @@ def _resolve_attack(char, weapon_name=None):
 
 
 def _load_spell(name):
-    """Load spell/ability from wiki.json by ID or fuzzy name match."""
+    """Load spell/ability from world.json (WorldGraph) with wiki.json fallback."""
     import json
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
         return None
+    name_lower = name.lower()
+    spell_types = {"spell", "ability", "technique", "cantrip"}
+
+    world_file = campaign_dir / "world.json"
+    if world_file.exists():
+        with open(world_file) as f:
+            world = json.load(f)
+        nodes = world.get("nodes", {})
+        world_spell_types = {"spell", "technique", "ability", "cantrip"}
+        for ntype in world_spell_types:
+            key = f"{ntype}:{name_lower}"
+            if key in nodes and nodes[key].get("type") in world_spell_types:
+                node = nodes[key]
+                return {"type": node["type"], "name": node.get("name", name),
+                        "mechanics": node.get("mechanics", node.get("data", {}))}
+        if name_lower in nodes and nodes[name_lower].get("type") in world_spell_types:
+            node = nodes[name_lower]
+            return {"type": node["type"], "name": node.get("name", name),
+                    "mechanics": node.get("mechanics", node.get("data", {}))}
+        for nid, node in nodes.items():
+            if node.get("type") not in world_spell_types:
+                continue
+            if name_lower in nid.lower() or name_lower in node.get("name", "").lower():
+                return {"type": node["type"], "name": node.get("name", name),
+                        "mechanics": node.get("mechanics", node.get("data", {}))}
+
     wiki_file = campaign_dir / "wiki.json"
     if not wiki_file.exists():
         return None
     with open(wiki_file) as f:
         wiki = json.load(f)
-    name_lower = name.lower()
-    spell_types = {"spell", "ability", "technique", "cantrip"}
     if name_lower in wiki and wiki[name_lower].get("type") in spell_types:
         return wiki[name_lower]
     for eid, data in wiki.items():

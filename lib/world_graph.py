@@ -27,7 +27,9 @@ except ImportError:
 
 NODE_TYPES = [
     "player", "npc", "location", "item", "creature",
-    "fact", "quest", "consequence", "spell", "technique"
+    "fact", "quest", "consequence", "spell", "technique",
+    "potion", "material", "artifact", "weapon", "armor",
+    "tool", "book", "chapter", "cantrip", "effect", "misc"
 ]
 
 EDGE_TYPES = [
