@@ -67,6 +67,24 @@ def parse_unique_weight(item_str: str) -> float:
     return float(m.group(1)) if m else 0.5
 
 
+def _load_world(campaign_dir: Path) -> dict:
+    world_file = campaign_dir / "world.json"
+    if not world_file.exists():
+        return {"nodes": {}, "edges": []}
+    try:
+        return json.loads(world_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {"nodes": {}, "edges": []}
+
+
+def _world_nodes(world: dict, node_type: str) -> list:
+    result = []
+    for nid, node in world.get("nodes", {}).items():
+        if node.get("type") == node_type:
+            result.append({"id": nid, **node})
+    return result
+
+
 def render_inner_html() -> str:
     active_file = ROOT / "world-state" / "active-campaign.txt"
     if not active_file.exists():
@@ -79,17 +97,20 @@ def render_inner_html() -> str:
     campaign_dir = ROOT / "world-state" / "campaigns" / campaign_name
 
     overview = load_json(campaign_dir / "campaign-overview.json") or {}
-    character = load_json(campaign_dir / "character.json") or {}
     custom_stats_data = load_json(campaign_dir / "module-data" / "custom-stats.json") or {}
-    inventory_data = load_json(campaign_dir / "module-data" / "inventory-system.json") or {}
-    consequences_data = load_json(campaign_dir / "consequences.json") or {}
-    plots_data = load_json(campaign_dir / "plots.json") or []
-    npcs_data = load_json(campaign_dir / "npcs.json") or {}
-    wiki_data = load_json(campaign_dir / "wiki.json") or {}
-    party_inv_data = load_json(campaign_dir / "module-data" / "inventory-party.json") or {}
+    world = _load_world(campaign_dir)
+
+    player_nodes = _world_nodes(world, "player")
+    player_node = player_nodes[0] if player_nodes else {}
+    character = player_node.get("data", {})
+    inventory_data = player_node.get("inventory", {})
+
+    npc_nodes = _world_nodes(world, "npc")
+    quest_nodes = _world_nodes(world, "quest")
+    consequence_nodes = _world_nodes(world, "consequence")
 
     display_campaign = overview.get("campaign_name", campaign_name)
-    char_name = character.get("name", overview.get("current_character", "Unknown"))
+    char_name = character.get("name", player_node.get("name", overview.get("current_character", "Unknown")))
     char_level = character.get("level", "?")
     char_class = character.get("class", "")
     char_race = character.get("race", "")
@@ -156,21 +177,18 @@ def render_inner_html() -> str:
         weight_color = "#16a34a"
         weight_label = "Normal"
 
-    active_consequences = consequences_data.get("active", []) if isinstance(consequences_data, dict) else []
+    active_consequences = []
+    for cn in consequence_nodes:
+        cdata = cn.get("data", {})
+        if cdata.get("status") not in ("triggered", "expired"):
+            active_consequences.append(cdata)
 
     active_quests = []
-    if isinstance(plots_data, list):
-        for item in plots_data:
-            if isinstance(item, list) and len(item) == 2:
-                qname, qdata = item
-                if qdata.get("status") not in ("completed", "failed"):
-                    active_quests.append((qname, qdata))
-            elif isinstance(item, dict) and item.get("status") not in ("completed", "failed"):
-                active_quests.append((item.get("id", "?"), item))
-    elif isinstance(plots_data, dict):
-        for qname, qdata in plots_data.items():
-            if qdata.get("status") not in ("completed", "failed"):
-                active_quests.append((qname, qdata))
+    for qn in quest_nodes:
+        qdata = qn.get("data", {})
+        if qdata.get("status") not in ("completed", "failed"):
+            qname = qdata.get("id", qn.get("name", qn.get("id", "?")))
+            active_quests.append((qname, {"events": qn.get("events", []), **qdata}))
 
     def _latest_ts(info: dict, fallback_key: str = "created") -> str:
         events = info.get("events", [])
@@ -181,10 +199,20 @@ def render_inner_html() -> str:
         return info.get(fallback_key, "") or ""
 
     npc_list = []
-    if isinstance(npcs_data, dict):
-        for npc_name, npc_info in npcs_data.items():
-            npc_list.append((npc_name, npc_info))
-        npc_list.sort(key=lambda x: _latest_ts(x[1]) if isinstance(x[1], dict) else "", reverse=True)
+    for nn in npc_nodes:
+        npc_name = nn.get("name", nn.get("id", "?"))
+        npc_info = {
+            "attitude": nn.get("data", {}).get("attitude", "neutral"),
+            "description": nn.get("data", {}).get("description", nn.get("data", {}).get("desc", "")),
+            "events": nn.get("events", []),
+            "tags": nn.get("data", {}).get("tags", {}),
+            "created": nn.get("data", {}).get("created", ""),
+            "is_party_member": nn.get("data", {}).get("is_party_member", False),
+            "character_sheet": nn.get("data", {}).get("character_sheet", {}),
+            "inventory": nn.get("inventory", {}),
+        }
+        npc_list.append((npc_name, npc_info))
+    npc_list.sort(key=lambda x: _latest_ts(x[1]) if isinstance(x[1], dict) else "", reverse=True)
 
     active_quests.sort(key=lambda x: _latest_ts(x[1], "created_at") if isinstance(x[1], dict) else "", reverse=True)
 
@@ -942,11 +970,7 @@ def render_inner_html() -> str:
       </div>
     </div>"""
 
-    party_members = []
-    if isinstance(npcs_data, dict):
-        for pname, pinfo in npcs_data.items():
-            if isinstance(pinfo, dict) and pinfo.get("is_party_member"):
-                party_members.append((pname, pinfo))
+    party_members = [(nm, info) for nm, info in npc_list if info.get("is_party_member")]
 
     party_html = ""
     if party_members:
@@ -967,7 +991,7 @@ def render_inner_html() -> str:
             if pm_conditions:
                 cond_html = " ".join(f'<span class="pm-cond">{h(c)}</span>' for c in pm_conditions)
 
-            pm_inv = party_inv_data.get(pm_name, {})
+            pm_inv = pm_info.get("inventory", {})
             pm_stackable = pm_inv.get("stackable", {})
             pm_unique = pm_inv.get("unique", [])
 

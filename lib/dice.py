@@ -294,6 +294,19 @@ def _load_character():
         return json.load(f)
 
 
+def _extract_mechanics(node):
+    """Extract mechanics dict from a WorldGraph node (handles nested data.mechanics)."""
+    data = node.get("data", {})
+    if isinstance(data, dict):
+        if "mechanics" in data:
+            return data["mechanics"]
+        if "ac" in data or "hp" in data or "attack_bonus" in data:
+            return data
+    if "mechanics" in node:
+        return node["mechanics"]
+    return data if isinstance(data, dict) else {}
+
+
 def _load_creature(name):
     """Load creature stats from world.json (WorldGraph) with wiki.json fallback."""
     import json
@@ -307,17 +320,18 @@ def _load_creature(name):
         with open(world_file) as f:
             world = json.load(f)
         nodes = world.get("nodes", {})
+
         for prefix in (f"creature:{name_lower}", name_lower):
             if prefix in nodes and nodes[prefix].get("type") == "creature":
                 node = nodes[prefix]
                 return {"type": "creature", "name": node.get("name", name),
-                        "mechanics": node.get("mechanics", node.get("data", {}))}
+                        "mechanics": _extract_mechanics(node)}
         for nid, node in nodes.items():
             if node.get("type") != "creature":
                 continue
             if name_lower in nid.lower() or name_lower in node.get("name", "").lower():
                 return {"type": "creature", "name": node.get("name", name),
-                        "mechanics": node.get("mechanics", node.get("data", {}))}
+                        "mechanics": _extract_mechanics(node)}
 
     wiki_file = campaign_dir / "wiki.json"
     if not wiki_file.exists():
@@ -440,17 +454,17 @@ def _load_spell(name):
             if key in nodes and nodes[key].get("type") in world_spell_types:
                 node = nodes[key]
                 return {"type": node["type"], "name": node.get("name", name),
-                        "mechanics": node.get("mechanics", node.get("data", {}))}
+                        "mechanics": _extract_mechanics(node)}
         if name_lower in nodes and nodes[name_lower].get("type") in world_spell_types:
             node = nodes[name_lower]
             return {"type": node["type"], "name": node.get("name", name),
-                    "mechanics": node.get("mechanics", node.get("data", {}))}
+                    "mechanics": _extract_mechanics(node)}
         for nid, node in nodes.items():
             if node.get("type") not in world_spell_types:
                 continue
             if name_lower in nid.lower() or name_lower in node.get("name", "").lower():
                 return {"type": node["type"], "name": node.get("name", name),
-                        "mechanics": node.get("mechanics", node.get("data", {}))}
+                        "mechanics": _extract_mechanics(node)}
 
     wiki_file = campaign_dir / "wiki.json"
     if not wiki_file.exists():
