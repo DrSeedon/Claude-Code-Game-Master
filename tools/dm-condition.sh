@@ -1,5 +1,5 @@
 #!/bin/bash
-# dm-condition.sh - Player character condition tracking (thin wrapper for player_manager.py)
+# dm-condition.sh - Player character condition tracking (delegates to world_graph.py)
 # Interface: dm-condition.sh add/remove/check <name> <condition>
 
 source "$(dirname "$0")/common.sh"
@@ -25,23 +25,25 @@ ACTION="$1"
 NAME="$2"
 CONDITION="$3"
 
+WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
+
 case "$ACTION" in
     add)
         if [ -z "$CONDITION" ]; then
             echo "Error: Condition name required for add"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" condition "$NAME" add "$CONDITION"
+        $WG player-condition add "$CONDITION"
         ;;
     remove)
         if [ -z "$CONDITION" ]; then
             echo "Error: Condition name required for remove"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" condition "$NAME" remove "$CONDITION"
+        $WG player-condition remove "$CONDITION"
         ;;
     check)
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" condition "$NAME" list
+        $WG player-condition list
         ;;
     *)
         echo "Unknown action: $ACTION"

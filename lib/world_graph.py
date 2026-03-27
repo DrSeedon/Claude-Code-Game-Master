@@ -591,6 +591,16 @@ class WorldGraph:
         self._save(w)
         return triggered
 
+    def consequence_list_resolved(self) -> List[dict]:
+        w = self._load()
+        result = []
+        for nid, node in w["nodes"].items():
+            if node.get("type") != "consequence":
+                continue
+            if node.get("data", {}).get("status") == "resolved":
+                result.append({"id": nid, **node})
+        return sorted(result, key=lambda x: x.get("data", {}).get("resolved", ""))
+
     def consequence_resolve(self, node_id: str, resolution: str = "") -> bool:
         data_update: dict = {"status": "resolved", "resolved": self._now()}
         if resolution:
@@ -718,6 +728,76 @@ class WorldGraph:
         node["data"] = d
         return self._save(w)
 
+    def player_hp_max(self, delta: int) -> bool:
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return False
+        w = self._load()
+        node = w["nodes"][pid]
+        d = node.get("data", {})
+        d["hp_max"] = d.get("hp_max", 0) + delta
+        node["data"] = d
+        return self._save(w)
+
+    def player_condition(self, action: str, condition_name: str = None) -> bool:
+        B, RS, C, DM = Colors.B, Colors.RESET, Colors.C, Colors.DIM
+        pid = self._player_id()
+        if not pid:
+            print("  No player node found", file=sys.stderr)
+            return False
+        w = self._load()
+        node = w["nodes"][pid]
+        d = node.get("data", {})
+        conditions = d.setdefault("conditions", [])
+        if action == "list":
+            if not conditions:
+                print(f"  {DM}(no active conditions){RS}")
+            else:
+                print(f"  {B}Active conditions:{RS} " + ", ".join(f"{C}{c}{RS}" for c in conditions))
+            return True
+        if not condition_name:
+            print("  condition_name required for add/remove", file=sys.stderr)
+            return False
+        if action == "add":
+            if condition_name in conditions:
+                print(f"  Condition '{condition_name}' already active", file=sys.stderr)
+                return False
+            conditions.append(condition_name)
+            node["data"] = d
+            ok = self._save(w)
+            if ok:
+                print(f"  ✓ Condition added: {C}{condition_name}{RS}")
+            return ok
+        elif action == "remove":
+            if condition_name not in conditions:
+                print(f"  Condition '{condition_name}' not active", file=sys.stderr)
+                return False
+            conditions.remove(condition_name)
+            node["data"] = d
+            ok = self._save(w)
+            if ok:
+                print(f"  ✓ Condition removed: {C}{condition_name}{RS}")
+            return ok
+        else:
+            print(f"  Unknown action: {action}", file=sys.stderr)
+            return False
+
+    def player_set(self, name: str) -> bool:
+        overview_file = self.campaign_dir / "campaign-overview.json"
+        if not overview_file.exists():
+            print(f"  campaign-overview.json not found in {self.campaign_dir}", file=sys.stderr)
+            return False
+        with open(overview_file, "r", encoding="utf-8") as f:
+            overview = json.load(f)
+        overview["character"] = name
+        tmp = overview_file.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(overview, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, overview_file)
+        print(f"  ✓ Active character set: {name}")
+        return True
+
     def player_show(self) -> str:
         B, RS, C, G, DM, Y = Colors.B, Colors.RESET, Colors.C, Colors.G, Colors.DIM, Colors.Y
         pid = self._player_id()
@@ -772,6 +852,111 @@ class WorldGraph:
                                   for e in self._load()["edges"]
                               ) else None)
         return full_id
+
+    def inventory_craft(self, owner_id: str, recipe_id: str, qty: int = 1) -> bool:
+        B, RS, C, DM, G_ = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.G
+        w = self._load()
+        if owner_id not in w["nodes"]:
+            print(f"  Node '{owner_id}' not found", file=sys.stderr)
+            return False
+        rid = self._resolve_id(recipe_id) or recipe_id
+        if rid not in w["nodes"]:
+            print(f"  Recipe node '{recipe_id}' not found", file=sys.stderr)
+            return False
+        recipe_node = w["nodes"][rid]
+        recipe_data = recipe_node.get("data", {}).get("recipe", {})
+        ingredients: dict = recipe_data.get("ingredients", {})
+        if not ingredients:
+            req_edges = [e for e in w["edges"] if e["from"] == rid and e["type"] == "requires"]
+            for e in req_edges:
+                q = e.get("data", {}).get("qty", 1) if e.get("data") else 1
+                ingredients[e["to"]] = q
+        if not ingredients:
+            print(f"  No recipe/ingredients found for '{rid}'", file=sys.stderr)
+            return False
+        inv = w["nodes"][owner_id].get("inventory", {}).get("stackable", {})
+        for ing_id, need_qty in ingredients.items():
+            total_need = need_qty * qty
+            ing_name = w["nodes"].get(ing_id, {}).get("name", ing_id)
+            have_qty = inv.get(ing_name, {}).get("qty", 0) if isinstance(inv.get(ing_name), dict) else 0
+            if ing_name not in inv and ing_id not in inv:
+                print(f"  Missing ingredient: {ing_name} x{total_need}", file=sys.stderr)
+                return False
+            key = ing_name if ing_name in inv else ing_id
+            have = inv[key].get("qty", 0) if isinstance(inv[key], dict) else int(inv[key])
+            if have < total_need:
+                print(f"  Not enough {ing_name}: have {have}, need {total_need}", file=sys.stderr)
+                return False
+        skill = recipe_data.get("skill", "any")
+        dc = recipe_data.get("dc")
+        craft_name = recipe_node.get("name", rid)
+        if dc:
+            print(f"  {DM}Run:{RS} dm-roll.sh --skill \"{skill}\" --dc {dc} --label \"Craft {craft_name}\"")
+        for ing_id, need_qty in ingredients.items():
+            ing_name = w["nodes"].get(ing_id, {}).get("name", ing_id)
+            key = ing_name if ing_name in inv else ing_id
+            self.inventory_remove(owner_id, key, need_qty * qty)
+        self.inventory_add(owner_id, craft_name, qty)
+        print(f"  {G_}✓{RS} Crafted: {B}{craft_name}{RS} x{qty}")
+        return True
+
+    def inventory_use(self, owner_id: str, item_name: str) -> Optional[dict]:
+        B, RS, C, DM = Colors.B, Colors.RESET, Colors.C, Colors.DIM
+        w = self._load()
+        if owner_id not in w["nodes"]:
+            print(f"  Node '{owner_id}' not found", file=sys.stderr)
+            return None
+        inv = w["nodes"][owner_id].get("inventory", {}).get("stackable", {})
+        item_key = None
+        for k in inv:
+            if k.lower() == item_name.lower():
+                item_key = k
+                break
+        if not item_key:
+            print(f"  Item '{item_name}' not in inventory", file=sys.stderr)
+            return None
+        if not self.inventory_remove(owner_id, item_key, 1):
+            return None
+        results = self.search_nodes(item_name)
+        effects = {}
+        for r in results[:3]:
+            mechanics = r.get("data", {}).get("mechanics", {})
+            if mechanics.get("effect") or mechanics.get("heal") or mechanics.get("damage"):
+                effects = mechanics
+                break
+        if effects:
+            print(f"  {B}Used:{RS} {item_key}")
+            for k, v in effects.items():
+                print(f"    {k}: {C}{v}{RS}")
+        else:
+            print(f"  {B}Used:{RS} {item_key}  {DM}(no effects found in wiki){RS}")
+        return effects if effects else {}
+
+    def inventory_loot(self, owner_id: str, items: list = None, gold: int = 0, xp: int = 0) -> bool:
+        G_, RS, B = Colors.G, Colors.RESET, Colors.B
+        w = self._load()
+        if owner_id not in w["nodes"]:
+            print(f"  Node '{owner_id}' not found", file=sys.stderr)
+            return False
+        for entry in (items or []):
+            name, qty, weight = entry[0], int(entry[1]) if len(entry) > 1 else 1, float(entry[2]) if len(entry) > 2 else 0.5
+            self.inventory_add(owner_id, name, qty, weight)
+            print(f"  {G_}+{RS} {name} x{qty}")
+        if gold:
+            pid = self._player_id()
+            if pid and pid == owner_id:
+                self.player_update_stat("money", gold)
+            else:
+                node = w["nodes"][owner_id]
+                node["data"]["money"] = node["data"].get("money", 0) + gold
+                self._save(w)
+            print(f"  {G_}+{RS} {B}{gold}{RS} gold")
+        if xp:
+            pid = self._player_id()
+            if pid:
+                self.player_update_stat("xp", xp)
+                print(f"  {G_}+{RS} {B}{xp}{RS} XP")
+        return True
 
     def wiki_recipe(self, entity_id: str) -> str:
         B, RS, C, DM, G = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.G
@@ -973,6 +1158,35 @@ def main():
 
     p = sub.add_parser("player-gold", help="Adjust player gold by delta")
     p.add_argument("delta", type=int)
+
+    p = sub.add_parser("player-hp-max", help="Adjust player max HP by delta")
+    p.add_argument("delta", type=int)
+
+    p = sub.add_parser("player-condition", help="Manage player conditions")
+    p.add_argument("action", choices=["add", "remove", "list"])
+    p.add_argument("condition", nargs="?", default=None)
+
+    p = sub.add_parser("player-set", help="Set active character in campaign-overview.json")
+    p.add_argument("name")
+
+    # ── Inventory extended ────────────────────────────────────────────────────
+    p = sub.add_parser("inventory-craft", help="Craft item from recipe")
+    p.add_argument("owner", help="Node name or ID")
+    p.add_argument("recipe_id", help="Recipe node ID or name")
+    p.add_argument("--qty", type=int, default=1)
+
+    p = sub.add_parser("inventory-use", help="Use a consumable item")
+    p.add_argument("owner", help="Node name or ID")
+    p.add_argument("item")
+
+    p = sub.add_parser("inventory-loot", help="Batch add items + gold + xp")
+    p.add_argument("owner", help="Node name or ID")
+    p.add_argument("--items", nargs="+", metavar="name:qty:weight",
+                   help="Items in format name:qty:weight (qty and weight optional)")
+    p.add_argument("--gold", type=int, default=0)
+    p.add_argument("--xp", type=int, default=0)
+
+    sub.add_parser("consequence-list-resolved", help="List resolved consequences")
 
     # ── Wiki ──────────────────────────────────────────────────────────────────
     p = sub.add_parser("wiki-add", help="Add entity to wiki")
@@ -1344,6 +1558,62 @@ def main():
             print(f"  ✓ Gold {'+' if args.delta >= 0 else ''}{args.delta}")
         else:
             sys.exit(1)
+
+    elif args.command == "player-hp-max":
+        ok = g.player_hp_max(args.delta)
+        if ok:
+            print(f"  ✓ HP max {'+' if args.delta >= 0 else ''}{args.delta}")
+        else:
+            sys.exit(1)
+
+    elif args.command == "player-condition":
+        ok = g.player_condition(args.action, args.condition)
+        if not ok and args.action != "list":
+            sys.exit(1)
+
+    elif args.command == "player-set":
+        ok = g.player_set(args.name)
+        if not ok:
+            sys.exit(1)
+
+    elif args.command == "inventory-craft":
+        oid = resolve(args.owner)
+        ok = g.inventory_craft(oid, args.recipe_id, args.qty)
+        if not ok:
+            sys.exit(1)
+
+    elif args.command == "inventory-use":
+        oid = resolve(args.owner)
+        result = g.inventory_use(oid, args.item)
+        if result is None:
+            sys.exit(1)
+
+    elif args.command == "inventory-loot":
+        oid = resolve(args.owner)
+        parsed_items = []
+        for raw in (args.items or []):
+            parts = raw.split(":")
+            name = parts[0]
+            qty = int(parts[1]) if len(parts) > 1 else 1
+            weight = float(parts[2]) if len(parts) > 2 else 0.5
+            parsed_items.append((name, qty, weight))
+        ok = g.inventory_loot(oid, parsed_items, args.gold, args.xp)
+        if not ok:
+            sys.exit(1)
+
+    elif args.command == "consequence-list-resolved":
+        nodes = g.consequence_list_resolved()
+        B, RS, C, DM = Colors.B, Colors.RESET, Colors.C, Colors.DIM
+        if not nodes:
+            print("  (no resolved consequences)")
+        for n in nodes:
+            d = n.get("data", {})
+            resolved_at = d.get("resolved", "?")
+            resolution = d.get("resolution", "")
+            print(f"  {Colors.G}[resolved]{RS} {B}{n['name']}{RS}  {DM}{n['id']}{RS}")
+            if resolution:
+                print(f"    {DM}→ {resolution}{RS}")
+            print(f"    {DM}at {resolved_at}{RS}")
 
     # ── Wiki handlers ─────────────────────────────────────────────────────────
     elif args.command == "wiki-add":

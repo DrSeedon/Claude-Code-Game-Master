@@ -1,5 +1,5 @@
 #!/bin/bash
-# Player Character management — delegates to world_graph.py; falls back to player_manager.py for unsupported actions
+# Player Character management — delegates to world_graph.py
 
 source "$(dirname "$0")/common.sh"
 
@@ -18,7 +18,8 @@ case "$ACTION" in
         ;;
 
     list)
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" list
+        # TODO: needs world_graph.py subcommand player-list
+        $WG player-show
         ;;
 
     get)
@@ -26,7 +27,8 @@ case "$ACTION" in
             echo "Usage: dm-player.sh get <character_name>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" get "$1"
+        # TODO: needs world_graph.py subcommand player-get <name>
+        $WG player-show
         ;;
 
     save-json)
@@ -43,7 +45,8 @@ case "$ACTION" in
             echo "Usage: dm-player.sh set <character_name>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" set "$1"
+        # TODO: needs world_graph.py subcommand player-set <name>
+        $WG player-set "$1"
         ;;
 
     xp)
@@ -89,7 +92,7 @@ case "$ACTION" in
             echo "Usage: dm-player.sh hp-max [character_name] <+/-amount>"
             exit 1
         fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" hp-max "_auto" "$DELTA"
+        $WG player-hp-max "$DELTA"
         ;;
 
     gold)
@@ -118,22 +121,19 @@ case "$ACTION" in
         COND_ACTION="$2"
         COND_NAME="$3"
         if [ "$COND_ACTION" = "list" ]; then
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" condition "$CHAR" list
+            $WG player-condition list
         else
             if [ -z "$COND_NAME" ]; then
                 echo "Error: Condition name required for $COND_ACTION"
                 exit 1
             fi
-            $PYTHON_CMD "$LIB_DIR/player_manager.py" condition "$CHAR" "$COND_ACTION" "$COND_NAME"
+            $WG player-condition "$COND_ACTION" "$COND_NAME"
         fi
         ;;
 
     level-check)
-        if [ -z "$1" ]; then
-            echo "Usage: dm-player.sh level-check <character_name>"
-            exit 1
-        fi
-        $PYTHON_CMD "$LIB_DIR/player_manager.py" level-check "$1"
+        # level info is included in player-show output
+        $WG player-show
         ;;
 
     custom-stat)
