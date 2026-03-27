@@ -20,10 +20,12 @@ ENTITY_TYPES = [
     "effect", "tool", "weapon", "armor", "book", "chapter", "creature", "misc"
 ]
 
+from colors import Colors
+
 ANSI = {
-    "B": "\033[1m", "DM": "\033[2m", "RS": "\033[0m",
-    "C": "\033[36m", "G": "\033[32m", "R": "\033[31m",
-    "Y": "\033[33m", "M": "\033[35m",
+    "B": Colors.B, "DM": Colors.DM, "RS": Colors.RS,
+    "C": Colors.C, "G": Colors.G, "R": Colors.R,
+    "Y": Colors.Y, "M": Colors.MAGENTA,
 }
 
 

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from entity_manager import EntityManager
 from currency import load_config, format_money, migrate_gold
-from colors import tag_success, tag_error
+from colors import tag_success, tag_error, Colors
 
 
 class SessionManager(EntityManager):
@@ -188,7 +188,7 @@ class SessionManager(EntityManager):
             "current_location": location
         }
 
-        print(f"📍 {old_location} → \033[1;36m{location}\033[0m")
+        print(f"📍 {old_location} → {Colors.BC}{location}{Colors.RS}")
         return result
 
     # ==================== Save System ====================

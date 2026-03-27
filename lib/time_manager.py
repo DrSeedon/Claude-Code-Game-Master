@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from campaign_manager import CampaignManager
 from json_ops import JsonOperations
-from colors import tag_error
+from colors import tag_error, Colors
 
 
 class TimeManager:
@@ -179,10 +179,10 @@ class TimeManager:
             pass
 
     def _print_time(self, data: dict, elapsed_hours: float = 0):
-        C = "\033[36m"
-        DM = "\033[2m"
-        Y = "\033[33m"
-        RS = "\033[0m"
+        C = Colors.C
+        DM = Colors.DM
+        Y = Colors.Y
+        RS = Colors.RS
 
         clock = data.get("precise_time", "??:??")
         game_date = data.get("game_date")

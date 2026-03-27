@@ -19,6 +19,27 @@ sys.path.insert(0, str(Path(__file__).parent))
 _infra_dir = Path(__file__).parent.parent / ".claude" / "additional" / "infrastructure"
 sys.path.insert(0, str(_infra_dir))
 from module_data import ModuleDataManager
+
+# Import colors for formatted output
+try:
+    from lib.colors import Colors
+except ImportError:
+    try:
+        from colors import Colors
+    except ImportError:
+        class Colors:
+            RESET = RS = ""
+            RED = R = ""
+            GREEN = G = ""
+            YELLOW = Y = ""
+            CYAN = C = ""
+            BOLD = B = ""
+            BOLD_RED = BR = ""
+            BOLD_GREEN = BG = ""
+            BOLD_YELLOW = BY = ""
+            BOLD_CYAN = BC = ""
+            DIM = DM = ""
+            MAGENTA = ""
 from currency import load_config, format_money, format_delta, parse_money, migrate_gold, can_afford
 from dice import roll as dice_roll, roll_formatted as dice_roll_formatted
 
@@ -587,12 +608,12 @@ class InventoryManager:
         who = self.character.get('name', 'Character')
         npc_tag = " [NPC]" if self.is_npc else ""
         print("=" * 68)
-        G = "\033[32m"
-        R = "\033[31m"
-        C = "\033[36m"
-        DM = "\033[2m"
-        RS = "\033[0m"
-        B = "\033[1m"
+        G = Colors.G
+        R = Colors.R
+        C = Colors.C
+        DM = Colors.DM
+        RS = Colors.RS
+        B = Colors.B
 
         reason_str = f" {DM}— {self.reason}{RS}" if getattr(self, 'reason', None) else ""
         print(f"  {B}INVENTORY UPDATE:{RS} {who}{npc_tag}{reason_str}")
@@ -743,11 +764,11 @@ class InventoryManager:
     # --- Drop (combat) ---
 
     def remove_item(self, item_name: str, quantity: Optional[int] = None, is_unique: bool = False) -> bool:
-        R = "\033[31m"
-        C = "\033[36m"
-        B = "\033[1m"
-        DM = "\033[2m"
-        RS = "\033[0m"
+        R = Colors.R
+        C = Colors.C
+        B = Colors.B
+        DM = Colors.DM
+        RS = Colors.RS
         who = self.character.get('name', 'Character')
         npc_tag = f" {DM}[NPC]{RS}" if self.is_npc else ""
 
@@ -792,14 +813,14 @@ class InventoryManager:
     # --- Status (compact, for session start) ---
 
     def show_status(self):
-        B = "\033[1m"
-        C = "\033[36m"
-        G = "\033[32m"
-        Y = "\033[33m"
-        R = "\033[31m"
-        DM = "\033[2m"
-        M = "\033[35m"
-        RS = "\033[0m"
+        B = Colors.B
+        C = Colors.C
+        G = Colors.G
+        Y = Colors.Y
+        R = Colors.R
+        DM = Colors.DM
+        M = Colors.MAGENTA
+        RS = Colors.RS
 
         char = self.character
         name = char.get("name", "Character")
@@ -857,14 +878,14 @@ class InventoryManager:
     # --- Show ---
 
     def show_inventory(self, category: Optional[str] = None):
-        B = "\033[1m"
-        C = "\033[36m"
-        G = "\033[32m"
-        Y = "\033[33m"
-        R = "\033[31m"
-        DM = "\033[2m"
-        M = "\033[35m"
-        RS = "\033[0m"
+        B = Colors.B
+        C = Colors.C
+        G = Colors.G
+        Y = Colors.Y
+        R = Colors.R
+        DM = Colors.DM
+        M = Colors.MAGENTA
+        RS = Colors.RS
 
         char = self.character
         name = char.get("name", "Character")
@@ -1168,9 +1189,9 @@ def main():
 
     elif args.command == 'remove':
         if manager.remove_item(args.item, args.qty, args.unique):
-            G = "\033[32m"
-            DM = "\033[2m"
-            RS = "\033[0m"
+            G = Colors.G
+            DM = Colors.DM
+            RS = Colors.RS
             weight_info = manager.calculate_weight()
             print(f"  {DM}⚖️  {G}{weight_info['total_weight']}/{weight_info['capacity']} kg{RS} {DM}({weight_info['status']}){RS}")
             print("=" * 68)
@@ -1304,8 +1325,8 @@ def main():
 
 
 def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = False) -> bool:
-    B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"; G = "\033[32m"
-    R = "\033[31m"; DM = "\033[2m"; Y = "\033[33m"
+    B = Colors.B; RS = Colors.RS; C = Colors.C; G = Colors.G
+    R = Colors.R; DM = Colors.DM; Y = Colors.Y
 
     entity = wiki.show(item_id)
     if not entity:
@@ -1463,8 +1484,8 @@ def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = Fa
 
 
 def _use_consumable(manager, wiki, item_name: str, qty: int = 1) -> bool:
-    B = "\033[1m"; RS = "\033[0m"; C = "\033[36m"; G = "\033[32m"
-    R = "\033[31m"; DM = "\033[2m"; Y = "\033[33m"
+    B = Colors.B; RS = Colors.RS; C = Colors.C; G = Colors.G
+    R = Colors.R; DM = Colors.DM; Y = Colors.Y
 
     entity = wiki.show(item_name)
     if not entity:
