@@ -56,11 +56,11 @@ else
     exit $CORE_RC
 fi
 
-# Post-hook for modules (custom-stats tick, action tracking)
+# Tick WorldGraph (custom stats, production, expenses, income, consequences)
 if [ -n "$ELAPSED_VAL" ] && [ "$ELAPSED_VAL" != "0" ] && [ "$ELAPSED_VAL" != "0.000000" ]; then
-    POST_ARGS="--elapsed $ELAPSED_VAL"
-    [ -n "$SLEEPING_VAL" ] && POST_ARGS="$POST_ARGS --sleeping"
-    dispatch_middleware_post "dm-time.sh" "$TIME_OF_DAY" "$DATE" "$TIME_OF_DAY" "$DATE" $POST_ARGS
+    TICK_ARGS="--elapsed $ELAPSED_VAL"
+    [ -n "$SLEEPING_VAL" ] && TICK_ARGS="$TICK_ARGS --sleeping"
+    $PYTHON_CMD "$LIB_DIR/world_graph.py" tick $TICK_ARGS 2>/dev/null
 fi
 
 exit ${CORE_RC:-0}

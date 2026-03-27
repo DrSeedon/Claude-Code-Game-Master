@@ -8,8 +8,6 @@ require_active_campaign
 ACTION=$1
 shift
 
-dispatch_middleware "dm-player.sh" "$ACTION" "$@" && exit $?
-
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 
 case "$ACTION" in
@@ -137,13 +135,29 @@ case "$ACTION" in
         ;;
 
     custom-stat)
-        dispatch_middleware "dm-player.sh" "custom-stat" "$@"
-        MRET=$?
-        if [ $MRET -ne 0 ]; then
-            echo "Error: custom-stat requires custom-stats module"
+        # Parse: custom-stat [char_name] <stat> [+/-delta] [--reason "text"]
+        STAT="" DELTA="" REASON=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --reason) REASON="$2"; shift 2 ;;
+                +*|-*) DELTA="$1"; shift ;;
+                *) [ -z "$STAT" ] && STAT="$1" && shift || shift ;;
+            esac
+        done
+        if [ -z "$STAT" ]; then
+            echo "Usage: dm-player.sh custom-stat [name] <stat> [+/-delta] [--reason text]"
             exit 1
         fi
-        exit $MRET
+        if [ -n "$DELTA" ]; then
+            RFLAG=""; [ -n "$REASON" ] && RFLAG="--reason $REASON"
+            $WG custom-stat "$STAT" "$DELTA" $RFLAG
+        else
+            $WG custom-stat "$STAT"
+        fi
+        ;;
+
+    custom-stats-list)
+        $WG custom-stat-list
         ;;
 
     *)
@@ -166,6 +180,4 @@ case "$ACTION" in
         ;;
 esac
 
-CORE_RC=$?
-dispatch_middleware_post "dm-player.sh" "$ACTION" "$@"
-exit $CORE_RC
+exit $?
