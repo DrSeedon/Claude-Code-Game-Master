@@ -17,7 +17,7 @@
 ## CORE tools (always available)
 | Tool | Lib | Purpose |
 |------|-----|---------|
-| `dm-roll.sh` | `dice.py` | Dice with `--label`, `--dc`, `--ac`. Auto-lookup: `--skill "name"`, `--save "name"`, `--attack "weapon"`, `--advantage`, `--disadvantage`. Reads character.json automatically. |
+| `dm-roll.sh` | `dice.py` | Dice with `--label`, `--dc`, `--ac`. Auto-lookup: `--skill "name"`, `--save "name"`, `--attack "weapon"`, `--advantage`, `--disadvantage`. Reads character.json automatically. Auto-combat: `--target "creature"` (player attacks, AC from wiki), `--defend --from "creature"` (creature attacks, stats from wiki). Auto-damage on hit. |
 | `dm-inventory.sh` | `inventory_manager.py` | Items, weight, gold, HP/XP, transfers, `remove` (sold/destroyed/consumed), `use` (auto-consume via wiki), `craft` (auto-craft via wiki recipe). Always use `--qty N`, never call multiple times. |
 | `dm-status.sh` | `inventory_manager.py status` | Compact inventory for session start |
 | `dm-player.sh` | `player_manager.py` | XP, HP, HP max, gold, conditions |

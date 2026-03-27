@@ -29,6 +29,34 @@ Use auto-lookup for ALL player character rolls. Fall back to manual notation onl
 - Custom/situational rolls (damage, healing, random tables)
 - Rolls with ad-hoc modifiers not in character.json
 
+## Auto-Combat (creatures from wiki)
+
+Creatures stored in wiki.json as type `creature` with mechanics (hp, ac, attack_bonus, damage). Auto-combat rolls attack + damage in one call.
+
+```bash
+# Player attacks creature — weapon from character.json, AC from wiki, auto-damage on hit
+bash tools/dm-roll.sh --attack "Longsword" --target "goblin"
+
+# Same but auto-picks equipped weapon
+bash tools/dm-roll.sh --target "goblin"
+
+# Creature attacks player — attack_bonus+damage from wiki, player AC from character.json
+bash tools/dm-roll.sh --defend --from "goblin"
+
+# With advantage/disadvantage
+bash tools/dm-roll.sh --target "goblin" --advantage
+bash tools/dm-roll.sh --defend --from "goblin" --disadvantage
+```
+
+**Adding creatures to wiki:**
+```bash
+bash tools/dm-wiki.sh add "goblin" --name "Goblin" --type creature \
+  --stat "hp:7" --stat "ac:13" --stat "attack_bonus:4" --stat "damage:1d6+1" \
+  --stat "speed:30" --stat "xp:50"
+```
+
+**On hit:** auto-rolls damage dice. On crit: doubles damage dice. On miss: no damage roll.
+
 ## Manual Notation (for NPCs, damage, custom rolls)
 
 ```bash
@@ -118,6 +146,9 @@ Damage has no pass/fail — just `--label`. No `--dc` or `--ac` needed.
 | `--skill "name"` | Auto-lookup skill total + dc_mod from character.json | Player skill checks (preferred) |
 | `--save "name"` | Auto-lookup save modifier from character.json | Player saving throws (preferred) |
 | `--attack "weapon"` | Auto-lookup weapon stats from character.json | Player attack rolls (preferred) |
+| `--target "creature"` | Auto-lookup creature AC from wiki, auto-damage on hit | Combat: player attacks creature |
+| `--defend` | Creature attacks player | Combat: creature turn |
+| `--from "creature"` | Creature doing the attacking (with --defend) | Combat: creature turn |
 | `--advantage` | Roll 2d20, keep highest | Advantage |
 | `--disadvantage` | Roll 2d20, keep lowest | Disadvantage |
 | `--label "text"` | Who and what | NPC/monster/custom rolls |

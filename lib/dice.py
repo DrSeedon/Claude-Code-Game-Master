@@ -266,20 +266,50 @@ def roll_formatted(notation: str) -> str:
     return _roller.format_result(result)
 
 
-def _load_character():
-    """Load active character from campaign."""
+def _get_campaign_path():
+    """Get active campaign directory path."""
     from pathlib import Path
     root = next(p for p in Path(__file__).parents if (p / ".git").exists())
     active_file = root / "world-state" / "active-campaign.txt"
     if not active_file.exists():
         return None
     campaign = active_file.read_text().strip()
-    char_file = root / "world-state" / "campaigns" / campaign / "character.json"
+    return root / "world-state" / "campaigns" / campaign
+
+
+def _load_character():
+    """Load active character from campaign."""
+    import json
+    campaign_dir = _get_campaign_path()
+    if not campaign_dir:
+        return None
+    char_file = campaign_dir / "character.json"
     if not char_file.exists():
         return None
-    import json
     with open(char_file) as f:
         return json.load(f)
+
+
+def _load_creature(name):
+    """Load creature stats from wiki.json by ID or fuzzy name match."""
+    import json
+    campaign_dir = _get_campaign_path()
+    if not campaign_dir:
+        return None
+    wiki_file = campaign_dir / "wiki.json"
+    if not wiki_file.exists():
+        return None
+    with open(wiki_file) as f:
+        wiki = json.load(f)
+    name_lower = name.lower()
+    if name_lower in wiki and wiki[name_lower].get("type") == "creature":
+        return wiki[name_lower]
+    for eid, data in wiki.items():
+        if not isinstance(data, dict) or data.get("type") != "creature":
+            continue
+        if name_lower in eid.lower() or name_lower in data.get("name", "").lower():
+            return data
+    return None
 
 
 def _resolve_skill(char, skill_name):
@@ -365,6 +395,9 @@ def main():
     parser.add_argument("--skill", "-s", help="Skill name (auto-lookup modifier from character.json)")
     parser.add_argument("--save", help="Save name: str/dex/con/int/wis/cha or Russian abbrev")
     parser.add_argument("--attack", nargs="?", const="", help="Attack roll (optional: weapon/skill name)")
+    parser.add_argument("--target", "-t", help="Target creature (auto-lookup AC from wiki, auto-damage on hit)")
+    parser.add_argument("--defend", action="store_true", help="Creature attacks player (use with --from)")
+    parser.add_argument("--from", dest="from_creature", help="Creature attacking (auto-lookup attack+damage from wiki)")
     parser.add_argument("--advantage", "--adv", action="store_true", help="Roll with advantage (2d20kh1)")
     parser.add_argument("--disadvantage", "--dis", action="store_true", help="Roll with disadvantage (2d20kl1)")
     args = parser.parse_args()
@@ -408,6 +441,63 @@ def main():
         if not label:
             label = f"Attack: {atk_name} ({char_name}) [dmg: {atk_damage}]"
 
+    creature_data = None
+    damage_dice = None
+
+    if args.target:
+        creature_data = _load_creature(args.target)
+        if not creature_data:
+            print(f"Error: Creature '{args.target}' not found in wiki", file=sys.stderr)
+            sys.exit(1)
+        mechanics = creature_data.get('mechanics', {})
+        creature_ac = int(mechanics.get('ac', mechanics.get('AC', 10)))
+        ac = creature_ac
+        creature_name = creature_data.get('name', args.target)
+        if args.attack is not None:
+            if not label:
+                label = f"Attack: {atk_name} → {creature_name} ({char_name})"
+            damage_dice = atk_damage
+        elif args.skill:
+            pass
+        else:
+            if not char:
+                char = _load_character()
+            if char:
+                char_name = char.get('name', '?')
+                mod, atk_name, atk_damage = _resolve_attack(char, None)
+                notation = f"1d20+{mod}" if mod >= 0 else f"1d20{mod}"
+                if not label:
+                    label = f"Attack: {atk_name} → {creature_name} ({char_name})"
+                damage_dice = atk_damage
+
+    if args.defend and args.from_creature:
+        creature_data = _load_creature(args.from_creature)
+        if not creature_data:
+            print(f"Error: Creature '{args.from_creature}' not found in wiki", file=sys.stderr)
+            sys.exit(1)
+        mechanics = creature_data.get('mechanics', {})
+        creature_name = creature_data.get('name', args.from_creature)
+        atk_bonus = int(mechanics.get('attack_bonus', mechanics.get('attack', 0)))
+        creature_dmg = mechanics.get('damage', '1d6')
+        notation = f"1d20+{atk_bonus}" if atk_bonus >= 0 else f"1d20{atk_bonus}"
+        if not char:
+            char = _load_character()
+        if char:
+            char_name = char.get('name', '?')
+            equipment = char.get('equipment', {})
+            armor = equipment.get('armor', {})
+            player_ac = armor.get('base_ac', 10)
+            if armor.get('dex_bonus', True):
+                dex_mod = (char.get('stats', {}).get('dex', 10) - 10) // 2
+                max_dex = armor.get('max_dex')
+                if max_dex is not None:
+                    dex_mod = min(dex_mod, max_dex)
+                player_ac += dex_mod
+            ac = player_ac
+        if not label:
+            label = f"{creature_name} attacks {char_name if char else '?'} [dmg: {creature_dmg}]"
+        damage_dice = creature_dmg
+
     if args.advantage and notation and 'd20' in notation:
         notation = notation.replace('1d20', '2d20kh1')
     elif args.disadvantage and notation and 'd20' in notation:
@@ -420,10 +510,36 @@ def main():
     roller = DiceRoller()
     try:
         result = roller.roll(notation)
-        if label or dc or ac:
-            print(format_enhanced(result, label=label, dc=dc, ac=ac))
-        else:
-            print(format_enhanced(result))
+        line = format_enhanced(result, label=label, dc=dc, ac=ac)
+        print(line)
+
+        is_hit = False
+        if ac:
+            is_hit = result['total'] >= ac or result.get('natural_20', False)
+        is_crit = result.get('natural_20', False)
+        is_fumble = result.get('natural_1', False)
+
+        if damage_dice and is_hit and not is_fumble:
+            if is_crit:
+                parts = damage_dice.split('+')
+                dice_part = parts[0]
+                m = re.match(r'(\d+)d(\d+)', dice_part)
+                if m:
+                    crit_dice = f"{int(m.group(1)) * 2}d{m.group(2)}"
+                    if len(parts) > 1:
+                        crit_dice += '+' + parts[1]
+                    dmg_result = roller.roll(crit_dice)
+                    dmg_line = format_enhanced(dmg_result, label="CRIT Damage")
+                else:
+                    dmg_result = roller.roll(damage_dice)
+                    dmg_line = format_enhanced(dmg_result, label="Damage")
+            else:
+                dmg_result = roller.roll(damage_dice)
+                dmg_line = format_enhanced(dmg_result, label="Damage")
+            print(dmg_line)
+        elif damage_dice and not is_hit:
+            pass
+
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)

@@ -17,12 +17,11 @@ Upstream repo maintainer inactive — 0 activity, PRs not reviewed. `lib/` is ou
 - Визуализация графа (опционально)
 - Делать ПОСЛЕ того как wiki.json (вариант Б) покажет себя в игре
 
-## Auto-Combat in dm-roll.sh
-- `--attack "weapon" --target "скелет"` → lookup weapon from equipment + enemy AC/stats from wiki
-- `--defend --from "скелет"` → enemy attacks us, lookup enemy attack from wiki + our AC from equipment
-- Enemies stored in wiki.json as type `creature` with mechanics: HP, AC, attack, damage
-- Bonus/penalty flags: `--bonus 2` `--penalty -3` for situational modifiers
-- Auto-damage roll on hit: show damage dice from weapon/creature
+## ~~Auto-Combat in dm-roll.sh~~ ✅ DONE
+- `--target "creature"` → weapon from character.json + AC from wiki + auto-damage on hit
+- `--defend --from "creature"` → creature attack_bonus+damage from wiki + player AC from character.json
+- Creatures in wiki.json as type `creature` with mechanics: hp, ac, attack_bonus, damage
+- Crits double damage dice. Fumbles skip damage
 
 ## Saves as Structured Format (like skills)
 - Convert saves from flat `{"инт": 7}` to `{"инт": {"total": 7, "breakdown": {"INT": 4, "proficiency": 3}}}`
