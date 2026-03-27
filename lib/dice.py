@@ -374,12 +374,15 @@ def _resolve_attack(char, weapon_name=None):
         total = stat_mod + prof_bonus + weapon_bonus
         name = target_weapon.get('name', '?')
         damage = target_weapon.get('damage', '1d4')
-        return total, name, damage
+        ammo = target_weapon.get('ammo_type', None)
+        range_normal = target_weapon.get('range_normal', None)
+        range_long = target_weapon.get('range_long', None)
+        return total, name, damage, ammo, range_normal, range_long
 
     skills = char.get('skills', {})
     melee = skills.get('ближний бой', {})
     mod = melee.get('total', 0) if isinstance(melee, dict) else int(melee) if melee else 0
-    return mod, 'ближний бой', '1d4'
+    return mod, 'ближний бой', '1d4', None, None, None
 
 
 def _load_spell(name):
@@ -433,6 +436,7 @@ def main():
     parser.add_argument("--target", "-t", help="Target creature (auto-lookup AC from wiki, auto-damage on hit)")
     parser.add_argument("--defend", action="store_true", help="Creature attacks player (use with --from)")
     parser.add_argument("--from", dest="from_creature", help="Creature attacking (auto-lookup attack+damage from wiki)")
+    parser.add_argument("--range", type=int, help="Distance to target in feet (auto-applies disadvantage if beyond normal range)")
     parser.add_argument("--advantage", "--adv", action="store_true", help="Roll with advantage (2d20kh1)")
     parser.add_argument("--disadvantage", "--dis", action="store_true", help="Roll with disadvantage (2d20kl1)")
     args = parser.parse_args()
@@ -442,6 +446,11 @@ def main():
     label = args.label
     dc = args.dc
     ac = args.ac
+    atk_ammo = None
+    atk_range_n = None
+    atk_range_l = None
+    atk_name = None
+    atk_damage = None
 
     if args.skill or args.save or args.attack is not None:
         char = _load_character()
@@ -471,7 +480,7 @@ def main():
             label = f"{save_name.upper()} Save ({char_name})"
 
     elif args.attack is not None:
-        mod, atk_name, atk_damage = _resolve_attack(char, args.attack if args.attack else None)
+        mod, atk_name, atk_damage, atk_ammo, atk_range_n, atk_range_l = _resolve_attack(char, args.attack if args.attack else None)
         notation = f"1d20+{mod}" if mod >= 0 else f"1d20{mod}"
         if not label:
             label = f"Attack: {atk_name} ({char_name}) [dmg: {atk_damage}]"
@@ -579,7 +588,7 @@ def main():
                 char = _load_character()
             if char:
                 char_name = char.get('name', '?')
-                mod, atk_name, atk_damage = _resolve_attack(char, None)
+                mod, atk_name, atk_damage, atk_ammo, atk_range_n, atk_range_l = _resolve_attack(char, None)
                 notation = f"1d20+{mod}" if mod >= 0 else f"1d20{mod}"
                 if not label:
                     label = f"Attack: {atk_name} → {creature_name} ({char_name})"
@@ -612,6 +621,20 @@ def main():
         if not label:
             label = f"{creature_name} attacks {char_name if char else '?'} [dmg: {creature_dmg}]"
         damage_dice = creature_dmg
+
+    weapon_ammo = atk_ammo
+    w_range_n = atk_range_n
+    w_range_l = atk_range_l
+
+    if args.range and w_range_n:
+        max_range = int(w_range_l) if w_range_l else int(w_range_n) * 4
+        if args.range > max_range:
+            print(f"  \u26a0\ufe0f Target beyond maximum range ({max_range}ft)!")
+            sys.exit(0)
+        elif args.range > int(w_range_n):
+            print(f"  {Colors.DIM}\U0001f4cf Long range ({args.range}ft > {w_range_n}ft) \u2192 disadvantage{Colors.RESET}")
+            if not args.advantage:
+                args.disadvantage = True
 
     if args.advantage and notation and 'd20' in notation:
         notation = notation.replace('1d20', '2d20kh1')
@@ -658,6 +681,23 @@ def main():
             print(dmg_line)
         elif damage_dice and not is_hit:
             pass
+
+        if weapon_ammo and (args.attack is not None or args.target):
+            import subprocess
+            campaign_dir = _get_campaign_path()
+            if campaign_dir:
+                char_name_ammo = char.get('name', 'Unknown') if char else 'Unknown'
+                ammo_result = subprocess.run(
+                    ["bash", "tools/dm-inventory.sh", "remove", char_name_ammo, weapon_ammo, "--qty", "1"],
+                    capture_output=True, text=True,
+                    cwd=str(campaign_dir.parent.parent.parent)
+                )
+                if ammo_result.returncode == 0 and ammo_result.stdout.strip():
+                    print(ammo_result.stdout.strip())
+                elif "not found" in (ammo_result.stderr or ""):
+                    RS = "\033[0m"
+                    BR = "\033[1;31m"
+                    print(f"  {BR}\u26a0\ufe0f No {weapon_ammo} left!{RS}")
 
     except ValueError as e:
         print(f"Error: {e}")
