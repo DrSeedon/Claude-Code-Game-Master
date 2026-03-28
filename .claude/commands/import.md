@@ -237,23 +237,67 @@ Use AskUserQuestion with these options:
 
 ---
 
-## Step 6: Copy Extracted Files and Archive
+## Step 6: Import Extracted Data into WorldGraph
 
-After all agents complete:
+After all agents complete, import extracted JSON files into world.json:
 
 ```bash
-# Copy extracted files to campaign root
 CAMPAIGN_DIR="world-state/campaigns/<campaign-name>"
-cp "$CAMPAIGN_DIR/extracted/npcs.json" "$CAMPAIGN_DIR/npcs.json"
-cp "$CAMPAIGN_DIR/extracted/locations.json" "$CAMPAIGN_DIR/locations.json"
-cp "$CAMPAIGN_DIR/extracted/items.json" "$CAMPAIGN_DIR/items.json"
-cp "$CAMPAIGN_DIR/extracted/plots.json" "$CAMPAIGN_DIR/plots.json"
+
+# Import extracted data into world.json via Python
+uv run python -c "
+import json, re, sys
+sys.path.insert(0, 'lib')
+from world_graph import WorldGraph
+
+g = WorldGraph()
+cd = '$CAMPAIGN_DIR'
+
+TRANSLIT = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}
+def slug(name):
+    s = name.lower()
+    out = [TRANSLIT.get(ch, ch) for ch in s]
+    return re.sub(r'[^a-z0-9]+', '-', ''.join(out)).strip('-') or 'unknown'
+
+# NPCs
+try:
+    npcs = json.load(open(f'{cd}/extracted/npcs.json'))
+    for name, data in npcs.items():
+        g.npc_create(name, data.get('description', ''), data.get('attitude', 'neutral'))
+    print(f'  NPCs: {len(npcs)}')
+except: pass
+
+# Locations
+try:
+    locs = json.load(open(f'{cd}/extracted/locations.json'))
+    for name, data in locs.items():
+        g.location_create(name, data.get('description', data.get('position', '')))
+    print(f'  Locations: {len(locs)}')
+except: pass
+
+# Plots
+try:
+    plots = json.load(open(f'{cd}/extracted/plots.json'))
+    for pid, data in plots.items():
+        g.quest_create(data.get('description', pid)[:60], data.get('type', 'side'), data.get('description', ''))
+    print(f'  Quests: {len(plots)}')
+except: pass
+
+# Items
+try:
+    items = json.load(open(f'{cd}/extracted/items.json'))
+    for name, data in items.items():
+        nid = f'item:{slug(name)}'
+        g.add_node(nid, 'item', name, data)
+    print(f'  Items: {len(items)}')
+except: pass
+"
 
 # Archive the extracted/ folder (temporary working directory)
 bash tools/dm-extract.sh archive "<campaign-name>"
 ```
 
-**Note**: The `extracted/` folder is a temporary working directory. After copying files to the campaign root, archive it to keep the campaign folder clean.
+**Note**: The `extracted/` folder is a temporary working directory. Data is imported into `world.json`. Archive after import.
 
 ---
 
@@ -267,10 +311,7 @@ Count and display what was extracted:
 
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
-uv run python -c "import json; d=json.load(open('$CAMPAIGN_DIR/npcs.json')); print(f'NPCs: {len(d)}')"
-uv run python -c "import json; d=json.load(open('$CAMPAIGN_DIR/locations.json')); print(f'Locations: {len(d)}')"
-uv run python -c "import json; d=json.load(open('$CAMPAIGN_DIR/items.json')); print(f'Items: {len(d)}')"
-uv run python -c "import json; d=json.load(open('$CAMPAIGN_DIR/plots.json')); print(f'Plot Hooks: {len(d)}')"
+bash tools/dm-world.sh stats
 ```
 
 Display the summary:
@@ -364,15 +405,12 @@ All content is stored in:
 world-state/campaigns/<campaign-name>/
 ├── chunks/              # Text chunks from document
 ├── vectors/             # ChromaDB embeddings for RAG queries
-├── extracted/           # Individual agent outputs
+├── extracted/           # Individual agent outputs (temporary)
 │   ├── npcs.json
 │   ├── locations.json
 │   ├── items.json
 │   └── plots.json
-├── npcs.json            # Final NPC data (copied from extracted/)
-├── locations.json       # Final location data
-├── items.json           # Final item data
-├── plots.json           # Final quest/plot data
+├── world.json           # Unified entity graph (imported from extracted/)
 ├── campaign-overview.json
 ├── session-log.md
 └── current-document.txt # Full extracted text
