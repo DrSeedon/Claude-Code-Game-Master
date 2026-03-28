@@ -93,6 +93,10 @@ bash .claude/additional/infrastructure/tools/dm-module.sh list-verbose
   sense. E.g. for survival/STALKER → firearms-combat + world-travel.
   For classic D&D → no extras. For open world → world-travel + mass-combat.
   Write 1-2 sentences why each suggested module fits the vibe.
+
+  ℹ️  Custom stats (hunger, mana, sanity, reputation etc.) are CORE
+  features — no module needed. Configure after world creation via
+  dm-world.sh custom-stat-define or in campaign-rules.md.
   ────────────────────────────────────────────────────────────
   Type numbers to toggle (e.g. "1 2") or ENTER to keep current.
 
@@ -126,6 +130,8 @@ These rules tell you HOW to handle world-building for each active module:
 - **world-travel**: How to generate locations with coordinates and encounters
 - **firearms-combat**: Weapon presets and firearms system configuration
 - **mass-combat**: Unit templates and battle setup
+
+**Note:** Custom stats (hunger, mana, sanity, reputation etc.) are CORE features — no module needed. Define them via `dm-world.sh custom-stat-define` or in campaign-rules.md.
 
 **The creation rules augment (not replace) the phases below.**
 Follow module-specific instructions when they apply to that phase.
@@ -481,6 +487,36 @@ bash tools/dm-consequence.sh add "[Strange event occurs]" "2 days"
 bash tools/dm-consequence.sh add "[Rumor arrives from afar]" "1 week"
 ```
 
+### Initialize Player Node
+
+Create an empty player node in world.json for character creation to fill later:
+
+```bash
+bash tools/dm-world.sh add-node "player:active" --name "Player" --type player --data '{"level": 1, "hp": {"current": 10, "max": 10}, "ac": 10, "money": 0, "xp": {"current": 0, "next_level": 300}, "stats": {}, "skills": {}, "save_proficiencies": [], "conditions": [], "equipment": {"armor": {}, "weapons": []}, "custom_stats": {}, "timed_effects": []}'
+```
+
+### Initialize Economy Node
+
+Create economy node for recurring mechanics (expenses, income, production, random events):
+
+```bash
+bash tools/dm-world.sh add-node "campaign:economy" --name "Economy & Events" --type campaign --data '{"expenses": [], "income": [], "production": [], "random_events": {"enabled": false}}'
+```
+
+### Setup Custom Stats (if campaign template defines them)
+
+Based on campaign rules template, define relevant custom stats:
+
+```bash
+# Examples by genre:
+# Survival: hunger, thirst, morale, radiation
+bash tools/dm-world.sh custom-stat-define hunger --value 100 --max 100 --min 0 --rate -5
+# Horror: sanity, dread
+bash tools/dm-world.sh custom-stat-define sanity --value 100 --max 100 --min 0 --rate -1
+# Dark fantasy: dark_power, suspicion
+bash tools/dm-world.sh custom-stat-define dark_power --value 0 --max 100 --min 0 --rate -0.08
+```
+
 ### Update Status
 
 As each element completes:
@@ -545,7 +581,7 @@ cat > "$CAMPAIGN_DIR/session-log.md" << EOF
 ### World Summary
 - **Starting Location**: [Location name]
 - **Initial NPCs**: [List the 6 NPC names]
-- **Plot Hooks**: [List the 3 quest names from plots.json]
+- **Plot Hooks**: [List the 3 quest names]
 
 Ready for character creation.
 
@@ -614,12 +650,15 @@ Then automatically run `/create-character` to guide the user through character c
 
 Before transitioning to character creation, verify:
 
-- [ ] Campaign folder exists with all JSON files
+- [ ] world.json exists with player node, locations, NPCs, quests
+- [ ] Player node in world.json (player:active)
+- [ ] Economy node in world.json (campaign:economy)
 - [ ] Starting location + 3-4 connected locations
 - [ ] All locations connected via paths
 - [ ] 6 NPCs with descriptions and locations
-- [ ] 3 plot hooks in plots.json (via dm-plot.sh add)
+- [ ] 3 plot hooks (via dm-plot.sh add)
 - [ ] 3+ consequences scheduled
+- [ ] Custom stats defined (if campaign template requires them)
 - [ ] Session log initialized
 - [ ] Campaign overview updated with settings
 - [ ] `advanced_mode` written to campaign-overview.json
