@@ -11,7 +11,7 @@ Generate complete dungeon structures for exploration gameplay.
 
 ## When to Spawn
 - Player enters a new cave, ruin, lair, or underground complex
-- No pre-defined room structure exists in locations.json
+- No pre-defined room structure exists in world.json
 - DM wants procedural dungeon generation
 - Run in **background** - don't block gameplay
 - `/enhance` is called on a dungeon location
@@ -199,7 +199,7 @@ Include a mix of:
 ## After Generation
 
 1. **Return the JSON** to the main DM
-2. DM integrates rooms into campaign's `locations.json`
+2. DM integrates rooms into campaign's `world.json` via dm-location.sh
 3. Entry room gets `discovered: true, visited: true` immediately
 4. Other rooms discovered as player explores
 

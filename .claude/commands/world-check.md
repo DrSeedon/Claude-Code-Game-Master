@@ -45,24 +45,23 @@ Covered by the schema validator above. Only add custom checks here if needed.
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/locations.json', 'r') as f:
-    locations = json.load(f)
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+locations = {k: v for k, v in nodes.items() if v.get('type') == 'location'}
 
 print(f'📍 LOCATIONS: {len(locations)} total')
 
-# Check for descriptions and connections
-for name, data in locations.items():
+for loc_id, node in locations.items():
+    data = node.get('data', {})
+    name = data.get('name', loc_id)
     desc_len = len(data.get('description', ''))
     conn_count = len(data.get('connections', []))
 
     status = '✅' if desc_len > 50 else '⚠️'
     print(f'{status} {name}: {desc_len} chars, {conn_count} connections')
 
-    # Check for orphaned locations
     if conn_count == 0:
         print(f'   ⚠️ No connections - orphaned location!')
 " "$CAMPAIGN_DIR"
@@ -72,23 +71,21 @@ for name, data in locations.items():
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/npcs.json', 'r') as f:
-    npcs = json.load(f)
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+npcs = {k: v for k, v in nodes.items() if v.get('type') == 'npc'}
 
 print(f'🎭 NPCS: {len(npcs)} total')
 
-for name, data in npcs.items():
+for npc_id, node in npcs.items():
+    data = node.get('data', {})
+    name = data.get('name', npc_id)
     desc_len = len(data.get('description', ''))
     tags = data.get('tags', {})
 
-    # Check description length
     desc_status = '✅' if desc_len > 80 else '⚠️'
-
-    # Check tags
     location_tags = tags.get('locations', [])
     quest_tags = tags.get('quests', [])
 
@@ -107,41 +104,33 @@ for name, data in npcs.items():
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
 import json, sys
-from pathlib import Path
-
 campaign_dir = sys.argv[1]
-plots_path = Path(campaign_dir) / 'plots.json'
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+quests = {k: v for k, v in nodes.items() if v.get('type') == 'quest'}
 
 print('📜 PLOT STRUCTURE:')
 
-if not plots_path.exists():
-    print('❌ plots.json missing — no quests created')
-    sys.exit(0)
-
-with open(plots_path, 'r') as f:
-    plots = json.load(f)
-
-if not plots:
-    print('❌ plots.json is empty — no quests')
+if not quests:
+    print('❌ No quests in world.json')
     sys.exit(0)
 
 by_type = {}
-for name, data in plots.items():
-    if not isinstance(data, dict):
-        continue
+for quest_id, node in quests.items():
+    data = node.get('data', {})
+    name = data.get('name', quest_id)
     t = data.get('type', 'other')
     by_type.setdefault(t, []).append(name)
 
 for t in ['main', 'side', 'mystery', 'threat']:
     names = by_type.get(t, [])
     if names:
-        print(f'✅ {t}: {len(names)} — {', '.join(names)}')
+        print(f'✅ {t}: {len(names)} — {\", \".join(names)}')
     else:
         print(f'⚠️  {t}: none')
 
-active = sum(1 for d in plots.values() if isinstance(d, dict) and d.get('status') == 'active')
-total = len([d for d in plots.values() if isinstance(d, dict)])
-print(f'📊 Total: {total} ({active} active)')
+active = sum(1 for node in quests.values() if node.get('data', {}).get('status') == 'active')
+print(f'📊 Total: {len(quests)} ({active} active)')
 " "$CAMPAIGN_DIR"
 ```
 
@@ -149,25 +138,25 @@ print(f'📊 Total: {total} ({active} active)')
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/consequences.json', 'r') as f:
-    data = json.load(f)
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+consequences = {k: v for k, v in nodes.items() if v.get('type') == 'consequence'}
 
-active = data.get('active', [])
-resolved = data.get('resolved', [])
+active = [v for v in consequences.values() if v.get('data', {}).get('status') != 'resolved']
+resolved = [v for v in consequences.values() if v.get('data', {}).get('status') == 'resolved']
 
 print(f'⏰ CONSEQUENCES:')
 print(f'   Active: {len(active)}')
 print(f'   Resolved: {len(resolved)}')
 
 if active:
-    print('\\n   Scheduled Events:')
-    for cons in active:
-        trigger = cons.get('trigger', 'unknown')
-        desc = cons.get('consequence', '')[:50]
+    print('\n   Scheduled Events:')
+    for node in active:
+        data = node.get('data', {})
+        trigger = data.get('trigger', 'unknown')
+        desc = data.get('consequence', data.get('description', ''))[:50]
         print(f'   • {trigger}: {desc}...')
 " "$CAMPAIGN_DIR"
 ```
@@ -180,28 +169,28 @@ if active:
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/locations.json', 'r') as f:
-    locations = json.load(f)
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+locations = {k: v for k, v in nodes.items() if v.get('type') == 'location'}
+loc_names = {v.get('data', {}).get('name', k) for k in locations}
+loc_ids = set(locations.keys())
 
 print('🔗 LOCATION CONNECTIONS:')
 
-# Build connection graph
 connections = {}
-for name, data in locations.items():
+for loc_id, node in locations.items():
+    data = node.get('data', {})
+    name = data.get('name', loc_id)
     connections[name] = []
     for conn in data.get('connections', []):
         target = conn.get('to', '')
         if target:
             connections[name].append(target)
-            # Check if target exists
-            if target not in locations:
+            if target not in loc_ids and target not in loc_names:
                 print(f'❌ {name} connects to non-existent {target}')
 
-# Find orphaned locations
 orphaned = [name for name, conns in connections.items() if len(conns) == 0]
 if orphaned:
     print(f'⚠️ Orphaned locations (no connections): {orphaned}')
@@ -214,33 +203,26 @@ else:
 ```bash
 CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
-with open(f'{campaign_dir}/npcs.json', 'r') as f:
-    npcs = json.load(f)
-with open(f'{campaign_dir}/locations.json', 'r') as f:
-    locations = json.load(f)
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+npcs = {k: v for k, v in nodes.items() if v.get('type') == 'npc'}
+loc_ids = {k for k, v in nodes.items() if v.get('type') == 'location'}
+loc_names = {v.get('data', {}).get('name', k) for k in loc_ids}
 
 print('🏠 NPC LOCATION TAGS:')
 
-location_names = list(locations.keys())
 issues = []
-
-for name, data in npcs.items():
+for npc_id, node in npcs.items():
+    data = node.get('data', {})
+    name = data.get('name', npc_id)
     location_tags = data.get('tags', {}).get('locations', [])
     if not location_tags:
         issues.append(f'⚠️ {name} has no location tags')
-    else:
-        # Verify locations exist
-        for tag in location_tags:
-            # Tags might be slugified versions of location names
-            # This is a loose check - adjust based on your tagging convention
-            pass  # For now, just note they have tags
 
 if issues:
-    for issue in issues[:5]:  # Show first 5 issues
+    for issue in issues[:5]:
         print(issue)
 else:
     print('✅ All NPCs have location tags')
@@ -263,10 +245,19 @@ Campaign: $(bash tools/dm-campaign.sh active)
 
 # Quick stats
 echo "📊 QUICK STATS:"
-echo "   Locations: $(uv run python -c "import json; print(len(json.load(open('$CAMPAIGN_DIR/locations.json'))))")"
-echo "   NPCs: $(uv run python -c "import json; print(len(json.load(open('$CAMPAIGN_DIR/npcs.json'))))")"
-echo "   Active Plots: $(uv run python -c "import json; f=json.load(open('$CAMPAIGN_DIR/facts.json')); print(len([k for k in f.keys() if 'plot_' in k]))")"
-echo "   Consequences: $(uv run python -c "import json; print(len(json.load(open('$CAMPAIGN_DIR/consequences.json')).get('active', [])))")"
+uv run python -c "
+import json
+world = json.load(open('$CAMPAIGN_DIR/world.json'))
+nodes = world.get('nodes', {})
+locs = sum(1 for v in nodes.values() if v.get('type') == 'location')
+npcs = sum(1 for v in nodes.values() if v.get('type') == 'npc')
+quests = sum(1 for v in nodes.values() if v.get('type') == 'quest' and v.get('data', {}).get('status') == 'active')
+cons = sum(1 for v in nodes.values() if v.get('type') == 'consequence' and v.get('data', {}).get('status') != 'resolved')
+print(f'   Locations: {locs}')
+print(f'   NPCs: {npcs}')
+print(f'   Active Plots: {quests}')
+print(f'   Consequences: {cons}')
+"
 
 echo "
 🎯 READINESS CHECKLIST:
@@ -274,36 +265,33 @@ echo "
 
 # Campaign ready check
 uv run python -c "
-import json
-import sys
-
+import json, sys
 campaign_dir = sys.argv[1]
+world = json.load(open(f'{campaign_dir}/world.json'))
+nodes = world.get('nodes', {})
+overview = json.load(open(f'{campaign_dir}/campaign-overview.json'))
 ready = True
 issues = []
 
-# Check campaign overview
-with open(f'{campaign_dir}/campaign-overview.json', 'r') as f:
-    campaign = json.load(f)
-    if not campaign.get('campaign_name'):
-        issues.append('❌ No campaign name set')
-        ready = False
-    if not campaign.get('player_position', {}).get('current_location'):
-        issues.append('❌ No starting location set')
-        ready = False
+if not overview.get('campaign_name'):
+    issues.append('❌ No campaign name set')
+    ready = False
+if not overview.get('player_position', {}).get('current_location'):
+    issues.append('❌ No starting location set')
+    ready = False
 
-# Check minimum content
-with open(f'{campaign_dir}/locations.json', 'r') as f:
-    if len(json.load(f)) < 3:
-        issues.append('❌ Less than 3 locations')
-        ready = False
+locations = [v for v in nodes.values() if v.get('type') == 'location']
+if len(locations) < 3:
+    issues.append('❌ Less than 3 locations')
+    ready = False
 
-with open(f'{campaign_dir}/npcs.json', 'r') as f:
-    if len(json.load(f)) < 4:
-        issues.append('❌ Less than 4 NPCs')
-        ready = False
+npcs = [v for v in nodes.values() if v.get('type') == 'npc']
+if len(npcs) < 4:
+    issues.append('❌ Less than 4 NPCs')
+    ready = False
 
 if issues:
-    print('\\n'.join(issues))
+    print('\n'.join(issues))
 else:
     print('✅ World is ready for play!')
     print('✅ Run /dm to begin!')

@@ -31,17 +31,18 @@ CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python - "$CAMPAIGN_DIR" << 'PYEOF'
 import json, sys
 cd = sys.argv[1]
-npcs = json.loads(open(f"{cd}/npcs.json").read())
-plots = json.loads(open(f"{cd}/plots.json").read())
+world = json.load(open(f"{cd}/world.json"))
+nodes = world.get("nodes", {})
+npcs = {k: v for k, v in nodes.items() if v.get("type") == "npc"}
+quests = {k: v for k, v in nodes.items() if v.get("type") == "quest"}
 
-active_quests = {k for k, v in plots.items() if isinstance(v, dict) and v.get("status") not in ("completed", "failed")}
-completed_quests = {k for k, v in plots.items() if isinstance(v, dict) and v.get("status") in ("completed", "failed")}
+completed_quests = {k for k, v in quests.items() if v.get("data", {}).get("status") in ("completed", "failed")}
 
 issues = []
-for npc_name, npc in npcs.items():
-    if not isinstance(npc, dict):
-        continue
-    tagged_quests = npc.get("tags", {}).get("quests", [])
+for npc_id, npc in npcs.items():
+    npc_data = npc.get("data", {})
+    npc_name = npc_data.get("name", npc_id)
+    tagged_quests = npc_data.get("tags", {}).get("quests", [])
     for q in tagged_quests:
         if q in completed_quests:
             issues.append(f"NPC '{npc_name}' tagged to completed quest '{q}' — remove tag")
@@ -63,23 +64,25 @@ CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python - "$CAMPAIGN_DIR" << 'PYEOF'
 import json, sys
 cd = sys.argv[1]
-npcs = json.loads(open(f"{cd}/npcs.json").read())
-locs = json.loads(open(f"{cd}/locations.json").read())
-char = json.loads(open(f"{cd}/character.json").read())
-overview = json.loads(open(f"{cd}/campaign-overview.json").read())
+world = json.load(open(f"{cd}/world.json"))
+nodes = world.get("nodes", {})
+overview = json.load(open(f"{cd}/campaign-overview.json"))
+
+npcs = {k: v for k, v in nodes.items() if v.get("type") == "npc"}
+loc_ids = {k for k, v in nodes.items() if v.get("type") == "location"}
 
 issues = []
 
 cur_loc = overview.get("player_position", {}).get("current_location", overview.get("current_location", ""))
-if cur_loc and cur_loc not in locs:
-    issues.append(f"Player at '{cur_loc}' but location not in locations.json")
+if cur_loc and cur_loc not in loc_ids:
+    issues.append(f"Player at '{cur_loc}' but location not in world.json")
 
-for name, npc in npcs.items():
-    if not isinstance(npc, dict):
-        continue
-    for loc in npc.get("tags", {}).get("locations", []):
-        if loc not in locs:
-            issues.append(f"NPC '{name}' tagged to non-existent location '{loc}'")
+for npc_id, npc in npcs.items():
+    npc_data = npc.get("data", {})
+    npc_name = npc_data.get("name", npc_id)
+    for loc in npc_data.get("tags", {}).get("locations", []):
+        if loc not in loc_ids:
+            issues.append(f"NPC '{npc_name}' tagged to non-existent location '{loc}'")
 
 if issues:
     print("ORPHAN ISSUES:")
@@ -98,7 +101,10 @@ CAMPAIGN_DIR=$(bash tools/dm-campaign.sh path)
 uv run python - "$CAMPAIGN_DIR" << 'PYEOF'
 import json, sys
 cd = sys.argv[1]
-char = json.loads(open(f"{cd}/character.json").read())
+world = json.load(open(f"{cd}/world.json"))
+nodes = world.get("nodes", {})
+player = next((v for v in nodes.values() if v.get("type") == "player"), {})
+char = player.get("data", {})
 
 issues = []
 hp = char.get("hp", {})

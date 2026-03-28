@@ -107,7 +107,7 @@ bash tools/dm-enhance.sh dungeon-check "$ARGUMENTS"
 
 This returns:
 - `room_count` - Number of rooms defined
-- `has_structure` - Whether rooms exist in locations.json
+- `has_structure` - Whether rooms exist in world.json as location nodes
 - `rooms` - List of existing rooms
 
 #### Step 2: Query Source Passages
@@ -196,10 +196,10 @@ When user chooses [G]enerate:
    2. [Room Name] - [brief description]
    ...
 
-   **Save to locations.json?**
+   **Save to world.json?**
    ```
 
-4. If approved, add rooms to locations.json
+4. If approved, add rooms as location nodes in world.json via `dm-location.sh` or `dm-world.sh`
 
 ---
 

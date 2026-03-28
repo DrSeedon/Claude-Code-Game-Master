@@ -40,12 +40,12 @@ uv run python features/character-creation/api/get_spells.py --class <class> --le
 
 **Database Operations**:
 ```bash
-# Save complete character from JSON data
-# This saves to the ACTIVE CAMPAIGN's character.json file
-bash tools/dm-player.sh save-json '<character_json>'
-
-# To verify the active campaign:
+# Save complete character as a player node in world.json
+# First verify the active campaign:
 bash tools/dm-campaign.sh info
+
+# Save character data via dm-world.sh:
+bash tools/dm-world.sh update-node "player:active" --type player --data '<character_json>'
 
 # Example character JSON structure:
 # {
@@ -66,7 +66,7 @@ bash tools/dm-campaign.sh info
 #   "traits": "Never backs down from a challenge"
 # }
 
-# Note: Character is saved to: world-state/campaigns/<active-campaign>/character.json
+# Note: Character is saved as "player:active" node in world.json
 ```
 
 ## Presentation Style
@@ -214,7 +214,7 @@ Save this character? (yes/no)
 
 When user confirms "yes", execute:
 ```bash
-bash tools/dm-player.sh save-json '{"name":"Character Name","race":"Race","class":"Class","level":1,"stats":{"str":15,"dex":14,"con":13,"int":12,"wis":10,"cha":8},"ac":16,"skills":{"athletics":5},"equipment":["Longsword","Shield"],"features":["Fighting Style"],"spells":{"cantrips":[],"level_1":[]},"background":"Background","alignment":"Alignment","bonds":"Bonds text","flaws":"Flaws text","ideals":"Ideals text","traits":"Traits text"}'
+bash tools/dm-world.sh update-node "player:active" --type player --data '{"name":"Character Name","race":"Race","class":"Class","level":1,"stats":{"str":15,"dex":14,"con":13,"int":12,"wis":10,"cha":8},"ac":16,"skills":{"athletics":5},"equipment":["Longsword","Shield"],"features":["Fighting Style"],"spells":{"cantrips":[],"level_1":[]},"background":"Background","alignment":"Alignment","bonds":"Bonds text","flaws":"Flaws text","ideals":"Ideals text","traits":"Traits text"}'
 ```
 
 Replace placeholder values with actual character data collected during creation process.

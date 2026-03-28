@@ -1,6 +1,6 @@
 ---
 name: npc-builder
-description: NPC NARRATIVE enhancer (NOT combat stats). Use PROACTIVELY when NPCs need backstory, motivations, or personality depth. Works with npcs.json to add character development. For COMBAT STATS, use monster-manual instead.
+description: NPC NARRATIVE enhancer (NOT combat stats). Use PROACTIVELY when NPCs need backstory, motivations, or personality depth. Works with world.json NPC nodes to add character development. For COMBAT STATS, use monster-manual instead.
 tools: Bash, Read
 color: teal
 ---
