@@ -63,22 +63,15 @@ class AgentExtractor:
         This preserves NPCs, locations, facts, items, and plots that were
         created manually or from previous imports so they aren't lost.
         """
+        from lib.world_graph import WorldGraph
+        self._ensure_world_json()
+        wg = WorldGraph(str(self.extraction_dir))
         backup = {}
-        files_to_backup = ['npcs.json', 'locations.json', 'facts.json', 'items.json', 'plots.json', 'consequences.json']
-
-        for filename in files_to_backup:
-            filepath = self.extraction_dir / filename
-            if filepath.exists():
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    # Only backup if there's actual content
-                    if data and (isinstance(data, dict) and len(data) > 0) or (isinstance(data, list) and len(data) > 0):
-                        backup[filename] = data
-                        print(f"  Backed up existing {filename} ({len(data) if isinstance(data, dict) else 'list'} entries)")
-                except (json.JSONDecodeError, IOError) as e:
-                    print(f"  Warning: Could not backup {filename}: {e}")
-
+        for node_type in ['npc', 'location', 'item', 'quest', 'fact', 'consequence']:
+            nodes = wg.list_nodes(node_type=node_type)
+            if nodes:
+                backup[node_type] = {n['id']: n for n in nodes}
+                print(f"  Backed up existing {node_type} nodes ({len(nodes)} entries)")
         return backup
 
     def prepare_for_agents(self, filepath: str) -> Dict[str, Any]:
@@ -386,40 +379,50 @@ class AgentExtractor:
             "preserved_from_backup": {}
         }
 
-        # Use JsonOperations to work directly with extraction folder
-        extraction_json = JsonOperations(str(self.extraction_dir))
+        from lib.world_graph import WorldGraph
+        self._ensure_world_json()
+        wg = WorldGraph(str(self.extraction_dir))
 
-        # Load BACKED UP existing data (preserved from before extraction started)
-        # This ensures we merge with the original campaign data, not empty files
-        existing_npcs_dict = self._existing_backup.get('npcs.json', {})
-        existing_locations_dict = self._existing_backup.get('locations.json', {})
+        # Track counts from backup for reporting
+        for node_type, nodes in self._existing_backup.items():
+            results['preserved_from_backup'][node_type] = len(nodes)
 
-        # Track what we preserved
-        if existing_npcs_dict:
-            results['preserved_from_backup']['npcs'] = len(existing_npcs_dict)
-        if existing_locations_dict:
-            results['preserved_from_backup']['locations'] = len(existing_locations_dict)
-
-        # Start with existing data (from backup)
-        npcs_dict = existing_npcs_dict.copy()
-        locations_dict = existing_locations_dict.copy()
-
-        existing_npcs = set(npcs_dict.keys())
-        existing_locations = set(locations_dict.keys())
-
-        # Process NPCs from merged extraction data
+        # Process NPCs
         for name, npc_data in merged_data.get('npcs', {}).items():
-            if name in existing_npcs:
+            slug = wg._slug(name)
+            node_id = f"npc:{slug}"
+            existing = wg.get_node(node_id)
+            if existing:
                 if conflict_strategy == "skip":
                     results['conflicts'].append(f"NPC '{name}' already exists, skipping")
                     continue
                 elif conflict_strategy == "rename":
-                    new_name = self._find_unique_name(name, existing_npcs)
-                    results['conflicts'].append(f"Renamed NPC '{name}' to '{new_name}'")
-                    name = new_name
+                    counter = 2
+                    while wg.get_node(f"npc:{slug}-{counter}"):
+                        counter += 1
+                    slug = f"{slug}-{counter}"
+                    node_id = f"npc:{slug}"
+                    results['conflicts'].append(f"Renamed NPC '{name}' to '{name} ({counter})'")
+                    name = f"{name} ({counter})"
+                else:
+                    # overwrite: update existing node
+                    npc_data_record = {
+                        'description': npc_data.get('description', ''),
+                        'attitude': npc_data.get('attitude', 'neutral'),
+                        'events': npc_data.get('events', []),
+                        'tags': {
+                            'locations': npc_data.get('location_tags', []),
+                            'quests': npc_data.get('quest_tags', [])
+                        }
+                    }
+                    agent_dialogue = npc_data.get('dialogue', [])
+                    if agent_dialogue:
+                        npc_data_record['context'] = agent_dialogue.copy()
+                    wg.update_node(node_id, {"data": npc_data_record})
+                    results['npcs_saved'] += 1
+                    continue
 
-            # Build NPC record
-            npc_record = {
+            npc_data_record = {
                 'description': npc_data.get('description', ''),
                 'attitude': npc_data.get('attitude', 'neutral'),
                 'created': datetime.now().isoformat(),
@@ -429,88 +432,98 @@ class AgentExtractor:
                     'quests': npc_data.get('quest_tags', [])
                 }
             }
-
-            # Preserve dialogue from agent extraction as context
             agent_dialogue = npc_data.get('dialogue', [])
             if agent_dialogue:
-                npc_record['context'] = agent_dialogue.copy()
+                npc_data_record['context'] = agent_dialogue.copy()
 
-            npcs_dict[name] = npc_record
-            existing_npcs.add(name)
+            if wg.add_node(node_id, "npc", name, npc_data_record):
+                results['npcs_saved'] += 1
+            else:
+                results['errors'].append(f"Failed to save NPC '{name}'")
 
-        # Save NPCs directly to extraction folder
-        if npcs_dict:
-            try:
-                extraction_json.save_json("npcs.json", npcs_dict)
-                results['npcs_saved'] = len(merged_data.get('npcs', {}))
-                print(f"  Saved {results['npcs_saved']} NPCs to npcs.json")
-            except Exception as e:
-                results['errors'].append(f"Failed to save NPCs: {e}")
+        if results['npcs_saved']:
+            print(f"  Saved {results['npcs_saved']} NPCs to WorldGraph")
 
-        # Process locations (locations_dict already initialized from backup above)
+        # Process locations
         for name, loc_data in merged_data.get('locations', {}).items():
-            if name in existing_locations:
+            slug = wg._slug(name)
+            node_id = f"location:{slug}"
+            existing = wg.get_node(node_id)
+            if existing:
                 if conflict_strategy == "skip":
                     results['conflicts'].append(f"Location '{name}' already exists, skipping")
                     continue
                 elif conflict_strategy == "rename":
-                    new_name = self._find_unique_name(name, existing_locations)
-                    results['conflicts'].append(f"Renamed location '{name}' to '{new_name}'")
-                    name = new_name
+                    counter = 2
+                    while wg.get_node(f"location:{slug}-{counter}"):
+                        counter += 1
+                    slug = f"{slug}-{counter}"
+                    node_id = f"location:{slug}"
+                    results['conflicts'].append(f"Renamed location '{name}' to '{name} ({counter})'")
+                    name = f"{name} ({counter})"
+                else:
+                    wg.update_node(node_id, {"data": {
+                        'position': loc_data.get('position', ''),
+                        'description': loc_data.get('description', ''),
+                        'connections': loc_data.get('connections', []),
+                        'discovered': True
+                    }})
+                    results['locations_saved'] += 1
+                    continue
 
-            locations_dict[name] = {
+            loc_record = {
                 'position': loc_data.get('position', ''),
                 'description': loc_data.get('description', ''),
                 'connections': loc_data.get('connections', []),
                 'discovered': True
             }
-            existing_locations.add(name)
+            if wg.add_node(node_id, "location", name, loc_record):
+                results['locations_saved'] += 1
+            else:
+                results['errors'].append(f"Failed to save location '{name}'")
 
-        # Save locations directly to extraction folder
-        if locations_dict:
-            try:
-                extraction_json.save_json("locations.json", locations_dict)
-                results['locations_saved'] = len(merged_data.get('locations', {}))
-                print(f"  Saved {results['locations_saved']} locations to locations.json")
-            except Exception as e:
-                results['errors'].append(f"Failed to save locations: {e}")
+        if results['locations_saved']:
+            print(f"  Saved {results['locations_saved']} locations to WorldGraph")
 
-        # Save items and plot hooks to campaign folder (merge with backup)
-        if merged_data.get('items') or self._existing_backup.get('items.json'):
-            existing_items = self._existing_backup.get('items.json', {})
-            if existing_items:
-                results['preserved_from_backup']['items'] = len(existing_items)
-
-            # Merge new items with existing (new items take precedence on conflict)
-            items_dict = existing_items.copy()
-            new_items = merged_data.get('items', {})
+        # Process items
+        existing_items_backup = self._existing_backup.get('item', {})
+        new_items = merged_data.get('items', {})
+        if new_items or existing_items_backup:
             for name, item_data in new_items.items():
-                if name in items_dict:
+                slug = wg._slug(name)
+                node_id = f"item:{slug}"
+                existing = wg.get_node(node_id)
+                if existing:
                     results['conflicts'].append(f"Item '{name}' already exists, overwriting")
-                items_dict[name] = item_data
+                    wg.update_node(node_id, {"data": item_data})
+                else:
+                    if wg.add_node(node_id, "item", name, item_data):
+                        results['items_saved'] += 1
+                    else:
+                        results['errors'].append(f"Failed to save item '{name}'")
 
-            items_path = self.extraction_dir / "items.json"
-            items_path.write_text(json.dumps(items_dict, indent=2, ensure_ascii=False))
-            results['items_saved'] = len(new_items)
-            print(f"  Saved {len(items_dict)} total items ({len(new_items)} new, {len(existing_items)} preserved)")
+            preserved_count = len(existing_items_backup)
+            print(f"  Saved {len(new_items)} new items to WorldGraph ({preserved_count} already in graph)")
 
-        if merged_data.get('plot_hooks') or self._existing_backup.get('plots.json'):
-            existing_plots = self._existing_backup.get('plots.json', {})
-            if existing_plots:
-                results['preserved_from_backup']['plots'] = len(existing_plots)
-
-            # Merge new plots with existing
-            plots_dict = existing_plots.copy()
-            new_plots = merged_data.get('plot_hooks', {})
+        # Process plot hooks
+        existing_plots_backup = self._existing_backup.get('quest', {})
+        new_plots = merged_data.get('plot_hooks', {})
+        if new_plots or existing_plots_backup:
             for name, plot_data in new_plots.items():
-                if name in plots_dict:
+                slug = wg._slug(name)
+                node_id = f"quest:{slug}"
+                existing = wg.get_node(node_id)
+                if existing:
                     results['conflicts'].append(f"Plot '{name}' already exists, overwriting")
-                plots_dict[name] = plot_data
+                    wg.update_node(node_id, {"data": plot_data})
+                else:
+                    if wg.add_node(node_id, "quest", name, plot_data):
+                        results['plots_saved'] += 1
+                    else:
+                        results['errors'].append(f"Failed to save plot '{name}'")
 
-            plots_path = self.extraction_dir / "plots.json"
-            plots_path.write_text(json.dumps(plots_dict, indent=2, ensure_ascii=False))
-            results['plots_saved'] = len(new_plots)
-            print(f"  Saved {len(plots_dict)} total plots ({len(new_plots)} new, {len(existing_plots)} preserved)")
+            preserved_count = len(existing_plots_backup)
+            print(f"  Saved {len(new_plots)} new plots to WorldGraph ({preserved_count} already in graph)")
 
         # Pass 2: Enrich NPCs with semantic context from vector store
         if results['npcs_saved'] > 0:
@@ -519,9 +532,32 @@ class AgentExtractor:
                 if check_rag_available():
                     print("  Pass 2: Extracting semantic context for NPCs...")
                     context_extractor = QuoteExtractor(str(self.extraction_dir))
-                    enriched_count = context_extractor.enrich_all_npcs()
-                    results['npcs_enriched_with_context'] = enriched_count
-                    print(f"  Enriched {enriched_count} NPCs with context")
+                    context_extractor._ensure_rag()
+                    if context_extractor._vector_store.count() == 0:
+                        print("  No vectors in store - skipping quote extraction")
+                    else:
+                        enriched_count = 0
+                        npc_nodes = wg.list_nodes(node_type="npc")
+                        for node in npc_nodes:
+                            npc_name = node.get("name", "")
+                            new_passages = context_extractor.extract_context_for_npc(npc_name)
+                            existing_context = node.get("data", {}).get("context", [])
+                            all_context = existing_context.copy()
+                            seen_keys = set(p[:100].lower() for p in all_context)
+                            for passage in new_passages:
+                                p_key = passage[:100].lower()
+                                if p_key not in seen_keys:
+                                    seen_keys.add(p_key)
+                                    all_context.append(passage)
+                            all_context = all_context[:15]
+                            if all_context:
+                                added = len(all_context) - len(existing_context)
+                                if added > 0:
+                                    wg.update_node(node["id"], {"data": {"context": all_context}})
+                                    enriched_count += 1
+                                    print(f"    {npc_name}: {len(all_context)} context passages (+{added} new)")
+                        results['npcs_enriched_with_context'] = enriched_count
+                        print(f"  Enriched {enriched_count} NPCs with context")
             except Exception as e:
                 print(f"  Warning: Context extraction failed: {e}")
                 results['context_extraction_error'] = str(e)
@@ -643,16 +679,14 @@ class AgentExtractor:
         if cleaned:
             print(f"  Cleaned up: {', '.join(cleaned)}")
 
-    def _find_unique_name(self, base_name: str, existing: set) -> str:
-        """Find a unique name by appending numbers"""
-        if base_name not in existing:
-            return base_name
-
-        counter = 2
-        while f"{base_name} ({counter})" in existing:
-            counter += 1
-
-        return f"{base_name} ({counter})"
+    def _ensure_world_json(self):
+        """Create an empty world.json if it doesn't exist yet."""
+        world_file = self.extraction_dir / "world.json"
+        if not world_file.exists():
+            world_file.write_text(json.dumps(
+                {"meta": {"version": 2, "schema": "graph"}, "nodes": {}, "edges": []},
+                indent=2, ensure_ascii=False
+            ))
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitize campaign name for use as directory name"""

@@ -55,12 +55,21 @@ def _save_overview(campaign_dir: Path, data: dict):
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
-def _load_wiki(campaign_dir: Path) -> dict:
-    f = campaign_dir / "wiki.json"
+def _load_creatures(campaign_dir: Path) -> dict:
+    """Load creature nodes from world.json."""
+    f = campaign_dir / "world.json"
     if not f.exists():
         return {}
     with open(f, encoding="utf-8") as fh:
-        return json.load(fh)
+        world = json.load(fh)
+    creatures = {}
+    for nid, node in world.get("nodes", {}).items():
+        if node.get("type") == "creature":
+            entry = dict(node.get("data", {}))
+            entry["type"] = "creature"
+            entry["name"] = node.get("name", nid)
+            creatures[nid] = entry
+    return creatures
 
 
 def _weighted_choice(types: dict) -> tuple[str, int]:
@@ -81,11 +90,11 @@ def _weighted_choice(types: dict) -> tuple[str, int]:
     return (last[0], last[1])
 
 
-def _find_creature_by_type(wiki: dict, encounter_type: str) -> Optional[dict]:
-    """Find a creature in wiki matching the encounter type by tag or name."""
+def _find_creature_by_type(creatures: dict, encounter_type: str) -> Optional[dict]:
+    """Find a creature in world.json matching the encounter type by tag or name."""
     type_lower = encounter_type.lower().rstrip("s")
     candidates = []
-    for eid, data in wiki.items():
+    for eid, data in creatures.items():
         if not isinstance(data, dict):
             continue
         if data.get("type") != "creature":
@@ -164,8 +173,8 @@ def check_encounter(elapsed_hours: float, campaign_dir: Path) -> Optional[dict]:
     category, weight = _weighted_choice(types)
     total_weight = sum(types.values()) if types else 100
 
-    wiki = _load_wiki(campaign_dir)
-    creature = _find_creature_by_type(wiki, category)
+    creatures = _load_creatures(campaign_dir)
+    creature = _find_creature_by_type(creatures, category)
 
     return {
         "triggered": True,

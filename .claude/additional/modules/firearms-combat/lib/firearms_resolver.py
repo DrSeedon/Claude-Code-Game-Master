@@ -9,6 +9,7 @@ DM (Claude) calls this via dm-combat.sh for firearms combat resolution.
 import argparse
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -19,9 +20,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from lib.json_ops import JsonOperations
 from lib.player_manager import PlayerManager
 from lib.campaign_manager import CampaignManager
+from lib.world_graph import WorldGraph
 
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
-from module_data import ModuleDataManager
+from lib.module_data import ModuleDataManager
 
 MODULE_ID = "firearms-combat"
 
@@ -39,6 +40,7 @@ class FirearmsCombatResolver:
         self.json_ops = JsonOperations(str(self.campaign_dir))
         self.player_mgr = PlayerManager(str(self.campaign_dir.parent.parent))
         self.module_data_mgr = ModuleDataManager(self.campaign_dir)
+        self.world_graph = WorldGraph(self.campaign_dir)
         self.firearms_config = self._load_firearms_config()
         self.character = self._load_character()
 
@@ -66,12 +68,25 @@ class FirearmsCombatResolver:
             raise RuntimeError(f"Character '{char_name}' not found")
         return char
 
+    def _to_kebab(self, name: str) -> str:
+        name = re.sub(r"[^a-z0-9]+", "-", name.lower())
+        return name.strip("-")
+
+    def _get_weapon_from_world(self, weapon_name: str) -> Optional[Dict]:
+        kebab = self._to_kebab(weapon_name)
+        node = self.world_graph.get_node(f"weapon:{kebab}")
+        if node:
+            return node.get("data", {})
+        results = self.world_graph.search_nodes(weapon_name, node_type="weapon")
+        if results:
+            return results[0].get("data", {})
+        return None
+
     def _get_weapon_stats(self, weapon_name: str) -> Dict:
-        weapons = self.firearms_config.get("weapons", {})
-        weapon = weapons.get(weapon_name)
-        if not weapon:
-            raise ValueError(f"Weapon '{weapon_name}' not found in firearms config")
-        return weapon
+        world_weapon = self._get_weapon_from_world(weapon_name)
+        if world_weapon:
+            return world_weapon
+        raise ValueError(f"Weapon '{weapon_name}' not found in world.json")
 
     def _get_fire_mode_config(self, mode: str) -> Dict:
         fire_modes = self.firearms_config.get("fire_modes", {})

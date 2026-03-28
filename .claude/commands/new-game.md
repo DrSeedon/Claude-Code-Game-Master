@@ -38,34 +38,7 @@ bash tools/dm-campaign.sh switch "<CAMPAIGN_NAME>"
 
 ---
 
-## PHASE 1.1: GAME MODE
-
-```
-================================================================
-  ╔═══════════════════════════════════════════════════════════╗
-  ║              GAME MODE                                    ║
-  ╚═══════════════════════════════════════════════════════════╝
-================================================================
-
-  [1] Classic (recommended)
-      Standard D&D rules. Fast start. No extra setup.
-
-  [2] Advanced
-      Custom modules, narrator styles, campaign rule templates.
-      More setup — more control.
-
-================================================================
-  Enter number (or press ENTER for Classic):
-================================================================
-```
-
-**If Classic** → Write `"advanced_mode": false` to campaign-overview.json, then skip to PHASE 2.
-
-**If Advanced** → Write `"advanced_mode": true` to campaign-overview.json, then run PHASES 1.5–1.9 (below) before continuing to PHASE 2.
-
----
-
-## PHASE 1.5: MODULE SELECTION (Advanced only)
+## PHASE 1.5: MODULE SELECTION
 
 Run after campaign is created and switched (so modules persist to campaign-overview.json).
 
@@ -118,8 +91,7 @@ Rules are now in context — use them for all world-building that follows.
 
 ---
 
-## PHASE 1.6: LOAD MODULE CREATION RULES (Advanced only)
-
+## PHASE 1.6: LOAD MODULE CREATION RULES 
 Load creation-specific instructions from active modules:
 
 ```bash
@@ -138,8 +110,7 @@ Follow module-specific instructions when they apply to that phase.
 
 ---
 
-## PHASE 1.7: NARRATOR STYLE (Advanced only)
-
+## PHASE 1.7: NARRATOR STYLE 
 ### 1. List available styles
 ```bash
 bash .claude/additional/infrastructure/dm-narrator.sh list
@@ -192,8 +163,7 @@ If user points to a `.md` file with their own style:
 
 ---
 
-## PHASE 1.8: CAMPAIGN RULES TEMPLATE (Advanced only)
-
+## PHASE 1.8: CAMPAIGN RULES TEMPLATE 
 ### 1. Get recommendation based on campaign genre
 ```bash
 bash .claude/additional/infrastructure/dm-campaign-rules.sh recommend "<genre>"
@@ -249,8 +219,52 @@ If user describes custom mechanics not covered by templates:
 
 ---
 
-## PHASE 1.9: CURRENCY & CALENDAR (Advanced only)
+## PHASE 1.85: CUSTOM RULES 
+### 1. List available custom rules
+```bash
+bash .claude/additional/infrastructure/dm-campaign-custom-rules.sh list
+```
 
+### 2. Display menu
+
+```
+================================================================
+  ╔═══════════════════════════════════════════════════════════╗
+  ║              CUSTOM RULES                                 ║
+  ╚═══════════════════════════════════════════════════════════╝
+================================================================
+
+  [1] realistic-progression  — Skill growth through action, no XP tables
+  [2] russian-language       — All content in Russian
+
+  ────────────────────────────────────────────────────────────
+  💡 RECOMMENDED FOR THIS CAMPAIGN:
+  Based on campaign genre, suggest which rules fit.
+  Multiple rules can be applied — they stack.
+  E.g. survival/STALKER → realistic-progression + russian-language.
+  Write 1 sentence why each suggested rule fits the vibe.
+  ────────────────────────────────────────────────────────────
+  Type numbers to select (e.g. "1 2"), ENTER to skip.
+
+================================================================
+```
+
+Get genre-based recommendation:
+```bash
+bash .claude/additional/infrastructure/dm-campaign-custom-rules.sh recommend "<genre>"
+```
+
+### 3. Apply selected rules
+```bash
+bash .claude/additional/infrastructure/dm-campaign-custom-rules.sh apply <rule-id>
+```
+Run once per selected rule. Rules are appended to campaign-rules.md with markers.
+
+### 4. If "skip", no custom rules applied.
+
+---
+
+## PHASE 1.9: CURRENCY & CALENDAR 
 Configure campaign-specific currency and calendar systems. Both use the same pattern: config in `campaign-overview.json`, defaults if skipped.
 
 ### Currency
@@ -661,9 +675,9 @@ Before transitioning to character creation, verify:
 - [ ] Custom stats defined (if campaign template requires them)
 - [ ] Session log initialized
 - [ ] Campaign overview updated with settings
-- [ ] `advanced_mode` written to campaign-overview.json
-- [ ] (Advanced only) Narrator style selected or skipped
-- [ ] (Advanced only) Campaign rules template applied or skipped
-- [ ] (Advanced only) Currency system configured or default accepted
-- [ ] (Advanced only) Calendar system configured or default accepted
-- [ ] (Advanced only) Module-specific creation steps completed
+- [ ] Narrator style selected or skipped
+- [ ] Campaign rules template applied or skipped
+- [ ] Custom rules selected and applied or skipped
+- [ ] Currency system configured or default accepted
+- [ ] Calendar system configured or default accepted
+- [ ] Module-specific creation steps completed

@@ -6,7 +6,7 @@ import random
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 
 class C:
@@ -57,9 +57,9 @@ PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from lib.campaign_manager import CampaignManager
+from lib.world_graph import WorldGraph
 
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
-from module_data import ModuleDataManager
+from lib.module_data import ModuleDataManager
 
 MODULE_ID = "mass-combat"
 COMBAT_STATE_FILE = "combat-state.json"
@@ -76,13 +76,37 @@ class MassCombatEngine:
         module_data_dir.mkdir(parents=True, exist_ok=True)
         self.state_path = module_data_dir / COMBAT_STATE_FILE
         self.module_data_mgr = ModuleDataManager(self.campaign_dir)
+        self.world_graph = WorldGraph(self.campaign_dir)
         self.templates = self._load_templates()
         self.state: Dict = {}
         self.test_mode: bool = False
 
+    def _to_kebab(self, name: str) -> str:
+        name = re.sub(r"[^a-z0-9]+", "-", name.lower())
+        return name.strip("-")
+
+    def _load_templates_from_world(self) -> Dict:
+        nodes = self.world_graph.list_nodes(node_type="creature")
+        templates = {}
+        for node in nodes:
+            data = node.get("data", {})
+            if not (data.get("source_module") == MODULE_ID or data.get("mass_combat_template")):
+                continue
+            node_id = node["id"]
+            key = node_id.split(":", 1)[-1] if ":" in node_id else node_id
+            entry: Dict[str, Any] = {}
+            for field in ("name", "ac", "hp", "atk", "dmg", "pen", "prot",
+                          "targeting", "range", "weight", "notes", "crewed",
+                          "aoe_save_type", "aoe_save_dc", "aoe_targets", "aoe_mode"):
+                if field in data:
+                    entry[field] = data[field]
+            if not entry.get("name"):
+                entry["name"] = node.get("name", key)
+            templates[key] = entry
+        return templates
+
     def _load_templates(self) -> Dict:
-        data = self.module_data_mgr.load(MODULE_ID)
-        return data.get("unit_templates", {})
+        return self._load_templates_from_world()
 
     def _load(self) -> Dict:
         if self.state_path.exists():

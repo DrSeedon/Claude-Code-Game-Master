@@ -14,6 +14,23 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 
 from colors import tag_success, tag_error, tag_warning
+from world_graph import WorldGraph
+
+
+def _get_player_node(campaign_dir: Path) -> Optional[Dict[str, Any]]:
+    """Read player node from WorldGraph. Returns None if world.json missing or no player."""
+    world_file = campaign_dir / "world.json"
+    if not world_file.exists():
+        return None
+    try:
+        wg = WorldGraph(str(campaign_dir))
+        player = wg.get_node("player:active")
+        if player:
+            return player
+        players = wg.list_nodes(node_type="player")
+        return players[0] if players else None
+    except Exception:
+        return None
 
 
 class CampaignManager:
@@ -55,20 +72,16 @@ class CampaignManager:
                 except (json.JSONDecodeError, IOError):
                     campaign_info["campaign_name"] = "Unknown"
 
-            # Try to read character info
-            char_file = campaign_dir / "character.json"
-            if char_file.exists():
-                try:
-                    with open(char_file, 'r', encoding='utf-8') as f:
-                        char = json.load(f)
-                    campaign_info["character"] = {
-                        "name": char.get("name", "Unknown"),
-                        "race": char.get("race", "?"),
-                        "class": char.get("class", "?"),
-                        "level": char.get("level", 1)
-                    }
-                except (json.JSONDecodeError, IOError) as e:
-                    print(tag_warning(f"Could not read character for {campaign_dir.name}: {e}"), file=sys.stderr)
+            # Try to read character info from WorldGraph
+            player = _get_player_node(campaign_dir)
+            if player:
+                data = player.get("data", {})
+                campaign_info["character"] = {
+                    "name": player.get("name", "Unknown"),
+                    "race": data.get("race", "?"),
+                    "class": data.get("class", "?"),
+                    "level": data.get("level", 1)
+                }
 
             campaigns.append(campaign_info)
 
@@ -230,28 +243,22 @@ class CampaignManager:
             except (json.JSONDecodeError, IOError) as e:
                 print(tag_warning(f"Could not read campaign overview for {name}: {e}"), file=sys.stderr)
 
-        # Read character
-        char_file = campaign_path / "character.json"
-        if char_file.exists():
+        # Read character and entity counts from WorldGraph
+        world_file = campaign_path / "world.json"
+        if world_file.exists():
             try:
-                with open(char_file, 'r', encoding='utf-8') as f:
-                    info["character"] = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                print(tag_warning(f"Could not read character for {name}: {e}"), file=sys.stderr)
-
-        # Count NPCs, locations, etc.
-        for filename in ["npcs.json", "locations.json", "facts.json"]:
-            filepath = campaign_path / filename
-            if filepath.exists():
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    if isinstance(data, dict):
-                        info[filename.replace('.json', '_count')] = len(data)
-                    elif isinstance(data, list):
-                        info[filename.replace('.json', '_count')] = len(data)
-                except (json.JSONDecodeError, IOError) as e:
-                    print(tag_warning(f"Could not read {filename} for {name}: {e}"), file=sys.stderr)
+                wg = WorldGraph(str(campaign_path))
+                player = wg.get_node("player:active")
+                if not player:
+                    players = wg.list_nodes(node_type="player")
+                    player = players[0] if players else None
+                if player:
+                    info["character"] = {"name": player.get("name"), **player.get("data", {})}
+                info["npcs_count"] = len(wg.list_nodes(node_type="npc"))
+                info["locations_count"] = len(wg.list_nodes(node_type="location"))
+                info["facts_count"] = len(wg.list_nodes(node_type="fact"))
+            except Exception as e:
+                print(tag_warning(f"Could not read world data for {name}: {e}"), file=sys.stderr)
 
         # Count saves
         saves_dir = campaign_path / "saves"
@@ -304,29 +311,11 @@ class CampaignManager:
             with open(overview_path, 'w', encoding='utf-8') as f:
                 json.dump(overview, f, indent=2, ensure_ascii=False)
 
-        # npcs.json
-        npcs_path = campaign_path / "npcs.json"
-        if not preserve_existing or not npcs_path.exists():
-            with open(npcs_path, 'w', encoding='utf-8') as f:
-                json.dump({}, f, indent=2, ensure_ascii=False)
-
-        # locations.json
-        locations_path = campaign_path / "locations.json"
-        if not preserve_existing or not locations_path.exists():
-            with open(locations_path, 'w', encoding='utf-8') as f:
-                json.dump({}, f, indent=2, ensure_ascii=False)
-
-        # facts.json
-        facts_path = campaign_path / "facts.json"
-        if not preserve_existing or not facts_path.exists():
-            with open(facts_path, 'w', encoding='utf-8') as f:
-                json.dump({}, f, indent=2, ensure_ascii=False)
-
-        # consequences.json
-        consequences_path = campaign_path / "consequences.json"
-        if not preserve_existing or not consequences_path.exists():
-            with open(consequences_path, 'w', encoding='utf-8') as f:
-                json.dump({"active": [], "resolved": []}, f, indent=2, ensure_ascii=False)
+        # world.json (WorldGraph — unified entity store)
+        world_path = campaign_path / "world.json"
+        if not preserve_existing or not world_path.exists():
+            with open(world_path, 'w', encoding='utf-8') as f:
+                json.dump({"nodes": {}, "edges": []}, f, indent=2, ensure_ascii=False)
 
         # campaign-rules.md - campaign-specific DM rules (ability costs, setting mechanics, etc.)
         rules_path = campaign_path / "campaign-rules.md"

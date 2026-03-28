@@ -282,16 +282,22 @@ def _get_campaign_path():
 
 
 def _load_character():
-    """Load active character from campaign."""
+    """Load active character from WorldGraph player node."""
     import json
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
         return None
-    char_file = campaign_dir / "character.json"
-    if not char_file.exists():
+    world_file = campaign_dir / "world.json"
+    if not world_file.exists():
         return None
-    with open(char_file) as f:
-        return json.load(f)
+    with open(world_file) as f:
+        world = json.load(f)
+    player = world.get("nodes", {}).get("player:active")
+    if not player:
+        return None
+    merged = dict(player.get("data", {}))
+    merged["name"] = player.get("name", merged.get("name", "Player"))
+    return merged
 
 
 def _extract_mechanics(node):
@@ -308,7 +314,7 @@ def _extract_mechanics(node):
 
 
 def _load_creature(name):
-    """Load creature stats from world.json (WorldGraph) with wiki.json fallback."""
+    """Load creature stats from world.json (WorldGraph)."""
     import json
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
@@ -333,18 +339,6 @@ def _load_creature(name):
                 return {"type": "creature", "name": node.get("name", name),
                         "mechanics": _extract_mechanics(node)}
 
-    wiki_file = campaign_dir / "wiki.json"
-    if not wiki_file.exists():
-        return None
-    with open(wiki_file) as f:
-        wiki = json.load(f)
-    if name_lower in wiki and wiki[name_lower].get("type") == "creature":
-        return wiki[name_lower]
-    for eid, data in wiki.items():
-        if not isinstance(data, dict) or data.get("type") != "creature":
-            continue
-        if name_lower in eid.lower() or name_lower in data.get("name", "").lower():
-            return data
     return None
 
 
@@ -435,7 +429,7 @@ def _resolve_attack(char, weapon_name=None):
 
 
 def _load_spell(name):
-    """Load spell/ability from world.json (WorldGraph) with wiki.json fallback."""
+    """Load spell/ability from world.json (WorldGraph)."""
     import json
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
@@ -466,18 +460,6 @@ def _load_spell(name):
                 return {"type": node["type"], "name": node.get("name", name),
                         "mechanics": _extract_mechanics(node)}
 
-    wiki_file = campaign_dir / "wiki.json"
-    if not wiki_file.exists():
-        return None
-    with open(wiki_file) as f:
-        wiki = json.load(f)
-    if name_lower in wiki and wiki[name_lower].get("type") in spell_types:
-        return wiki[name_lower]
-    for eid, data in wiki.items():
-        if not isinstance(data, dict) or data.get("type") not in spell_types:
-            continue
-        if name_lower in eid.lower() or name_lower in data.get("name", "").lower():
-            return data
     return None
 
 

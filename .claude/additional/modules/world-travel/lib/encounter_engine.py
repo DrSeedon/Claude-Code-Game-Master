@@ -15,13 +15,11 @@ from datetime import datetime, timedelta
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
-
 from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
 from lib.time_manager import TimeManager
 from lib.player_manager import PlayerManager
-from module_data import ModuleDataManager
+from lib.module_data import ModuleDataManager
 MODULE_LIB = Path(__file__).parent
 sys.path.insert(0, str(MODULE_LIB))
 from connection_utils import add_canonical_connection

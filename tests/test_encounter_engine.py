@@ -44,6 +44,20 @@ def write_wiki(campaign_dir, data):
         json.dump(data, fh)
 
 
+def write_world_creatures(campaign_dir, wiki_creatures: dict):
+    nodes = {}
+    for eid, data in wiki_creatures.items():
+        nodes[f"creature:{eid}"] = {
+            "type": "creature",
+            "name": data.get("name", eid),
+            "data": {k: v for k, v in data.items() if k not in ("type", "name")}
+        }
+    f = campaign_dir / "world.json"
+    world = {"nodes": nodes, "edges": []}
+    with open(f, "w") as fh:
+        json.dump(world, fh)
+
+
 class TestNoConfig:
     def test_no_config_returns_none(self, campaign_dir):
         write_overview(campaign_dir, {"campaign_name": "Test"})
@@ -206,7 +220,7 @@ class TestCreatureLookup:
                 "mechanics": {"ac": 12, "hp": 11, "attack_bonus": 3, "damage": "1d6+1"}
             }
         }
-        write_wiki(campaign_dir, wiki)
+        write_world_creatures(campaign_dir, wiki)
         base_overview["encounters"]["types"] = {"bandits": 100}
         write_overview(campaign_dir, base_overview)
         with patch("random.randint", return_value=1):
@@ -235,7 +249,7 @@ class TestNoCreature:
                 "mechanics": {"ac": 13, "hp": 11}
             }
         }
-        write_wiki(campaign_dir, wiki)
+        write_world_creatures(campaign_dir, wiki)
         base_overview["encounters"]["types"] = {"patrol": 100}
         write_overview(campaign_dir, base_overview)
         with patch("random.randint", return_value=1):

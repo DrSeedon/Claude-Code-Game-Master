@@ -1050,7 +1050,29 @@ def render_wiki_html() -> str:
     if not campaign_name:
         return '<div class="empty-state">No campaign</div>'
 
-    wiki_data = load_json(ROOT / "world-state" / "campaigns" / campaign_name / "wiki.json") or {}
+    wiki_types = {"potion", "material", "artifact", "technique", "effect",
+                   "tool", "weapon", "armor", "book", "chapter", "creature",
+                   "cantrip", "spell", "misc"}
+    world = load_json(ROOT / "world-state" / "campaigns" / campaign_name / "world.json") or {}
+    nodes = world.get("nodes", {})
+    wiki_data = {}
+    for nid, node in nodes.items():
+        ntype = node.get("type", "")
+        if ntype not in wiki_types:
+            continue
+        entry = {
+            "type": ntype,
+            "name": node.get("name", nid),
+            "description": node.get("data", {}).get("description", ""),
+            "mechanics": node.get("data", {}).get("mechanics", {}),
+            "recipe": node.get("data", {}).get("recipe", {}),
+            "refs": node.get("data", {}).get("refs", []),
+        }
+        flat_data = {k: v for k, v in node.get("data", {}).items()
+                     if k not in ("mechanics", "recipe", "refs", "description")}
+        if flat_data and not entry["mechanics"]:
+            entry["mechanics"] = flat_data
+        wiki_data[nid] = entry
     if not wiki_data:
         return '<div class="empty-state">Wiki is empty</div>'
 

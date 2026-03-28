@@ -43,14 +43,6 @@ def fake_campaign(tmp_path):
     }
 
     firearms_config = {
-        "weapons": {
-            "AK-74": {
-                "damage": "2d8+2",
-                "pen": 6,
-                "rpm": 650,
-                "ammo_type": "5.45x39mm"
-            }
-        },
         "fire_modes": {
             "single": {
                 "attacks": 1,
@@ -71,8 +63,31 @@ def fake_campaign(tmp_path):
         }
     }
 
-    (campaign_dir / "character.json").write_text(json.dumps(character_data, indent=2))
+    char_name = character_data.pop("name")
+    world_json = {
+        "nodes": {
+            "player:active": {
+                "type": "player",
+                "name": char_name,
+                "data": character_data
+            },
+            "weapon:ak-74": {
+                "type": "weapon",
+                "name": "AK-74",
+                "data": {
+                    "damage": "2d8+2",
+                    "pen": 6,
+                    "rpm": 650,
+                    "ammo_type": "5.45x39mm",
+                    "source_module": "firearms-combat"
+                }
+            }
+        },
+        "edges": []
+    }
+    character_data["name"] = char_name
     (campaign_dir / "campaign-overview.json").write_text(json.dumps(campaign_overview, indent=2))
+    (campaign_dir / "world.json").write_text(json.dumps(world_json, indent=2))
 
     module_data_dir = campaign_dir / "module-data"
     module_data_dir.mkdir()
@@ -87,7 +102,7 @@ def test_resolver_initialization(fake_campaign):
 
     assert resolver.character["name"] == "Test Stalker"
     assert resolver.character["subclass"] == "Стрелок"
-    assert resolver.firearms_config["weapons"]["AK-74"]["damage"] == "2d8+2"
+    assert resolver._get_weapon_stats("AK-74")["damage"] == "2d8+2"
 
 
 def test_attack_bonus_calculation(fake_campaign):

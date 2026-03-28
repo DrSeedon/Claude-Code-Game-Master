@@ -77,21 +77,23 @@ WORLD_STATE_DIR=$(get_campaign_dir)
 
 # Only set file paths if we have an active campaign
 if [ -n "$WORLD_STATE_DIR" ]; then
+    WORLD_FILE="$WORLD_STATE_DIR/world.json"
+    SESSION_LOG="$WORLD_STATE_DIR/session-log.md"
+    CAMPAIGN_OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
+    # Legacy flat files (only used by dm-reset.sh for cleanup)
     NPCS_FILE="$WORLD_STATE_DIR/npcs.json"
     LOCATIONS_FILE="$WORLD_STATE_DIR/locations.json"
     FACTS_FILE="$WORLD_STATE_DIR/facts.json"
     CONSEQUENCES_FILE="$WORLD_STATE_DIR/consequences.json"
-    SESSION_LOG="$WORLD_STATE_DIR/session-log.md"
-    CAMPAIGN_OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
     CHARACTER_FILE="$WORLD_STATE_DIR/character.json"
 else
-    # No active campaign - set empty paths (tools should check and error)
+    WORLD_FILE=""
+    SESSION_LOG=""
+    CAMPAIGN_OVERVIEW=""
     NPCS_FILE=""
     LOCATIONS_FILE=""
     FACTS_FILE=""
     CONSEQUENCES_FILE=""
-    SESSION_LOG=""
-    CAMPAIGN_OVERVIEW=""
     CHARACTER_FILE=""
 fi
 

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from entity_manager import EntityManager
 from currency import load_config, format_money, format_delta, parse_money, migrate_gold
 from colors import tag_success, tag_error, tag_warning
+from world_graph import WorldGraph
 
 
 class PlayerManager(EntityManager):
@@ -47,76 +48,25 @@ class PlayerManager(EntityManager):
     def __init__(self, world_state_dir: Optional[str] = None, require_active_campaign: bool = True):
         super().__init__(world_state_dir, require_active_campaign)
 
-        # Additional paths specific to player management
-        self.world_state_dir = self.campaign_dir  # Alias for compatibility
+        self.world_state_dir = self.campaign_dir
         self.campaign_file = "campaign-overview.json"
-
-        # New: single character file per campaign
-        self.character_file = self.campaign_dir / "character.json"
-
-        # Legacy: characters directory (for backwards compatibility)
-        self.characters_dir = self.campaign_dir / "characters"
-
-    def _name_to_id(self, name: str) -> str:
-        """Convert character name to file ID"""
-        return name.lower().replace(' ', '-')
-
-    def _is_using_single_character(self) -> bool:
-        """Check if we're using the new single character.json format"""
-        return self.character_file.exists()
-
-    def _get_character_path(self, name: str) -> Path:
-        """Get path to character JSON file"""
-        # New format: single character.json
-        if self._is_using_single_character():
-            return self.character_file
-
-        # Legacy format: characters/<name>.json
-        char_id = self._name_to_id(name)
-        return self.characters_dir / f"{char_id}.json"
+        self._wg = WorldGraph(str(self.campaign_dir))
 
     def _load_character(self, name: Optional[str] = None) -> Optional[Dict]:
-        """
-        Load character data from file
-        In single-character mode, name is optional/ignored
-        """
-        # New format: single character.json
-        if self._is_using_single_character():
-            try:
-                with open(self.character_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                print(tag_error(f"Failed to load character: {e}"))
-                return None
-
-        # Legacy format: need name to find file
-        if not name:
-            # Try to get from campaign overview
-            campaign = self.json_ops.load_json(self.campaign_file)
-            name = campaign.get('current_character')
-            if not name:
-                return None
-
-        char_path = self._get_character_path(name)
-        if not char_path.exists():
-            return None
-        try:
-            with open(char_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            print(tag_error(f"Failed to load character: {e}"))
-            return None
+        """Load character data from WorldGraph player node."""
+        node = self._wg.get_node("player:active")
+        if node:
+            merged = dict(node.get("data", {}))
+            merged["name"] = node.get("name", merged.get("name", "Player"))
+            return merged
+        return None
 
     def _save_character(self, name: str, data: Dict) -> bool:
-        """Save character data to file using atomic writes via json_ops"""
-        # New format: single character.json
-        if self._is_using_single_character():
-            return self.json_ops.save_json("character.json", data)
-
-        # Legacy format: characters/<name>.json
-        char_path = self._get_character_path(name)
-        char_path.parent.mkdir(parents=True, exist_ok=True)
-        return self.json_ops.save_json(str(char_path), data)
+        """Save character data to WorldGraph player node."""
+        char_name = data.pop("name", name)
+        self._wg.update_node("player:active", {"name": char_name, "data": data})
+        data["name"] = char_name
+        return True
 
     def _normalize_xp(self, char: Dict) -> Dict:
         """Normalize XP to object format {current, next_level}"""
@@ -143,21 +93,10 @@ class PlayerManager(EntityManager):
 
     def list_players(self) -> List[str]:
         """List all player character IDs"""
-        players = []
-
-        # New format: single character.json
-        if self._is_using_single_character():
-            char = self._load_character()
-            if char:
-                # Use the character name or 'character' as ID
-                players.append(char.get('name', 'character').lower().replace(' ', '-'))
-            return players
-
-        # Legacy format: scan characters/ directory
-        if self.characters_dir.exists():
-            for f in self.characters_dir.glob("*.json"):
-                players.append(f.stem)
-        return sorted(players)
+        char = self._load_character()
+        if char:
+            return [char.get('name', 'character').lower().replace(' ', '-')]
+        return []
 
     def show_player(self, name: str) -> Optional[str]:
         """Get formatted player summary"""
@@ -179,39 +118,17 @@ class PlayerManager(EntityManager):
 
     def show_all_players(self) -> List[str]:
         """Get summaries for all players"""
-        summaries = []
-
+        char = self._load_character()
+        if not char:
+            return []
         currency_config = load_config(self.campaign_dir)
-
-        # New format: single character.json
-        if self._is_using_single_character():
-            char = self._load_character()
-            if char:
-                hp = char.get('hp', {})
-                raw_money = char.get('money', None)
-                if raw_money is None:
-                    raw_money = migrate_gold(char.get('gold', 0), currency_config)
-                summaries.append(
-                    f"{char.get('name', 'Unknown')} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
-                )
-            return summaries
-
-        # Legacy format: scan characters/ directory
-        if self.characters_dir.exists():
-            for char_file in self.characters_dir.glob("*.json"):
-                try:
-                    with open(char_file, 'r', encoding='utf-8') as f:
-                        char = json.load(f)
-                    hp = char.get('hp', {})
-                    raw_money = char.get('money', None)
-                    if raw_money is None:
-                        raw_money = migrate_gold(char.get('gold', 0), currency_config)
-                    summaries.append(
-                        f"{char.get('name', char_file.stem)} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
-                    )
-                except (json.JSONDecodeError, IOError):
-                    continue
-        return summaries
+        hp = char.get('hp', {})
+        raw_money = char.get('money', None)
+        if raw_money is None:
+            raw_money = migrate_gold(char.get('gold', 0), currency_config)
+        return [
+            f"{char.get('name', 'Unknown')} - {char.get('race', '?')} {char.get('class', '?')} Level {char.get('level', 1)} (HP: {hp.get('current', 0)}/{hp.get('max', 0)}, Gold: {format_money(raw_money, currency_config)})"
+        ]
 
     def set_current_player(self, name: str) -> bool:
         """Set character as current active PC in campaign"""

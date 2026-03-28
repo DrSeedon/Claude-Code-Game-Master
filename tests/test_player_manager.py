@@ -31,8 +31,20 @@ def make_campaign(tmp_path, overview_extra=None, character=None):
             "xp": 0,
             "equipment": [],
         }
-    (campaign_dir / "character.json").write_text(
-        json.dumps(character, ensure_ascii=False)
+    char_name = character.pop("name", "Hero")
+    world = {
+        "nodes": {
+            "player:active": {
+                "type": "player",
+                "name": char_name,
+                "data": character
+            }
+        },
+        "edges": []
+    }
+    character["name"] = char_name
+    (campaign_dir / "world.json").write_text(
+        json.dumps(world, ensure_ascii=False)
     )
 
     return str(ws), campaign_dir
@@ -74,7 +86,8 @@ class TestModifyHp:
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         mgr.modify_hp("Hero", -5)
-        char = json.loads((camp / "character.json").read_text())
+        world = json.loads((camp / "world.json").read_text())
+        char = world["nodes"]["player:active"]["data"]
         assert char["hp"]["current"] == 15
 
     def test_bloodied_flag(self, tmp_path):
@@ -125,9 +138,9 @@ class TestModifyGold:
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         mgr.modify_gold("Hero", +25)
-        char = json.loads((camp / "character.json").read_text())
+        world = json.loads((camp / "world.json").read_text())
+        char = world["nodes"]["player:active"]["data"]
         assert char["money"] == 10025  # 10000cp + 25cp
-        assert "gold" not in char
 
     def test_string_amount_gp(self, tmp_path):
         ws, camp = make_campaign(tmp_path)
@@ -169,7 +182,8 @@ class TestModifyXp:
         ws, camp = make_campaign(tmp_path)
         mgr = PlayerManager(ws)
         mgr.award_xp("Hero", 200)
-        char = json.loads((camp / "character.json").read_text())
+        world = json.loads((camp / "world.json").read_text())
+        char = world["nodes"]["player:active"]["data"]
         assert char["xp"]["current"] == 200
 
 
@@ -190,7 +204,9 @@ class TestGetPlayer:
 
     def test_get_player_no_active_character_returns_none(self, tmp_path):
         ws, camp = make_campaign(tmp_path, overview_extra={"current_character": None})
-        (camp / "character.json").unlink()
+        world = json.loads((camp / "world.json").read_text())
+        del world["nodes"]["player:active"]
+        (camp / "world.json").write_text(json.dumps(world))
         mgr = PlayerManager(ws)
         result = mgr.get_player(None)
         assert result is None

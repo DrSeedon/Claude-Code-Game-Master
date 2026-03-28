@@ -160,20 +160,11 @@ Jump directly to scene setting:
 
 ## CONTINUE CAMPAIGN
 
-### Campaign Mode Check
-
-Read `campaign-overview.json`:
-```bash
-bash tools/dm-campaign.sh info
-```
-
-If `"advanced_mode": true` → invoke `/dm-continue` instead (handles module rules, narrator styles, campaign rules templates).
-
-Otherwise, continue below with the standard vanilla gameplay loop.
+Always invoke `/dm-continue` for session startup — it handles module rules, narrator styles, campaign rules templates, and the full startup checklist.
 
 ---
 
-### 🔒 MANDATORY STARTUP CHECKLIST
+### 🔒 MANDATORY STARTUP CHECKLIST (fallback if /dm-continue unavailable)
 
 **Execute ALL steps before presenting the scene to the player. Do not skip any step.**
 

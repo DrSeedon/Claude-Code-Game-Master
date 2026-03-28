@@ -86,9 +86,8 @@ class TestResolveSpellAttack:
 
 class TestLoadCreature:
     def test_load_from_wiki(self, tmp_path):
-        wiki = {"goblin": {"type": "creature", "name": "Goblin", "mechanics": {"hp": "7", "ac": "13", "attack_bonus": "4", "damage": "1d6+1"}}}
-        wiki_file = tmp_path / "wiki.json"
-        wiki_file.write_text(json.dumps(wiki))
+        world = {"nodes": {"creature:goblin": {"type": "creature", "name": "Goblin", "data": {"hp": "7", "ac": "13", "attack_bonus": "4", "damage": "1d6+1"}}}}
+        (tmp_path / "world.json").write_text(json.dumps(world))
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_creature("goblin")
             assert result is not None
@@ -96,16 +95,16 @@ class TestLoadCreature:
             assert result["mechanics"]["ac"] == "13"
 
     def test_fuzzy_match(self, tmp_path):
-        wiki = {"goblin-warrior": {"type": "creature", "name": "Goblin Warrior", "mechanics": {"ac": "15"}}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        world = {"nodes": {"creature:goblin-warrior": {"type": "creature", "name": "Goblin Warrior", "data": {"ac": "15"}}}}
+        (tmp_path / "world.json").write_text(json.dumps(world))
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_creature("goblin")
             assert result is not None
             assert result["name"] == "Goblin Warrior"
 
     def test_not_found(self, tmp_path):
-        wiki = {"sword": {"type": "weapon", "name": "Sword"}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        world = {"nodes": {"item:sword": {"type": "item", "name": "Sword", "data": {}}}}
+        (tmp_path / "world.json").write_text(json.dumps(world))
         with patch("dice._get_campaign_path", return_value=tmp_path):
             assert _load_creature("goblin") is None
 
@@ -114,32 +113,33 @@ class TestLoadCreature:
             assert _load_creature("goblin") is None
 
 
+def _write_world(tmp_path, nodes):
+    world = {"nodes": nodes, "edges": []}
+    (tmp_path / "world.json").write_text(json.dumps(world))
+
+
 class TestLoadSpell:
     def test_load_spell(self, tmp_path):
-        wiki = {"fire-bolt": {"type": "spell", "name": "Fire Bolt", "mechanics": {"damage": "1d10", "attack_type": "ranged"}}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        _write_world(tmp_path, {"spell:fire-bolt": {"type": "spell", "name": "Fire Bolt", "data": {"mechanics": {"damage": "1d10", "attack_type": "ranged"}}}})
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_spell("fire-bolt")
             assert result is not None
             assert result["mechanics"]["damage"] == "1d10"
 
     def test_load_ability(self, tmp_path):
-        wiki = {"shyish-bolt": {"type": "ability", "name": "Shyish Bolt", "mechanics": {"damage": "2d6", "save_type": "DEX"}}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        _write_world(tmp_path, {"ability:shyish-bolt": {"type": "ability", "name": "Shyish Bolt", "data": {"mechanics": {"damage": "2d6", "save_type": "DEX"}}}})
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_spell("shyish")
             assert result is not None
 
     def test_technique_type(self, tmp_path):
-        wiki = {"hand-of-dust": {"type": "technique", "name": "Hand of Dust", "mechanics": {}}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        _write_world(tmp_path, {"technique:hand-of-dust": {"type": "technique", "name": "Hand of Dust", "data": {"mechanics": {}}}})
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_spell("hand-of-dust")
             assert result is not None
 
     def test_weapon_not_spell(self, tmp_path):
-        wiki = {"longsword": {"type": "weapon", "name": "Longsword"}}
-        (tmp_path / "wiki.json").write_text(json.dumps(wiki))
+        _write_world(tmp_path, {"weapon:longsword": {"type": "weapon", "name": "Longsword", "data": {}}})
         with patch("dice._get_campaign_path", return_value=tmp_path):
             assert _load_spell("longsword") is None
 

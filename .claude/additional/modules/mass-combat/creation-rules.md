@@ -6,14 +6,13 @@ How to create unit templates for a new campaign.
 
 ## Where Templates Live
 
-`world-state/campaigns/<campaign>/module-data/mass-combat.json`
+Unit templates are stored as **creature nodes in `world.json`** (per campaign).
+Combat config (rules, targeting overrides) stays in `module-data/mass-combat.json`.
 
-```json
-{
-  "unit_templates": { ... },
-  "targeting_rules": { ... },
-  "combat_rules": { ... }
-}
+```
+world.json          → creature nodes with mass_combat_template: true
+module-data/
+  mass-combat.json  → combat_rules config only
 ```
 
 ---
@@ -242,58 +241,39 @@ Customize per campaign. These are DM reference — the engine does not enforce t
 
 ---
 
-## Example: Fantasy Campaign
+## Data Written
+
+### Unit templates → world.json via dm-world.sh
+
+```bash
+bash tools/dm-world.sh add-node "creature:bandit-raider" \
+  --name "Bandit Raider" --type creature \
+  --data '{"ac":11,"hp":8,"atk":3,"dmg":"1d6","pen":1,"prot":0,"targeting":"random","notes":"Shortsword, no armor, cowardly","source_module":"mass-combat","mass_combat_template":true}'
+
+bash tools/dm-world.sh add-node "creature:royal-guard" \
+  --name "Royal Guard" --type creature \
+  --data '{"ac":15,"hp":22,"atk":5,"dmg":"1d8+2","pen":3,"prot":3,"targeting":"random","notes":"Longsword, chain mail, disciplined","source_module":"mass-combat","mass_combat_template":true}'
+
+bash tools/dm-world.sh add-node "creature:volley-archer" \
+  --name "Volley Archer" --type creature \
+  --data '{"ac":14,"hp":35,"atk":5,"dmg":"2d6+2","pen":3,"prot":3,"targeting":"aoe","aoe_save_type":"DEX","aoe_save_dc":13,"aoe_targets":3,"aoe_mode":"spray","notes":"Rain of arrows, suppressive fire","source_module":"mass-combat","mass_combat_template":true}'
+
+bash tools/dm-world.sh add-node "creature:catapult" \
+  --name "Catapult" --type creature \
+  --data '{"ac":15,"hp":80,"atk":5,"dmg":"4d10","pen":5,"prot":3,"targeting":"aoe","aoe_save_type":"DEX","aoe_save_dc":15,"aoe_targets":4,"aoe_mode":"blast","notes":"Siege weapon, splash","source_module":"mass-combat","mass_combat_template":true}'
+```
+
+**Required node data fields:** all template fields from the Format section above plus:
+- `"source_module": "mass-combat"` — marks node as owned by this module
+- `"mass_combat_template": true` — marks node as a unit template (used for filtering)
+
+Node ID format: `creature:<kebab-name>` (e.g. `creature:goblin-berserker`).
+The engine strips the `creature:` prefix to use the kebab part as the template key.
+
+### Combat config → module-data/mass-combat.json
 
 ```json
 {
-  "unit_templates": {
-    "BanditRaider": {
-      "name": "Bandit Raider", "ac": 11, "hp": 8, "atk": 3, "dmg": "1d6",
-      "pen": 1, "prot": 0, "targeting": "random",
-      "notes": "Shortsword, no armor, cowardly"
-    },
-    "RoyalGuard": {
-      "name": "Royal Guard", "ac": 15, "hp": 22, "atk": 5, "dmg": "1d8+2",
-      "pen": 3, "prot": 3, "targeting": "random",
-      "notes": "Longsword, chain mail, disciplined"
-    },
-    "EliteArcher": {
-      "name": "Elite Archer", "ac": 14, "hp": 20, "atk": 7, "dmg": "2d8+3",
-      "pen": 4, "prot": 2, "targeting": "aimed", "weight": 1,
-      "notes": "Heavy crossbow, priority — high-value targets"
-    },
-    "VolleyArcher": {
-      "name": "Volley Archer", "ac": 14, "hp": 35, "atk": 5, "dmg": "2d6+2",
-      "pen": 3, "prot": 3, "targeting": "aoe",
-      "aoe_save_type": "DEX", "aoe_save_dc": 13, "aoe_targets": 3,
-      "aoe_mode": "spray",
-      "notes": "Rain of arrows, suppressive fire"
-    },
-    "GoblinBerserker": {
-      "name": "Goblin Berserker", "ac": 14, "hp": 25, "atk": 5, "dmg": "2d6+2",
-      "pen": 2, "prot": 1, "range": "melee", "targeting": "random",
-      "notes": "Leaping attacker, fast, melee only"
-    },
-    "Necromancer": {
-      "name": "Necromancer", "ac": 13, "hp": 60, "atk": 6, "dmg": "3d6",
-      "pen": 0, "prot": 1, "targeting": "aoe",
-      "aoe_save_type": "WIS", "aoe_save_dc": 15, "aoe_targets": 4,
-      "aoe_mode": "blast",
-      "notes": "Fear wave, bypasses physical armor"
-    },
-    "Knight": {
-      "name": "Knight", "ac": 18, "hp": 52, "atk": 5, "dmg": "1d10+3",
-      "pen": 2, "prot": 4, "range": "melee", "targeting": "aimed",
-      "notes": "Heavy armor, longsword"
-    },
-    "Catapult": {
-      "name": "Catapult", "ac": 15, "hp": 80, "atk": 5, "dmg": "4d10",
-      "pen": 5, "prot": 3, "targeting": "aoe",
-      "aoe_save_type": "DEX", "aoe_save_dc": 15, "aoe_targets": 4,
-      "aoe_mode": "blast",
-      "notes": "Siege weapon, splash"
-    }
-  },
   "combat_rules": {
     "cover": "+2 AC while in cover.",
     "surprise_round": "Ambushing side gets one free round.",
@@ -303,6 +283,10 @@ Customize per campaign. These are DM reference — the engine does not enforce t
   }
 }
 ```
+
+Customize per campaign. Unit templates MUST be in world.json as creature nodes — the engine reads ONLY from there.
+
+---
 
 In fantasy settings, PEN/PROT maps to weapon vs armor quality:
 - PEN 0 = fists/claws, PEN 1 = dagger/shortbow, PEN 2 = sword/longbow, PEN 3 = greataxe/heavy crossbow, PEN 4 = lance/ballista, PEN 5 = siege

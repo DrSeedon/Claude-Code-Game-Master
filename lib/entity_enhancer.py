@@ -11,13 +11,13 @@ import sys
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
-from difflib import SequenceMatcher
 
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 from json_ops import JsonOperations
 from campaign_manager import CampaignManager
+from world_graph import WorldGraph
 from colors import tag_success, tag_error, tag_info
 
 
@@ -115,86 +115,50 @@ class EntityEnhancer:
         """
         Search for an entity by name across all entity types.
 
-        Search order: NPCs -> Locations -> Items -> Plots
-        Uses exact match first, then fuzzy matching.
-        Locations with 'dungeon' field are typed as 'dungeon'.
+        Search order: NPCs -> Locations -> Items -> Quests
+        Uses exact match first, then substring, then fuzzy matching via WorldGraph.
+        Locations with 'dungeon' field in data are typed as 'dungeon'.
 
         Args:
             name: Entity name to search for
 
         Returns:
-            Dict with 'type', 'name', 'data' if found, None otherwise
+            Dict with 'type', 'name', 'id', 'data' if found, None otherwise
         """
-        entity_files = [
-            ("npc", "npcs.json"),
-            ("location", "locations.json"),
-            ("item", "items.json"),
-            ("plot", "plots.json"),
-        ]
-
+        wg = WorldGraph(str(self.campaign_dir))
+        search_types = ["npc", "location", "item", "quest"]
         name_lower = name.lower()
 
-        # First pass: exact match (case-insensitive)
-        for entity_type, filename in entity_files:
-            data = self.json_ops.load_json(filename)
-            if not isinstance(data, dict):
-                continue
+        def _node_to_result(node: dict) -> dict:
+            actual_type = node["type"]
+            if actual_type == "location" and node.get("data", {}).get("dungeon"):
+                actual_type = "dungeon"
+            return {
+                "type": actual_type,
+                "name": node["name"],
+                "id": node["id"],
+                "data": node.get("data", {})
+            }
 
-            for key in data.keys():
-                if key.lower() == name_lower:
-                    # Check if location is actually a dungeon
-                    actual_type = entity_type
-                    if entity_type == "location" and data[key].get("dungeon"):
-                        actual_type = "dungeon"
-                    return {
-                        "type": actual_type,
-                        "name": key,
-                        "data": data[key]
-                    }
+        # First pass: exact match (case-insensitive) across relevant types
+        for ntype in search_types:
+            for node in wg.list_nodes(node_type=ntype):
+                if node["name"].lower() == name_lower:
+                    return _node_to_result(node)
 
-        # Second pass: substring match (search term contained in entity name)
-        for entity_type, filename in entity_files:
-            data = self.json_ops.load_json(filename)
-            if not isinstance(data, dict):
-                continue
+        # Second pass: substring match
+        for ntype in search_types:
+            for node in wg.list_nodes(node_type=ntype):
+                if name_lower in node["name"].lower():
+                    return _node_to_result(node)
 
-            for key in data.keys():
-                if name_lower in key.lower():
-                    # Check if location is actually a dungeon
-                    actual_type = entity_type
-                    if entity_type == "location" and data[key].get("dungeon"):
-                        actual_type = "dungeon"
-                    return {
-                        "type": actual_type,
-                        "name": key,
-                        "data": data[key]
-                    }
+        # Third pass: fuzzy via WorldGraph search_nodes (covers SequenceMatcher internally)
+        results = wg.search_nodes(name)
+        for node in results:
+            if node.get("type") in search_types:
+                return _node_to_result(node)
 
-        # Third pass: fuzzy match (similarity > 0.5)
-        best_match = None
-        best_score = 0.5  # Minimum threshold
-
-        for entity_type, filename in entity_files:
-            data = self.json_ops.load_json(filename)
-            if not isinstance(data, dict):
-                continue
-
-            for key in data.keys():
-                # Use sequence matching for similarity
-                score = SequenceMatcher(None, name_lower, key.lower()).ratio()
-                if score > best_score:
-                    best_score = score
-                    # Check if location is actually a dungeon
-                    actual_type = entity_type
-                    if entity_type == "location" and data[key].get("dungeon"):
-                        actual_type = "dungeon"
-                    best_match = {
-                            "type": actual_type,
-                            "name": key,
-                            "data": data[key]
-                        }
-
-        return best_match
+        return None
 
     def search_raw(self, query: str, n_results: int = 15) -> List[Dict[str, Any]]:
         """
@@ -390,26 +354,34 @@ class EntityEnhancer:
         Returns:
             True on success, False on failure
         """
-        filename_map = {
-            "npc": "npcs.json",
-            "location": "locations.json",
-            "dungeon": "locations.json",  # Dungeons are stored in locations
-            "item": "items.json",
-            "plot": "plots.json",
+        node_type_map = {
+            "npc": "npc",
+            "location": "location",
+            "dungeon": "location",
+            "item": "item",
+            "plot": "quest",
+            "quest": "quest",
         }
 
-        filename = filename_map.get(entity_type)
-        if not filename:
+        node_type = node_type_map.get(entity_type)
+        if not node_type:
             print(tag_error(f"Unknown entity type: {entity_type}"))
             return False
 
-        # Load current data
-        data = self.json_ops.load_json(filename)
-        if entity_name not in data:
-            print(tag_error(f"Entity '{entity_name}' not found in {filename}"))
+        wg = WorldGraph(str(self.campaign_dir))
+
+        # Resolve entity to node id
+        node_id = wg._resolve_id(entity_name, node_type)
+        if not node_id:
+            print(tag_error(f"Entity '{entity_name}' not found in WorldGraph"))
             return False
 
-        entity = data[entity_name]
+        node = wg.get_node(node_id)
+        if not node:
+            print(tag_error(f"Node '{node_id}' not found"))
+            return False
+
+        entity = dict(node.get("data", {}))
 
         # Merge context (additive, deduplicated)
         existing_context = entity.get("context", [])
@@ -421,39 +393,31 @@ class EntityEnhancer:
                 seen_keys.add(p_key)
                 existing_context.append(passage)
 
-        # Limit total context
         entity["context"] = existing_context[:20]
 
         # Update description if provided and it's an enhancement
         if new_description:
             old_desc = entity.get("description", "")
-            # Only update if new description is longer or different
             if len(new_description) > len(old_desc) or not old_desc:
                 entity["description"] = new_description
 
         # Apply additional fields (with care not to overwrite important data)
         if additional_fields:
             for key, value in additional_fields.items():
-                # Don't overwrite certain protected fields
                 if key in ["name", "created", "source"]:
                     continue
-                # Merge lists additively
                 if isinstance(value, list) and isinstance(entity.get(key), list):
                     existing = set(entity[key])
                     for item in value:
                         if item not in existing:
                             entity[key].append(item)
-                # Update other fields
                 else:
                     entity[key] = value
 
-        # Mark as enhanced
         entity["enhanced"] = True
         entity["enhanced_at"] = self.json_ops.get_timestamp()
 
-        # Save
-        data[entity_name] = entity
-        if self.json_ops.save_json(filename, data):
+        if wg.update_node(node_id, {"data": entity}):
             print(tag_success(f"Enhanced {entity_type}: {entity_name}"))
             print(f"  - Context passages: {len(entity['context'])}")
             return True
@@ -464,7 +428,7 @@ class EntityEnhancer:
         """
         Count rooms belonging to a dungeon.
 
-        Searches locations.json for entries where the 'dungeon' field
+        Searches location nodes in WorldGraph for entries where data.dungeon
         matches the given dungeon name.
 
         Args:
@@ -473,13 +437,10 @@ class EntityEnhancer:
         Returns:
             Number of rooms belonging to this dungeon
         """
-        locations = self.json_ops.load_json("locations.json")
-        if not isinstance(locations, dict):
-            return 0
-
+        wg = WorldGraph(str(self.campaign_dir))
         return sum(
-            1 for loc in locations.values()
-            if loc.get("dungeon") == dungeon_name
+            1 for node in wg.list_nodes(node_type="location")
+            if node.get("data", {}).get("dungeon") == dungeon_name
         )
 
     def get_dungeon_info(self, dungeon_name: str) -> Dict[str, Any]:
@@ -492,21 +453,18 @@ class EntityEnhancer:
         Returns:
             Dict with dungeon info: room_count, has_structure, rooms (if any)
         """
-        locations = self.json_ops.load_json("locations.json")
-        if not isinstance(locations, dict):
-            return {"room_count": 0, "has_structure": False, "rooms": []}
-
+        wg = WorldGraph(str(self.campaign_dir))
         rooms = []
-        for name, loc in locations.items():
-            if loc.get("dungeon") == dungeon_name:
+        for node in wg.list_nodes(node_type="location"):
+            d = node.get("data", {})
+            if d.get("dungeon") == dungeon_name:
                 rooms.append({
-                    "name": name,
-                    "room_number": loc.get("room_number", 0),
-                    "discovered": loc.get("state", {}).get("discovered", False),
-                    "cleared": loc.get("state", {}).get("cleared", False)
+                    "name": node["name"],
+                    "room_number": d.get("room_number", 0),
+                    "discovered": d.get("state", {}).get("discovered", False),
+                    "cleared": d.get("state", {}).get("cleared", False)
                 })
 
-        # Sort by room number
         rooms.sort(key=lambda r: r.get("room_number", 0))
 
         return {
@@ -535,26 +493,27 @@ class EntityEnhancer:
         if not vectors_dir.exists() or not any(vectors_dir.iterdir()):
             return None  # No RAG for this campaign
 
-        # Try to find location in locations.json
-        locations = self.json_ops.load_json("locations.json")
+        # Try to find location node in WorldGraph
+        wg = WorldGraph(str(self.campaign_dir))
         location_data = None
         location_key = None
+        location_node_id = None
 
-        if isinstance(locations, dict):
-            # Try exact match first
-            for name, data in locations.items():
-                if location_name.lower() == name.lower():
-                    location_key = name
-                    location_data = data
+        name_lower = location_name.lower()
+        for node in wg.list_nodes(node_type="location"):
+            if node["name"].lower() == name_lower:
+                location_key = node["name"]
+                location_data = node.get("data", {})
+                location_node_id = node["id"]
+                break
+
+        if not location_key:
+            for node in wg.list_nodes(node_type="location"):
+                if name_lower in node["name"].lower():
+                    location_key = node["name"]
+                    location_data = node.get("data", {})
+                    location_node_id = node["id"]
                     break
-
-            # Try substring match
-            if not location_key:
-                for name, data in locations.items():
-                    if location_name.lower() in name.lower():
-                        location_key = name
-                        location_data = data
-                        break
 
         # If enhanced, return stored context
         if location_data and location_data.get("enhanced") and location_data.get("context"):
@@ -589,49 +548,46 @@ class EntityEnhancer:
         List entities that haven't been enhanced yet.
 
         Args:
-            entity_type: Optional filter by type (npc, location, dungeon, item, plot)
+            entity_type: Optional filter by type (npc, location, dungeon, item, plot/quest)
 
         Returns:
             List of entity dicts with type, name, has_context
         """
-        entity_files = {
-            "npc": "npcs.json",
-            "location": "locations.json",
-            "item": "items.json",
-            "plot": "plots.json",
+        node_type_map = {
+            "npc": ["npc"],
+            "location": ["location"],
+            "dungeon": ["location"],
+            "item": ["item"],
+            "plot": ["quest"],
+            "quest": ["quest"],
         }
 
-        # Handle dungeon as a special case of location
-        if entity_type == "dungeon":
-            entity_files = {"location": "locations.json"}
-        elif entity_type:
-            entity_files = {entity_type: entity_files.get(entity_type)}
+        if entity_type:
+            search_types = node_type_map.get(entity_type, [entity_type])
+        else:
+            search_types = ["npc", "location", "item", "quest"]
 
+        wg = WorldGraph(str(self.campaign_dir))
         unenhanced = []
 
-        for etype, filename in entity_files.items():
-            if not filename:
-                continue
-            data = self.json_ops.load_json(filename)
-            if not isinstance(data, dict):
-                continue
+        for ntype in search_types:
+            for node in wg.list_nodes(node_type=ntype):
+                d = node.get("data", {})
+                if d.get("enhanced"):
+                    continue
 
-            for name, entity_data in data.items():
-                if not entity_data.get("enhanced"):
-                    # Determine actual type (location vs dungeon)
-                    actual_type = etype
-                    if etype == "location" and entity_data.get("dungeon"):
-                        actual_type = "dungeon"
+                actual_type = ntype
+                if ntype == "location" and d.get("dungeon"):
+                    actual_type = "dungeon"
 
-                    # Filter by dungeon if requested
-                    if entity_type == "dungeon" and actual_type != "dungeon":
-                        continue
+                if entity_type == "dungeon" and actual_type != "dungeon":
+                    continue
 
-                    unenhanced.append({
-                        "type": actual_type,
-                        "name": name,
-                        "has_context": len(entity_data.get("context", [])) > 0
-                    })
+                unenhanced.append({
+                    "type": actual_type,
+                    "name": node["name"],
+                    "has_context": len(d.get("context", [])) > 0
+                })
 
         return unenhanced
 

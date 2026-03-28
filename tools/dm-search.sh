@@ -98,7 +98,7 @@ fi
 if [ "$TAG_SEARCH" = true ]; then
     echo "Searching World State"
     echo "====================="
-    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/search.py" "$TAG_TYPE" "$TAG_VALUE" $([ "$FULL_OUTPUT" = true ] && echo "--full"))
+    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/world_graph.py" search "$TAG_VALUE" --node-type npc)
     WORLD_STATUS=$?
     echo "$WORLD_OUTPUT"
     WORLD_CHARS=${#WORLD_OUTPUT}
@@ -114,7 +114,7 @@ CAMPAIGN_DIR=$(bash "$TOOLS_DIR/dm-campaign.sh" path 2>/dev/null)
 if [ "$RAG_ONLY" = false ]; then
     echo "Searching World State"
     echo "====================="
-    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/search.py" "$QUERY" $([ "$FULL_OUTPUT" = true ] && echo "--full"))
+    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/world_graph.py" search "$QUERY")
     WORLD_STATUS=$?
     echo "$WORLD_OUTPUT"
     WORLD_CHARS=${#WORLD_OUTPUT}

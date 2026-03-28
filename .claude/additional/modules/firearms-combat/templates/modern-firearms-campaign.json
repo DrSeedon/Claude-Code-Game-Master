@@ -2,7 +2,11 @@
   "_template_info": {
     "name": "Modern/STALKER Firearms Campaign",
     "description": "Template for modern/post-apocalyptic campaigns with firearms mechanics",
-    "use_cases": ["STALKER", "Fallout", "Modern Military", "Cyberpunk", "Zombie Survival"]
+    "use_cases": ["STALKER", "Fallout", "Modern Military", "Cyberpunk", "Zombie Survival"],
+    "data_split": {
+      "module_data": "fire_modes, penetration_vs_armor, range_rules, combat_style, combat_rules go into module-data/firearms-combat.json",
+      "world_json": "weapons, armor_types, enemies go into world.json as nodes (weapon:*, armor:*, creature:*) via dm-world.sh add-node. See creation-rules.md Step 7 for commands."
+    }
   },
   "campaign_rules": {
     "firearms_system": {

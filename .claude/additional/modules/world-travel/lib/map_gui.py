@@ -17,10 +17,8 @@ except ImportError:
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
-
 from lib.json_ops import JsonOperations
-from module_data import ModuleDataManager
+from lib.module_data import ModuleDataManager
 from connection_utils import get_unique_edges, get_connections, _segment_intersects_circle
 
 MODULE_DIR = Path(__file__).parent

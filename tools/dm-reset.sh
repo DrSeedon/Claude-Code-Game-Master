@@ -43,13 +43,14 @@ preview_world() {
     require_active_campaign
     echo "📊 Current World State:"
     echo ""
-    $PYTHON_CMD "$LIB_DIR/world_stats.py" counts
+    $PYTHON_CMD "$LIB_DIR/world_graph.py" stats
     echo ""
     echo "📁 Files that would be reset:"
-    echo "  • $WORLD_STATE_DIR/npcs.json"
-    echo "  • $WORLD_STATE_DIR/locations.json"
-    echo "  • $WORLD_STATE_DIR/facts.json"
-    echo "  • $WORLD_STATE_DIR/consequences.json"
+    echo "  • $WORLD_STATE_DIR/world.json"
+    echo "  • $WORLD_STATE_DIR/npcs.json (legacy)"
+    echo "  • $WORLD_STATE_DIR/locations.json (legacy)"
+    echo "  • $WORLD_STATE_DIR/facts.json (legacy)"
+    echo "  • $WORLD_STATE_DIR/consequences.json (legacy)"
     echo "  • $WORLD_STATE_DIR/campaign-overview.json"
     echo "  • $WORLD_STATE_DIR/session-log.md"
     # Check for new format (character.json) vs legacy (characters/)
@@ -65,21 +66,15 @@ reset_world() {
     echo "🧹 Resetting world state..."
     echo ""
 
-    # Reset NPCs
-    echo '{}' > "$NPCS_FILE"
-    echo "  ✓ NPCs cleared"
+    # Reset WorldGraph (primary)
+    echo '{"nodes":{},"edges":[]}' > "$WORLD_STATE_DIR/world.json"
+    echo "  ✓ WorldGraph cleared"
 
-    # Reset Locations
-    echo '{}' > "$LOCATIONS_FILE"
-    echo "  ✓ Locations cleared"
-
-    # Reset Facts
-    echo '{}' > "$FACTS_FILE"
-    echo "  ✓ Facts cleared"
-
-    # Reset Consequences
-    echo '{"active": [], "resolved": []}' > "$CONSEQUENCES_FILE"
-    echo "  ✓ Consequences cleared"
+    # Reset legacy flat files (backward compat for old campaigns)
+    [ -f "$NPCS_FILE" ] && echo '{}' > "$NPCS_FILE" && echo "  ✓ NPCs (legacy) cleared"
+    [ -f "$LOCATIONS_FILE" ] && echo '{}' > "$LOCATIONS_FILE" && echo "  ✓ Locations (legacy) cleared"
+    [ -f "$FACTS_FILE" ] && echo '{}' > "$FACTS_FILE" && echo "  ✓ Facts (legacy) cleared"
+    [ -f "$CONSEQUENCES_FILE" ] && echo '{"active": [], "resolved": []}' > "$CONSEQUENCES_FILE" && echo "  ✓ Consequences (legacy) cleared"
 
     # Reset Campaign Overview
     cat > "$CAMPAIGN_OVERVIEW" << 'EOF'

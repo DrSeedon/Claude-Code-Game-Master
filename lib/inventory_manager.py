@@ -15,9 +15,6 @@ from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 
 sys.path.insert(0, str(Path(__file__).parent))
-# Infrastructure imports
-_infra_dir = Path(__file__).parent.parent / ".claude" / "additional" / "infrastructure"
-sys.path.insert(0, str(_infra_dir))
 from module_data import ModuleDataManager
 
 # Import colors for formatted output
@@ -42,6 +39,7 @@ except ImportError:
             MAGENTA = ""
 from currency import load_config, format_money, format_delta, parse_money, migrate_gold, can_afford
 from dice import roll as dice_roll, roll_formatted as dice_roll_formatted
+from world_graph import WorldGraph
 
 
 ITEM_CATEGORIES = {
@@ -85,12 +83,11 @@ class InventoryManager:
 
     def __init__(self, campaign_path: Path, npc_name: Optional[str] = None):
         self.campaign_path = campaign_path
-        self.character_file = campaign_path / "character.json"
-        self.npcs_file = campaign_path / "npcs.json"
         self.module_data_mgr = ModuleDataManager(campaign_path)
         self.npc_name = npc_name
         self.is_npc = npc_name is not None
         self.currency_config = load_config(campaign_path)
+        self._wg = WorldGraph(str(campaign_path))
         self.character = self._load_character()
         self.inventory = self._load_inventory()
         self.changes_log = []
@@ -101,10 +98,11 @@ class InventoryManager:
         if self.is_npc:
             return self._load_npc_as_character()
 
-        if not self.character_file.exists():
-            raise FileNotFoundError(f"Character file not found: {self.character_file}")
-        with open(self.character_file, 'r', encoding='utf-8') as f:
-            char = json.load(f)
+        node = self._wg.get_node("player:active")
+        if not node:
+            raise FileNotFoundError("Player node not found in world.json")
+        char = dict(node.get("data", {}))
+        char["name"] = node.get("name", char.get("name", "Player"))
         if char.get('money') is None:
             char['money'] = migrate_gold(char.get('gold', 0), self.currency_config)
         cs_data = self.module_data_mgr.load("custom-stats")
@@ -113,21 +111,21 @@ class InventoryManager:
         return char
 
     def _load_npc_as_character(self) -> Dict:
-        if not self.npcs_file.exists():
-            raise FileNotFoundError(f"NPCs file not found: {self.npcs_file}")
-        with open(self.npcs_file, 'r', encoding='utf-8') as f:
-            npcs = json.load(f)
-        if self.npc_name not in npcs:
+        npc_id = self._wg._resolve_id(self.npc_name, "npc")
+        if not npc_id:
             raise ValueError(f"NPC '{self.npc_name}' not found")
-        npc = npcs[self.npc_name]
-        if not npc.get('is_party_member'):
+        node = self._wg.get_node(npc_id)
+        if not node:
+            raise ValueError(f"NPC '{self.npc_name}' not found")
+        npc_data = node.get("data", {})
+        if not npc_data.get('is_party_member') and not npc_data.get('party_member'):
             raise ValueError(f"'{self.npc_name}' is not a party member. Use 'dm-npc.sh promote' first.")
-        sheet = npc.get('character_sheet', {})
+        sheet = npc_data.get('character_sheet', {})
         raw_money = sheet.get('money', None)
         if raw_money is None:
             raw_money = migrate_gold(sheet.get('gold', 0), self.currency_config)
         char = {
-            'name': self.npc_name,
+            'name': node.get('name', self.npc_name),
             'level': sheet.get('level', 1),
             'race': sheet.get('race', 'Unknown'),
             'class': sheet.get('class', 'Commoner'),
@@ -149,8 +147,9 @@ class InventoryManager:
 
         custom_stats = self.character.pop('custom_stats', {})
         save_data = {k: v for k, v in self.character.items() if k not in ("inventory", "gold")}
-        with open(self.character_file, 'w', encoding='utf-8') as f:
-            json.dump(save_data, f, indent=2, ensure_ascii=False)
+        char_name = save_data.pop("name", "Player")
+        self._wg.update_node("player:active", {"name": char_name, "data": save_data})
+        save_data["name"] = char_name
         if custom_stats:
             self.character['custom_stats'] = custom_stats
             cs_data = self.module_data_mgr.load("custom-stats") or {}
@@ -158,9 +157,14 @@ class InventoryManager:
             self.module_data_mgr.save("custom-stats", cs_data)
 
     def _save_npc_character(self):
-        with open(self.npcs_file, 'r', encoding='utf-8') as f:
-            npcs = json.load(f)
-        sheet = npcs[self.npc_name].setdefault('character_sheet', {})
+        npc_id = self._wg._resolve_id(self.npc_name, "npc")
+        if not npc_id:
+            return
+        node = self._wg.get_node(npc_id)
+        if not node:
+            return
+        npc_data = dict(node.get("data", {}))
+        sheet = npc_data.setdefault('character_sheet', {})
         sheet['hp'] = self.character.get('hp', {'current': 10, 'max': 10})
         sheet['ac'] = self.character.get('ac', 10)
         sheet['money'] = self.character.get('money', 0)
@@ -169,8 +173,7 @@ class InventoryManager:
         sheet['xp'] = xp.get('current', 0) if isinstance(xp, dict) else xp
         sheet['stats'] = self.character.get('stats', {})
         sheet['level'] = self.character.get('level', 1)
-        with open(self.npcs_file, 'w', encoding='utf-8') as f:
-            json.dump(npcs, f, indent=2, ensure_ascii=False)
+        self._wg.update_node(npc_id, {"data": npc_data})
 
     def _load_inventory(self) -> Dict:
         if self.is_npc:
@@ -199,9 +202,6 @@ class InventoryManager:
     def _migrate_old_format(self):
         if "equipment" in self.character:
             print("[MIGRATION] Converting old equipment format...")
-            backup_file = self.character_file.with_suffix('.json.backup')
-            with open(backup_file, 'w', encoding='utf-8') as f:
-                json.dump(self.character, f, indent=2, ensure_ascii=False)
             stackable = {}
             unique = []
             for item in self.character.get("equipment", []):
@@ -748,18 +748,20 @@ class InventoryManager:
         return True
 
     def _is_npc_name(self, name: str) -> bool:
-        if not self.npcs_file.exists():
+        npc_id = self._wg._resolve_id(name, "npc")
+        if not npc_id:
             return False
-        with open(self.npcs_file, 'r', encoding='utf-8') as f:
-            npcs = json.load(f)
-        return name in npcs and npcs[name].get('is_party_member', False)
+        node = self._wg.get_node(npc_id)
+        if not node:
+            return False
+        npc_data = node.get("data", {})
+        return npc_data.get('is_party_member', False) or npc_data.get('party_member', False)
 
     def _is_player_name(self, name: str) -> bool:
-        if not self.character_file.exists():
+        node = self._wg.get_node("player:active")
+        if not node:
             return False
-        with open(self.character_file, 'r', encoding='utf-8') as f:
-            char = json.load(f)
-        return char.get('name', '') == name
+        return node.get('name', '').lower() == name.lower()
 
     # --- Drop (combat) ---
 
@@ -1025,11 +1027,7 @@ class InventoryManager:
         print("\n" + "=" * 68)
 
     def show_party_inventory(self):
-        if not self.npcs_file.exists():
-            print("No NPCs file found.")
-            return
-        with open(self.npcs_file, 'r', encoding='utf-8') as f:
-            npcs = json.load(f)
+        npc_nodes = self._wg.list_nodes(node_type="npc")
 
         player_name = self.character.get('name', 'Player')
         player_weight = self.calculate_weight()
@@ -1039,9 +1037,11 @@ class InventoryManager:
         print(f"\n  ► {player_name} (PLAYER)")
         print(f"    Weight: {player_weight['total_weight']}/{player_weight['capacity']} kg — {player_weight['status']}")
 
-        for npc_name, npc_data in npcs.items():
-            if not npc_data.get('is_party_member'):
+        for node in npc_nodes:
+            npc_data = node.get("data", {})
+            if not npc_data.get('is_party_member') and not npc_data.get('party_member'):
                 continue
+            npc_name = node.get("name", node["id"])
             try:
                 npc_mgr = InventoryManager(self.campaign_path, npc_name=npc_name)
                 npc_weight = npc_mgr.calculate_weight()
@@ -1063,21 +1063,14 @@ class InventoryManager:
 # --- CLI ---
 
 def _resolve_target(campaign_path: Path, name: str) -> Optional[str]:
-    char_file = campaign_path / "character.json"
-    if char_file.exists():
-        with open(char_file, 'r', encoding='utf-8') as f:
-            char = json.load(f)
-        if char.get('name', '').lower() == name.lower():
-            return None
-
-    npcs_file = campaign_path / "npcs.json"
-    if npcs_file.exists():
-        with open(npcs_file, 'r', encoding='utf-8') as f:
-            npcs = json.load(f)
-        for npc_name in npcs:
-            if npc_name.lower() == name.lower():
-                return npc_name
-
+    wg = WorldGraph(str(campaign_path))
+    player = wg.get_node("player:active")
+    if player and player.get("name", "").lower() == name.lower():
+        return None
+    npc_id = wg._resolve_id(name, "npc")
+    if npc_id:
+        node = wg.get_node(npc_id)
+        return node.get("name", name) if node else None
     return None
 
 
@@ -1312,23 +1305,36 @@ def main():
         sys.exit(0 if success else 1)
 
     elif args.command == 'use':
-        from wiki_manager import WikiManager
-        wiki = WikiManager(str(campaign_path))
-        _use_consumable(manager, wiki, args.item, args.qty)
+        wg = WorldGraph(campaign_path)
+        _use_consumable(manager, wg, args.item, args.qty)
         sys.exit(0)
 
     elif args.command == 'craft':
-        from wiki_manager import WikiManager
-        wiki = WikiManager(str(campaign_path))
-        _craft_item(manager, wiki, args.item, args.qty, args.check)
+        wg = WorldGraph(campaign_path)
+        _craft_item(manager, wg, args.item, args.qty, args.check)
         sys.exit(0)
 
 
-def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = False) -> bool:
+def _wiki_lookup(wg: 'WorldGraph', item_id: str) -> Optional[dict]:
+    rid = wg._resolve_id(item_id) or item_id
+    node = wg.get_node(rid)
+    if not node:
+        return None
+    result = {
+        "_id": rid,
+        "name": node.get("name", rid),
+        "type": node.get("type", "misc"),
+    }
+    data = node.get("data", {})
+    result.update({k: v for k, v in data.items()})
+    return result
+
+
+def _craft_item(manager, wg: 'WorldGraph', item_id: str, qty: int = 1, check_only: bool = False) -> bool:
     B = Colors.B; RS = Colors.RS; C = Colors.C; G = Colors.G
     R = Colors.R; DM = Colors.DM; Y = Colors.Y
 
-    entity = wiki.show(item_id)
+    entity = _wiki_lookup(wg, item_id)
     if not entity:
         print(f"[ERROR] '{item_id}' not found in wiki", file=sys.stderr)
         return False
@@ -1361,7 +1367,7 @@ def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = Fa
     stackable = inv.get('stackable', {})
     for ing_id, ing_qty in ingredients.items():
         needed = ing_qty * qty
-        ing_entity = wiki.show(ing_id)
+        ing_entity = _wiki_lookup(wg, ing_id)
         ing_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
         have = 0
         for inv_name, inv_data in stackable.items():
@@ -1376,7 +1382,7 @@ def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = Fa
     print(f"  {DM}Skill: {skill_name} +{skill_bonus}, DC: {dc}{'+' + str(dc_mod) if dc_mod else ''} = {effective_dc}{RS}")
     print(f"  Ингредиенты:")
     for ing_id, ing_qty in ingredients.items():
-        ing_entity = wiki.show(ing_id)
+        ing_entity = _wiki_lookup(wg, ing_id)
         ing_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
         needed = ing_qty * qty
         have = 0
@@ -1410,7 +1416,7 @@ def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = Fa
     def _resolve_ing_names():
         names = {}
         for ing_id in ingredients:
-            ing_entity = wiki.show(ing_id)
+            ing_entity = _wiki_lookup(wg, ing_id)
             wiki_name = ing_entity.get('name', ing_id) if ing_entity else ing_id
             matched_inv_name = wiki_name
             for inv_name in stackable:
@@ -1483,11 +1489,11 @@ def _craft_item(manager, wiki, item_id: str, qty: int = 1, check_only: bool = Fa
     return successes > 0
 
 
-def _use_consumable(manager, wiki, item_name: str, qty: int = 1) -> bool:
+def _use_consumable(manager, wg: 'WorldGraph', item_name: str, qty: int = 1) -> bool:
     B = Colors.B; RS = Colors.RS; C = Colors.C; G = Colors.G
     R = Colors.R; DM = Colors.DM; Y = Colors.Y
 
-    entity = wiki.show(item_name)
+    entity = _wiki_lookup(wg, item_name)
     if not entity:
         print(f"[ERROR] '{item_name}' not found in wiki", file=sys.stderr)
         return False
