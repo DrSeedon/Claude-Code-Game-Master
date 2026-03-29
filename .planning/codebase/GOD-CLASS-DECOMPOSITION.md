@@ -463,4 +463,316 @@ def main(): ...  # CLI stays here
 
 ---
 
-*Sections 2 and 3 (InventoryManager and secondary problem classes) will be added by subsequent subtasks.*
+## 2. InventoryManager (lib/inventory_manager.py)
+
+**LOC:** 1,554 | **Methods:** 38 (28 class methods + 2 standalone functions + 2 module-level helpers + `main()`) | **Inherits:** None
+
+InventoryManager is the unified inventory/stats manager for player characters and party NPCs. It handles item CRUD, gold/HP/XP modifications, weight/encumbrance calculations, transfers between characters, crafting, consumable use, and formatted display output. Operates in dual mode: player (default) or NPC (via `npc_name` constructor parameter).
+
+### 2.1 Complete Method Catalog by Responsibility Group
+
+#### Group A: Load/Save & Initialization (9 methods, ~118 LOC, lines 86–227)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 86 | `__init__` | Init with campaign path + optional NPC name, load character + inventory |
+| 100 | `_load_character` | Load player from `character.json`, merge custom stats from module-data |
+| 115 | `_load_npc_as_character` | Load NPC `character_sheet` into player-compatible dict |
+| 145 | `_save_character` | Persist player to `character.json` + custom stats to module-data |
+| 160 | `_save_npc_character` | Write NPC stats back into `npcs.json` |
+| 175 | `_load_inventory` | Load player inventory from `module-data/inventory-system.json` |
+| 183 | `_load_npc_inventory` | Load NPC inventory from `module-data/inventory-party.json` |
+| 189 | `_save_inventory` | Persist inventory (player or NPC path) |
+| 199 | `_migrate_old_format` | One-time migration from legacy `equipment[]` or inline `inventory{}` |
+
+**Coupling:** `ModuleDataManager` for module-data I/O, `currency.py` for gold migration, `character.json` / `npcs.json` for persistence. The dual player/NPC branching is replicated across load, save, and inventory methods (6 if/else branches).
+
+#### Group B: Migration Helpers (3 methods, ~20 LOC, lines 228–247)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 228 | `_is_unique_item` | Heuristic: detect unique items by regex/keywords |
+| 243 | `_parse_item_quantity` | Parse "Item (3 шт)" → (name, qty) |
+| 199 | `_migrate_old_format` | *(listed in Group A — orchestrates B helpers)* |
+
+**Coupling:** Only used by `_migrate_old_format`. Dead code if no legacy campaigns remain.
+
+#### Group C: Weight & Encumbrance (9 methods, ~108 LOC, lines 249–355)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 251 | `_get_stackable_qty` | Get quantity from stackable entry (handles dict/int) |
+| 257 | `_get_stackable_weight` | Get per-unit weight from stackable entry |
+| 265 | `_set_stackable` | Set quantity+weight for stackable item |
+| 281 | `_parse_unique_weight` | Extract `[Xkg]` tag from unique item string |
+| 287 | `_get_unique_weight` | Get weight for unique item (tag or default) |
+| 293 | `_add_weight_to_unique` | Append `[Xkg]` tag to unique item string |
+| 298 | `calculate_weight` | Full weight calculation with encumbrance tiers (58 LOC) |
+| 672 | `_categorize_item` | Keyword-based item categorization (ammo/weapon/food/etc.) |
+| 985 | `show_weight_breakdown` | Formatted weight report (42 LOC) |
+
+**Coupling:** Uses `ITEM_CATEGORIES`, `DEFAULT_WEIGHTS`, `ENCUMBRANCE_*` module constants. `calculate_weight` reads `character.stats.str` for capacity.
+
+#### Group D: Transaction Validation & Execution (4 methods, ~186 LOC, lines 359–543)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 359 | `validate_transaction` | Pre-check gold, HP, item quantities, custom stats (50 LOC) |
+| 412 | `apply_transaction` | Execute operations dict atomically with rollback (132 LOC) |
+| 561 | `_preview_changes` | Dry-run display for `--test` mode (45 LOC) |
+| 545 | `_print_weight_warning` | Emit encumbrance warnings post-transaction |
+
+**Coupling:** Heart of the class. `apply_transaction` calls `_save_character`, `_save_inventory`, `calculate_weight`, `_print_changes_summary`. Operations dict is a mini-DSL with keys: `gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `custom_stats`, `_weights`, `_unique_weights`, `_dice_rolls`.
+
+#### Group E: Display & Formatting (3 methods, ~152 LOC, lines 607–983)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 607 | `_print_changes_summary` | Rich ANSI output of transaction results (65 LOC) |
+| 815 | `show_status` | Compact session-start status (50 LOC) |
+| 880 | `show_inventory` | Full inventory display with filtering (103 LOC) |
+
+**Coupling:** Uses `Colors` (imported or fallback stub), `format_money`/`format_delta` from currency.py. All three methods duplicate HP/XP/weight extraction logic.
+
+#### Group F: Transfer & Drop (5 methods, ~82 LOC, lines 680–811)
+
+| Line | Method | Purpose |
+|------|--------|---------|
+| 682 | `transfer_to` | Move items between player↔NPC inventories (67 LOC) |
+| 750 | `_is_npc_name` | Check if name is a party NPC |
+| 757 | `_is_player_name` | Check if name matches player character |
+| 766 | `remove_item` | Direct removal (bypass transaction for sold/destroyed) (46 LOC) |
+| 1027 | `show_party_inventory` | Display all party members' inventories (34 LOC) |
+
+**Coupling:** `transfer_to` creates a second `InventoryManager` instance for the target — recursive instantiation pattern. `remove_item` bypasses `apply_transaction`, saving directly — inconsistent with the transaction model.
+
+#### Group G: Wiki Integration — Standalone Functions (2 functions, ~223 LOC, lines 1327–1549)
+
+| Line | Function | Purpose |
+|------|----------|---------|
+| 1327 | `_craft_item` | Craft from wiki recipe: check ingredients, roll skill, apply transaction (157 LOC) |
+| 1486 | `_use_consumable` | Use consumable: lookup wiki effects, build operations, apply (64 LOC) |
+
+**Coupling:** Import `WikiManager` at call time (lazy import). Receive `manager` as parameter. These are **standalone functions**, not class methods — extracted but still tightly coupled to `InventoryManager` internals (access `.inventory`, `.character`, `.apply_transaction`, `.reason`).
+
+#### Group H: CLI Entry Point (2 functions, ~260 LOC, lines 1065–1325)
+
+| Line | Function | Purpose |
+|------|----------|---------|
+| 1065 | `_resolve_target` | Map character name → NPC name or None (player) |
+| 1084 | `main` | argparse CLI with 8 subcommands: update, show, weigh, party, transfer, loot, remove, use, craft (241 LOC) |
+
+**Coupling:** Pure dispatch. Duplicates gold-parsing logic between `update` and `loot` subcommands (lines 1201–1212 ≈ 1271–1282).
+
+### 2.2 Responsibility Group Summary
+
+| Group | Responsibility | Methods | Est. LOC | % of Total |
+|-------|---------------|---------|----------|------------|
+| A | Load/Save & Init | 9 | 118 | 7.6% |
+| B | Migration Helpers | 2 | 20 | 1.3% |
+| C | Weight & Encumbrance | 9 | 108 | 6.9% |
+| D | Transaction System | 4 | 186 | 12.0% |
+| E | Display & Formatting | 3 | 152 | 9.8% |
+| F | Transfer & Drop | 5 | 82 | 5.3% |
+| G | Wiki Integration (standalone) | 2 | 223 | 14.3% |
+| H | CLI Entry Point | 2 | 260 | 16.7% |
+| — | Constants, imports, blank lines | — | ~405 | 26.1% |
+| **Total** | | **36+** | **1,554** | **100%** |
+
+### 2.3 Dual Player/NPC Mode Analysis
+
+The `is_npc` flag creates **parallel code paths** throughout the class:
+
+| Operation | Player Path | NPC Path |
+|-----------|------------|----------|
+| Load character | `character.json` | `npcs.json` → `character_sheet` → normalize to player dict |
+| Save character | `character.json` + module-data `custom-stats` | `npcs.json` → denormalize back to `character_sheet` |
+| Load inventory | `module-data/inventory-system.json` | `module-data/inventory-party.json[npc_name]` |
+| Save inventory | `module-data/inventory-system.json` | `module-data/inventory-party.json[npc_name]` |
+
+**Issues:**
+1. **Normalization asymmetry** — NPC data is normalized to player format on load and denormalized on save. Fields like `xp` (int vs dict), `hp` (int vs dict), and `money` (with gold migration) are handled differently. This creates subtle bugs when NPC data doesn't match expected shapes.
+2. **No shared abstraction** — Both paths produce the same `self.character` dict, but the mapping logic is duplicated across 4 method pairs instead of using a Strategy or Adapter pattern.
+3. **Recursive instantiation** — `transfer_to` creates a new `InventoryManager(npc_name=target)` to add items to the target. `show_party_inventory` creates one per NPC. This causes redundant file I/O (character.json loaded N+1 times).
+
+### 2.4 Code Smells
+
+1. **God class** — 1,554 LOC mixing persistence, business logic, display, CLI parsing, and wiki integration
+2. **Operations dict as mini-DSL** — `apply_transaction` accepts a `Dict` with 11+ possible keys (`gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `custom_stats`, `_weights`, `_unique_weights`, `_dice_rolls`). No schema, no type safety, underscore-prefixed "private" keys mixed with public ones.
+3. **Inconsistent save patterns** — `apply_transaction` does atomic save with rollback; `remove_item` saves directly; `transfer_to` calls `apply_transaction` then does additional saves. Three different consistency models.
+4. **Duplicated display logic** — HP extraction (`isinstance(hp, dict)` check) appears 6 times. Gold formatting appears 8+ times. Weight status coloring appears in 3 methods.
+5. **Hardcoded Russian strings** — `_craft_item` and `_use_consumable` contain Russian UI text ("Ингредиенты:", "АВТОУСПЕХ", "скрафтил", etc.) violating the English-only rules policy.
+6. **Duplicated gold parsing** — Lines 1201–1212 (update) ≈ 1271–1282 (loot) — identical `parse_money` loop.
+7. **Module constants as global state** — `ITEM_CATEGORIES`, `DEFAULT_WEIGHTS`, `ENCUMBRANCE_TIERS` are hardcoded at module level with mixed Russian/English keywords, not configurable per campaign.
+
+### 2.5 Proposed Decomposition: 5 Focused Classes
+
+#### Class 1: `CharacterStore` (Group A persistence)
+**File:** `lib/character_store.py` (~120 LOC)
+**Responsibility:** Load/save character and inventory data, abstracting player vs NPC differences
+
+```python
+class CharacterStore:
+    """Unified character data access for player and NPC."""
+    def __init__(self, campaign_path: Path, npc_name: Optional[str] = None)
+    def load_character(self) -> dict
+    def save_character(self, data: dict)
+    def load_inventory(self) -> dict
+    def save_inventory(self, data: dict)
+    @property
+    def is_npc(self) -> bool
+    @property
+    def name(self) -> str
+```
+
+**Key improvement:** Encapsulate the player/NPC branching in one place. All other classes receive a `CharacterStore` and never check `is_npc`.
+
+#### Class 2: `WeightCalculator` (Group C)
+**File:** `lib/weight_calculator.py` (~100 LOC)
+**Responsibility:** Weight calculation, encumbrance tiers, item categorization
+
+```python
+class WeightCalculator:
+    def __init__(self, config: Optional[dict] = None)  # campaign-specific weight config
+    def calculate(self, inventory: dict, str_score: int) -> dict
+    def categorize_item(self, name: str) -> str
+    def get_stackable_weight(self, item_name: str, val) -> float
+    def get_unique_weight(self, item: str) -> float
+```
+
+**Key improvement:** Configurable weight constants (move `ITEM_CATEGORIES`, `DEFAULT_WEIGHTS`, `ENCUMBRANCE_TIERS` into campaign config). Pure computation, no I/O.
+
+#### Class 3: `InventoryTransaction` (Group D)
+**File:** `lib/inventory_transaction.py` (~200 LOC)
+**Responsibility:** Atomic inventory/stat modifications with validation and rollback
+
+```python
+@dataclass
+class TransactionOps:
+    """Typed replacement for the operations dict."""
+    gold: int = 0
+    hp: int = 0
+    xp: int = 0
+    add: Dict[str, int] = field(default_factory=dict)
+    remove: Dict[str, int] = field(default_factory=dict)
+    add_unique: List[str] = field(default_factory=list)
+    remove_unique: List[str] = field(default_factory=list)
+    custom_stats: Dict[str, int] = field(default_factory=dict)
+    weights: Dict[str, float] = field(default_factory=dict)
+
+class InventoryTransaction:
+    def __init__(self, store: CharacterStore, weight_calc: WeightCalculator)
+    def validate(self, ops: TransactionOps) -> Tuple[bool, List[str]]
+    def execute(self, ops: TransactionOps, test_mode: bool = False) -> bool
+```
+
+**Key improvement:** Replace untyped `Dict` operations with `TransactionOps` dataclass. Eliminate `_weights`/`_dice_rolls` underscore-key hack.
+
+#### Class 4: `InventoryDisplay` (Group E + partial F)
+**File:** `lib/inventory_display.py` (~200 LOC)
+**Responsibility:** All formatted output — status, full inventory, weight breakdown, party summary, transaction summaries
+
+```python
+class InventoryDisplay:
+    def __init__(self, currency_config: dict)
+    def print_status(self, character: dict, inventory: dict, weight_info: dict)
+    def print_inventory(self, character: dict, inventory: dict, weight_info: dict, category: Optional[str] = None)
+    def print_weight_breakdown(self, character: dict, weight_info: dict)
+    def print_party_summary(self, party_data: List[dict])
+    def print_transaction_result(self, changes_log: list, character: dict)
+    def print_weight_warning(self, weight_info: dict, who: str)
+    def preview_changes(self, ops: TransactionOps, character: dict)
+```
+
+**Key improvement:** Extract all ANSI formatting into one class. Eliminate duplicated HP/XP/weight extraction. Display methods become pure formatters that accept data, not managers.
+
+#### Class 5: `InventoryManager` (Facade + Transfer + CLI)
+**File:** `lib/inventory_manager.py` (~250 LOC)
+**Responsibility:** Backward-compatible facade, transfer logic, CLI entry point
+
+```python
+class InventoryManager:
+    """Backward-compatible facade delegating to focused classes."""
+    def __init__(self, campaign_path: Path, npc_name: Optional[str] = None):
+        self.store = CharacterStore(campaign_path, npc_name)
+        self.weight_calc = WeightCalculator()
+        self.transaction = InventoryTransaction(self.store, self.weight_calc)
+        self.display = InventoryDisplay(load_config(campaign_path))
+
+    # Delegate existing methods for backward compat
+    def apply_transaction(self, ops, test_mode=False) -> bool
+    def validate_transaction(self, ops) -> Tuple[bool, List[str]]
+    def calculate_weight(self) -> dict
+    def show_inventory(self, category=None)
+    def show_status(self)
+    def transfer_to(self, target, items, unique_items, test_mode=False) -> bool
+    def remove_item(self, item, qty=None, is_unique=False) -> bool
+```
+
+### 2.6 LOC Distribution After Decomposition
+
+| New Class | Est. LOC | Methods | SRP Focus |
+|-----------|----------|---------|-----------|
+| `CharacterStore` | 120 | 7 | Data persistence + player/NPC abstraction |
+| `WeightCalculator` | 100 | 5 | Weight computation + categorization |
+| `InventoryTransaction` | 200 | 3 | Atomic operations + validation |
+| `InventoryDisplay` | 200 | 7 | All formatted output |
+| `InventoryManager` (facade) | 250 | delegates + transfer + CLI | Backward compat |
+| `_craft_item` / `_use_consumable` | 220 | 2 | Wiki integration (stay as functions or move to `wiki_actions.py`) |
+| **Total** | **~1,090** | **~24+** | Reduced via deduplication |
+
+**Net reduction:** ~460 LOC (30%) from eliminating duplicated HP/gold extraction, gold parsing, display logic, and the player/NPC branching repetition.
+
+### 2.7 Migration Strategy
+
+**Approach:** Incremental extraction with facade pattern (same as WorldGraph)
+
+**Phase 1: Extract CharacterStore** (highest value — eliminates dual-mode branching)
+1. Move load/save methods into `lib/character_store.py`
+2. `InventoryManager.__init__` creates `self.store = CharacterStore(...)` and sets `self.character = self.store.load_character()`
+3. Replace all `self._save_character()` calls with `self.store.save_character(self.character)`
+4. All bash tools call `InventoryManager` unchanged — zero external impact
+5. Run `uv run pytest`
+
+**Phase 2: Extract WeightCalculator** (low risk — pure computation)
+1. Move weight methods + constants into `lib/weight_calculator.py`
+2. `InventoryManager` delegates `calculate_weight` to `self.weight_calc.calculate(...)`
+3. Make constants configurable via campaign config (optional)
+
+**Phase 3: Extract InventoryDisplay** (medium risk — many call sites)
+1. Move all `show_*` and `_print_*` methods into `lib/inventory_display.py`
+2. Deduplicate HP/XP/weight extraction into shared helpers
+3. `InventoryManager` delegates display calls
+
+**Phase 4: Extract InventoryTransaction** (highest risk — core logic)
+1. Introduce `TransactionOps` dataclass
+2. Move `validate_transaction` and `apply_transaction` into `lib/inventory_transaction.py`
+3. Keep facade methods that convert old `Dict` format → `TransactionOps` for backward compat
+4. `remove_item` should be refactored to use `InventoryTransaction` instead of direct saves
+
+**Phase 5: Fix standalone functions**
+1. Move `_craft_item` and `_use_consumable` to `lib/wiki_actions.py`
+2. Replace Russian UI strings with English (rules compliance)
+3. Import in CLI only when needed (maintain lazy import pattern)
+
+### 2.8 Backward Compatibility Strategy
+
+- **Facade pattern** — `InventoryManager` retains all existing method signatures
+- **Operations dict** — Old `Dict`-based transaction format continues to work through facade adapter that converts to `TransactionOps`
+- **Bash tool compatibility** — `dm-inventory.sh` calls `main()` CLI, which stays in `inventory_manager.py`
+- **Module middleware** — custom-stats module post-hooks call `InventoryManager` methods; facade ensures they work unchanged
+- **`transfer_to` recursive pattern** — Still creates child `InventoryManager` instances, but each internally uses `CharacterStore` (cleaner, same external behavior)
+
+### 2.9 Impact on Existing Tests
+
+| Test File | Tests InventoryManager? | Impact |
+|-----------|------------------------|--------|
+| `tests/test_inventory_manager.py` | Yes (if exists) | Facade preserves API |
+| `tests/test_session_manager.py` | Indirectly (via session flow) | None |
+| `tests/test_dice_combat.py` | No | None |
+
+**New tests needed:** Unit tests for `CharacterStore` (player vs NPC paths), `WeightCalculator` (encumbrance tiers), `InventoryTransaction` (validation + rollback), `InventoryDisplay` (output formatting).
+
+---
+
+*Section 3 (secondary problem classes) will be added by subsequent subtasks.*
