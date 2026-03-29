@@ -775,4 +775,279 @@ class InventoryManager:
 
 ---
 
-*Section 3 (secondary problem classes) will be added by subsequent subtasks.*
+## 3. Secondary Problem Classes
+
+### 3.1 DiceRoller (lib/dice.py)
+
+**LOC:** 739 | **Class Methods:** 3 (DiceRoller: `__init__`, `roll`, `format_result`) | **Standalone Functions:** 14 | **`main()` LOC:** ~300 (lines 439–737)
+
+#### 3.1.1 Structural Violations
+
+**Violation 1: Monolithic `main()` function (lines 439–737, ~300 LOC)**
+The CLI entry point is a single function handling argument parsing, character loading, skill/save/attack/spell resolution, creature lookup, advantage/disadvantage application, ammo checking, range calculation, damage rolling, and ammo consumption. This is procedural code with deep nesting (up to 5 levels of `if/elif/else`).
+
+**Violation 2: Mixed abstraction levels**
+The file contains three distinct layers jammed together:
+- **Pure dice engine** (lines 46–178): `DiceRoller` class — clean, well-scoped, 133 LOC
+- **Formatting helpers** (lines 181–268): `_dc_color`, `format_enhanced`, `roll`, `roll_detailed`, `roll_formatted` — module-level functions
+- **D&D combat orchestration** (lines 273–737): character loading, creature lookup, spell resolution, auto-damage, ammo tracking — 465 LOC of game-specific logic
+
+**Violation 3: Library code calling shell tools (lines 646–732)**
+`main()` calls `subprocess.run(["bash", "tools/dm-inventory.sh", ...])` twice — once to check ammo (line 650) and once to consume ammo (line 723). A library file should not shell out to bash wrappers; this creates circular dependency (tools → lib → tools).
+
+**Violation 4: Duplicated code in `roll()` method (lines 66–144)**
+The advantage, disadvantage, and standard roll branches each independently handle natural 20/1 detection (lines 84–88, 109–113, 136–140) and modifier parsing. The three branches share ~60% identical logic.
+
+#### 3.1.2 Method/Function Catalog
+
+| Line | Name | Type | LOC | Responsibility |
+|------|------|------|-----|----------------|
+| 46 | `DiceRoller.__init__` | method | 5 | Compile regex patterns |
+| 53 | `DiceRoller.roll` | method | 91 | Parse notation, roll dice, return result dict |
+| 146 | `DiceRoller.format_result` | method | 33 | ANSI-format roll result |
+| 181 | `_dc_color` | function | 16 | DC difficulty color gradient |
+| 197 | `format_enhanced` | function | 62 | Rich roll output with DC/AC checks |
+| 259 | `roll` | function | 4 | Convenience: notation → total |
+| 263 | `roll_detailed` | function | 4 | Convenience: notation → result dict |
+| 267 | `roll_formatted` | function | 6 | Convenience: notation → formatted string |
+| 273 | `_get_campaign_path` | function | 11 | Find active campaign directory |
+| 284 | `_load_character` | function | 13 | Load character.json |
+| 297 | `_load_creature` | function | 22 | Load creature from wiki |
+| 319 | `_resolve_skill` | function | 11 | Skill name → modifier |
+| 330 | `_resolve_save` | function | 34 | Save name → modifier (with Russian abbrev support) |
+| 364 | `_resolve_attack` | function | 41 | Weapon → attack modifier + damage + ammo |
+| 405 | `_load_spell` | function | 23 | Load spell from wiki |
+| 428 | `_resolve_spell_attack` | function | 11 | Spellcasting modifier |
+| 439 | `main` | function | 300 | CLI: all combat orchestration |
+
+#### 3.1.3 Proposed Decomposition
+
+**Class 1: `DiceRoller` (keep as-is, refactor internals)**
+**File:** `lib/dice.py` (~120 LOC)
+Refactor `roll()` to eliminate the three near-identical branches by extracting `_roll_and_keep(count, sides, keep, highest, modifier)` and `_check_natural(rolls, sides)` helpers.
+
+**Class 2: `CharacterResolver`**
+**File:** `lib/character_resolver.py` (~130 LOC)
+Extract `_load_character`, `_load_creature`, `_resolve_skill`, `_resolve_save`, `_resolve_attack`, `_load_spell`, `_resolve_spell_attack`, `_get_campaign_path` into a class that handles all character/creature stat lookups.
+
+```python
+class CharacterResolver:
+    def __init__(self, campaign_path: Optional[Path] = None)
+    def load_character(self) -> Optional[dict]
+    def load_creature(self, name: str) -> Optional[dict]
+    def resolve_skill(self, char: dict, skill_name: str) -> Tuple[Optional[int], Optional[int], str]
+    def resolve_save(self, char: dict, save_name: str) -> Tuple[Optional[int], str]
+    def resolve_attack(self, char: dict, weapon_name: Optional[str]) -> AttackInfo
+    def load_spell(self, name: str) -> Optional[dict]
+    def resolve_spell_attack(self, char: dict) -> Tuple[int, int, int]
+```
+
+**Class 3: `CombatRollOrchestrator`**
+**File:** `lib/combat_roll.py` (~200 LOC)
+Extract the combat orchestration logic from `main()` — target resolution, auto-damage, spell-vs-save, ammo management. Replace subprocess calls with direct Python imports.
+
+```python
+class CombatRollOrchestrator:
+    def __init__(self, resolver: CharacterResolver, roller: DiceRoller)
+    def build_roll(self, args: Namespace) -> RollSpec  # notation, label, dc, ac, damage_dice
+    def execute_roll(self, spec: RollSpec) -> RollResult
+    def handle_ammo(self, char: dict, weapon_ammo: str, consumed: bool)
+```
+
+**`main()` reduced to:** argparse + `CombatRollOrchestrator` dispatch (~60 LOC)
+
+#### 3.1.4 Effort Estimate
+
+| Phase | Work | Risk | Est. Hours |
+|-------|------|------|------------|
+| Extract `CharacterResolver` | Move 7 functions to class | Low | 2 |
+| Extract `CombatRollOrchestrator` | Decompose `main()` | Medium | 4 |
+| Replace subprocess calls | Direct Python imports for ammo | Low | 1 |
+| Refactor `DiceRoller.roll()` | Deduplicate 3 branches | Low | 1 |
+| Update tests | `test_dice_combat.py` adaptation | Low | 1 |
+| **Total** | | | **9 hours** |
+
+---
+
+### 3.2 EntityEnhancer (lib/entity_enhancer.py)
+
+**LOC:** 921 | **Class Methods:** 14 | **Standalone:** `main()` (222 LOC) | **Inherits:** None
+
+#### 3.2.1 Structural Violations
+
+**Violation 1: Dual responsibility — RAG search engine + world-state mutator**
+The class mixes two distinct concerns:
+- **Read-only RAG querying** (lines 91–368): `_ensure_rag`, `find_entity`, `search_raw`, `query_passages`, `_clean_passage`, `get_enhancement_summary` — pure search/retrieval operations
+- **World-state mutation** (lines 369–698): `apply_enhancements`, `count_dungeon_rooms`, `get_dungeon_info`, `get_scene_context`, `list_unenhanced`, `batch_enhance` — read/write JSON entity files
+
+These responsibilities have different change reasons: RAG query tuning vs. entity data schema changes.
+
+**Violation 2: `find_entity` is a 85-line method (lines 114–198) with 6 nested branches**
+It searches across 4 JSON files (`npcs.json`, `locations.json`, `items.json`, `plots.json`) with fuzzy matching, dungeon-type detection, and world-graph fallback. This duplicates entity resolution logic that exists in `WorldGraph._resolve_id`.
+
+**Violation 3: Monolithic `main()` (lines 700–921, 222 LOC)**
+CLI entry point with 9 subcommands (`find`, `query`, `apply`, `list-unenhanced`, `summary`, `search`, `dungeon-check`, `scene`, `batch`), each with inline display logic. Similar pattern to `dice.py` — CLI and presentation mixed.
+
+**Violation 4: Direct JSON file manipulation (lines 393–461)**
+`apply_enhancements` loads JSON via `json_ops`, modifies entity data, and saves — bypassing `WorldGraph` even though the graph is the authoritative data store. This creates potential consistency issues when both `WorldGraph` and `EntityEnhancer` modify the same entities.
+
+**Violation 5: Dungeon-specific logic embedded in generic class (lines 463–586)**
+`count_dungeon_rooms`, `get_dungeon_info`, and `get_scene_context` are domain-specific methods that account for ~125 LOC. They belong in a dungeon-focused module or in the domain layer.
+
+#### 3.2.2 Method Catalog by Responsibility
+
+| Group | Methods | Lines | LOC | Responsibility |
+|-------|---------|-------|-----|----------------|
+| A: RAG Init | `__init__`, `_ensure_rag` | 73–112 | 40 | Setup, lazy RAG loading |
+| B: Entity Search | `find_entity`, `search_raw`, `query_passages`, `_clean_passage` | 114–348 | 235 | RAG-based entity search |
+| C: Enhancement | `get_enhancement_summary`, `apply_enhancements`, `batch_enhance` | 349–698 | 200 | Context application to entities |
+| D: Dungeon | `count_dungeon_rooms`, `get_dungeon_info`, `get_scene_context` | 463–637 | 175 | Dungeon/scene-specific queries |
+| E: Unenhanced | `list_unenhanced` | 587–637 | 50 | Query entities missing enhancement |
+| F: CLI | `main` | 700–921 | 222 | argparse + display |
+
+#### 3.2.3 Proposed Decomposition
+
+**Class 1: `RAGSearchEngine` (Groups A + B)**
+**File:** `lib/rag_search.py` (~180 LOC)
+Pure read-only RAG search. No world-state mutation.
+
+```python
+class RAGSearchEngine:
+    def __init__(self, campaign_path: Optional[Path] = None)
+    def search(self, query: str, n_results: int = 15) -> List[Dict]
+    def query_entity(self, name: str, entity_type: str, n_results: int = 10) -> List[Dict]
+    def find_entity(self, name: str) -> Optional[Dict]
+```
+
+**Class 2: `EntityEnhancer` (Groups C + E, slimmed)**
+**File:** `lib/entity_enhancer.py` (~200 LOC)
+Focuses on enhancement application. Uses `RAGSearchEngine` for queries and `WorldGraph` for mutations (replacing direct JSON manipulation).
+
+```python
+class EntityEnhancer:
+    def __init__(self, search: RAGSearchEngine, world: WorldGraph)
+    def get_summary(self, entity: Dict, passages: List[Dict]) -> Dict
+    def apply(self, entity_type: str, entity_name: str, context: List[str], description: Optional[str]) -> bool
+    def list_unenhanced(self, entity_type: Optional[str] = None) -> List[Dict]
+    def batch_enhance(self, max_entities: Optional[int] = None) -> Dict[str, int]
+```
+
+**Dungeon methods:** Move to `WorldGraph` domain layer or a `DungeonManager` if complexity warrants.
+
+**`main()` stays** but delegates to the two classes, with display logic extracted into helper functions.
+
+#### 3.2.4 Effort Estimate
+
+| Phase | Work | Risk | Est. Hours |
+|-------|------|------|------------|
+| Extract `RAGSearchEngine` | Move search methods | Low | 2 |
+| Refactor `EntityEnhancer` | Use WorldGraph for mutations | Medium | 3 |
+| Move dungeon methods | To WorldGraph or separate module | Low | 1 |
+| Slim `main()` | Extract display helpers | Low | 1 |
+| Update tests + integration | Verify dm-enhance.sh, dm-search.sh | Medium | 2 |
+| **Total** | | | **9 hours** |
+
+---
+
+### 3.3 AgentExtractor (lib/agent_extractor.py)
+
+**LOC:** 726 | **Class Methods:** 14 | **Standalone:** `main()` (54 LOC) | **Inherits:** None
+
+#### 3.3.1 Structural Violations
+
+**Violation 1: `sys.exit(1)` in library code (line 101)**
+`prepare_for_agents` calls `sys.exit(1)` when RAG dependencies are missing (line 101). This is inside a class method, not `main()`. Library code should raise exceptions, not terminate the process. This prevents callers from handling the error gracefully (e.g., tests, other orchestrators).
+
+```python
+# Line 94-101 — VIOLATION
+if not check_rag_available():
+    missing = get_missing_deps()
+    print("ERROR: RAG dependencies not installed.")
+    ...
+    sys.exit(1)  # ← kills caller's process
+```
+
+**Fix:** Replace with `raise RuntimeError("RAG dependencies not installed: ...")`.
+
+**Violation 2: Manual argv parsing in `main()` (lines 672–724)**
+`main()` manually parses `sys.argv` instead of using `argparse`. It mutates `sys.argv` in-place (lines 687–688: `sys.argv.pop(idx)`) to extract the `--campaign` flag. This is fragile and inconsistent with the `argparse` pattern used by all other CLI entry points.
+
+**Violation 3: `validate_and_save` is a 172-line method (lines 366–537)**
+This single method handles: loading merged results, iterating entity types, conflict detection (name collisions), three conflict strategies (rename/skip/overwrite), data merging, saving to world-state files, and summary reporting. It has 7 levels of nesting and mixes validation, transformation, and persistence.
+
+**Violation 4: Dual responsibility — extraction orchestration + data persistence**
+The class mixes:
+- **Extraction workflow** (lines 84–278): `prepare_for_agents`, `create_agent_prompts`, `merge_agent_results` — document processing pipeline
+- **Data persistence** (lines 366–665): `validate_and_save`, `review_extraction`, `_write_chunk_files`, `_save_chunks`, `_cleanup_extraction_temp` — file I/O and conflict resolution
+
+#### 3.3.2 Method Catalog
+
+| Line | Method | LOC | Responsibility |
+|------|--------|-----|----------------|
+| 32 | `__init__` | 18 | Initialize paths, managers |
+| 60 | `_backup_existing_data` | 24 | Backup world-state before extraction |
+| 84 | `prepare_for_agents` | 95 | Extract + vectorize document (**contains sys.exit**) |
+| 179 | `create_agent_prompts` | 61 | Generate per-category agent prompts |
+| 240 | `merge_agent_results` | 37 | Merge agent JSON outputs |
+| 277 | `to_dict` (nested) | 12 | Convert list to name-keyed dict |
+| 366 | `validate_and_save` | 172 | Validate + conflict resolution + save |
+| 538 | `review_extraction` | 30 | Summary of extracted content |
+| 568 | `_write_chunk_files` | 20 | Write text chunks to disk |
+| 588 | `_save_chunks` | 26 | Save categorized chunks |
+| 614 | `_clear_extraction_temp` | 8 | Clear temp directory |
+| 622 | `_cleanup_extraction_temp` | 24 | Conditional cleanup |
+| 646 | `_find_unique_name` | 11 | Name deduplication helper |
+| 657 | `_sanitize_name` | 15 | Name → filesystem-safe slug |
+| 672 | `main` | 54 | CLI entry point (manual argv) |
+
+#### 3.3.3 Proposed Decomposition
+
+**Immediate fix (no decomposition needed):**
+1. Replace `sys.exit(1)` at line 101 with `raise RuntimeError(...)` — 1 line change
+2. Replace manual `sys.argv` parsing in `main()` with `argparse` — ~30 LOC rewrite
+
+**Optional decomposition for `validate_and_save`:**
+
+**Class 1: `ExtractionPipeline` (extraction workflow)**
+**File:** `lib/agent_extractor.py` (~350 LOC, renamed)
+Keep `prepare_for_agents`, `create_agent_prompts`, `merge_agent_results`.
+
+**Class 2: `ExtractionPersistence` (data persistence)**
+**File:** `lib/extraction_persistence.py` (~250 LOC)
+Move `validate_and_save` (decomposed into `validate`, `resolve_conflicts`, `save`), `review_extraction`, file I/O helpers.
+
+```python
+class ExtractionPersistence:
+    def __init__(self, json_ops: JsonOperations, campaign_manager: CampaignManager)
+    def validate(self, merged_data: Dict) -> Tuple[bool, List[str]]
+    def resolve_conflicts(self, new_data: Dict, existing_data: Dict, strategy: str) -> Dict
+    def save(self, validated_data: Dict) -> Dict[str, int]
+    def review(self) -> Dict
+```
+
+#### 3.3.4 Effort Estimate
+
+| Phase | Work | Risk | Est. Hours |
+|-------|------|------|------------|
+| Fix `sys.exit(1)` | Replace with exception | None | 0.25 |
+| Replace argv parsing with argparse | Rewrite `main()` | Low | 0.5 |
+| Extract `ExtractionPersistence` | Split `validate_and_save` | Medium | 3 |
+| Decompose `validate_and_save` | Break into validate/resolve/save | Medium | 2 |
+| Update tests | Verify extraction pipeline | Low | 1 |
+| **Total** | | | **6.75 hours** |
+
+---
+
+### 3.4 Cross-Cutting Summary
+
+| File | LOC | Primary Violations | Priority | Est. Hours |
+|------|-----|--------------------|----------|------------|
+| `lib/dice.py` | 739 | 300-line `main()`, subprocess calls to bash tools, mixed abstraction levels | Medium | 9 |
+| `lib/entity_enhancer.py` | 921 | Dual responsibility (RAG + mutation), bypasses WorldGraph, 222-line `main()` | Medium | 9 |
+| `lib/agent_extractor.py` | 726 | `sys.exit` in library, manual argv parsing, 172-line `validate_and_save` | Low-Medium | 6.75 |
+| **Total** | **2,386** | | | **24.75 hours** |
+
+**Recommended order:**
+1. **AgentExtractor `sys.exit` fix** — trivial, immediate safety improvement
+2. **DiceRoller decomposition** — high-traffic file, subprocess calls create fragility
+3. **EntityEnhancer split** — improves RAG search reusability across codebase
