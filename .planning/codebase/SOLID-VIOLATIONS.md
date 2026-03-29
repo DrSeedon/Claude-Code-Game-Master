@@ -148,3 +148,224 @@ XP thresholds, level cap (20), bloodied threshold (25% HP) are all D&D 5e specif
 | Medium | 22 |
 | Low | 6 |
 | **Total** | **38** |
+
+---
+
+## Section 2: Utility Modules
+
+---
+
+### 2.1 JsonOperations (284 LOC) — `lib/json_ops.py`
+
+**Overall Assessment:** Medium severity. Repetitive nested-path navigation duplicated across 5 methods.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 74-80, 103-109, 135-141, 155-161, 178-184 | Identical nested-path navigation loop (`for key in path: current = current[key]`) copy-pasted across `update_json`, `append_to_list`, `check_exists`, `get_value`, `delete_key` — 5 copies of the same 6-line block | High |
+| 2 | SRP | 211-284 | CLI `main()` with argparse (~73 LOC) bundled in same file as domain class | Medium |
+| 3 | SRP | 36-41, 60, 115, 122 | `print()` error output in domain class — error reporting mixed with business logic; should raise exceptions or use logging | Medium |
+| 4 | OCP | 14-19 | `JsonOperations` is hardwired to filesystem JSON via `Path` — cannot swap to in-memory or DB storage without modifying the class | Medium |
+| 5 | DIP | 17-19 | Constructor creates `Path` and calls `mkdir` directly — infrastructure concern baked into domain class | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 62: `.tmp` suffix for atomic write temp files
+- Line 17: `"world-state"` default directory name
+
+**Refactoring Opportunity:** Extract a `_navigate_path(data, path)` helper to eliminate 5× duplicated navigation blocks (~30 LOC saved).
+
+---
+
+### 2.2 Validators (303 LOC) — `lib/validators.py`
+
+**Overall Assessment:** High severity. Worst DRY violation in the codebase — 9 validation methods with identical structure.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 36-228 | **9 methods** follow identical pattern: `input.lower().strip()` → check `not in valid_list` → return error with `join()`. Methods: `validate_attitude` (36-50), `validate_damage_type` (75-91), `validate_skill` (93-111), `validate_alignment` (113-134), `validate_condition` (136-153), `validate_ability` (155-169), `validate_quest_priority` (171-183), `validate_time_of_day` (185-200), `validate_plot_type` (202-214), `validate_plot_status` (216-228) — ~150 LOC that could be 1 generic method + data | High |
+| 2 | OCP | 41-44, 81-85, 99-105, 119-124, 142-147, 161, 177, 191-194, 208, 222 | Valid value lists hardcoded inside each method — adding a new attitude/condition/skill requires modifying the class. Should be data-driven (external config or class-level registry) | High |
+| 3 | SRP | 230-242 | `escape_for_json()` — JSON encoding concern mixed with input validation class | Medium |
+| 4 | SRP | 244-258 | `sanitize_path()` — filesystem security concern mixed with input validation class | Medium |
+| 5 | SRP | 261-304 | CLI `main()` (~43 LOC) bundled in domain file | Low |
+| 6 | OCP | 69-71 | `valid_die_sizes = [4, 6, 8, 10, 12, 20, 100]` hardcoded — D&D-specific, not extensible | Medium |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 25: `100` max name length
+- Lines 66-67: `1-100` dice count range
+- Line 69: `[4, 6, 8, 10, 12, 20, 100]` valid die sizes (D&D-specific)
+- Lines 41-44: 10 hardcoded attitudes
+- Lines 81-84: 13 hardcoded damage types (D&D 5e)
+- Lines 99-105: 18 hardcoded skills (D&D 5e)
+- Lines 142-147: 15 hardcoded conditions (D&D 5e)
+
+**Refactoring Opportunity:** Replace 9 identical methods with `_validate_enum(value, valid_set, label)` + a `VALID_VALUES` dict. Reduces ~150 LOC to ~20 LOC.
+
+---
+
+### 2.3 Currency (234 LOC) — `lib/currency.py`
+
+**Overall Assessment:** Medium severity. Two nearly-identical formatting functions are the main issue.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 50-73 vs 76-100 | `format_money()` and `format_money_long()` are near-duplicates — same algorithm, only differ in using `symbol` vs `name` field. Should be one function with a `use_long_names` parameter | High |
+| 2 | SRP | 100-133 | `parse_money()` handles 3 distinct parsing strategies (int, float, regex) in one method — should be a chain of parsers | Medium |
+| 3 | Error | 39-40 | `except (json.JSONDecodeError, IOError): pass` — silently swallows config load errors with no logging | Medium |
+| 4 | Error | 110-117 | Two bare `except: pass` blocks that silently swallow int/float conversion failures | Medium |
+| 5 | DIP | 23-41 | `load_config()` reads filesystem directly — not injectable for testing | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Lines 13-20: `DEFAULT_CONFIG` with D&D-specific cp/sp/gp denominations
+- Line 121: Regex pattern `r'([\d.]+)\s*([a-zA-Z]+)'` for money parsing
+
+**Refactoring Opportunity:** Merge `format_money` and `format_money_long` into one function with a `style` parameter (~25 LOC saved).
+
+---
+
+### 2.4 Calendar (258 LOC) — `lib/calendar.py`
+
+**Overall Assessment:** Medium severity. Core algorithm is sound but `advance_days` is complex and magic numbers abound.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | SRP | 129-164 | `advance_days()` — 36-line method handling forward advancement, backward advancement, month rollover, and year rollover in one function. High cyclomatic complexity | Medium |
+| 2 | OCP | 60-92 | `parse_date()` uses regex + loop to match month names — fragile string parsing that breaks with non-standard formats | Medium |
+| 3 | DRY | 139-150 vs 152-163 | Forward and backward day advancement are separate code paths with mirrored logic — could be unified with a direction multiplier | Medium |
+| 4 | Error | 87 | `ValueError` raised on invalid month but no handling in callers (`advance_hours` at line 172 where `parse_date` is called) | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 114: `0` default for `year_zero_weekday`
+- Lines 175-176: `24 * 60` (minutes/day) and `60.0` (minutes/hour) not named constants
+- Line 127: `24` hours per day hardcoded in fallback
+
+---
+
+### 2.5 Colors (314 LOC) — `lib/colors.py`
+
+**Overall Assessment:** Low-medium severity. Presentation-only module; violations are less impactful than domain modules.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 58-72 | 4 `tag_*()` functions (`tag_success`, `tag_error`, `tag_info`, `tag_warning`) with identical structure: `f"{BOLD_X}[TAG]{RESET}"` + optional text. Should be one `_tag(color, label, text)` helper | Medium |
+| 2 | OCP | 14-53 | 40+ ANSI escape codes as class attributes — not data-driven, no theme support, no `NO_COLOR` env var support | Medium |
+| 3 | SRP | 90-133 | `hp_bar()` — HP visualization logic (health percentage, color thresholds, bar rendering) in a color utility class. This is a UI widget, not a color concern | Medium |
+| 4 | SRP | 136-220 | Combat formatting methods (`format_roll`, `format_attack`, `format_damage`, `format_save`) — domain-specific presentation mixed with generic color utilities | Medium |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 105: `width=12` default bar width
+- Line 123: `0.5` and `0.25` HP color thresholds (50%, 25%)
+- Lines 179-186: Success/failure text hardcoded across multiple branches
+
+---
+
+### 2.6 ModuleData (80 LOC) — `.claude/additional/infrastructure/module_data.py`
+
+**Overall Assessment:** Low severity. Small utility with minor coupling issues.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DIP | 22, 69 | Hardcoded `"module-data"` directory and `"active-campaign.txt"` filename — infrastructure paths baked in | Medium |
+| 2 | Error | 48 | Generic `except Exception` with `print()` instead of logging — swallows save errors | Medium |
+| 3 | Error | 37-38 | `load()` returns `{}` silently on missing file — caller cannot distinguish "empty data" from "file not found" | Low |
+| 4 | DRY | 66-78 | `_find_campaign_dir()` duplicates project-root-finding logic from encounter_engine and other modules | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 22: `"module-data"` directory name
+- Line 69: `"active-campaign.txt"` filename
+- Line 70: `"world-state"` directory name
+
+---
+
+### 2.7 EncounterEngine (227 LOC) — `lib/encounter_engine.py`
+
+**Overall Assessment:** High severity. God function with side effects, magic numbers, and duplicated infrastructure code.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | SRP | 115-188 | `check_encounter()` — 73-line god function handling: time tracking, probability calculation, dice rolling, encounter filtering, creature selection, and file persistence. At least 4 responsibilities | High |
+| 2 | SRP | 30-41 | `_find_project_root()` and `_get_active_campaign_dir()` — duplicates campaign-finding logic from module_data.py and other modules | Medium |
+| 3 | OCP | 157-165 | Encounter probability is a fixed d100 roll with hardcoded defaults — no way to plug in alternative probability systems | Medium |
+| 4 | DIP | 15-27 | `sys.path.insert(0, ...)` + direct color constant assignment — runtime path manipulation and tight coupling to Colors class internals | Medium |
+| 5 | SRP | 44-49 | Direct `json.load()`/`json.dump()` file I/O duplicating JsonOperations functionality | Medium |
+| 6 | Error | 47-48, 63 | Silent failures returning empty dicts on file errors — no logging | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 136: `15` default chance_per_hour
+- Line 137: `2` default min_hours_between encounters
+- Line 160: `100` for d100 roll
+- Line 31: `.git` directory used for project root detection
+
+---
+
+### 2.8 ExtractionSchemas (179 LOC) — `lib/extraction_schemas.py`
+
+**Overall Assessment:** Medium severity. Schema definitions are repetitive; validation function violates OCP.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 7-118 | 7 schema dicts with repeated `"source": ""` field and similar structure — no base schema or schema factory | Medium |
+| 2 | OCP | 135-163 | `validate_extraction()` uses if-elif chain for schema-specific validation (NPC attitude check, item rarity check) — adding a new schema type requires modifying this function | High |
+| 3 | DRY | 152-156 | Attitude enum hardcoded again (duplicates `validators.py` lines 41-44) | Medium |
+| 4 | DRY | 158-161 | Rarity enum hardcoded (duplicates values likely defined elsewhere) | Medium |
+| 5 | SRP | 135-163 | Generic validation + schema-specific validation in one function — schema-specific rules should live with their schemas | Medium |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 153: `100` character limit for name (duplicates validators.py line 25)
+- Lines 155: Attitude list duplicated from validators.py
+
+---
+
+### 2.9 ContentExtractor (294 LOC) — `lib/content_extractor.py`
+
+**Overall Assessment:** Medium severity. God classes for PDF/Docx extraction with duplicated patterns.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DRY | 69-83 vs 85-103 | `_extract_pdfplumber()` and `_extract_pypdf2()` — near-identical page iteration loops differing only in library API calls | Medium |
+| 2 | SRP | 13-103 | `PDFExtractor` handles library detection (21-33), dispatch (38-67), and two extraction implementations (69-103) — should be strategy pattern with one extractor per library | Medium |
+| 3 | Error | 56, 65, 81, 101, 193-201 | Print-based error reporting with exception swallowing — cascading fallbacks without structured error handling | Medium |
+| 4 | OCP | 247-255 | File extension → extractor mapping hardcoded in `extract_content()` — adding new format requires modifying this function | Medium |
+| 5 | DIP | 21-33 | Runtime `import` with try/except in constructor — library availability becomes hidden state | Low |
+| 6 | SRP | 189-201 | `_basic_extract()` is a "very basic fallback that may not work well" (comment on line 189) — acknowledged technical debt | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 198: Regex `r'[^\x20-\x7E\n\r\t]'` for printable char filtering (unexplained)
+- Line 126: `\n{3,}` regex for whitespace normalization
+- Line 174: `' | '` table cell separator
+- Lines 220-232: 4 encoding attempts (`utf-8`, `latin-1`, `cp1252`, `ascii`) hardcoded
+
+---
+
+## Section 2 Summary: Cross-Cutting Issues
+
+### 1. Extreme DRY Violations (Validators, JsonOperations)
+`validators.py` has 9 copy-pasted validation methods (~150 LOC) that differ only in the valid-values list. `json_ops.py` has 5 copies of the same path-navigation loop. Combined: ~180 LOC of pure duplication.
+
+### 2. Duplicated Infrastructure Patterns (EncounterEngine, ModuleData)
+Project-root detection, active-campaign lookup, and raw JSON file I/O are re-implemented independently in multiple modules instead of using shared utilities.
+
+### 3. Silent Error Swallowing (Currency, ModuleData, EncounterEngine, ContentExtractor)
+`except: pass` and `except Exception: print()` patterns throughout — callers cannot distinguish errors from empty/default data.
+
+### 4. D&D 5e Hardcoding (Validators, Currency, ExtractionSchemas)
+Damage types, conditions, skills, abilities, die sizes, and currency denominations are all hardcoded D&D 5e values. The system claims game-system-agnostic design but utility modules bake in D&D assumptions.
+
+### 5. CLI in Domain Files (JsonOperations, Validators)
+Same anti-pattern as manager modules — `main()` with argparse in domain files.
+
+### Section 2 Severity Distribution
+
+| Severity | Count |
+|----------|-------|
+| High | 7 |
+| Medium | 27 |
+| Low | 8 |
+| **Total** | **42** |
+
+### Combined Severity (Sections 1 + 2)
+
+| Severity | Section 1 | Section 2 | Total |
+|----------|-----------|-----------|-------|
+| High | 10 | 7 | 17 |
+| Medium | 22 | 27 | 49 |
+| Low | 6 | 8 | 14 |
+| **Total** | **38** | **42** | **80** |
