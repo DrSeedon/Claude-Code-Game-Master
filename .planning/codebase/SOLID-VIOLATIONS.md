@@ -369,3 +369,190 @@ Same anti-pattern as manager modules — `main()` with argparse in domain files.
 | Medium | 22 | 27 | 49 |
 | Low | 6 | 8 | 14 |
 | **Total** | **38** | **42** | **80** |
+
+---
+
+## Section 3: RAG Subsystem
+
+Six modules in `lib/rag/` (~1,423 LOC) implementing semantic search over campaign documents. Optional dependencies: `sentence-transformers` (embedder), `chromadb` (vector store).
+
+---
+
+### 3.1 Embedder (176 LOC) — `lib/rag/embedder.py`
+
+**Overall Assessment:** Medium severity. Stderr suppression is the main concern; otherwise clean with good lazy-loading.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | Error | 52-60 | `sys.stderr = io.StringIO()` — suppresses ALL stderr during model loading, including genuine errors. If `SentenceTransformer()` fails, the error message is silently discarded. Only the exception propagates without its stderr context | High |
+| 2 | SRP | 15-21 | Module-level side effects: sets 3 env vars (`HF_HUB_DISABLE_PROGRESS_BARS`, `TOKENIZERS_PARALLELISM`) and configures 3 loggers at import time — affects global process state as a side effect of importing this module | Medium |
+| 3 | SRP | 144-176 | `main()` test harness (~33 LOC) bundled in domain file | Low |
+| 4 | OCP | 27 | `DEFAULT_MODEL = "all-MiniLM-L6-v2"` — model name hardcoded as class constant. Acceptable for a default, but no validation or fallback if model unavailable | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 27: `"all-MiniLM-L6-v2"` default model name
+- Line 75: `batch_size: int = 32` default batch size
+
+**Optional Dependency Handling:** Good — `is_available()` static method (lines 40-47) checks for `sentence_transformers` import. However, `_ensure_model()` (line 57) imports `SentenceTransformer` without checking `is_available()` first, so callers must check availability themselves or face an unguarded `ImportError`.
+
+---
+
+### 3.2 SemanticChunker (262 LOC) — `lib/rag/semantic_chunker.py`
+
+**Overall Assessment:** Medium severity. Hardcoded threshold and tight coupling to extraction_queries.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | OCP | 19 | `DEFAULT_THRESHOLD = 0.35` — similarity threshold hardcoded. This is a tuning parameter that significantly affects categorization behavior, with no guidance on how to adjust it per corpus or model | Medium |
+| 2 | DIP | 12-13 | Hard-imports `LocalEmbedder` and `EXTRACTION_QUERIES` — tightly coupled to specific embedder and query definitions. Cannot swap embedder implementation or query set without modifying this file | Medium |
+| 3 | SRP | 44, 56 | `print()` calls during initialization — progress reporting mixed with domain logic. Should use logging or a callback | Medium |
+| 4 | DRY | 73-78 vs 183-186 | `score_chunk()` and `categorize_chunks()` both compute category similarity via `self.embedder.similarity(chunk_emb, category_embedding)` — duplicated scoring loop | Medium |
+| 5 | SRP | 81-113 | `score_chunk_detailed()` returns a complex nested dict with both summary and per-query scores — mixes summary and detailed analysis in one method | Low |
+| 6 | SRP | 222-262 | `main()` test harness (~40 LOC) bundled in domain file | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 19: `0.35` default similarity threshold
+- Line 145: `"general"` fallback category name (appears 3 times: lines 145, 178, 196)
+
+**Coupling Note:** `SemanticChunker` creates `LocalEmbedder()` internally if none provided (line 33). Constructor accepts optional injection, which is good, but the default path creates a concrete dependency.
+
+---
+
+### 3.3 VectorStore (307 LOC) — `lib/rag/vector_store.py`
+
+**Overall Assessment:** Medium severity. Clean ChromaDB wrapper with good lazy-loading, but has coupling and error handling gaps.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | DIP | 47-48 | Hard-imports `chromadb` and `chromadb.config.Settings` inside method — no abstraction layer. Cannot swap to FAISS or other vector DB without rewriting this class | Medium |
+| 2 | OCP | 51-57 | ChromaDB client configuration hardcoded: `anonymized_telemetry=False`, `allow_reset=True`, `hnsw:space: "cosine"` — not configurable per use case | Medium |
+| 3 | DRY | 149-153 | Result flattening pattern (`results["ids"][0] if results["ids"] else []`) repeated 4 times for ids/documents/metadatas/distances | Low |
+| 4 | SRP | 216-228 | `count_by_category()` fetches ALL metadatas to count categories — inefficient for large stores, and data aggregation logic in a storage class | Medium |
+| 5 | SRP | 240-248 | `persist()` is a no-op method with a comment explaining it does nothing — dead code kept "for future compatibility" | Low |
+| 6 | SRP | 263-307 | `main()` test harness (~44 LOC) bundled in domain file | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 17: `"document_chunks"` default collection name
+- Line 62: `"cosine"` hardcoded distance metric
+- Line 93: `f"chunk_{current_count + i}"` — ID generation scheme hardcoded
+- Line 182: `limit: int = 100` default query limit
+
+**Optional Dependency Handling:** Good — `is_available()` static method (lines 36-42). Same gap as embedder: `_ensure_client()` imports chromadb without guarding, so callers must check `is_available()` first.
+
+---
+
+### 3.4 RAGExtractor (275 LOC) — `lib/rag/rag_extractor.py`
+
+**Overall Assessment:** Medium severity. Pipeline orchestrator with excessive print statements and tight coupling.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | SRP | 71-72, 82, 84, 89, 91, 94, 100, 103, 107, 119 | 10+ `print()` calls throughout `extract_from_document()` — progress reporting mixed with extraction logic. Should use logging or a callback/observer | Medium |
+| 2 | DIP | 19-20 | Hard-imports `LocalEmbedder` and `CampaignVectorStore` — pipeline is hardwired to specific implementations | Medium |
+| 3 | DIP | 168 | `from lib.content_extractor import ContentExtractor` — lazy import inside method creates hidden dependency on content_extractor module | Medium |
+| 4 | SRP | 173-208 | `_split_into_chunks()` — text chunking logic (regex-based header splitting + paragraph fallback) embedded in the extractor class. This is a separate responsibility that could be its own chunker | Medium |
+| 5 | OCP | 178 | Header pattern regex `r'^(?:#{1,3}\s+.+|[A-Z][A-Z\s]+:|Chapter \d+|PART [IVX]+)'` hardcoded — only handles markdown/book-style headers, not extensible for other formats | Medium |
+| 6 | SRP | 248-275 | `main()` CLI (~27 LOC) bundled in domain file | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 27: `3000` default chunk size
+- Line 97: `batch_size=32` hardcoded in embed call
+- Line 125: `n_results: int = 20` default query results
+- Line 244: `f"doc_{i:04d}"` — ID format hardcoded
+
+**Note:** `RAGExtractor` duplicates chunking logic that `SemanticChunker` also handles — the two classes have overlapping responsibilities with different approaches (regex splitting vs semantic scoring).
+
+---
+
+### 3.5 QuoteExtractor (226 LOC) — `lib/rag/quote_extractor.py`
+
+**Overall Assessment:** Medium severity. Tight coupling to NPC file format and hardcoded similarity thresholds.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | SRP | 135-193 | `enrich_all_npcs()` reads `npcs.json`, queries vectors, merges context, deduplicates, and writes back — at least 4 responsibilities in one method | High |
+| 2 | OCP | 85 | `distance > 1.3` — hardcoded distance threshold for filtering results. This cosine distance cutoff is model-specific and not configurable | Medium |
+| 3 | OCP | 80 | `doc[:200].lower()` — deduplication key uses first 200 chars, a magic number that affects dedup accuracy | Medium |
+| 4 | OCP | 99 | `passages[:10]` — hardcoded limit of 10 passages per NPC | Medium |
+| 5 | OCP | 180 | `all_context[:15]` — hardcoded limit of 15 total context entries per NPC | Medium |
+| 6 | DIP | 40-41 | Lazy import of `CampaignVectorStore` and `LocalEmbedder` — same hidden dependency pattern as other RAG modules | Low |
+| 7 | SRP | 127-133 | `extract_voice_for_npc()` legacy compatibility wrapper — dead API surface adding maintenance burden | Low |
+| 8 | SRP | 196-226 | `main()` CLI (~30 LOC) bundled in domain file | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Line 46: `n_results: int = 15` default results per query
+- Line 80: `200` chars for deduplication key
+- Line 85: `1.3` distance threshold
+- Line 99: `10` max passages returned
+- Line 101: `max_length: int = 500` passage cap
+- Line 119: `max_length // 2` minimum break point for truncation
+- Line 172: `100` chars for merge deduplication key
+- Line 180: `15` max total context entries
+
+---
+
+### 3.6 ExtractionQueries (177 LOC) — `lib/rag/extraction_queries.py`
+
+**Overall Assessment:** Low severity. Pure data module with minimal logic. Main issue is hardcoded D&D/fantasy-specific query templates.
+
+| # | Principle | Lines | Violation | Severity |
+|---|-----------|-------|-----------|----------|
+| 1 | OCP | 14-125 | `EXTRACTION_QUERIES` dict with 5 content types and ~60 query strings hardcoded — not configurable per campaign genre (all queries assume fantasy/D&D setting: "dungeon", "castle", "AC HP hit points", "gp sp cp") | Medium |
+| 2 | OCP | 128-156 | Utility functions (`get_queries_for_type`, `get_all_types`, `get_combined_queries`) operate on the module-level constant — no way to pass custom queries without modifying this file | Medium |
+| 3 | SRP | 159-177 | `main()` display function (~18 LOC) bundled in domain file | Low |
+
+**Magic Numbers / Hardcoded Values:**
+- Lines 14-125: 5 content type categories with ~60 query templates (all D&D/fantasy themed)
+- Line 166: `queries[:3]` — display limit of 3 queries in main()
+
+---
+
+## Section 3 Summary: Cross-Cutting Issues
+
+### 1. Stderr/Output Suppression (Embedder)
+`sys.stderr` replacement (embedder.py lines 52-60) is the highest-severity issue. It silently discards all stderr output during model loading, hiding genuine errors. Module-level env var and logger manipulation (lines 15-21) also affects global state at import time.
+
+### 2. Hardcoded Thresholds Without Guidance
+- Similarity threshold `0.35` (semantic_chunker.py line 19)
+- Distance threshold `1.3` (quote_extractor.py line 85)
+- Dedup key length `200` chars (quote_extractor.py line 80)
+- Various passage limits (`10`, `15`, `500` chars)
+
+These are model-specific tuning parameters with no documentation on how they were derived or how to adjust them for different models or corpora.
+
+### 3. Optional Dependency Pattern: Consistent but Incomplete
+All modules with optional deps (`embedder`, `vector_store`) provide `is_available()` static methods, which is good. However, the internal `_ensure_*` methods do NOT check availability before importing — they will raise raw `ImportError` if the dependency is missing. There's a gap between the public "check if available" API and the internal "just import and hope" pattern.
+
+### 4. Print-Based Progress Reporting (All 6 Modules)
+Every module uses `print()` for progress output, including the domain-layer classes. The `rag_extractor.py` is worst with 10+ print calls in `extract_from_document()`. Should use `logging` or a progress callback.
+
+### 5. CLI in Domain Files (All 6 Modules)
+Every module has a `main()` function with CLI code. Total: ~192 LOC of test/CLI code in domain files.
+
+### 6. D&D/Fantasy Hardcoding (ExtractionQueries)
+All 60 query templates assume fantasy RPG content (dungeons, castles, AC/HP, gold/silver). Not usable for sci-fi, modern, or other genres without modifying the module.
+
+### 7. Coupling Between RAG Components
+`RAGExtractor` → `LocalEmbedder` + `CampaignVectorStore` + `ContentExtractor` (3 hard deps)
+`SemanticChunker` → `LocalEmbedder` + `EXTRACTION_QUERIES` (2 hard deps)
+`QuoteExtractor` → `CampaignVectorStore` + `LocalEmbedder` (2 hard deps, lazy)
+
+No interfaces or abstractions — swapping any component requires modifying its dependents.
+
+### Section 3 Severity Distribution
+
+| Severity | Count |
+|----------|-------|
+| High | 2 |
+| Medium | 20 |
+| Low | 10 |
+| **Total** | **32** |
+
+### Combined Severity (Sections 1 + 2 + 3)
+
+| Severity | Section 1 | Section 2 | Section 3 | Total |
+|----------|-----------|-----------|-----------|-------|
+| High | 10 | 7 | 2 | 19 |
+| Medium | 22 | 27 | 20 | 69 |
+| Low | 6 | 8 | 10 | 24 |
+| **Total** | **38** | **42** | **32** | **112** |
