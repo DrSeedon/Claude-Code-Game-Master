@@ -1,0 +1,244 @@
+# Dependency Injection Assessment
+
+## Current State: How Each Class Creates Dependencies
+
+### Infrastructure Layer (no domain dependencies)
+
+| Class | Dependencies | Creation Method |
+|-------|-------------|----------------|
+| `JsonOperations` | None (only `pathlib.Path`) | Standalone |
+| `Validators` | None | Standalone, stateless |
+| `Colors` | None | Standalone, static methods |
+| `DiceRoller` | None | Standalone |
+| `CampaignManager` | `pathlib.Path` only | Standalone |
+
+### Base Layer
+
+| Class | Dependencies | Creation Method |
+|-------|-------------|----------------|
+| `EntityManager` | `JsonOperations`, `Validators`, `CampaignManager` | **Direct construction** in `__init__` |
+
+### Manager Layer (EntityManager subclasses)
+
+All of these inherit from `EntityManager` and call `super().__init__()`, which internally constructs `JsonOperations`, `Validators`, and `CampaignManager`:
+
+- `ConsequenceManager(EntityManager)`
+- `LocationManager(EntityManager)`
+- `NPCManager(EntityManager)`
+- `PlayerManager(EntityManager)`
+- `PlotManager(EntityManager)` — also creates `SessionManager` inline (lazy import)
+- `SessionManager(EntityManager)`
+
+### Manager Layer (standalone, non-EntityManager)
+
+| Class | Dependencies Created in `__init__` |
+|-------|-----------------------------------|
+| `NoteManager` | `CampaignManager`, `JsonOperations` |
+| `TimeManager` | `CampaignManager`, `JsonOperations` |
+| `WorldSearcher` | `CampaignManager`, `JsonOperations` |
+| `WorldStats` | `CampaignManager`, `JsonOperations` |
+| `WikiManager` | None (receives `campaign_dir: str`) |
+| `InventoryManager` | `ModuleDataManager` (direct construction) |
+| `EntityEnhancer` | `CampaignManager`, `JsonOperations` |
+| `AgentExtractor` | `JsonOperations`, `Validators`, `CampaignManager` |
+
+### Content Extraction Layer
+
+| Class | Dependencies |
+|-------|-------------|
+| `ContentExtractor` | `PDFExtractor`, `MarkdownExtractor`, `DocxExtractor`, `TextExtractor` — all constructed internally |
+
+## Dependency Graph
+
+```
+CampaignManager (standalone)
+    │
+    ▼
+EntityManager ──► JsonOperations (standalone)
+    │           ► Validators (standalone)
+    │           ► CampaignManager
+    │
+    ├── ConsequenceManager
+    ├── LocationManager
+    ├── NPCManager
+    ├── PlayerManager
+    ├── PlotManager ──► SessionManager (lazy import, direct construction)
+    └── SessionManager
+
+NoteManager ──► CampaignManager, JsonOperations
+TimeManager ──► CampaignManager, JsonOperations
+WorldSearcher ──► CampaignManager, JsonOperations
+WorldStats ──► CampaignManager, JsonOperations
+EntityEnhancer ──► CampaignManager, JsonOperations
+AgentExtractor ──► JsonOperations, Validators, CampaignManager
+
+InventoryManager ──► ModuleDataManager (direct construction)
+                 ──► WikiManager (lazy import in transfer/craft methods)
+                 ──► InventoryManager (self-creates for NPC/target operations)
+
+WikiManager (receives campaign_dir string — closest to injection)
+```
+
+## Key Problems
+
+1. **Every manager constructs its own `CampaignManager` and `JsonOperations`** — identical bootstrap logic duplicated ~10 times. Each instance independently resolves the active campaign.
+
+2. **No interfaces/protocols** — all dependencies are concrete classes. Testing requires either real filesystem or the `require_active_campaign=False` escape hatch (only on `EntityManager`).
+
+3. **Cross-manager dependencies use lazy imports with direct construction** — `PlotManager` creates `SessionManager()` inline; `InventoryManager` creates `WikiManager()` inline. These are hidden, untestable coupling points.
+
+4. **`EntityManager` has two code paths** in `__init__` (testing vs production) controlled by a boolean flag — a code smell that would be eliminated by proper DI.
+
+5. **Standalone managers duplicate EntityManager's pattern** — `NoteManager`, `TimeManager`, `WorldSearcher`, `WorldStats`, `EntityEnhancer` all repeat the same `CampaignManager` → `get_active_campaign_dir()` → `JsonOperations` bootstrap.
+
+## Proposed DI Strategy
+
+### 1. Protocol Interfaces for Key Services
+
+```python
+# lib/protocols.py
+from typing import Protocol, Optional, Any
+from pathlib import Path
+
+class JsonStore(Protocol):
+    """Protocol for JSON persistence operations."""
+    def load_json(self, filename: str) -> Optional[dict]: ...
+    def save_json(self, filename: str, data: dict) -> bool: ...
+    def check_exists(self, filename: str, key: str) -> bool: ...
+    def update_json(self, filename: str, updates: dict) -> bool: ...
+    def get_timestamp(self) -> str: ...
+
+class CampaignResolver(Protocol):
+    """Protocol for resolving the active campaign directory."""
+    def get_active_campaign_dir(self) -> Optional[Path]: ...
+    def get_active(self) -> Optional[str]: ...
+```
+
+`JsonOperations` and `CampaignManager` already satisfy these protocols without modification.
+
+### 2. Constructor Injection Pattern
+
+**Before (current — `NoteManager`):**
+```python
+class NoteManager:
+    def __init__(self, world_state_dir: str = "world-state"):
+        self.campaign_mgr = CampaignManager(world_state_dir)
+        campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+        if campaign_dir is None:
+            raise RuntimeError("No active campaign.")
+        self.campaign_dir = campaign_dir
+        self.json_ops = JsonOperations(str(self.campaign_dir))
+```
+
+**After (constructor injection):**
+```python
+class NoteManager:
+    def __init__(self, json_store: JsonStore, campaign_dir: Path):
+        self.json_ops = json_store
+        self.campaign_dir = campaign_dir
+```
+
+**Before (current — `EntityManager`):**
+```python
+class EntityManager:
+    def __init__(self, world_state_dir=None, require_active_campaign=True):
+        if not require_active_campaign and world_state_dir:
+            self.campaign_dir = Path(world_state_dir)
+            self.json_ops = JsonOperations(str(self.campaign_dir))
+            self.validators = Validators()
+            self.campaign_mgr = None
+        else:
+            base_dir = world_state_dir or "world-state"
+            self.campaign_mgr = CampaignManager(base_dir)
+            active_dir = self.campaign_mgr.get_active_campaign_dir()
+            if active_dir is None:
+                raise RuntimeError("No active campaign.")
+            self.campaign_dir = active_dir
+            self.json_ops = JsonOperations(str(active_dir))
+            self.validators = Validators()
+```
+
+**After (constructor injection):**
+```python
+class EntityManager:
+    def __init__(self, json_store: JsonStore, validators: Validators, campaign_dir: Path):
+        self.json_ops = json_store
+        self.validators = validators
+        self.campaign_dir = campaign_dir
+```
+
+### 3. Factory Functions for Default Wiring
+
+Keep backwards compatibility and eliminate bootstrap duplication with a single factory:
+
+```python
+# lib/context.py
+from pathlib import Path
+from json_ops import JsonOperations
+from validators import Validators
+from campaign_manager import CampaignManager
+
+class CampaignContext:
+    """Resolved campaign context — created once, shared by all managers."""
+
+    def __init__(self, campaign_dir: Path, json_ops: JsonOperations,
+                 validators: Validators, campaign_mgr: CampaignManager = None):
+        self.campaign_dir = campaign_dir
+        self.json_ops = json_ops
+        self.validators = validators
+        self.campaign_mgr = campaign_mgr
+
+def resolve_campaign(world_state_dir: str = "world-state") -> CampaignContext:
+    """Resolve the active campaign and return a shared context."""
+    mgr = CampaignManager(world_state_dir)
+    active_dir = mgr.get_active_campaign_dir()
+    if active_dir is None:
+        raise RuntimeError("No active campaign. Run /new-game or /import first.")
+    return CampaignContext(
+        campaign_dir=active_dir,
+        json_ops=JsonOperations(str(active_dir)),
+        validators=Validators(),
+        campaign_mgr=mgr,
+    )
+
+def make_note_manager(ctx: CampaignContext = None) -> "NoteManager":
+    ctx = ctx or resolve_campaign()
+    return NoteManager(json_store=ctx.json_ops, campaign_dir=ctx.campaign_dir)
+
+def make_plot_manager(ctx: CampaignContext = None) -> "PlotManager":
+    ctx = ctx or resolve_campaign()
+    return PlotManager(json_store=ctx.json_ops, validators=ctx.validators,
+                       campaign_dir=ctx.campaign_dir)
+```
+
+CLI entry points (`if __name__ == "__main__"`) call the factory with no arguments (production default). Tests pass a `CampaignContext` with a temp directory and mock/real `JsonOperations` — no filesystem setup, no `require_active_campaign` flag.
+
+### Migration Path
+
+This can be done incrementally, one manager at a time:
+
+1. **Phase 1:** Add `protocols.py` and `context.py` (zero impact on existing code).
+2. **Phase 2:** Update `EntityManager.__init__` to accept optional injected deps; if none provided, fall back to current behavior. Subclasses unchanged.
+3. **Phase 3:** Convert standalone managers (`NoteManager`, `TimeManager`, etc.) one by one — add injected constructor, update CLI entry point to use factory.
+4. **Phase 4:** Remove `require_active_campaign` flag and legacy constructor paths once all tests use injection.
+
+### Impact on Testability
+
+**Current test setup:**
+```python
+# Must use escape hatch or create real campaign structure
+mgr = PlayerManager(world_state_dir=str(tmp_path), require_active_campaign=False)
+```
+
+**After DI:**
+```python
+# Direct, explicit, no filesystem needed for unit tests
+json_store = JsonOperations(str(tmp_path))
+mgr = PlayerManager(json_store=json_store, validators=Validators(), campaign_dir=tmp_path)
+```
+
+### Risk Assessment
+
+- **Low risk:** All changes are additive (new optional params with fallback).
+- **No breaking changes** to CLI entry points or bash wrappers — factories handle wiring.
+- **Biggest win:** Eliminating 10+ duplicate bootstrap sequences and the `require_active_campaign` testing hack.

@@ -266,7 +266,9 @@
             "type": "manual",
             "instructions": "Verify SOLID-VIOLATIONS.md section 2 has analysis tables for all 9 utility modules with specific line ranges"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Audited 9 utility modules (2,093 LOC). Found 42 SOLID violations (7 High, 27 Medium, 8 Low). Key findings: validators.py 9× copy-pasted methods, json_ops.py 5× duplicated path nav, encounter_engine.py 73-line god function. Section 2 added to SOLID-VIOLATIONS.md.",
+          "updated_at": "2026-03-29T08:16:03.230458+00:00"
         },
         {
           "id": "subtask-3-3",
@@ -294,7 +296,9 @@
             "type": "manual",
             "instructions": "Verify SOLID-VIOLATIONS.md section 3 covers all 6 RAG modules with specific line ranges and includes analysis of optional dependency handling"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Audited all 6 RAG modules (1,423 LOC). Found 32 violations: 2 High (stderr suppression in embedder, god-method in quote_extractor), 20 Medium, 10 Low. Key issues: sys.stderr replacement hiding errors, hardcoded similarity thresholds (0.35, 1.3), incomplete optional dependency guards, print-based progress in all modules, D&D-specific query templates.",
+          "updated_at": "2026-03-29T08:18:55.028701+00:00"
         },
         {
           "id": "subtask-3-4",
@@ -322,7 +326,9 @@
             "type": "manual",
             "instructions": "Verify SOLID-VIOLATIONS.md section 4 covers all 3 optional modules, checks campaign-agnosticism, and documents middleware correctness"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Audited all 3 optional modules. Found 23 SOLID violations (5 High, 12 Medium, 6 Low). Key findings: 8 campaign-agnosticism violations including hardcoded Russian \"Стрелок\" in firearms-combat production code, fragile regex stdout parsing in world-travel middleware, no cross-module dependencies.",
+          "updated_at": "2026-03-29T08:23:44.689511+00:00"
         }
       ]
     },
@@ -371,7 +377,7 @@
             "command": "test -f .planning/codebase/ERROR-HANDLING-AUDIT.md && echo 'EXISTS' || echo 'MISSING'",
             "expected": "EXISTS"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-4-2",
@@ -718,12 +724,12 @@
   "planStatus": "in_progress",
   "xstateState": "coding",
   "executionPhase": "coding",
-  "updated_at": "2026-03-29T08:08:25.047Z",
+  "updated_at": "2026-03-29T08:24:21.690Z",
   "lastEvent": {
     "eventId": "4f0b41ee-e48f-4216-8885-765eff404e43",
     "sequence": 0,
     "type": "PLANNING_COMPLETE",
     "timestamp": "2026-03-29T07:44:31.030667+00:00"
   },
-  "last_updated": "2026-03-29T08:04:18.455815+00:00"
+  "last_updated": "2026-03-29T08:23:44.689527+00:00"
 }
