@@ -266,46 +266,152 @@ dispatch_middleware_post "dm-session.sh" "$ACTION" "$@"
 
 ### Tools Using Middleware Dispatch
 
-| Tool | Pre-hook | Post-hook | Known Module Interceptors |
-|------|----------|-----------|--------------------------|
-| `dm-session.sh` | Yes | Yes | world-travel (move: pathfinding, encounters) |
-| `dm-location.sh` | Yes | Yes | world-travel (create: adds coordinates) |
-| `dm-inventory.sh` | Yes | Yes | - |
-| `dm-npc.sh` | Yes | Yes | - |
-| `dm-plot.sh` | Yes | Yes | - |
-| `dm-consequence.sh` | Yes | Yes | - |
-| `dm-time.sh` | Yes | Yes | custom-stats (post: tick recurring stats) |
+All 10 CORE tools that invoke `dispatch_middleware` or `dispatch_middleware_post`:
+
+| # | Tool | Pre-hook | Post-hook | Module Pre-Interceptors | Module Post-Interceptors |
+|---|------|----------|-----------|-------------------------|--------------------------|
+| 1 | `dm-session.sh` | ✅ | ✅ | world-travel (move: pathfinding + encounters) | custom-stats (action tracker: log moves/starts) |
+| 2 | `dm-location.sh` | ✅ | ✅ | world-travel (add: coordinates, connect: terrain/distance) | — |
+| 3 | `dm-player.sh` | ✅ | ✅ | custom-stats (custom-stat, custom-stats-list actions) | — |
+| 4 | `dm-npc.sh` | ✅ | ✅ | — | custom-stats (action tracker: log NPC changes) |
+| 5 | `dm-plot.sh` | ✅ | ✅ | — | custom-stats (action tracker: log quest changes) |
+| 6 | `dm-consequence.sh` | ✅ | ✅ | custom-stats (add with --hours: timed consequences) | custom-stats (check: show remaining hours) |
+| 7 | `dm-note.sh` | ✅ | ✅ | — | custom-stats (action tracker: log notes) |
+| 8 | `dm-time.sh` | ✅ | ✅ | — | custom-stats (tick stats, resolve action tracker, check timed consequences) |
+| 9 | `dm-roll.sh` | ❌ | ✅ | — | custom-stats (action tracker: log dice rolls) |
+| 10 | `dm-inventory.sh` | ❌ | ✅ | — | — |
+
+**Note**: `dm-roll.sh` and `dm-inventory.sh` only use post-hooks (no pre-hook dispatch). The remaining 8 tools use both pre and post dispatch.
+
+### Middleware Dispatch Chain Detail
+
+```
+Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
+  │
+  ├─[1] dispatch_middleware "dm-session.sh" "move" "Town" "--elapsed" "2"
+  │     │
+  │     ├── Iterate: .claude/additional/modules/*/middleware/dm-session.sh
+  │     │   ├── custom-stats/middleware/dm-session.sh → does NOT exist (no pre-hook)
+  │     │   └── world-travel/middleware/dm-session.sh → EXISTS
+  │     │       ├── _module_enabled("world-travel") → checks campaign-overview.json
+  │     │       │   └── campaign_rules.modules["world-travel"] == true?
+  │     │       ├── If enabled: execute, handles "move" action
+  │     │       │   ├── BFS pathfinding, distance calc
+  │     │       │   ├── Encounter checks per segment
+  │     │       │   ├── Update player location
+  │     │       │   └── exit 0 → HANDLED
+  │     │       └── If disabled: skip
+  │     │
+  │     └── Return 0 → CORE skipped (exit $?)
+  │
+  ├─[2] CORE logic (only if pre-hook returned 1)
+  │     └── uv run python lib/session_manager.py move "Town" --elapsed 2
+  │
+  └─[3] dispatch_middleware_post "dm-session.sh" "move" "Town" "--elapsed" "2"
+        │
+        ├── custom-stats/middleware/dm-session.sh.post → EXISTS
+        │   ├── _module_enabled("custom-stats") → check
+        │   └── If enabled: log action to tracker, always runs (|| true)
+        │
+        └── world-travel/middleware/dm-session.sh.post → does NOT exist
+```
+
+### Module Enable/Disable Lifecycle
+
+```
+1. Campaign creation or module toggle:
+   → campaign-overview.json.campaign_rules.modules["module-id"] = true/false
+
+2. Every dispatch_middleware call:
+   → _module_enabled(module-id) calls Python:
+     ModuleLoader().is_module_enabled(module-id)
+       → Reads campaign-overview.json
+       → Returns campaign_rules.modules[module-id] (default: module.json.enabled_by_default)
+
+3. Module enable: set modules["id"] = true → middleware files start executing
+4. Module disable: set modules["id"] = false → middleware files silently skipped
+5. No initialization/teardown hooks — modules are stateless middleware only
+6. Module data persists in module-data/*.json regardless of enable state
+```
+
+### Conflict Risks
+
+| Risk | Description | Severity |
+|------|-------------|----------|
+| **Pre-hook ordering** | Modules iterated by filesystem glob order (`*/middleware/`). If two modules both pre-hook the same tool, first match wins. | Medium |
+| **Post-hook cascade** | All enabled post-hooks run. If custom-stats post-hook on dm-time.sh fails, error is swallowed (`|| true`). Silent data loss possible. | Low |
+| **No dependency enforcement** | `module.json.dependencies` is declared but NOT enforced at runtime. A module with missing deps will silently fail. | Medium |
+| **Shared data mutation** | Multiple post-hooks could write to same JSON file (e.g., world.json) without coordination. | Low (currently no overlap) |
 
 ---
 
 ## Optional Modules
 
-Located in `.claude/additional/modules/`:
+Located in `.claude/additional/modules/` (4 modules total):
 
-### mass-combat
-- **Purpose**: Large-scale battles (30+ combatants) with individual unit tracking
+### custom-stats
+- **ID**: `custom-stats`
+- **Purpose**: Custom character stats with automatic time-based changes, conditions, timed effects, and action tracking
 - **Enabled by default**: No
-- **Tools**: `dm-mass-combat.sh` (init, add, round, attack, aoe, damage, heal, kill, cover, status, next-round, end)
-- **Middleware**: None (standalone)
-- **Data**: `combat-state.json` (temporary, per-battle)
+- **Category**: character-mechanics
+- **Tools**: `dm-survival.sh` (tick, status, custom-stat, custom-stats-list, rate, rates, effect add/remove, effects)
+- **Middleware (pre-hooks)**: `dm-player.sh` (intercepts custom-stat/custom-stats-list actions), `dm-consequence.sh` (intercepts add with --hours flag)
+- **Middleware (post-hooks)**: `dm-time.sh.post` (tick stats + resolve action tracker), `dm-consequence.sh.post` (show remaining hours), `dm-roll.sh.post` (log roll), `dm-note.sh.post` (log note), `dm-npc.sh.post` (log NPC change), `dm-plot.sh.post` (log quest change), `dm-session.sh.post` (log move/start)
+- **Total middleware files**: 9 (2 pre + 7 post)
+- **Data**: `module-data/custom-stats.json`
+- **Replaces slots**: None
 
 ### world-travel
-- **Purpose**: Coordinate-based navigation, pathfinding, maps, encounters
+- **ID**: `world-travel`
+- **Purpose**: Coordinate-based navigation, pathfinding, maps, vehicle system, and automatic encounter checks
 - **Enabled by default**: No
+- **Category**: travel-mechanics
 - **Tools**: `dm-navigation.sh`, `dm-map.sh`, `dm-encounter.sh`, `dm-vehicle.sh`
-- **Middleware**: `dm-location.sh` (pre: adds coordinates), `dm-session.sh` (pre: distance calc + encounters)
-- **Data**: Extends location nodes with `coordinates`, `connections[].distance_meters`, `connections[].bearing`
+- **Middleware (pre-hooks)**: `dm-location.sh` (intercepts add --from, connect, decide, routes, block, unblock), `dm-session.sh` (intercepts move: distance calc, hierarchy, vehicles, auto-encounters)
+- **Middleware (post-hooks)**: None
+- **Total middleware files**: 2 (2 pre + 0 post)
+- **Data**: Extends `locations.json` with coordinates/connections, `campaign-overview.json` with path_preferences and encounter_system
+- **Replaces slots**: `movement`
+
+### mass-combat
+- **ID**: `mass-combat`
+- **Purpose**: Individual unit tracking for large-scale battles (30+ combatants)
+- **Enabled by default**: No
+- **Category**: combat
+- **Tools**: `dm-mass-combat.sh` (init, add, round, attack, aoe, damage, heal, kill, cover, status, next-round, end)
+- **Middleware**: None (standalone module, no CORE tool interception)
+- **Total middleware files**: 0
+- **Data**: `combat-state.json` (temporary, deleted on battle end)
+- **Replaces slots**: None
 
 ### firearms-combat
-- **Purpose**: Modern/sci-fi firearms mechanics
+- **ID**: `firearms-combat`
+- **Purpose**: Automated firearms combat with penetration mechanics, RPM simulation, fire modes
 - **Enabled by default**: No
-- **Tools**: `dm-status.sh`, `dm-combat.sh`
-- **Middleware**: None
+- **Category**: combat
+- **Tools**: `dm-combat.sh` (resolve)
+- **Middleware**: None (standalone module, no CORE tool interception)
+- **Total middleware files**: 0
+- **Data**: Weapon/fire-mode config in `campaign-overview.json.campaign_rules.firearms_system`
+- **Replaces slots**: None
 
-### custom-stats (referenced in CLAUDE.md)
-- **Purpose**: Recurring expenses, income, production, random events
-- **Middleware**: `dm-time.sh` (post: tick custom stats on time advance)
-- **Data**: `module-data/custom-stats.json`
+### Module Middleware Coverage Matrix
+
+```
+                    custom-stats    world-travel    mass-combat    firearms-combat
+dm-session.sh       .post           PRE             —              —
+dm-location.sh      —               PRE             —              —
+dm-player.sh        PRE             —               —              —
+dm-npc.sh           .post           —               —              —
+dm-plot.sh          .post           —               —              —
+dm-consequence.sh   PRE + .post     —               —              —
+dm-note.sh          .post           —               —              —
+dm-time.sh          .post           —               —              —
+dm-roll.sh          .post           —               —              —
+dm-inventory.sh     —               —               —              —
+
+Legend: PRE = pre-hook (can intercept), .post = post-hook (augments after CORE)
+```
 
 ---
 
