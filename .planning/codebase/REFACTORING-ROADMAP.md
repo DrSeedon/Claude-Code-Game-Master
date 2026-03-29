@@ -84,7 +84,7 @@ Introduce Protocol-based interfaces and constructor injection so managers can be
 | 2.1 | Create `lib/protocols.py` — define `JsonStore`, `CampaignResolver`, `EntityStore` protocols | 1 hr | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.2 | Create `CampaignContext` factory — single bootstrap point replacing ~10 duplicated sequences | 2 hrs | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.3 | Refactor `EntityManager` to accept injected `JsonOperations` + `CampaignManager` via constructor | 3 hrs | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
-| 2.4 | Refactor standalone managers (`TimeManager`, `InventoryManager`, `NoteManager`, etc.) to accept deps | 4 hrs | Medium | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
+| 2.4 | Refactor standalone managers (`TimeManager`, `InventoryManager`, `CalendarManager`, etc.) to accept deps | 4 hrs | Medium | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.5 | Separate CLI `main()` from domain logic in all 5 managers (~510 LOC total to extract) | 4 hrs | Medium | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 | 2.6 | Remove `sys.exit()` from library code — migrate 29 calls to raise exceptions, catch at CLI boundary | 3 hrs | High | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 
@@ -152,7 +152,7 @@ Each extraction is a separate branch. If a facade breaks integration, revert tha
 
 **Effort:** Ongoing (initial push ~5-8 days) | **Risk:** Low | **Dependencies:** Phase 1 minimum; Phase 2-3 make testing far easier
 
-Raise test coverage from 27% (7/26 modules) toward 70%+ target.
+Raise test coverage from the current baseline toward 70%+ target.
 
 ### Tasks — Priority Order
 
@@ -161,20 +161,17 @@ Raise test coverage from 27% (7/26 modules) toward 70%+ target.
 | 4.1 | `inventory_manager.py` | 1,559 | ~200 | Critical | Phase 2.4 (DI) |
 | 4.2 | `time_manager.py` | 258 | ~120 | High | Phase 2.4 |
 | 4.3 | `campaign_manager.py` | 445 | ~150 | High | Phase 2.2 |
-| 4.4 | `npc_manager.py` | 950 | ~180 | High | Phase 2.3 |
-| 4.5 | `wiki_manager.py` | 442 | ~130 | Medium | Phase 2.4 |
-| 4.6 | `plot_manager.py` | 671 | ~140 | Medium | Phase 2.3 |
-| 4.7 | `calendar.py` | 258 | ~80 | Medium | None |
-| 4.8 | `currency.py` | 234 | ~70 | Medium | None |
-| 4.9 | `dice.py` (untested portions) | 778 | ~80 | Medium | None |
-| 4.10 | RAG modules (7 files) | ~2,000 | ~300 | Low | Phase 2.4 |
+| 4.4 | `calendar.py` | 258 | ~80 | Medium | None |
+| 4.5 | `currency.py` | 234 | ~70 | Medium | None |
+| 4.6 | `dice.py` (untested portions) | 778 | ~80 | Medium | None |
+| 4.7 | RAG modules (7 files) | ~2,000 | ~300 | Low | Phase 2.4 |
 
-**Note:** Tasks 4.7-4.9 have no DI dependency and can start immediately after Phase 1.
+**Note:** Tasks 4.4-4.6 have no DI dependency and can start immediately after Phase 1.
 
 ### Success Criteria
 
-- [ ] Core module coverage ≥ 70% (18/26 modules with tests)
-- [ ] All Priority 1 modules (inventory, time, campaign, NPC) have tests
+- [ ] Core module coverage ≥ 70% (target: majority of remaining modules with tests)
+- [ ] All Priority 1 modules (inventory, time, campaign) have tests
 - [ ] Total test count ≥ 200 (up from ~93)
 - [ ] No untested public method in any Priority 1 module
 - [ ] CI-compatible test suite (all tests pass with `uv run pytest`)

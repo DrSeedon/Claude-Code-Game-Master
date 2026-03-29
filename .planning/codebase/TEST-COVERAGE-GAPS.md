@@ -2,20 +2,17 @@
 
 ## Current State
 
-**Tested:** 7/26 core modules (27%), 0/7 RAG modules (0%)
-**Total test files:** 7 + conftest.py
-**Existing test cases:** ~93
+**Tested:** 4/19 core modules (21%), 0/7 RAG modules (0%)
+**Total test files:** 5 + conftest.py
+**Existing test cases:** ~65
 
 ### Tested Modules
 
 | Module | Test File | Cases | Quality |
 |--------|-----------|-------|---------|
 | player_manager.py | test_player_manager.py | 17 | Good: HP/gold/XP CRUD, clamping, persistence, auto-detect |
-| location_manager.py | test_location_manager.py | 17 | Good: bidirectional links, duplicates, empty state |
 | dice.py (partial) | test_dice_combat.py | 13 | Good: fuzzy matching, missing creatures, profession scaling |
 | session_manager.py | test_session_manager.py | 15 | Fair: lacks corrupted JSON, error conditions |
-| consequence_manager.py | test_consequence_manager.py | 13 | Good: state transitions, nonexistent IDs |
-| note_manager.py | test_note_manager.py | 15 | Fair: lacks error condition coverage |
 | encounter_engine.py | test_encounter_engine.py | 20 | Excellent: statistical validation, cooldown, edge cases |
 
 ---
@@ -63,47 +60,9 @@
   - `test_get_active_campaign` — resolution logic
   - `test_campaign_overview_defaults` — schema validation
 
-#### 4. npc_manager.py — 950 LOC, 46 public methods
-- **Risk:** Complex NPC state; party management; attitude system
-- **Testability:** Medium — extends EntityManager, needs fixtures
-- **Proposed tests (~180 LOC):**
-  - `test_create_npc` — basic creation with defaults
-  - `test_set_attitude` — friendly/neutral/hostile transitions
-  - `test_add_to_party` / `test_remove_from_party`
-  - `test_list_npcs` — filtering by attitude/location
-  - `test_update_npc` — partial field updates
-  - `test_delete_npc` — cleanup
-  - `test_npc_persistence` — file verification
-  - `test_duplicate_npc_name` — error handling
-  - `test_party_capacity` — if limits exist
-
 ### Priority 2: Important (Medium complexity, frequently used)
 
-#### 5. wiki_manager.py — 442 LOC, 19 public methods
-- **Risk:** Game mechanics source of truth; recipes, items, abilities
-- **Testability:** Easy — JSON CRUD on wiki.json
-- **Proposed tests (~130 LOC):**
-  - `test_add_entity` / `test_get_entity` / `test_delete_entity`
-  - `test_search_by_type` — filter by potion/weapon/spell
-  - `test_search_by_tags` — tag-based lookup
-  - `test_subentry_dot_notation` — parent.child IDs
-  - `test_recipe_structure` — DC + ingredients validation
-  - `test_update_entity` — partial updates
-  - `test_duplicate_id` — error handling
-
-#### 6. plot_manager.py — 671 LOC, 29 public methods
-- **Risk:** Quest tracking; status transitions affect gameplay
-- **Testability:** Easy — extends EntityManager
-- **Proposed tests (~140 LOC):**
-  - `test_create_plot` — with type and objectives
-  - `test_list_plots_filter` — by type (main/side) and status
-  - `test_update_status` — active→completed→failed transitions
-  - `test_add_objective` / `test_complete_objective`
-  - `test_get_plot` — by name
-  - `test_delete_plot`
-  - `test_plot_persistence`
-
-#### 7. dice.py (untested portions) — 778 LOC total
+#### 4. dice.py (untested portions) — 778 LOC total
 - **Risk:** Core mechanic; tested for combat but not base rolling
 - **Testability:** Easy — pure functions
 - **Proposed additional tests (~80 LOC):**
@@ -114,7 +73,7 @@
   - `test_skill_check` — modifier lookup from character
   - `test_save_check` — ability save modifier
 
-#### 8. calendar.py — 258 LOC, 10 public methods
+#### 5. calendar.py — 258 LOC, 10 public methods
 - **Risk:** Date display; campaign-specific configs
 - **Testability:** Easy — pure logic
 - **Proposed tests (~80 LOC):**
@@ -124,7 +83,7 @@
   - `test_month_lengths` — including leap year if supported
   - `test_date_formatting`
 
-#### 9. currency.py — 234 LOC, 10 public methods
+#### 6. currency.py — 234 LOC, 10 public methods
 - **Risk:** Money conversion errors cause gameplay issues
 - **Testability:** Easy — pure functions
 - **Proposed tests (~70 LOC):**
@@ -136,7 +95,7 @@
 
 ### Priority 3: Lower Risk (Utility/support modules)
 
-#### 10. json_ops.py — 285 LOC, 17 public methods
+#### 7. json_ops.py — 285 LOC, 17 public methods
 - **Risk:** Data persistence layer; corruption = data loss
 - **Testability:** Easy — file I/O
 - **Proposed tests (~90 LOC):**
@@ -146,7 +105,7 @@
   - `test_atomic_write` — no partial writes
   - `test_ensure_ascii_false` — unicode preservation
 
-#### 11. validators.py — 304 LOC, 29 public methods
+#### 8. validators.py — 304 LOC, 29 public methods
 - **Risk:** Low — input validation; failures are safe
 - **Testability:** Very easy — pure static methods
 - **Proposed tests (~60 LOC):**
@@ -154,31 +113,14 @@
   - `test_validate_name_special_chars`
   - `test_validate_attitude_valid` / `test_validate_attitude_invalid`
 
-#### 12. search.py — 441 LOC, 29 public methods
-- **Risk:** Medium — incorrect search misses data but no mutation
-- **Testability:** Medium — needs populated world state
-- **Proposed tests (~100 LOC):**
-  - `test_search_facts` — keyword matching
-  - `test_search_empty_state`
-  - `test_search_across_categories`
-  - `test_campaign_resolution`
-
-#### 13. entity_manager.py — 172 LOC, 4 public methods
+#### 9. entity_manager.py — 172 LOC, 4 public methods
 - **Risk:** Low — base class; tested indirectly via subclasses
 - **Testability:** Easy
 - **Proposed tests (~40 LOC):**
   - `test_init_creates_paths`
   - `test_require_active_campaign`
 
-#### 14. world_stats.py — 301 LOC, 11 public methods
-- **Risk:** Low — read-only reporting
-- **Testability:** Easy — needs populated world state
-- **Proposed tests (~70 LOC):**
-  - `test_get_counts` — all categories
-  - `test_empty_world` — zeros
-  - `test_partial_data` — missing files
-
-#### 15. colors.py — ~50 LOC
+#### 10. colors.py — ~50 LOC
 - **Risk:** None — constants only
 - **Testability:** Trivial
 - **Proposed tests:** Not recommended (no logic)
@@ -187,7 +129,7 @@
 
 All RAG modules require `sentence-transformers` and `chromadb`. Tests should mock these.
 
-#### 16. entity_enhancer.py — 877 LOC, 21 public methods
+#### 11. entity_enhancer.py — 877 LOC, 21 public methods
 - **Testability:** Hard — heavy RAG integration
 - **Proposed tests (~100 LOC):**
   - `test_enhance_npc` — mock vector store, verify query construction
@@ -195,27 +137,27 @@ All RAG modules require `sentence-transformers` and `chromadb`. Tests should moc
   - `test_no_rag_available` — graceful degradation
   - `test_search_hybrid` — world state + RAG merge
 
-#### 17. rag/vector_store.py
+#### 12. rag/vector_store.py
 - **Testability:** Hard — chromadb dependency
 - **Proposed tests (~60 LOC):** Mock chromadb client; test add/query/delete
 
-#### 18. rag/semantic_chunker.py
+#### 13. rag/semantic_chunker.py
 - **Testability:** Medium — text processing
 - **Proposed tests (~50 LOC):** Test chunk boundaries, overlap, empty input
 
-#### 19. rag/embedder.py
+#### 14. rag/embedder.py
 - **Testability:** Hard — model loading
 - **Proposed tests (~40 LOC):** Mock model; test embed shape/type
 
-#### 20. rag/quote_extractor.py
+#### 15. rag/quote_extractor.py
 - **Testability:** Easy — text processing
 - **Proposed tests (~40 LOC):** Test quote extraction patterns
 
-#### 21. rag/rag_extractor.py
+#### 16. rag/rag_extractor.py
 - **Testability:** Hard — orchestrates RAG pipeline
 - **Proposed tests (~60 LOC):** Mock all deps; test extraction flow
 
-#### 22. rag/extraction_queries.py + extraction_schemas.py + content_extractor.py + agent_extractor.py
+#### 17. rag/extraction_queries.py + extraction_schemas.py + content_extractor.py + agent_extractor.py
 - **Testability:** Medium-Hard — schema validation, PDF deps
 - **Proposed tests (~80 LOC):** Schema structure validation, mock PDF
 
@@ -236,7 +178,6 @@ All RAG modules require `sentence-transformers` and `chromadb`. Tests should moc
 - **No integration tests:** No test exercises tool→manager→file round-trip
 - **Missing edge cases per module:**
   - session_manager: no test for corrupted session files, concurrent sessions
-  - note_manager: no test for very long content, special characters in category names
   - player_manager: no test for missing character.json mid-operation
 
 ### Fixture Assessment
@@ -253,20 +194,15 @@ All RAG modules require `sentence-transformers` and `chromadb`. Tests should moc
 | P1 | inventory_manager | 1,559 | 200 | Critical |
 | P1 | time_manager | 258 | 120 | Critical |
 | P1 | campaign_manager | 445 | 150 | Critical |
-| P1 | npc_manager | 950 | 180 | Critical |
-| P2 | wiki_manager | 442 | 130 | High |
-| P2 | plot_manager | 671 | 140 | High |
 | P2 | dice.py (gaps) | 778 | 80 | High |
 | P2 | calendar | 258 | 80 | Medium |
 | P2 | currency | 234 | 70 | Medium |
 | P3 | json_ops | 285 | 90 | Medium |
 | P3 | validators | 304 | 60 | Low |
-| P3 | search | 441 | 100 | Medium |
 | P3 | entity_manager | 172 | 40 | Low |
-| P3 | world_stats | 301 | 70 | Low |
 | P3 | colors | 50 | 0 | None |
 | P4 | entity_enhancer | 877 | 100 | Medium |
 | P4 | rag/* (6 modules) | ~600 | 330 | Medium |
-| **Total** | | **~8,625** | **~1,940** | |
+| **Total** | | **~5,820** | **~1,320** | |
 
-**Recommended implementation order:** P1 modules first (inventory, time, campaign, npc), then P2 (wiki, plot, dice gaps, calendar, currency). P3/P4 as capacity allows.
+**Recommended implementation order:** P1 modules first (inventory, time, campaign), then P2 (dice gaps, calendar, currency). P3/P4 as capacity allows.

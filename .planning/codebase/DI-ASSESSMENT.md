@@ -22,22 +22,15 @@
 
 All of these inherit from `EntityManager` and call `super().__init__()`, which internally constructs `JsonOperations`, `Validators`, and `CampaignManager`:
 
-- `ConsequenceManager(EntityManager)`
-- `LocationManager(EntityManager)`
-- `NPCManager(EntityManager)`
 - `PlayerManager(EntityManager)`
-- `PlotManager(EntityManager)` — also creates `SessionManager` inline (lazy import)
 - `SessionManager(EntityManager)`
 
 ### Manager Layer (standalone, non-EntityManager)
 
 | Class | Dependencies Created in `__init__` |
 |-------|-----------------------------------|
-| `NoteManager` | `CampaignManager`, `JsonOperations` |
 | `TimeManager` | `CampaignManager`, `JsonOperations` |
 | `WorldSearcher` | `CampaignManager`, `JsonOperations` |
-| `WorldStats` | `CampaignManager`, `JsonOperations` |
-| `WikiManager` | None (receives `campaign_dir: str`) |
 | `InventoryManager` | `ModuleDataManager` (direct construction) |
 | `EntityEnhancer` | `CampaignManager`, `JsonOperations` |
 | `AgentExtractor` | `JsonOperations`, `Validators`, `CampaignManager` |
@@ -58,38 +51,27 @@ EntityManager ──► JsonOperations (standalone)
     │           ► Validators (standalone)
     │           ► CampaignManager
     │
-    ├── ConsequenceManager
-    ├── LocationManager
-    ├── NPCManager
     ├── PlayerManager
-    ├── PlotManager ──► SessionManager (lazy import, direct construction)
     └── SessionManager
 
-NoteManager ──► CampaignManager, JsonOperations
 TimeManager ──► CampaignManager, JsonOperations
 WorldSearcher ──► CampaignManager, JsonOperations
-WorldStats ──► CampaignManager, JsonOperations
 EntityEnhancer ──► CampaignManager, JsonOperations
 AgentExtractor ──► JsonOperations, Validators, CampaignManager
 
 InventoryManager ──► ModuleDataManager (direct construction)
-                 ──► WikiManager (lazy import in transfer/craft methods)
                  ──► InventoryManager (self-creates for NPC/target operations)
-
-WikiManager (receives campaign_dir string — closest to injection)
 ```
 
 ## Key Problems
 
-1. **Every manager constructs its own `CampaignManager` and `JsonOperations`** — identical bootstrap logic duplicated ~10 times. Each instance independently resolves the active campaign.
+1. **Every manager constructs its own `CampaignManager` and `JsonOperations`** — identical bootstrap logic duplicated across multiple classes. Each instance independently resolves the active campaign.
 
 2. **No interfaces/protocols** — all dependencies are concrete classes. Testing requires either real filesystem or the `require_active_campaign=False` escape hatch (only on `EntityManager`).
 
-3. **Cross-manager dependencies use lazy imports with direct construction** — `PlotManager` creates `SessionManager()` inline; `InventoryManager` creates `WikiManager()` inline. These are hidden, untestable coupling points.
+3. **`EntityManager` has two code paths** in `__init__` (testing vs production) controlled by a boolean flag — a code smell that would be eliminated by proper DI.
 
-4. **`EntityManager` has two code paths** in `__init__` (testing vs production) controlled by a boolean flag — a code smell that would be eliminated by proper DI.
-
-5. **Standalone managers duplicate EntityManager's pattern** — `NoteManager`, `TimeManager`, `WorldSearcher`, `WorldStats`, `EntityEnhancer` all repeat the same `CampaignManager` → `get_active_campaign_dir()` → `JsonOperations` bootstrap.
+4. **Standalone managers duplicate EntityManager's pattern** — `TimeManager`, `WorldSearcher`, `EntityEnhancer` all repeat the same `CampaignManager` → `get_active_campaign_dir()` → `JsonOperations` bootstrap.
 
 ## Proposed DI Strategy
 
@@ -117,26 +99,6 @@ class CampaignResolver(Protocol):
 `JsonOperations` and `CampaignManager` already satisfy these protocols without modification.
 
 ### 2. Constructor Injection Pattern
-
-**Before (current — `NoteManager`):**
-```python
-class NoteManager:
-    def __init__(self, world_state_dir: str = "world-state"):
-        self.campaign_mgr = CampaignManager(world_state_dir)
-        campaign_dir = self.campaign_mgr.get_active_campaign_dir()
-        if campaign_dir is None:
-            raise RuntimeError("No active campaign.")
-        self.campaign_dir = campaign_dir
-        self.json_ops = JsonOperations(str(self.campaign_dir))
-```
-
-**After (constructor injection):**
-```python
-class NoteManager:
-    def __init__(self, json_store: JsonStore, campaign_dir: Path):
-        self.json_ops = json_store
-        self.campaign_dir = campaign_dir
-```
 
 **Before (current — `EntityManager`):**
 ```python
@@ -201,14 +163,19 @@ def resolve_campaign(world_state_dir: str = "world-state") -> CampaignContext:
         campaign_mgr=mgr,
     )
 
-def make_note_manager(ctx: CampaignContext = None) -> "NoteManager":
+def make_player_manager(ctx: CampaignContext = None) -> "PlayerManager":
     ctx = ctx or resolve_campaign()
-    return NoteManager(json_store=ctx.json_ops, campaign_dir=ctx.campaign_dir)
+    return PlayerManager(json_store=ctx.json_ops, validators=ctx.validators,
+                         campaign_dir=ctx.campaign_dir)
 
-def make_plot_manager(ctx: CampaignContext = None) -> "PlotManager":
+def make_session_manager(ctx: CampaignContext = None) -> "SessionManager":
     ctx = ctx or resolve_campaign()
-    return PlotManager(json_store=ctx.json_ops, validators=ctx.validators,
-                       campaign_dir=ctx.campaign_dir)
+    return SessionManager(json_store=ctx.json_ops, validators=ctx.validators,
+                          campaign_dir=ctx.campaign_dir)
+
+def make_time_manager(ctx: CampaignContext = None) -> "TimeManager":
+    ctx = ctx or resolve_campaign()
+    return TimeManager(json_store=ctx.json_ops, campaign_dir=ctx.campaign_dir)
 ```
 
 CLI entry points (`if __name__ == "__main__"`) call the factory with no arguments (production default). Tests pass a `CampaignContext` with a temp directory and mock/real `JsonOperations` — no filesystem setup, no `require_active_campaign` flag.
@@ -219,7 +186,7 @@ This can be done incrementally, one manager at a time:
 
 1. **Phase 1:** Add `protocols.py` and `context.py` (zero impact on existing code).
 2. **Phase 2:** Update `EntityManager.__init__` to accept optional injected deps; if none provided, fall back to current behavior. Subclasses unchanged.
-3. **Phase 3:** Convert standalone managers (`NoteManager`, `TimeManager`, etc.) one by one — add injected constructor, update CLI entry point to use factory.
+3. **Phase 3:** Convert standalone managers (`TimeManager`, `WorldSearcher`, etc.) one by one — add injected constructor, update CLI entry point to use factory.
 4. **Phase 4:** Remove `require_active_campaign` flag and legacy constructor paths once all tests use injection.
 
 ### Impact on Testability
@@ -241,4 +208,4 @@ mgr = PlayerManager(json_store=json_store, validators=Validators(), campaign_dir
 
 - **Low risk:** All changes are additive (new optional params with fallback).
 - **No breaking changes** to CLI entry points or bash wrappers — factories handle wiring.
-- **Biggest win:** Eliminating 10+ duplicate bootstrap sequences and the `require_active_campaign` testing hack.
+- **Biggest win:** Eliminating duplicate bootstrap sequences and the `require_active_campaign` testing hack.

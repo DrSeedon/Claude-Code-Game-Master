@@ -107,16 +107,13 @@
 | # | Principle | Lines | Violation | Severity |
 |---|-----------|-------|-----------|----------|
 | 1 | DIP | 20-26 | Creates `CampaignManager` and `JsonOperations` directly — same hard-dependency pattern as EntityManager but doesn't inherit from it (code duplication) | Medium |
-| 2 | SRP | 79-99 | `_read_module_time()` and `_read_module_date()` — reads custom-stats module data directly instead of going through a module API. Tight coupling to module internals | High |
-| 3 | SRP | 169-179 | `_sync_to_module()` writes directly to `module-data/custom-stats.json` — cross-module file manipulation | High |
-| 4 | SRP | 181-203 | `_print_time()` — presentation/formatting logic with ANSI colors embedded in domain class | Medium |
-| 5 | OCP | 118-133 | Two branches for time advancement (with calendar vs without) — not extensible for other time systems | Medium |
-| 6 | DIP | 41-42, 71-72, 119, 194 | Conditional `from lib.calendar import ...` inside methods — fragile dependency on calendar module availability | Medium |
-| 7 | ISP | 20-26 | Does not inherit from `EntityManager` despite needing the same initialization pattern — duplicates campaign resolution logic | Medium |
+| 2 | SRP | 181-203 | `_print_time()` — presentation/formatting logic with ANSI colors embedded in domain class | Medium |
+| 3 | OCP | 118-133 | Two branches for time advancement (with calendar vs without) — not extensible for other time systems | Medium |
+| 4 | DIP | 41-42, 71-72, 119, 194 | Conditional `from lib.calendar import ...` inside methods — fragile dependency on calendar module availability | Medium |
+| 5 | ISP | 20-26 | Does not inherit from `EntityManager` despite needing the same initialization pattern — duplicates campaign resolution logic | Medium |
 
 **Magic Numbers / Hardcoded Values:**
 - Line 54: `"08:00"` — default time fallback (appears 3 times: lines 54, 58, 174)
-- Line 81: `"module-data" / "custom-stats.json"` — hardcoded module data path (appears 3 times: lines 81, 91, 171)
 - Line 127: `24` — hours per day hardcoded (not calendar-aware in fallback path)
 - Line 155: `24 * 60` — minutes per day hardcoded
 - Line 156: `60.0` — minutes per hour hardcoded
