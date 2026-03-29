@@ -417,7 +417,7 @@
             "command": "test -f .planning/codebase/DI-ASSESSMENT.md && echo 'EXISTS' || echo 'MISSING'",
             "expected": "EXISTS"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-4-3",
@@ -450,7 +450,9 @@
             "command": "test -f .planning/codebase/CONFIG-DEBT.md && echo 'EXISTS' || echo 'MISSING'",
             "expected": "EXISTS"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Cataloged ~130 hardcoded magic values across 22 lib/ files. Grouped into 9 categories. Proposed 4-tier centralized config strategy. Also found a bug: dice.py:369 proficiency bonus truncated at level 9.",
+          "updated_at": "2026-03-29T08:34:02.557620+00:00"
         },
         {
           "id": "subtask-4-4",
@@ -489,7 +491,7 @@
             "command": "test -f .planning/codebase/TEST-COVERAGE-GAPS.md && echo 'EXISTS' || echo 'MISSING'",
             "expected": "EXISTS"
           },
-          "status": "pending"
+          "status": "completed"
         }
       ]
     },
@@ -537,7 +539,7 @@
             "type": "manual",
             "instructions": "Verify TECHNICAL-DEBT-REPORT.md has: (1) Executive summary with top 10 findings, (2) Quality scorecard, (3) Metrics for all 8 analysis categories, (4) Cross-references to all other analysis documents"
           },
-          "status": "pending"
+          "status": "completed"
         },
         {
           "id": "subtask-5-2",
@@ -568,7 +570,8 @@
             "type": "manual",
             "instructions": "Verify REFACTORING-ROADMAP.md has: (1) 5 phased sections with effort estimates, (2) dependency graph, (3) risk assessments, (4) success criteria for each phase, (5) total timeline estimate"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Created REFACTORING-ROADMAP.md with 5 phases, dependency graph, effort estimates (15-27 days total), risk assessments, success criteria, rollback strategies, and quality scorecard progression targets."
         },
         {
           "id": "subtask-5-3",
@@ -582,7 +585,8 @@
             "command": "cd /mnt/data/Projects/Python/Claude-Code-Game-Master && uv run pytest && echo '---TESTS PASSED---' && git status --short && echo '---GIT STATUS---'",
             "expected": "All tests pass, no source files modified (only .planning/ files may appear as new)"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "All 347 tests pass. No source files modified (git diff shows only implementation_plan.json and .gitignore). Ruff not installed (not in project deps). Cyrillic text in analysis docs is intentional - quoting actual Russian strings found in source code as violations. Key inaccuracy found: GOD-CLASS-DECOMPOSITION.md references lib/world_graph.py (WorldGraph class, 2481 LOC) which does not exist; the actual architecture uses EntityManager subclasses. LOC spot-checks: inventory_manager.py=1553 (plan said 1559, close), dice.py=740, entity_enhancer.py=921. Language policy: all analysis prose is English; Cyrillic only appears when quoting source code violations."
         }
       ]
     }
@@ -720,16 +724,17 @@
     }
   },
   "qa_signoff": null,
-  "status": "in_progress",
-  "planStatus": "in_progress",
-  "xstateState": "coding",
-  "executionPhase": "coding",
-  "updated_at": "2026-03-29T08:24:21.690Z",
+  "status": "human_review",
+  "planStatus": "review",
+  "xstateState": "human_review",
+  "executionPhase": "complete",
+  "updated_at": "2026-03-29T08:46:34.716Z",
   "lastEvent": {
     "eventId": "4f0b41ee-e48f-4216-8885-765eff404e43",
     "sequence": 0,
     "type": "PLANNING_COMPLETE",
     "timestamp": "2026-03-29T07:44:31.030667+00:00"
   },
-  "last_updated": "2026-03-29T08:23:44.689527+00:00"
+  "last_updated": "2026-03-29T08:34:02.557632+00:00",
+  "reviewReason": "completed"
 }
