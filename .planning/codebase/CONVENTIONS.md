@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-03-28
+**Analysis Date:** 2026-03-29 (post WorldGraph migration)
 
 ## Naming Patterns
 
@@ -11,7 +11,7 @@
 
 **Classes:**
 - PascalCase — `WorldGraph`, `PlayerManager`, `EntityManager`, `DiceRoller`, `JsonOperations`
-- Manager suffix for stateful CRUD classes — `ConsequenceManager`, `CampaignManager`, `WikiManager`
+- Manager suffix for stateful CRUD classes — `SessionManager`, `CampaignManager`, `PlayerManager`
 
 **Methods:**
 - `snake_case` throughout
@@ -52,6 +52,14 @@
 sys.path.insert(0, str(Path(__file__).parent))
 ```
 
+**Module imports:** Modules use `from lib.<module> import <Class>` pattern:
+```python
+PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
+sys.path.insert(0, str(PROJECT_ROOT))
+from lib.world_graph import WorldGraph
+from lib.module_data import ModuleDataManager
+```
+
 **Colors import pattern** (defensive try/except everywhere):
 ```python
 try:
@@ -61,11 +69,8 @@ except ImportError:
         from colors import Colors
     except ImportError:
         class Colors:
-            RESET = RS = RED = R = GREEN = G = ""  # all attrs stubbed as empty string
+            RESET = RS = RED = R = GREEN = G = ""
 ```
-This pattern repeats in `dice.py`, `inventory_manager.py`, `world_graph.py`. Every lib file that uses colors has a self-contained fallback.
-
-**Path aliases:** None — `lib/` is on sys.path via injection, no package-level `__init__.py` re-exports used in runtime code.
 
 ## Error Handling
 
@@ -173,4 +178,4 @@ Module code (`.claude/additional/modules/`) must contain zero campaign-specific 
 
 ---
 
-*Convention analysis: 2026-03-28*
+*Convention analysis: 2026-03-29*

@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-03-28
+**Analysis Date:** 2026-03-29
 
 ## APIs & External Services
 
@@ -24,8 +24,8 @@
 ## Data Storage
 
 **Databases:**
-- None — all state is flat JSON files on disk
-- Primary state file: `world-state/campaigns/<name>/world.json` — unified entity graph (WorldGraph)
+- None — all state in JSON files on disk
+- Primary state file: `world-state/campaigns/<name>/world.json` — unified entity graph (WorldGraph, all entities)
 - Campaign metadata: `world-state/campaigns/<name>/campaign-overview.json`
 - Active campaign pointer: `world-state/active-campaign.txt`
 
@@ -103,4 +103,4 @@
 
 ---
 
-*Integration audit: 2026-03-28*
+*Integration audit: 2026-03-29*

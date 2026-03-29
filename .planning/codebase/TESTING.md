@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-03-28
+**Analysis Date:** 2026-03-29 (post WorldGraph migration)
 
 ## Test Framework
 
@@ -42,11 +42,10 @@ tests/
   conftest.py               # shared fixtures (minimal_campaign, stalker_campaign)
   test_world_graph.py       # WorldGraph CRUD, edges, search
   test_tick_engine.py       # WorldGraph tick/time methods
-  test_dice_combat.py       # DiceRoller, _resolve_attack, auto-combat
+  test_dice_combat.py       # DiceRoller, _resolve_attack, auto-combat, spell/creature lookup
   test_encounter_engine.py  # check_encounter, _weighted_choice
-  test_player_manager.py    # PlayerManager HP, XP, conditions
-  test_session_manager.py   # SessionManager move, location tracking
-  test_consequence_manager.py  # ConsequenceManager add/check/resolve
+  test_player_manager.py    # PlayerManager HP, XP, conditions (WorldGraph player node)
+  test_session_manager.py   # SessionManager move, save/restore, context (WorldGraph)
 
 .claude/additional/modules/world-travel/tests/
   test_navigation.py        # PathFinder coordinate math
@@ -178,10 +177,12 @@ uv run pytest --cov=lib --cov-report=term-missing
 
 **Approximate coverage by area:**
 - `WorldGraph` — high coverage via `test_world_graph.py` + `test_tick_engine.py` (153 test functions total in `tests/`)
-- `PlayerManager`, `SessionManager`, `ConsequenceManager` — dedicated test files
-- `dice.py` auto-combat (`_resolve_attack`, `_resolve_spell_attack`) — covered in `test_dice_combat.py`
-- `inventory_manager.py`, `wiki_manager.py`, `currency.py` — **no dedicated test files** (gap)
-- `entity_enhancer.py`, `search.py`, `rag/` — **no test files** (gap)
+- `PlayerManager`, `SessionManager` — dedicated test files (all use world.json fixtures)
+- `dice.py` auto-combat (`_resolve_attack`, `_resolve_spell_attack`, creature/spell lookup) — covered in `test_dice_combat.py`
+- `FirearmsCombatResolver` — 15 tests in module test suite
+- `MassCombatEngine` — 22 tests in module test suite
+- `inventory_manager.py`, `currency.py` — **no dedicated test files** (gap)
+- `entity_enhancer.py`, `rag/` — **no test files** (gap)
 
 ## Test Types
 
@@ -210,16 +211,17 @@ Or for WorldGraph (accepts `campaign_dir` directly):
 g = WorldGraph(tmp_path)  # tmp_path IS the campaign dir
 ```
 
-**Persistence verification pattern:**
+**Persistence verification pattern (WorldGraph):**
 ```python
 def test_hp_persisted_to_file(self, tmp_path):
     ws, camp = make_campaign(tmp_path)
     mgr = PlayerManager(ws)
     mgr.modify_hp("Hero", -5)
-    char = json.loads((camp / "character.json").read_text())
+    world = json.loads((camp / "world.json").read_text())
+    char = world["nodes"]["player:active"]["data"]
     assert char["hp"]["current"] == 15
 ```
-Reading the JSON file directly after the operation verifies atomic write worked correctly.
+Reading world.json directly after the operation verifies atomic write worked correctly.
 
 **Edge case pattern — clamping:**
 ```python
@@ -255,4 +257,4 @@ def test_no_config_returns_none(self, campaign_dir):
 
 ---
 
-*Testing analysis: 2026-03-28*
+*Testing analysis: 2026-03-29*
