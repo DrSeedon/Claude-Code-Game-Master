@@ -556,3 +556,140 @@ No interfaces or abstractions — swapping any component requires modifying its 
 | Medium | 22 | 27 | 20 | 69 |
 | Low | 6 | 8 | 10 | 24 |
 | **Total** | **38** | **42** | **32** | **112** |
+
+---
+
+## Section 4: Optional Modules
+
+**Scope:** 3 optional gameplay modules totaling ~6,909 LOC across 15 lib files, 2 middleware scripts, 4 tool scripts, and 6 test files.
+
+---
+
+### 4.1 World-Travel Module (~5,024 LOC, 13 lib files)
+
+**Overall Assessment:** Medium severity. Well-architected multi-component module with clear internal separation. Main issues are campaign-language leaks (Russian compass names) and fragile middleware output parsing.
+
+#### Campaign-Agnosticism Violations
+
+| # | File | Lines | Violation | Severity |
+|---|------|-------|-----------|----------|
+| 1 | lib/pathfinding.py | 24-39 | `COMPASS_DIRECTIONS` hardcodes Russian compass names: `"Север"`, `"Восток"`, `"Юг"`, `"Запад"` etc. — violates CLAUDE.md rule that module code must be campaign-agnostic. English abbreviations ("N", "E") exist but Russian names are primary display values | High |
+
+#### SOLID Violations
+
+| # | Principle | File | Lines | Violation | Severity |
+|---|-----------|------|-------|-----------|----------|
+| 2 | DIP | lib/vehicle_manager.py | 19-27 | Hard-imports `HierarchyManager` — vehicle system silently requires hierarchy component; no graceful fallback if removed | Medium |
+| 3 | DIP | lib/navigation_manager.py | 31-32 | Concrete imports of `PathFinder` and `PathManager` — tight coupling chain: NavigationManager → PathManager → PathFinder | Medium |
+| 4 | SRP | middleware/dm-session.sh | 70-97 | Extracts structured data (distance_meters, terrain) from navigation output via regex on stdout — fragile coupling between tool output format and middleware parsing | Medium |
+| 5 | SRP | middleware/dm-session.sh | 99-118 | Middleware reads campaign JSON directly (`campaign-overview.json`) to get `previous_location` — bypasses CORE tools, duplicates state-reading logic | Medium |
+| 6 | OCP | lib/encounter_engine.py | 70-86 | Time-of-day DC modifiers keyed by fixed strings ("Morning", "Day", "Evening", "Night") — not extensible for alternative time systems | Low |
+| 7 | OCP | lib/force_layout.py | 6 | Global `_cache` dict for layout positions with no invalidation strategy — stale layouts persist if locations change | Low |
+| 8 | DIP | All 13 lib files | — | Every class creates `CampaignManager` / `JsonOperations` directly — same hard-dependency pattern as CORE managers | Medium |
+
+**Middleware Correctness:**
+- `dm-location.sh`: Clean routing, no state mutations, correctly exits 1 to pass unhandled actions to CORE ✓
+- `dm-session.sh`: Correctly chains hierarchy → vehicle → navigation → encounter ✓
+  - **Issue:** Line 67: `[ $NAV_RC -eq 0 ] || exit 0` — navigation errors are masked. Exit 0 signals "handled" to CORE even on failure, preventing error propagation
+  - **Issue:** Lines 70-97: Regex extraction of JSON from stdout is fragile — any change to navigation output format breaks encounter auto-check
+
+**Inter-Module Dependencies:** Internal only (vehicle → hierarchy → pathfinding). No cross-module dependencies to mass-combat or firearms-combat ✓
+
+---
+
+### 4.2 Mass-Combat Module (~1,201 LOC, 1 lib file)
+
+**Overall Assessment:** Low-medium severity. Standalone module with no middleware — cleanest isolation. Main issue is Russian faction name aliases.
+
+#### Campaign-Agnosticism Violations
+
+| # | File | Lines | Violation | Severity |
+|---|------|-------|-----------|----------|
+| 1 | lib/mass_combat_engine.py | 50-52 | `faction_color()` hardcodes Russian faction aliases: `"враги"` (enemies), `"союзники"` (allies) — language-specific strings in module code violates campaign-agnosticism rule | Medium |
+| 2 | tests/test_mass_combat.py | 65, 83 | Test uses Russian unit name `"Хантер"` — campaign-language assumption in test data | Low |
+
+#### SOLID Violations
+
+| # | Principle | File | Lines | Violation | Severity |
+|---|-----------|------|-------|-----------|----------|
+| 3 | SRP | lib/mass_combat_engine.py | 95-99 | `_save()` writes JSON directly without atomic write (no temp file + rename) — data integrity concern under process interruption | Low |
+| 4 | DIP | lib/mass_combat_engine.py | 87-93 | `_load()` does raw file I/O without structure validation — corrupted state file causes unhandled exceptions | Medium |
+| 5 | OCP | lib/mass_combat_engine.py | 48-54 | Faction color mapping is a closed if-chain — cannot add new factions (neutral, hostile, civilian) without modifying the method | Low |
+| 6 | DIP | lib/mass_combat_engine.py | 56-62 | Creates `CampaignManager` and `ModuleDataManager` directly in constructor — same hard-dependency pattern | Medium |
+
+**Middleware Correctness:** N/A — module declares `"middleware": []` and has no middleware directory. Fully standalone tool ✓
+
+**Inter-Module Dependencies:** None. Only depends on CORE (`CampaignManager`, `ModuleDataManager`) ✓
+
+---
+
+### 4.3 Firearms-Combat Module (~684 LOC, 1 lib file)
+
+**Overall Assessment:** High severity due to campaign-specific content leak. Hardcoded Russian subclass name `"Стрелок"` in production code directly violates the mandatory campaign-agnosticism rule.
+
+#### Campaign-Agnosticism Violations
+
+| # | File | Lines | Violation | Severity |
+|---|------|-------|-----------|----------|
+| 1 | lib/firearms_resolver.py | 90 | **Critical:** `if self.character.get("subclass") == "Стрелок"` — hardcoded Russian subclass name ("Sharpshooter") in production resolver. Grants +2 attack bonus only to this specific campaign's subclass name | **High** |
+| 2 | lib/firearms_resolver.py | 96-97 | `_is_sharpshooter()` method: `return self.character.get("subclass") == "Стрелок"` — same hardcoded check as a dedicated method | **High** |
+| 3 | lib/firearms_resolver.py | 549 | Display string includes `"(Стрелок subclass)"` — Russian in user-facing output | Medium |
+| 4 | tests/test_firearms_resolver.py | 30 | Test fixture uses `"subclass": "Стрелок"`, `"class": "Сталкер"` — STALKER-campaign-specific test data | Medium |
+| 5 | creation-rules.md | 127 | Documentation hardcodes `char['subclass'] = 'Стрелок'` | Low |
+
+#### SOLID Violations
+
+| # | Principle | File | Lines | Violation | Severity |
+|---|-----------|------|-------|-----------|----------|
+| 6 | OCP | lib/firearms_resolver.py | 88-91 | Subclass bonus is a hardcoded if-check — no way to define other subclass bonuses without modifying the class | High |
+| 7 | SRP | lib/firearms_resolver.py | 98-108 | Attack bonus always uses DEX modifier — no configuration for STR-based or WIS-based firearms | Medium |
+| 8 | OCP | lib/firearms_resolver.py | 142-148 | Penetration vs protection scaling (full / half / quarter damage) hardcoded — cannot adjust balance per campaign | Medium |
+| 9 | DIP | lib/firearms_resolver.py | 16-24 | `PROJECT_ROOT` discovery via `.git` parent traversal + `sys.path.insert` — fragile import mechanism shared with all modules | Low |
+
+**Middleware Correctness:** N/A — no middleware directory, no middleware declared. Standalone tool called explicitly by DM ✓
+
+**Inter-Module Dependencies:** None. Only depends on CORE (`JsonOperations`, `PlayerManager`, `CampaignManager`, `ModuleDataManager`) ✓
+
+---
+
+### Section 4 Summary
+
+#### Campaign-Agnosticism Report
+
+| Module | Violations | Worst Severity | Primary Issue |
+|--------|-----------|----------------|---------------|
+| world-travel | 1 | High | Russian compass direction names in pathfinding.py |
+| mass-combat | 2 | Medium | Russian faction aliases in engine, Russian test data |
+| firearms-combat | 5 | **High** | Hardcoded `"Стрелок"` subclass in production resolver |
+
+**Total campaign-specific leaks: 8** — firearms-combat is the worst offender with production logic gated on a Russian string.
+
+#### Middleware Correctness Report
+
+| Module | Middleware Files | Pre-hook Semantics | Post-hook Semantics | Issues |
+|--------|------------------|--------------------|---------------------|--------|
+| world-travel | dm-session.sh, dm-location.sh | exit 0 = handled, exit 1 = pass to CORE | N/A (no .post files) | Regex stdout parsing fragile; errors masked by exit 0 |
+| mass-combat | None | N/A | N/A | Clean — standalone tool |
+| firearms-combat | None | N/A | N/A | Clean — standalone tool |
+
+#### Inter-Module Dependency Report
+
+No cross-module dependencies exist between the 3 optional modules. Each module depends only on CORE libraries. Within world-travel, internal dependencies form a clean DAG: vehicle → hierarchy → pathfinding ← navigation.
+
+#### Severity Distribution (Section 4)
+
+| Severity | Count |
+|----------|-------|
+| High | 5 |
+| Medium | 12 |
+| Low | 6 |
+| **Total** | **23** |
+
+### Combined Severity (Sections 1 + 2 + 3 + 4)
+
+| Severity | Section 1 | Section 2 | Section 3 | Section 4 | Total |
+|----------|-----------|-----------|-----------|-----------|-------|
+| High | 10 | 7 | 2 | 5 | 24 |
+| Medium | 22 | 27 | 20 | 12 | 81 |
+| Low | 6 | 8 | 10 | 6 | 30 |
+| **Total** | **38** | **42** | **32** | **23** | **135** |
