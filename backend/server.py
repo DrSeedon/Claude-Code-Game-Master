@@ -1,6 +1,6 @@
 """FastAPI server for DM Game Master web interface."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_config
@@ -65,3 +65,44 @@ async def root():
         "docs": "/docs",
         "health": "/api/health",
     }
+
+
+@app.get("/ws/game")
+async def game_websocket_info():
+    """HTTP GET handler for WebSocket endpoint.
+
+    Returns 426 Upgrade Required to indicate this is a WebSocket endpoint.
+
+    Returns:
+        Response: 426 status code with Upgrade header
+    """
+    return Response(
+        content="This endpoint requires WebSocket connection",
+        status_code=426,
+        headers={"Upgrade": "websocket"}
+    )
+
+
+@app.websocket("/ws/game")
+async def game_websocket(websocket: WebSocket):
+    """WebSocket endpoint for real-time game communication.
+
+    Handles bi-directional communication between player and DM agent.
+    Streams responses from Claude API and executes game tools.
+
+    Args:
+        websocket: WebSocket connection instance
+    """
+    await websocket.accept()
+
+    try:
+        while True:
+            # Receive message from player
+            message = await websocket.receive_text()
+
+            # Echo back for now (DM agent integration will come in next subtasks)
+            await websocket.send_text(f"Received: {message}")
+
+    except WebSocketDisconnect:
+        # Client disconnected, cleanup connection
+        pass
