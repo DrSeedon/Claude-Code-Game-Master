@@ -152,13 +152,12 @@ WorldGraph is the unified graph-based world state manager that replaced 6 separa
 
 **Coupling:** Uses E (_player_id), A (_load/_save). `wiki_add` is misplaced here — it's a reference data operation.
 
-#### Group M: Custom Stats & Timed Effects (6 methods, ~95 LOC, lines 972–1146)
+#### Group M: Custom Stats & Timed Effects (5 methods, ~95 LOC, lines 972–1146)
 
 | Line | Method | Purpose |
 |------|--------|---------|
 | 972 | `custom_stat_get` | Query custom stat |
 | 981 | `custom_stat_set` | Modify stat (delta or absolute) |
-| 1019 | `custom_stat_list` | List all custom stats |
 | 1052 | `custom_stat_define` | Define stat with decay rate |
 | 1079 | `timed_effect_add` | Add temporary effect |
 | 1116 | `timed_effect_list` | List active effects |
@@ -169,7 +168,7 @@ WorldGraph is the unified graph-based world state manager that replaced 6 separa
 
 | Line | Method | Purpose |
 |------|--------|---------|
-| 1147 | `_tick_custom_stats` | Apply stat decay |
+| 1147 | `_tick_custom_stats` | Apply custom stat decay |
 | 1186 | `_tick_timed_effects` | Expire/apply effects |
 | 1205 | `_check_stat_thresholds` | Generate threshold warnings |
 | 1234 | `_tick_production` | Location production (dice rolls, 81 LOC) |
@@ -187,7 +186,7 @@ WorldGraph is the unified graph-based world state manager that replaced 6 separa
 - `_roll(expr)` — dice expression evaluator (duplicated 3x at lines 1235, 1372, 1529)
 - `_fm(amount)` — money formatter (duplicated 3x at lines 1334, 1388, 1545)
 
-**Coupling:** Reads/writes custom stats (M), consequences (J), player data (L), inventory (K). Most complex group — 580 LOC with heavy internal coupling and duplicated helper closures.
+**Coupling:** Reads/writes custom stats and timed effects (M), consequences (J), player data (L), inventory (K). Most complex group — 580 LOC with heavy internal coupling and duplicated helper closures.
 
 #### Group O: Wiki Display (1 method, ~28 LOC, lines 1698–1726)
 
@@ -222,7 +221,7 @@ WorldGraph is the unified graph-based world state manager that replaced 6 separa
 | J | Consequence Domain | 4 | 59 | 2.4% |
 | K | Inventory Operations | 9 | 121 | 4.9% |
 | L | Player Operations | 8 | 88 | 3.5% |
-| M | Custom Stats & Effects | 6 | 95 | 3.8% |
+| M | Custom Stats & Effects | 5 | 95 | 3.8% |
 | N | Tick Engine | 13+5 | 580 | 23.4% |
 | O | Wiki Display | 1 | 28 | 1.1% |
 | P | CLI Entry Point | 2 | 262 | 10.6% |
@@ -344,7 +343,7 @@ class InventoryEngine:
 class TickEngine:
     def __init__(self, store: GraphStore)
     # Custom stats
-    def custom_stat_get / set / list / define(...)
+    def custom_stat_get / set / define(...)
     # Timed effects
     def timed_effect_add / list(...)
     # Tick sub-systems (private)
@@ -445,7 +444,7 @@ def main(): ...  # CLI stays here
 - **No external API changes** — all bash tools, session_manager, entity_enhancer, inventory_manager continue calling `WorldGraph` methods identically
 - **Test compatibility** — existing tests import `WorldGraph` and call its methods; facade ensures they pass without modification
 - **Gradual adoption** — new code can import focused classes directly (`from graph_store import GraphStore`), old code uses facade
-- **Module middleware** — custom-stats middleware calls `wg.tick()`, `wg.custom_stat_set()` — all delegated through facade
+- **Tick engine callers** — any code calling `wg.tick()` or `wg.custom_stat_set()` continues unchanged through facade delegation
 
 ### 1.9 Impact on Existing Tests
 
@@ -453,11 +452,8 @@ def main(): ...  # CLI stays here
 |-----------|------------------|--------|
 | `tests/test_session_manager.py` | Indirectly (via SessionManager) | None — facade preserves API |
 | `tests/test_player_manager.py` | No (tests legacy PlayerManager) | None |
-| `tests/test_consequence_manager.py` | No (tests legacy ConsequenceManager) | None |
 | `tests/test_dice_combat.py` | No | None |
 | `tests/test_encounter_engine.py` | Indirectly | None — facade |
-| `tests/test_location_manager.py` | No (tests legacy) | None |
-| `tests/test_note_manager.py` | No (tests legacy) | None |
 
 **New tests needed:** Unit tests for `GraphStore`, `WorldDomain`, `InventoryEngine`, `TickEngine` (currently only integration-tested through the facade).
 
@@ -465,7 +461,7 @@ def main(): ...  # CLI stays here
 
 ## 2. InventoryManager (lib/inventory_manager.py)
 
-**LOC:** 1,554 | **Methods:** 38 (28 class methods + 2 standalone functions + 2 module-level helpers + `main()`) | **Inherits:** None
+**LOC:** 1,559 | **Methods:** 38 (28 class methods + 2 standalone functions + 2 module-level helpers + `main()`) | **Inherits:** None
 
 InventoryManager is the unified inventory/stats manager for player characters and party NPCs. It handles item CRUD, gold/HP/XP modifications, weight/encumbrance calculations, transfers between characters, crafting, consumable use, and formatted display output. Operates in dual mode: player (default) or NPC (via `npc_name` constructor parameter).
 
@@ -476,16 +472,16 @@ InventoryManager is the unified inventory/stats manager for player characters an
 | Line | Method | Purpose |
 |------|--------|---------|
 | 86 | `__init__` | Init with campaign path + optional NPC name, load character + inventory |
-| 100 | `_load_character` | Load player from `character.json`, merge custom stats from module-data |
-| 115 | `_load_npc_as_character` | Load NPC `character_sheet` into player-compatible dict |
-| 145 | `_save_character` | Persist player to `character.json` + custom stats to module-data |
-| 160 | `_save_npc_character` | Write NPC stats back into `npcs.json` |
-| 175 | `_load_inventory` | Load player inventory from `module-data/inventory-system.json` |
-| 183 | `_load_npc_inventory` | Load NPC inventory from `module-data/inventory-party.json` |
-| 189 | `_save_inventory` | Persist inventory (player or NPC path) |
+| 100 | `_load_character` | Load player node from `world.json` |
+| 115 | `_load_npc_as_character` | Load NPC node from `world.json` into player-compatible dict |
+| 145 | `_save_character` | Persist player node back to `world.json` |
+| 160 | `_save_npc_character` | Write NPC stats back into NPC node in `world.json` |
+| 175 | `_load_inventory` | Load player inventory from player node in `world.json` |
+| 183 | `_load_npc_inventory` | Load NPC inventory from NPC node in `world.json` |
+| 189 | `_save_inventory` | Persist inventory to owner node in `world.json` (player or NPC) |
 | 199 | `_migrate_old_format` | One-time migration from legacy `equipment[]` or inline `inventory{}` |
 
-**Coupling:** `ModuleDataManager` for module-data I/O, `currency.py` for gold migration, `character.json` / `npcs.json` for persistence. The dual player/NPC branching is replicated across load, save, and inventory methods (6 if/else branches).
+**Coupling:** `WorldGraph` / `world.json` for all persistence (player node + NPC nodes), `currency.py` for gold migration. The dual player/NPC branching is replicated across load, save, and inventory methods (6 if/else branches).
 
 #### Group B: Migration Helpers (3 methods, ~20 LOC, lines 228–247)
 
@@ -517,12 +513,12 @@ InventoryManager is the unified inventory/stats manager for player characters an
 
 | Line | Method | Purpose |
 |------|--------|---------|
-| 359 | `validate_transaction` | Pre-check gold, HP, item quantities, custom stats (50 LOC) |
+| 359 | `validate_transaction` | Pre-check gold, HP, and item quantities (50 LOC) |
 | 412 | `apply_transaction` | Execute operations dict atomically with rollback (132 LOC) |
 | 561 | `_preview_changes` | Dry-run display for `--test` mode (45 LOC) |
 | 545 | `_print_weight_warning` | Emit encumbrance warnings post-transaction |
 
-**Coupling:** Heart of the class. `apply_transaction` calls `_save_character`, `_save_inventory`, `calculate_weight`, `_print_changes_summary`. Operations dict is a mini-DSL with keys: `gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `custom_stats`, `_weights`, `_unique_weights`, `_dice_rolls`.
+**Coupling:** Heart of the class. `apply_transaction` calls `_save_character`, `_save_inventory`, `calculate_weight`, `_print_changes_summary`. Operations dict is a mini-DSL with keys: `gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `_weights`, `_unique_weights`, `_dice_rolls`.
 
 #### Group E: Display & Formatting (3 methods, ~152 LOC, lines 607–983)
 
@@ -553,7 +549,7 @@ InventoryManager is the unified inventory/stats manager for player characters an
 | 1327 | `_craft_item` | Craft from wiki recipe: check ingredients, roll skill, apply transaction (157 LOC) |
 | 1486 | `_use_consumable` | Use consumable: lookup wiki effects, build operations, apply (64 LOC) |
 
-**Coupling:** Import `WikiManager` at call time (lazy import). Receive `manager` as parameter. These are **standalone functions**, not class methods — extracted but still tightly coupled to `InventoryManager` internals (access `.inventory`, `.character`, `.apply_transaction`, `.reason`).
+**Coupling:** Access wiki data via `WorldGraph` at call time (wiki functions merged into `world_graph.py` after WorldGraph migration — no separate `WikiManager` class exists). Receive `manager` as parameter. These are **standalone functions**, not class methods — extracted but still tightly coupled to `InventoryManager` internals (access `.inventory`, `.character`, `.apply_transaction`, `.reason`).
 
 #### Group H: CLI Entry Point (2 functions, ~260 LOC, lines 1065–1325)
 
@@ -577,7 +573,7 @@ InventoryManager is the unified inventory/stats manager for player characters an
 | G | Wiki Integration (standalone) | 2 | 223 | 14.3% |
 | H | CLI Entry Point | 2 | 260 | 16.7% |
 | — | Constants, imports, blank lines | — | ~405 | 26.1% |
-| **Total** | | **36+** | **1,554** | **100%** |
+| **Total** | | **36+** | **1,559** | **100%** |
 
 ### 2.3 Dual Player/NPC Mode Analysis
 
@@ -585,20 +581,20 @@ The `is_npc` flag creates **parallel code paths** throughout the class:
 
 | Operation | Player Path | NPC Path |
 |-----------|------------|----------|
-| Load character | `character.json` | `npcs.json` → `character_sheet` → normalize to player dict |
-| Save character | `character.json` + module-data `custom-stats` | `npcs.json` → denormalize back to `character_sheet` |
-| Load inventory | `module-data/inventory-system.json` | `module-data/inventory-party.json[npc_name]` |
-| Save inventory | `module-data/inventory-system.json` | `module-data/inventory-party.json[npc_name]` |
+| Load character | player node in `world.json` | NPC node in `world.json` → `character_sheet` → normalize to player dict |
+| Save character | player node in `world.json` | NPC node in `world.json` → denormalize back to `character_sheet` |
+| Load inventory | player node in `world.json` | NPC node in `world.json` |
+| Save inventory | player node in `world.json` | NPC node in `world.json` |
 
 **Issues:**
 1. **Normalization asymmetry** — NPC data is normalized to player format on load and denormalized on save. Fields like `xp` (int vs dict), `hp` (int vs dict), and `money` (with gold migration) are handled differently. This creates subtle bugs when NPC data doesn't match expected shapes.
 2. **No shared abstraction** — Both paths produce the same `self.character` dict, but the mapping logic is duplicated across 4 method pairs instead of using a Strategy or Adapter pattern.
-3. **Recursive instantiation** — `transfer_to` creates a new `InventoryManager(npc_name=target)` to add items to the target. `show_party_inventory` creates one per NPC. This causes redundant file I/O (character.json loaded N+1 times).
+3. **Recursive instantiation** — `transfer_to` creates a new `InventoryManager(npc_name=target)` to add items to the target. `show_party_inventory` creates one per NPC. This causes redundant file I/O (world.json loaded N+1 times).
 
 ### 2.4 Code Smells
 
-1. **God class** — 1,554 LOC mixing persistence, business logic, display, CLI parsing, and wiki integration
-2. **Operations dict as mini-DSL** — `apply_transaction` accepts a `Dict` with 11+ possible keys (`gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `custom_stats`, `_weights`, `_unique_weights`, `_dice_rolls`). No schema, no type safety, underscore-prefixed "private" keys mixed with public ones.
+1. **God class** — 1,559 LOC mixing persistence, business logic, display, CLI parsing, and wiki integration
+2. **Operations dict as mini-DSL** — `apply_transaction` accepts a `Dict` with 10+ possible keys (`gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `_weights`, `_unique_weights`, `_dice_rolls`). No schema, no type safety, underscore-prefixed "private" keys mixed with public ones.
 3. **Inconsistent save patterns** — `apply_transaction` does atomic save with rollback; `remove_item` saves directly; `transfer_to` calls `apply_transaction` then does additional saves. Three different consistency models.
 4. **Duplicated display logic** — HP extraction (`isinstance(hp, dict)` check) appears 6 times. Gold formatting appears 8+ times. Weight status coloring appears in 3 methods.
 5. **Hardcoded Russian strings** — `_craft_item` and `_use_consumable` contain Russian UI text ("Ингредиенты:", "АВТОУСПЕХ", "скрафтил", etc.) violating the English-only rules policy.
@@ -613,7 +609,7 @@ The `is_npc` flag creates **parallel code paths** throughout the class:
 
 ```python
 class CharacterStore:
-    """Unified character data access for player and NPC."""
+    """Unified character data access for player and NPC, backed by world.json nodes."""
     def __init__(self, campaign_path: Path, npc_name: Optional[str] = None)
     def load_character(self) -> dict
     def save_character(self, data: dict)
@@ -657,7 +653,6 @@ class TransactionOps:
     remove: Dict[str, int] = field(default_factory=dict)
     add_unique: List[str] = field(default_factory=list)
     remove_unique: List[str] = field(default_factory=list)
-    custom_stats: Dict[str, int] = field(default_factory=dict)
     weights: Dict[str, float] = field(default_factory=dict)
 
 class InventoryTransaction:
@@ -760,7 +755,7 @@ class InventoryManager:
 - **Facade pattern** — `InventoryManager` retains all existing method signatures
 - **Operations dict** — Old `Dict`-based transaction format continues to work through facade adapter that converts to `TransactionOps`
 - **Bash tool compatibility** — `dm-inventory.sh` calls `main()` CLI, which stays in `inventory_manager.py`
-- **Module middleware** — custom-stats module post-hooks call `InventoryManager` methods; facade ensures they work unchanged
+- **Tick engine callers** — any code calling `InventoryManager` methods via tick post-hooks continues unchanged through facade
 - **`transfer_to` recursive pattern** — Still creates child `InventoryManager` instances, but each internally uses `CharacterStore` (cleaner, same external behavior)
 
 ### 2.9 Impact on Existing Tests
@@ -811,7 +806,7 @@ The advantage, disadvantage, and standard roll branches each independently handl
 | 263 | `roll_detailed` | function | 4 | Convenience: notation → result dict |
 | 267 | `roll_formatted` | function | 6 | Convenience: notation → formatted string |
 | 273 | `_get_campaign_path` | function | 11 | Find active campaign directory |
-| 284 | `_load_character` | function | 13 | Load character.json |
+| 284 | `_load_character` | function | 13 | Load player node from world.json |
 | 297 | `_load_creature` | function | 22 | Load creature from wiki |
 | 319 | `_resolve_skill` | function | 11 | Skill name → modifier |
 | 330 | `_resolve_save` | function | 34 | Save name → modifier (with Russian abbrev support) |
@@ -883,13 +878,13 @@ The class mixes two distinct concerns:
 These responsibilities have different change reasons: RAG query tuning vs. entity data schema changes.
 
 **Violation 2: `find_entity` is a 85-line method (lines 114–198) with 6 nested branches**
-It searches across 4 JSON files (`npcs.json`, `locations.json`, `items.json`, `plots.json`) with fuzzy matching, dungeon-type detection, and world-graph fallback. This duplicates entity resolution logic that exists in `WorldGraph._resolve_id`.
+It searches across entity nodes in `world.json` with fuzzy matching, dungeon-type detection, and direct world-graph lookup via `WorldGraph._resolve_id`.
 
 **Violation 3: Monolithic `main()` (lines 700–921, 222 LOC)**
 CLI entry point with 9 subcommands (`find`, `query`, `apply`, `list-unenhanced`, `summary`, `search`, `dungeon-check`, `scene`, `batch`), each with inline display logic. Similar pattern to `dice.py` — CLI and presentation mixed.
 
 **Violation 4: Direct JSON file manipulation (lines 393–461)**
-`apply_enhancements` loads JSON via `json_ops`, modifies entity data, and saves — bypassing `WorldGraph` even though the graph is the authoritative data store. This creates potential consistency issues when both `WorldGraph` and `EntityEnhancer` modify the same entities.
+`apply_enhancements` should mutate entity nodes through `WorldGraph` rather than any direct JSON manipulation, since `world.json` is the authoritative data store.
 
 **Violation 5: Dungeon-specific logic embedded in generic class (lines 463–586)**
 `count_dungeon_rooms`, `get_dungeon_info`, and `get_scene_context` are domain-specific methods that account for ~125 LOC. They belong in a dungeon-focused module or in the domain layer.

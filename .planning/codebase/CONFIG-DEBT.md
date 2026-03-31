@@ -2,15 +2,15 @@
 
 > Generated: 2026-03-29
 > Scope: All `lib/*.py` files
-> Total magic values found: ~130 distinct instances across 22 files
+> Total magic values found: ~85 distinct instances across 10 files
 
 ## Executive Summary
 
 Hardcoded values are spread across the entire codebase with no centralized configuration. The biggest risks are:
 1. **D&D 5e lock-in** -- XP thresholds, proficiency bonus, die sizes, AC defaults are hardcoded, preventing use with other game systems
-2. **Duplicated file paths** -- `"active-campaign.txt"`, `"character.json"`, `"wiki.json"` appear in 3+ files each
+2. **Duplicated file paths** -- `"active-campaign.txt"`, `"character.json"`, `"world.json"` appear in 3+ files each
 3. **Campaign-specific defaults baked into code** -- encumbrance, item weights, encounter rates, tone percentages
-4. **Display limits scattered everywhere** -- 50+ truncation constants with no consistent strategy
+4. **Display limits scattered everywhere** -- truncation constants with no consistent strategy
 
 ---
 
@@ -32,11 +32,10 @@ Hardcoded values are spread across the entire codebase with no centralized confi
 | File | Line(s) | Value | What It Controls |
 |------|---------|-------|------------------|
 | `player_manager.py` | 358, 368 | `max_hp // 4` | "BLOODIED" threshold (25% HP) |
-| `npc_manager.py` | 631 | `hp['max'] // 4` | NPC "[CRITICAL]" HP threshold |
 | `colors.py` | 97, 99 | `0.5`, `0.25` | HP bar color breakpoints (green/yellow/red) |
 | `inventory_manager.py` | 838, 909 | `0.5`, `0.25` | HP color in status/inventory display |
 
-**Risk:** HP color thresholds duplicated in 3 files. Bloodied threshold hardcoded to 25%.
+**Risk:** HP color thresholds duplicated in 2 files. Bloodied threshold hardcoded to 25%.
 
 ## Category 3: Similarity Scores / Search Thresholds
 
@@ -44,8 +43,6 @@ Hardcoded values are spread across the entire codebase with no centralized confi
 |------|---------|-------|------------------|
 | `entity_enhancer.py` | 175 | `0.5` | Fuzzy entity match minimum similarity |
 | `entity_enhancer.py` | 305 | `1.5` | RAG passage max distance (skip if exceeded) |
-| `wiki_manager.py` | 103-110 | `10, 8, 3, 5` | Search score weights (name/ID/desc/tag) |
-| `wiki_manager.py` | 172 | `0.6` | Fuzzy find minimum similarity |
 
 **Risk:** Search quality tuning requires code changes. No way to adjust per-campaign.
 
@@ -57,29 +54,23 @@ Duplicated across multiple files with no single source of truth:
 |----------|---------------|
 | `"active-campaign.txt"` | `campaign_manager.py`, `dice.py`, `encounter_engine.py` |
 | `"campaign-overview.json"` | `player_manager.py`, `encounter_engine.py`, `entity_manager.py` |
-| `"character.json"` | `player_manager.py`, `dice.py` |
-| `"wiki.json"` | `wiki_manager.py`, `dice.py`, `encounter_engine.py` |
+| `"character.json"` | `player_manager.py` (migration code only), `dice.py` (comment only) |
+| `"world.json"` | `world_graph.py`, `dice.py`, `encounter_engine.py` |
 | `"inventory-system.json"` | `inventory_manager.py` |
-| `"npcs.json"` | `npc_manager.py` |
-| `"locations.json"` | `location_manager.py` |
-| `"plots.json"` | `plot_manager.py` |
-| `"consequences.json"` | `consequence_manager.py` |
 | `"session-log.md"` | `session_manager.py` |
-| `"module-data/custom-stats.json"` | `time_manager.py` |
+
+> **Post-WorldGraph migration note (2026-03-31):** `character.json` references in `player_manager.py` and `dice.py` are **legacy/migration artifacts** — `player_manager.py` contains migration code to read old `character.json` and port data into `world.json`; `dice.py` references it only in a comment. The old per-entity JSON files (`npcs.json`, `locations.json`, `facts.json`, `consequences.json`) no longer exist — all data is now in `world.json` via the WorldGraph. The 8 modules that managed those files (`npc_manager.py`, `location_manager.py`, `note_manager.py`, `consequence_manager.py`, `wiki_manager.py`, `search.py`, `world_stats.py`, `plot_manager.py`) were deleted and absorbed into `world_graph.py`.
 
 **Risk:** Renaming any file requires hunting through multiple modules. No constants file.
 
 ## Category 5: Display Truncation Limits
 
-~50 hardcoded truncation values scattered across 5 files:
+~14 hardcoded truncation values scattered across 2 files:
 
 | File | Count | Range | Examples |
 |------|-------|-------|---------|
-| `search.py` | 7 | 60-260 chars | NPC desc (240), location desc (260), trigger (60) |
 | `session_manager.py` | 7 | 120-220 chars | Party desc (180), events (120), rules (220) |
 | `entity_enhancer.py` | 7 | 100-600 chars | Passage max (600), excerpt (350), dedup key (200) |
-| `world_stats.py` | 5 | 3-10 items | NPCs (10), locations (10), plots (5), consequences (3) |
-| `plot_manager.py` | 2 | 60 chars | Description truncation |
 
 **Risk:** No consistent truncation strategy. Values seem arbitrary and untested.
 
@@ -92,7 +83,6 @@ Duplicated across multiple files with no single source of truth:
 | `dice.py` | 393, 402 | `'1d4'` | Default damage (no weapon found) |
 | `dice.py` | 623 | `'1d6'` | Default creature damage |
 | `dice.py` | 548, 631 | `10` | Default AC (creature and player) |
-| `npc_manager.py` | 28-29 | `+2`, `'1d6'` | Default party member attack/damage |
 
 **Risk:** Game-system-specific defaults hardcoded. Encounter rates should be per-location.
 
@@ -103,8 +93,6 @@ Duplicated across multiple files with no single source of truth:
 | `validators.py` | 25 | `100` | Max name length |
 | `validators.py` | 66-67 | `1-100` | Dice count range |
 | `validators.py` | 69 | `[4, 6, 8, 10, 12, 20, 100]` | Valid die sizes |
-| `wiki_manager.py` | 116 | `5` | Recipe tree max depth |
-| `consequence_manager.py` | 41 | `8` | UUID truncation length |
 
 **Risk:** Die sizes locked to D&D standard. Max depth/length limits untested.
 
@@ -117,12 +105,10 @@ Duplicated across multiple files with no single source of truth:
 | `campaign_manager.py` | 295 | `"1st of the First Month, Year 1"` | Default start date |
 | `campaign_manager.py` | 296 | `"Morning"` | Default time of day |
 | `time_manager.py` | 58 | `"08:00"` | Default precise time |
-| `npc_manager.py` | 19-34 | `PARTY_MEMBER_DEFAULTS` | Default NPC stats (HP 10, AC 10, all stats 10) |
 | `inventory_manager.py` | 64-71 | `DEFAULT_WEIGHTS` | Item weights by category (weapon: 3.0kg, ammo: 0.02kg, etc.) |
 | `inventory_manager.py` | 73 | `ENCUMBRANCE_MULTIPLIER = 7` | STR x 7 = carry capacity (kg) |
 | `inventory_manager.py` | 75-80 | `ENCUMBRANCE_TIERS` | Load thresholds with speed penalties |
 | `inventory_manager.py` | 47-62 | `ITEM_CATEGORIES` | Keyword-based item classification (contains Russian strings) |
-| `plot_manager.py` | 521, 523 | `3`, `2` | Stale plot thresholds (sessions) |
 | `inventory_manager.py` | 833 | `300` | Fallback XP for next level |
 
 **Risk:** All of these vary by campaign/game-system but require code changes to modify.
@@ -139,7 +125,7 @@ ITEM_CATEGORIES = {
 }
 ```
 
-**Risk:** Language-specific content in code violates module design principles. Should be data-driven from wiki.json or campaign config.
+**Risk:** Language-specific content in code violates module design principles. Should be data-driven from world.json or campaign config.
 
 ---
 
@@ -169,9 +155,7 @@ Centralize all truncation/limit values:
 Already partially supported, needs completion:
 - Encounter rates (per-location override)
 - Encumbrance system (multiplier, tiers, weights)
-- Item categories (move to wiki.json or campaign config)
-- Stale plot thresholds
-- Party member defaults
+- Item categories (move to world.json or campaign config)
 
 ### Implementation Priority
 

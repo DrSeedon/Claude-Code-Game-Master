@@ -9,14 +9,14 @@
 
 | # | Finding | Severity | Category | Detail Document |
 |---|---------|----------|----------|-----------------|
-| 1 | **WorldGraph is a 2,481-LOC god class** with 87 methods spanning 16 responsibility groups — tick engine alone is 580 LOC with 3x duplicated helper closures | Critical | God Class | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
-| 2 | **27% test coverage** — only 7/26 core modules tested, 0/7 RAG modules; highest-risk untested module is `inventory_manager.py` (1,559 LOC, 19 public methods) | Critical | Testing | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
-| 3 | **Zero dependency injection** — every manager constructs its own `CampaignManager` + `JsonOperations`, duplicating bootstrap logic ~10 times with no interfaces/protocols | High | DI | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
+| 1 | **WorldGraph is a 2,481-LOC god class** with 87 methods spanning 11 responsibility groups — tick engine alone is 580 LOC with 3x duplicated helper closures | Critical | God Class | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
+| 2 | **32% test coverage** — only 6/19 core modules tested, 0/6 RAG modules; highest-risk untested module is `inventory_manager.py` (1,559 LOC, 19 public methods); 144 test cases, 1,498 LOC | Critical | Testing | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
+| 3 | **Zero dependency injection** — every manager constructs its own `CampaignManager` + `JsonOperations`, duplicating bootstrap logic ~6 times with no interfaces/protocols | High | DI | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 4 | **D&D 5e rules hardcoded throughout** — XP thresholds, proficiency bonus (duplicated 3x, one copy buggy at `dice.py:369`), die sizes, AC defaults baked into core code | High | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
 | 5 | **22 broad `except Exception` catches** silently swallowing errors — `content_extractor.py` (7), `time_manager.py` (5), `agent_extractor.py` (4) | High | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 | 6 | **38 SOLID violations across 5 core managers** — 10 High severity, including CLI parsing mixed with domain logic in every manager (~510 LOC total) | High | SOLID | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 | 7 | **~130 magic values** across 22 files with no centralized config — file paths duplicated in 3+ files each, ~50 display truncation constants scattered arbitrarily | Medium | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
-| 8 | **29 `sys.exit()` calls in library code** — makes modules untestable; `json_ops.py` (6), `plot_manager.py` (8), `location_manager.py` (5) | Medium | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
+| 8 | **118 `sys.exit()` calls in library code** — makes modules untestable; spread across all managers and world_graph.py | Medium | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 | 9 | **Validators module has 9 identical methods** (~150 LOC) that could be 1 generic method + data dictionary — worst DRY violation in codebase | Medium | SOLID | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 | 10 | **Russian strings in production code** — `inventory_manager.py` lines 47-62 has hardcoded Russian keywords for item classification, violating module design principles | Medium | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
 
@@ -26,15 +26,15 @@
 
 | Category | Current Score | Target Score | Gap | Key Metric |
 |----------|:------------:|:------------:|:---:|------------|
-| **Test Coverage** | 2/10 | 7/10 | -5 | 27% modules tested (7/26 core, 0/7 RAG) |
+| **Test Coverage** | 3/10 | 7/10 | -4 | 32% modules tested (6/19 core, 0/6 RAG), 144 test cases |
 | **SOLID Compliance** | 4/10 | 7/10 | -3 | 38 violations (10 High, 22 Medium, 6 Low) |
 | **God Class Health** | 2/10 | 7/10 | -5 | 1 god class (2,481 LOC), 3 large managers (500-950 LOC) |
-| **Error Handling** | 3/10 | 7/10 | -4 | 22 broad catches, 29 sys.exit(), 60+ print errors, 0 exception hierarchy |
-| **Dependency Injection** | 1/10 | 6/10 | -5 | 0 protocols, 0 injected deps, ~10 duplicated bootstrap sequences |
+| **Error Handling** | 3/10 | 7/10 | -4 | 29 broad catches, 118 sys.exit(), 60+ print errors, 0 exception hierarchy |
+| **Dependency Injection** | 1/10 | 6/10 | -5 | 0 protocols, 0 injected deps, ~6 duplicated bootstrap sequences |
 | **Config Centralization** | 2/10 | 7/10 | -5 | ~130 magic values, 0 constants files, 11 duplicated file paths |
 | **Architecture** | 6/10 | 8/10 | -2 | Clean 4-layer design, good middleware system, but god class undermines it |
 | **Code Organization** | 5/10 | 8/10 | -3 | Clear module boundaries exist but CLI mixed with domain in all managers |
-| **Overall** | **3.1/10** | **7.1/10** | **-4.0** | |
+| **Overall** | **3.2/10** | **7.1/10** | **-3.9** | |
 
 ---
 
@@ -72,9 +72,8 @@
 
 | Class | LOC | Methods | Responsibility Groups | Severity |
 |-------|:---:|:-------:|:---------------------:|----------|
-| **WorldGraph** | 2,481 | 87 | 16 (Infrastructure, Node CRUD, Edge CRUD, Display, ID Resolution, NPC, Location, Facts, Quest, Consequence, Inventory, Player, Custom Stats, Tick Engine, Wiki, CLI) | **Critical** |
+| **WorldGraph** | 2,481 | 87 | 11 (Infrastructure, Node CRUD, Edge CRUD, Display, ID Resolution, Facts, Quest, Inventory, Player, Tick Engine, CLI) | **Critical** |
 | InventoryManager | 1,559 | 19 | 4 (item CRUD, weight/encumbrance, crafting, display) | High |
-| NPCManager | 950 | 46 | 3 (NPC CRUD, party management, display) | Medium |
 | PlayerManager | 611 | ~15 | 4 (stats, conditions, money, display) | Medium |
 | SessionManager | 542 | ~12 | 4 (lifecycle, movement, saves, context) | Medium |
 
@@ -88,9 +87,9 @@ The tick engine (Group N: 580 LOC, 13 methods, 5 duplicated closures) is the hig
 
 | Metric | Count |
 |--------|:-----:|
-| Broad `except Exception` catches | 22 |
+| Broad `except Exception` catches | 29 |
 | Bare `except:` catches | 0 |
-| `sys.exit()` in library code | 29 |
+| `sys.exit()` in library code | 118 |
 | Print-based error reporting | 60+ |
 | Specific exception catches | 33 |
 | Custom exception classes | 0 |
@@ -116,9 +115,9 @@ Create `lib/exceptions.py` with typed hierarchy: `DMError` → `EntityNotFoundEr
 |--------|-------|
 | Protocol/interface definitions | 0 |
 | Classes using constructor injection | 0 |
-| Classes with hardcoded dependencies | 13 |
-| Duplicated bootstrap sequences | ~10 |
-| Cross-manager hidden coupling | 3 (PlotManager→SessionManager, InventoryManager→WikiManager, TimeManager→custom-stats.json) |
+| Classes with hardcoded dependencies | 8 |
+| Duplicated bootstrap sequences | ~6 |
+| Cross-manager hidden coupling | 1 (InventoryManager→ModuleDataManager direct coupling) |
 
 ### Current Dependency Graph
 
@@ -128,14 +127,13 @@ CampaignManager (standalone)
     ▼
 EntityManager ──► JsonOperations, Validators, CampaignManager
     │
-    ├── ConsequenceManager, LocationManager, NPCManager
-    ├── PlayerManager, PlotManager ──► SessionManager (lazy)
+    ├── PlayerManager ──► SessionManager (lazy)
     └── SessionManager
 
-NoteManager, TimeManager, WorldSearcher, WorldStats,
+TimeManager,
 EntityEnhancer, AgentExtractor ──► CampaignManager + JsonOperations (each creates own)
 
-InventoryManager ──► ModuleDataManager (direct), WikiManager (lazy)
+InventoryManager ──► ModuleDataManager (direct)
 ```
 
 ### Proposed Fix
@@ -173,11 +171,12 @@ Introduce `CampaignContext` factory that resolves once, shared by all managers. 
 
 | Metric | Value |
 |--------|-------|
-| Core modules tested | 7/26 (27%) |
-| RAG modules tested | 0/7 (0%) |
-| Total test cases | ~93 |
-| Test files | 7 + conftest.py |
-| Estimated LOC to reach 70% | ~1,500 |
+| Core modules tested | 6/19 (32%) |
+| RAG modules tested | 0/6 (0%) |
+| Total test cases | 144 |
+| Test LOC | 1,498 |
+| Test files | 6 + conftest.py |
+| Estimated LOC to reach 70% | ~900 |
 
 ### Priority 1 (Critical — Untested, High Risk)
 
@@ -186,14 +185,11 @@ Introduce `CampaignContext` factory that resolves once, shared by all managers. 
 | inventory_manager.py | 1,559 | 19 | ~200 |
 | time_manager.py | 258 | 9 | ~120 |
 | campaign_manager.py | 445 | 19 | ~150 |
-| npc_manager.py | 950 | 46 | ~180 |
 
 ### Priority 2 (Important — Untested, Medium Risk)
 
 | Module | LOC | Public Methods | Estimated Test LOC |
 |--------|:---:|:--------------:|:------------------:|
-| wiki_manager.py | 442 | 19 | ~130 |
-| plot_manager.py | 671 | 29 | ~140 |
 | dice.py (untested portions) | 778 | — | ~80 |
 | calendar.py | 258 | 10 | ~80 |
 | currency.py | 234 | 10 | ~70 |
@@ -228,8 +224,7 @@ Introduce `CampaignContext` factory that resolves once, shared by all managers. 
 | Tests for inventory_manager.py | Critical | 4 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
 | Tests for time_manager.py | High | 2 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
 | Tests for campaign_manager.py | High | 3 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
-| Tests for npc_manager.py | High | 3 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
-| Tests for wiki, plot, calendar, currency | Medium | 6 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
+| Tests for dice.py, calendar.py, currency.py | Medium | 4 hrs | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
 
 ### Phase 4: Dependency Injection (3-5 days)
 
@@ -245,7 +240,7 @@ Introduce `CampaignContext` factory that resolves once, shared by all managers. 
 | Task | Impact | Effort | Document |
 |------|--------|--------|----------|
 | Extract TickEngine from WorldGraph | Critical | 8 hrs | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
-| Extract domain facades (NPC, Location, Quest, etc.) | High | 12 hrs | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
+| Extract domain facades (Quest, Inventory, Player, etc.) | High | 8 hrs | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
 | Separate CLI from domain in all managers | Medium | 6 hrs | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 
 ### Phase 6: Config Externalization (2-3 days)

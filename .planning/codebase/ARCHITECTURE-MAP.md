@@ -14,6 +14,7 @@
 8. [Data Storage Layout](#data-storage-layout)
 9. [Key Architectural Patterns](#key-architectural-patterns)
 
+
 ---
 
 ## Four Architectural Layers
@@ -67,7 +68,7 @@ All tools live in `tools/`. Each is a thin wrapper that:
 
 ### Layer 3: Python Library
 
-Central hub is `world_graph.py` (~105KB) - a unified graph database with 20+ node types and 12+ edge types. Most tools delegate to it directly. Specialized managers (session, time, campaign, entity_enhancer) handle cross-cutting concerns.
+Central hub is `world_graph.py` (~103KB) - a unified graph database with 20+ node types and 12+ edge types. Most tools delegate to it directly. Specialized managers (session, time, campaign, entity_enhancer) handle cross-cutting concerns.
 
 ### Layer 4: Data Storage
 
@@ -115,7 +116,7 @@ Tools with middleware dispatch (pre+post hooks): `dm-session.sh`, `dm-inventory.
 
 | # | Module | Size | Purpose | Reads | Writes |
 |---|--------|------|---------|-------|--------|
-| 1 | `world_graph.py` | 105KB | Unified graph DB, 80+ subcommands | `world.json` | `world.json` |
+| 1 | `world_graph.py` | 103KB | Unified graph DB, 87 methods, 80+ subcommands | `world.json` | `world.json` |
 | 2 | `campaign_manager.py` | 32KB | Multi-campaign management | `campaign-overview.json`, `active-campaign.txt` | Both |
 | 3 | `session_manager.py` | 21KB | Session lifecycle, saves | `campaign-overview.json`, `world.json` | `session-log.md`, `saves/` |
 | 4 | `player_manager.py` | 21KB | Player character operations | `world.json` (player node) | `world.json` |
@@ -270,15 +271,15 @@ All 10 CORE tools that invoke `dispatch_middleware` or `dispatch_middleware_post
 
 | # | Tool | Pre-hook | Post-hook | Module Pre-Interceptors | Module Post-Interceptors |
 |---|------|----------|-----------|-------------------------|--------------------------|
-| 1 | `dm-session.sh` | ✅ | ✅ | world-travel (move: pathfinding + encounters) | custom-stats (action tracker: log moves/starts) |
+| 1 | `dm-session.sh` | ✅ | ✅ | world-travel (move: pathfinding + encounters) | — |
 | 2 | `dm-location.sh` | ✅ | ✅ | world-travel (add: coordinates, connect: terrain/distance) | — |
-| 3 | `dm-player.sh` | ✅ | ✅ | custom-stats (custom-stat, custom-stats-list actions) | — |
-| 4 | `dm-npc.sh` | ✅ | ✅ | — | custom-stats (action tracker: log NPC changes) |
-| 5 | `dm-plot.sh` | ✅ | ✅ | — | custom-stats (action tracker: log quest changes) |
-| 6 | `dm-consequence.sh` | ✅ | ✅ | custom-stats (add with --hours: timed consequences) | custom-stats (check: show remaining hours) |
-| 7 | `dm-note.sh` | ✅ | ✅ | — | custom-stats (action tracker: log notes) |
-| 8 | `dm-time.sh` | ✅ | ✅ | — | custom-stats (tick stats, resolve action tracker, check timed consequences) |
-| 9 | `dm-roll.sh` | ❌ | ✅ | — | custom-stats (action tracker: log dice rolls) |
+| 3 | `dm-player.sh` | ✅ | ✅ | — | — |
+| 4 | `dm-npc.sh` | ✅ | ✅ | — | — |
+| 5 | `dm-plot.sh` | ✅ | ✅ | — | — |
+| 6 | `dm-consequence.sh` | ✅ | ✅ | — | — |
+| 7 | `dm-note.sh` | ✅ | ✅ | — | — |
+| 8 | `dm-time.sh` | ✅ | ✅ | — | — |
+| 9 | `dm-roll.sh` | ❌ | ✅ | — | — |
 | 10 | `dm-inventory.sh` | ❌ | ✅ | — | — |
 
 **Note**: `dm-roll.sh` and `dm-inventory.sh` only use post-hooks (no pre-hook dispatch). The remaining 8 tools use both pre and post dispatch.
@@ -291,7 +292,6 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
   ├─[1] dispatch_middleware "dm-session.sh" "move" "Town" "--elapsed" "2"
   │     │
   │     ├── Iterate: .claude/additional/modules/*/middleware/dm-session.sh
-  │     │   ├── custom-stats/middleware/dm-session.sh → does NOT exist (no pre-hook)
   │     │   └── world-travel/middleware/dm-session.sh → EXISTS
   │     │       ├── _module_enabled("world-travel") → checks campaign-overview.json
   │     │       │   └── campaign_rules.modules["world-travel"] == true?
@@ -308,11 +308,6 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
   │     └── uv run python lib/session_manager.py move "Town" --elapsed 2
   │
   └─[3] dispatch_middleware_post "dm-session.sh" "move" "Town" "--elapsed" "2"
-        │
-        ├── custom-stats/middleware/dm-session.sh.post → EXISTS
-        │   ├── _module_enabled("custom-stats") → check
-        │   └── If enabled: log action to tracker, always runs (|| true)
-        │
         └── world-travel/middleware/dm-session.sh.post → does NOT exist
 ```
 
@@ -339,7 +334,7 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
 | Risk | Description | Severity |
 |------|-------------|----------|
 | **Pre-hook ordering** | Modules iterated by filesystem glob order (`*/middleware/`). If two modules both pre-hook the same tool, first match wins. | Medium |
-| **Post-hook cascade** | All enabled post-hooks run. If custom-stats post-hook on dm-time.sh fails, error is swallowed (`|| true`). Silent data loss possible. | Low |
+| **Post-hook cascade** | All enabled post-hooks run. If a post-hook on dm-time.sh fails, error is swallowed (`|| true`). Silent data loss possible. | Low |
 | **No dependency enforcement** | `module.json.dependencies` is declared but NOT enforced at runtime. A module with missing deps will silently fail. | Medium |
 | **Shared data mutation** | Multiple post-hooks could write to same JSON file (e.g., world.json) without coordination. | Low (currently no overlap) |
 
@@ -347,19 +342,7 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
 
 ## Optional Modules
 
-Located in `.claude/additional/modules/` (4 modules total):
-
-### custom-stats
-- **ID**: `custom-stats`
-- **Purpose**: Custom character stats with automatic time-based changes, conditions, timed effects, and action tracking
-- **Enabled by default**: No
-- **Category**: character-mechanics
-- **Tools**: `dm-survival.sh` (tick, status, custom-stat, custom-stats-list, rate, rates, effect add/remove, effects)
-- **Middleware (pre-hooks)**: `dm-player.sh` (intercepts custom-stat/custom-stats-list actions), `dm-consequence.sh` (intercepts add with --hours flag)
-- **Middleware (post-hooks)**: `dm-time.sh.post` (tick stats + resolve action tracker), `dm-consequence.sh.post` (show remaining hours), `dm-roll.sh.post` (log roll), `dm-note.sh.post` (log note), `dm-npc.sh.post` (log NPC change), `dm-plot.sh.post` (log quest change), `dm-session.sh.post` (log move/start)
-- **Total middleware files**: 9 (2 pre + 7 post)
-- **Data**: `module-data/custom-stats.json`
-- **Replaces slots**: None
+Located in `.claude/additional/modules/` (3 modules total):
 
 ### world-travel
 - **ID**: `world-travel`
@@ -370,7 +353,7 @@ Located in `.claude/additional/modules/` (4 modules total):
 - **Middleware (pre-hooks)**: `dm-location.sh` (intercepts add --from, connect, decide, routes, block, unblock), `dm-session.sh` (intercepts move: distance calc, hierarchy, vehicles, auto-encounters)
 - **Middleware (post-hooks)**: None
 - **Total middleware files**: 2 (2 pre + 0 post)
-- **Data**: Extends `locations.json` with coordinates/connections, `campaign-overview.json` with path_preferences and encounter_system
+- **Data**: Extends location nodes in `world.json` with coordinates/connections, `campaign-overview.json` with path_preferences and encounter_system
 - **Replaces slots**: `movement`
 
 ### mass-combat
@@ -398,17 +381,17 @@ Located in `.claude/additional/modules/` (4 modules total):
 ### Module Middleware Coverage Matrix
 
 ```
-                    custom-stats    world-travel    mass-combat    firearms-combat
-dm-session.sh       .post           PRE             —              —
-dm-location.sh      —               PRE             —              —
-dm-player.sh        PRE             —               —              —
-dm-npc.sh           .post           —               —              —
-dm-plot.sh          .post           —               —              —
-dm-consequence.sh   PRE + .post     —               —              —
-dm-note.sh          .post           —               —              —
-dm-time.sh          .post           —               —              —
-dm-roll.sh          .post           —               —              —
-dm-inventory.sh     —               —               —              —
+                    world-travel    mass-combat    firearms-combat
+dm-session.sh       PRE             —              —
+dm-location.sh      PRE             —              —
+dm-player.sh        —               —              —
+dm-npc.sh           —               —              —
+dm-plot.sh          —               —              —
+dm-consequence.sh   —               —              —
+dm-note.sh          —               —              —
+dm-time.sh          —               —              —
+dm-roll.sh          —               —              —
+dm-inventory.sh     —               —              —
 
 Legend: PRE = pre-hook (can intercept), .post = post-hook (augments after CORE)
 ```
@@ -526,7 +509,7 @@ User: /dm-session move "Volcano Temple" --elapsed 4
   ├── exit $? (0 = handled, CORE skipped)
   │
   └── dispatch_middleware_post "dm-session.sh" "move" args...
-      └── custom-stats post-hook: tick stats for elapsed hours
+      └── (no post-hooks registered)
 ```
 
 ### Trace 5: Document Extraction to World State
@@ -565,7 +548,6 @@ world-state/
     ├── campaign-overview.json             # Metadata: name, date, time, rules, modules
     ├── session-log.md                     # Session history (append-only)
     ├── module-data/                       # Per-module persistent state
-    │   ├── custom-stats.json
     │   ├── world-travel.json
     │   └── mass-combat.json
     ├── saves/                             # Named save points
@@ -646,4 +628,4 @@ Each campaign gets its own directory under `world-state/campaigns/`. Module enab
 
 ### Pattern 6: Module Agnosticism
 
-Modules must be campaign-agnostic (no character names, setting-specific rules). Campaign-specific configuration goes in `campaign-overview.json` or `facts.json` only.
+Modules must be campaign-agnostic (no character names, setting-specific rules). Campaign-specific configuration goes in `campaign-overview.json` only; fact nodes live in `world.json`.
