@@ -34,6 +34,10 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
                         "type": "string",
                         "description": "Dice notation (e.g. '1d20+5', '3d6', '2d20kh1+3')"
                     },
+                    "expression": {
+                        "type": "string",
+                        "description": "Dice expression (alias for 'notation' - e.g. '1d20+5', '3d6')"
+                    },
                     "label": {
                         "type": "string",
                         "description": "Description of what the roll is for (e.g. 'Perception check', 'Attack with longsword')"
@@ -300,7 +304,7 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         params: Tool parameters from Claude
 
     Returns:
-        Dict with execution result and any output
+        Dict with 'result' key on success or 'error' key on failure
     """
     try:
         if tool_name == "roll_dice":
@@ -328,15 +332,9 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         elif tool_name == "time_advance":
             return _execute_time_advance(params)
         else:
-            return {
-                "success": False,
-                "error": f"Unknown tool: {tool_name}"
-            }
+            return {"error": f"Unknown tool: {tool_name}"}
     except Exception as e:
-        return {
-            "success": False,
-            "error": f"Tool execution failed: {str(e)}"
-        }
+        return {"error": f"Tool execution failed: {str(e)}"}
 
 
 def _execute_roll_dice(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -344,7 +342,8 @@ def _execute_roll_dice(params: Dict[str, Any]) -> Dict[str, Any]:
     try:
         roller = DiceRoller()
 
-        notation = params.get("notation")
+        # Support both 'notation' and 'expression' parameter names
+        notation = params.get("notation") or params.get("expression")
         label = params.get("label")
         dc = params.get("dc")
         ac = params.get("ac")
@@ -377,48 +376,46 @@ def _execute_roll_dice(params: Dict[str, Any]) -> Dict[str, Any]:
             if params.get("disadvantage"):
                 args.append("--disadvantage")
 
-            result = subprocess.run(
+            proc = subprocess.run(
                 ["uv", "run", "python", "lib/dice.py"] + args,
                 capture_output=True,
                 text=True,
                 check=True
             )
-            return {
-                "success": True,
-                "output": result.stdout.strip()
-            }
+            return {"result": proc.stdout.strip()}
 
         # Simple roll
         if not notation:
-            return {"success": False, "error": "No dice notation provided"}
+            return {"error": "No dice notation provided"}
 
         roll_result = roller.roll(notation)
         formatted = format_enhanced(roll_result, label=label, dc=dc, ac=ac)
 
         return {
-            "success": True,
-            "total": roll_result["total"],
-            "rolls": roll_result["rolls"],
-            "output": formatted
+            "result": {
+                "total": roll_result["total"],
+                "rolls": roll_result["rolls"],
+                "output": formatted
+            }
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"error": str(e)}
 
 
 def _execute_inventory_show(params: Dict[str, Any]) -> Dict[str, Any]:
     """Show character inventory"""
     character = params.get("character", "_auto")
 
-    result = subprocess.run(
+    proc = subprocess.run(
         ["bash", "tools/dm-inventory.sh", "show", character],
         capture_output=True,
         text=True
     )
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_inventory_add(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -434,12 +431,12 @@ def _execute_inventory_add(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         args.append("0.5")
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_inventory_remove(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -448,16 +445,16 @@ def _execute_inventory_remove(params: Dict[str, Any]) -> Dict[str, Any]:
     item = params["item"]
     qty = params.get("quantity", 1)
 
-    result = subprocess.run(
+    proc = subprocess.run(
         ["bash", "tools/dm-inventory.sh", "remove", character, item, "--qty", str(qty)],
         capture_output=True,
         text=True
     )
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_player_award_xp(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -469,12 +466,12 @@ def _execute_player_award_xp(params: Dict[str, Any]) -> Dict[str, Any]:
     if character:
         args.extend(["--name", character])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_player_update_hp(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -486,12 +483,12 @@ def _execute_player_update_hp(params: Dict[str, Any]) -> Dict[str, Any]:
     if character:
         args.extend(["--name", character])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_player_update_gold(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -503,12 +500,12 @@ def _execute_player_update_gold(params: Dict[str, Any]) -> Dict[str, Any]:
     if character:
         args.extend(["--name", character])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_session_move(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -520,12 +517,12 @@ def _execute_session_move(params: Dict[str, Any]) -> Dict[str, Any]:
     if elapsed_hours is not None:
         args.extend(["--elapsed", str(elapsed_hours)])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_npc_add(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -543,12 +540,12 @@ def _execute_npc_add(params: Dict[str, Any]) -> Dict[str, Any]:
     if attitude:
         args.extend(["--attitude", attitude])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_location_add(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,12 +560,12 @@ def _execute_location_add(params: Dict[str, Any]) -> Dict[str, Any]:
     if loc_type:
         args.extend(["--type", loc_type])
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_note_add(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -576,16 +573,16 @@ def _execute_note_add(params: Dict[str, Any]) -> Dict[str, Any]:
     content = params["content"]
     category = params.get("category", "lore")
 
-    result = subprocess.run(
+    proc = subprocess.run(
         ["bash", "tools/dm-note.sh", "add", content, "--category", category],
         capture_output=True,
         text=True
     )
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 def _execute_time_advance(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -597,12 +594,12 @@ def _execute_time_advance(params: Dict[str, Any]) -> Dict[str, Any]:
     if sleeping:
         args.append("--sleeping")
 
-    result = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True)
 
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
-    }
+    if proc.returncode == 0:
+        return {"result": proc.stdout.strip()}
+    else:
+        return {"error": proc.stderr.strip()}
 
 
 if __name__ == "__main__":
