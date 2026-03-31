@@ -4,6 +4,7 @@ from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_config
+from backend.game_state import get_character_status
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -50,6 +51,29 @@ async def health_check():
         dict: Status message indicating server is healthy
     """
     return {"status": "healthy"}
+
+
+@app.get("/api/status")
+async def get_status():
+    """Get current character status for sidebar.
+
+    Returns character stats, inventory, and location from world.json via WorldGraph.
+    Uses game_state cache to minimize disk operations.
+
+    Returns:
+        dict: Character status with keys:
+            - name (str): Character name
+            - hp (int): Current health
+            - max_hp (int): Maximum health
+            - xp (int): Experience points
+            - gold (int): Gold in base units (copper)
+            - inventory (List[Dict]): Items [{name, quantity}]
+            - location (str, optional): Current location
+            Or error dict if failed:
+            - error (str): Error message
+    """
+    status = get_character_status()
+    return status
 
 
 @app.get("/")
