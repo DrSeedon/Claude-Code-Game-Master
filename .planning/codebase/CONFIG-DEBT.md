@@ -54,10 +54,12 @@ Duplicated across multiple files with no single source of truth:
 |----------|---------------|
 | `"active-campaign.txt"` | `campaign_manager.py`, `dice.py`, `encounter_engine.py` |
 | `"campaign-overview.json"` | `player_manager.py`, `encounter_engine.py`, `entity_manager.py` |
-| `"character.json"` | `player_manager.py`, `dice.py` |
+| `"character.json"` | `player_manager.py` (migration code only), `dice.py` (comment only) |
 | `"world.json"` | `world_graph.py`, `dice.py`, `encounter_engine.py` |
 | `"inventory-system.json"` | `inventory_manager.py` |
 | `"session-log.md"` | `session_manager.py` |
+
+> **Post-WorldGraph migration note (2026-03-31):** `character.json` references in `player_manager.py` and `dice.py` are **legacy/migration artifacts** — `player_manager.py` contains migration code to read old `character.json` and port data into `world.json`; `dice.py` references it only in a comment. The old per-entity JSON files (`npcs.json`, `locations.json`, `facts.json`, `consequences.json`) no longer exist — all data is now in `world.json` via the WorldGraph. The 8 modules that managed those files (`npc_manager.py`, `location_manager.py`, `note_manager.py`, `consequence_manager.py`, `wiki_manager.py`, `search.py`, `world_stats.py`, `plot_manager.py`) were deleted and absorbed into `world_graph.py`.
 
 **Risk:** Renaming any file requires hunting through multiple modules. No constants file.
 

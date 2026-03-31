@@ -461,7 +461,7 @@ def main(): ...  # CLI stays here
 
 ## 2. InventoryManager (lib/inventory_manager.py)
 
-**LOC:** 1,554 | **Methods:** 38 (28 class methods + 2 standalone functions + 2 module-level helpers + `main()`) | **Inherits:** None
+**LOC:** 1,559 | **Methods:** 38 (28 class methods + 2 standalone functions + 2 module-level helpers + `main()`) | **Inherits:** None
 
 InventoryManager is the unified inventory/stats manager for player characters and party NPCs. It handles item CRUD, gold/HP/XP modifications, weight/encumbrance calculations, transfers between characters, crafting, consumable use, and formatted display output. Operates in dual mode: player (default) or NPC (via `npc_name` constructor parameter).
 
@@ -549,7 +549,7 @@ InventoryManager is the unified inventory/stats manager for player characters an
 | 1327 | `_craft_item` | Craft from wiki recipe: check ingredients, roll skill, apply transaction (157 LOC) |
 | 1486 | `_use_consumable` | Use consumable: lookup wiki effects, build operations, apply (64 LOC) |
 
-**Coupling:** Import `WikiManager` at call time (lazy import). Receive `manager` as parameter. These are **standalone functions**, not class methods — extracted but still tightly coupled to `InventoryManager` internals (access `.inventory`, `.character`, `.apply_transaction`, `.reason`).
+**Coupling:** Access wiki data via `WorldGraph` at call time (wiki functions merged into `world_graph.py` after WorldGraph migration — no separate `WikiManager` class exists). Receive `manager` as parameter. These are **standalone functions**, not class methods — extracted but still tightly coupled to `InventoryManager` internals (access `.inventory`, `.character`, `.apply_transaction`, `.reason`).
 
 #### Group H: CLI Entry Point (2 functions, ~260 LOC, lines 1065–1325)
 
@@ -573,7 +573,7 @@ InventoryManager is the unified inventory/stats manager for player characters an
 | G | Wiki Integration (standalone) | 2 | 223 | 14.3% |
 | H | CLI Entry Point | 2 | 260 | 16.7% |
 | — | Constants, imports, blank lines | — | ~405 | 26.1% |
-| **Total** | | **36+** | **1,554** | **100%** |
+| **Total** | | **36+** | **1,559** | **100%** |
 
 ### 2.3 Dual Player/NPC Mode Analysis
 
@@ -593,7 +593,7 @@ The `is_npc` flag creates **parallel code paths** throughout the class:
 
 ### 2.4 Code Smells
 
-1. **God class** — 1,554 LOC mixing persistence, business logic, display, CLI parsing, and wiki integration
+1. **God class** — 1,559 LOC mixing persistence, business logic, display, CLI parsing, and wiki integration
 2. **Operations dict as mini-DSL** — `apply_transaction` accepts a `Dict` with 10+ possible keys (`gold`, `hp`, `xp`, `add`, `remove`, `set`, `add_unique`, `remove_unique`, `_weights`, `_unique_weights`, `_dice_rolls`). No schema, no type safety, underscore-prefixed "private" keys mixed with public ones.
 3. **Inconsistent save patterns** — `apply_transaction` does atomic save with rollback; `remove_item` saves directly; `transfer_to` calls `apply_transaction` then does additional saves. Three different consistency models.
 4. **Duplicated display logic** — HP extraction (`isinstance(hp, dict)` check) appears 6 times. Gold formatting appears 8+ times. Weight status coloring appears in 3 methods.

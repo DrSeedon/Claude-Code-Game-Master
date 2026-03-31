@@ -21,7 +21,7 @@
 | `lib/entity_enhancer.py` | 0 | 0 | 0 | 1 (tag_error) | 0 | LOW |
 | `lib/entity_manager.py` | 0 | 0 | 0 | 0 | 0 | LOW |
 | `lib/extraction_schemas.py` | 0 | 0 | 0 | 1 | 0 | LOW |
-| `lib/world_graph.py` | 0 | 0 | 0 | 0 | 0 | LOW |
+| `lib/world_graph.py` | 29 | 0 | 118 | 0 | 0 | **HIGH** |
 | **lib/rag/** | | | | | | |
 | `lib/rag/__init__.py` | 0 | 0 | 0 | 0 | 2 (ImportError) | LOW |
 | `lib/rag/embedder.py` | 0 | 0 | 0 | 0 | 1 (ImportError) | LOW |
@@ -31,7 +31,9 @@
 | `lib/rag/semantic_chunker.py` | 0 | 0 | 0 | 0 | 0 | LOW |
 | `lib/rag/extraction_queries.py` | 0 | 0 | 0 | 0 | 0 | LOW |
 
-**Totals:** 21 broad `except Exception`, 0 bare `except:`, 14 `sys.exit()`, 38+ print-based errors, 32 specific catches
+**Totals:** 29 broad `except Exception`, 0 bare `except:`, 118 `sys.exit()`, 38+ print-based errors, 32 specific catches
+
+> **Post-WorldGraph migration note (2026-03-31):** `world_graph.py` (2,481 LOC, 87 methods) absorbed 8 deleted modules: `wiki_manager.py`, `search.py`, `world_stats.py`, `consequence_manager.py`, `npc_manager.py`, `location_manager.py`, `note_manager.py`, `plot_manager.py`. The `sys.exit()` spike (14 → 118) and `except Exception` increase (21 → 29) reflect that `world_graph.py` now contains the CLI entry points and error handling previously spread across those 8 files. `WorldSearcher` (from `search.py`) no longer exists as a class — search is built into `WorldGraph` methods.
 
 ## Key Anti-Patterns
 
@@ -116,6 +118,6 @@ class DuplicateEntityError(DMError):
 
 1. **Create `lib/exceptions.py`** with the hierarchy above.
 2. **Phase 1 — Core utilities:** Refactor `json_ops.py` to raise `FileError`/`ConfigError` instead of `sys.exit()`. All other modules depend on this.
-3. **Phase 2 — Data managers:** Refactor `inventory_manager.py`, `world_graph.py` to raise typed exceptions. Move `sys.exit()` to CLI entry points only.
+3. **Phase 2 — Data managers:** Refactor `world_graph.py` (118 `sys.exit()` calls, 29 broad catches — highest priority post-migration) and `inventory_manager.py` to raise typed exceptions. Move `sys.exit()` to CLI entry points only.
 4. **Phase 3 — Extractors:** Replace broad catches in `content_extractor.py`, `agent_extractor.py` with specific catches + logging.
 5. **Phase 4 — CLI boundary:** Each `if __name__ == "__main__"` block catches `DMError` and calls `sys.exit(1)` with formatted output. This is the ONLY place `sys.exit()` should live.

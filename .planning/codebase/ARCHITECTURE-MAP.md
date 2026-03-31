@@ -68,7 +68,7 @@ All tools live in `tools/`. Each is a thin wrapper that:
 
 ### Layer 3: Python Library
 
-Central hub is `world_graph.py` (~105KB) - a unified graph database with 20+ node types and 12+ edge types. Most tools delegate to it directly. Specialized managers (session, time, campaign, entity_enhancer) handle cross-cutting concerns.
+Central hub is `world_graph.py` (~103KB) - a unified graph database with 20+ node types and 12+ edge types. Most tools delegate to it directly. Specialized managers (session, time, campaign, entity_enhancer) handle cross-cutting concerns.
 
 ### Layer 4: Data Storage
 
@@ -116,7 +116,7 @@ Tools with middleware dispatch (pre+post hooks): `dm-session.sh`, `dm-inventory.
 
 | # | Module | Size | Purpose | Reads | Writes |
 |---|--------|------|---------|-------|--------|
-| 1 | `world_graph.py` | 105KB | Unified graph DB, 80+ subcommands | `world.json` | `world.json` |
+| 1 | `world_graph.py` | 103KB | Unified graph DB, 87 methods, 80+ subcommands | `world.json` | `world.json` |
 | 2 | `campaign_manager.py` | 32KB | Multi-campaign management | `campaign-overview.json`, `active-campaign.txt` | Both |
 | 3 | `session_manager.py` | 21KB | Session lifecycle, saves | `campaign-overview.json`, `world.json` | `session-log.md`, `saves/` |
 | 4 | `player_manager.py` | 21KB | Player character operations | `world.json` (player node) | `world.json` |
@@ -353,7 +353,7 @@ Located in `.claude/additional/modules/` (3 modules total):
 - **Middleware (pre-hooks)**: `dm-location.sh` (intercepts add --from, connect, decide, routes, block, unblock), `dm-session.sh` (intercepts move: distance calc, hierarchy, vehicles, auto-encounters)
 - **Middleware (post-hooks)**: None
 - **Total middleware files**: 2 (2 pre + 0 post)
-- **Data**: Extends `locations.json` with coordinates/connections, `campaign-overview.json` with path_preferences and encounter_system
+- **Data**: Extends location nodes in `world.json` with coordinates/connections, `campaign-overview.json` with path_preferences and encounter_system
 - **Replaces slots**: `movement`
 
 ### mass-combat
@@ -628,4 +628,4 @@ Each campaign gets its own directory under `world-state/campaigns/`. Module enab
 
 ### Pattern 6: Module Agnosticism
 
-Modules must be campaign-agnostic (no character names, setting-specific rules). Campaign-specific configuration goes in `campaign-overview.json` or `facts.json` only.
+Modules must be campaign-agnostic (no character names, setting-specific rules). Campaign-specific configuration goes in `campaign-overview.json` only; fact nodes live in `world.json`.

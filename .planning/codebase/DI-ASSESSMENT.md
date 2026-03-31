@@ -30,7 +30,6 @@ All of these inherit from `EntityManager` and call `super().__init__()`, which i
 | Class | Dependencies Created in `__init__` |
 |-------|-----------------------------------|
 | `TimeManager` | `CampaignManager`, `JsonOperations` |
-| `WorldSearcher` | `CampaignManager`, `JsonOperations` |
 | `InventoryManager` | `ModuleDataManager` (direct construction) |
 | `EntityEnhancer` | `CampaignManager`, `JsonOperations` |
 | `AgentExtractor` | `JsonOperations`, `Validators`, `CampaignManager` |
@@ -55,7 +54,6 @@ EntityManager ──► JsonOperations (standalone)
     └── SessionManager
 
 TimeManager ──► CampaignManager, JsonOperations
-WorldSearcher ──► CampaignManager, JsonOperations
 EntityEnhancer ──► CampaignManager, JsonOperations
 AgentExtractor ──► JsonOperations, Validators, CampaignManager
 
@@ -71,7 +69,7 @@ InventoryManager ──► ModuleDataManager (direct construction)
 
 3. **`EntityManager` has two code paths** in `__init__` (testing vs production) controlled by a boolean flag — a code smell that would be eliminated by proper DI.
 
-4. **Standalone managers duplicate EntityManager's pattern** — `TimeManager`, `WorldSearcher`, `EntityEnhancer` all repeat the same `CampaignManager` → `get_active_campaign_dir()` → `JsonOperations` bootstrap.
+4. **Standalone managers duplicate EntityManager's pattern** — `TimeManager`, `EntityEnhancer` (and previously `WorldSearcher`, now merged into `world_graph.py`) all repeat the same `CampaignManager` → `get_active_campaign_dir()` → `JsonOperations` bootstrap. Post-WorldGraph migration, search functionality lives in `WorldGraph` directly — no separate `WorldSearcher` class.
 
 ## Proposed DI Strategy
 
@@ -186,7 +184,7 @@ This can be done incrementally, one manager at a time:
 
 1. **Phase 1:** Add `protocols.py` and `context.py` (zero impact on existing code).
 2. **Phase 2:** Update `EntityManager.__init__` to accept optional injected deps; if none provided, fall back to current behavior. Subclasses unchanged.
-3. **Phase 3:** Convert standalone managers (`TimeManager`, `WorldSearcher`, etc.) one by one — add injected constructor, update CLI entry point to use factory.
+3. **Phase 3:** Convert standalone managers (`TimeManager`, `EntityEnhancer`, etc.) one by one — add injected constructor, update CLI entry point to use factory. Note: `WorldSearcher` was deleted in WorldGraph migration; search is now handled by `WorldGraph` methods directly.
 4. **Phase 4:** Remove `require_active_campaign` flag and legacy constructor paths once all tests use injection.
 
 ### Impact on Testability

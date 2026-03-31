@@ -2,18 +2,20 @@
 
 ## Current State
 
-**Tested:** 4/19 core modules (21%), 0/7 RAG modules (0%)
-**Total test files:** 5 + conftest.py
-**Existing test cases:** ~65
+**Tested:** 6/19 core modules (32%), 0/6 RAG modules (0%)
+**Total test files:** 6 + conftest.py
+**Existing test cases:** 144 (1,498 LOC)
 
 ### Tested Modules
 
 | Module | Test File | Cases | Quality |
 |--------|-----------|-------|---------|
-| player_manager.py | test_player_manager.py | 17 | Good: HP/gold/XP CRUD, clamping, persistence, auto-detect |
+| world_graph.py | test_world_graph.py | — | Core graph operations, node/edge CRUD |
 | dice.py (partial) | test_dice_combat.py | 13 | Good: fuzzy matching, missing creatures, profession scaling |
-| session_manager.py | test_session_manager.py | 15 | Fair: lacks corrupted JSON, error conditions |
 | encounter_engine.py | test_encounter_engine.py | 20 | Excellent: statistical validation, cooldown, edge cases |
+| player_manager.py | test_player_manager.py | 17 | Good: HP/gold/XP CRUD, clamping, persistence, auto-detect |
+| session_manager.py | test_session_manager.py | 15 | Fair: lacks corrupted JSON, error conditions |
+| tick_engine.py | test_tick_engine.py | — | Tick processing, time advancement hooks |
 
 ---
 
@@ -161,6 +163,8 @@ All RAG modules require `sentence-transformers` and `chromadb`. Tests should moc
 - **Testability:** Medium-Hard — schema validation, PDF deps
 - **Proposed tests (~80 LOC):** Schema structure validation, mock PDF
 
+> **Note:** RAG module count is 6 (entity_enhancer.py + rag/ subdirectory files). `__init__.py` is not counted as a testable module.
+
 ---
 
 ## Existing Test Quality Assessment
@@ -202,7 +206,7 @@ All RAG modules require `sentence-transformers` and `chromadb`. Tests should moc
 | P3 | entity_manager | 172 | 40 | Low |
 | P3 | colors | 50 | 0 | None |
 | P4 | entity_enhancer | 877 | 100 | Medium |
-| P4 | rag/* (6 modules) | ~600 | 330 | Medium |
+| P4 | rag/* (5 modules) | ~600 | 330 | Medium |
 | **Total** | | **~5,820** | **~1,320** | |
 
 **Recommended implementation order:** P1 modules first (inventory, time, campaign), then P2 (dice gaps, calendar, currency). P3/P4 as capacity allows.

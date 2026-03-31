@@ -84,16 +84,16 @@ Introduce Protocol-based interfaces and constructor injection so managers can be
 | 2.1 | Create `lib/protocols.py` — define `JsonStore`, `CampaignResolver`, `EntityStore` protocols | 1 hr | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.2 | Create `CampaignContext` factory — single bootstrap point replacing ~10 duplicated sequences | 2 hrs | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.3 | Refactor `EntityManager` to accept injected `JsonOperations` + `CampaignManager` via constructor | 3 hrs | High | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
-| 2.4 | Refactor standalone managers (`TimeManager`, `InventoryManager`, `CalendarManager`, etc.) to accept deps | 4 hrs | Medium | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
+| 2.4 | Refactor standalone managers (`TimeManager`, `InventoryManager`, and standalone modules like `calendar.py`) to accept deps | 4 hrs | Medium | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 2.5 | Separate CLI `main()` from domain logic in all 5 managers (~510 LOC total to extract) | 4 hrs | Medium | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
-| 2.6 | Remove `sys.exit()` from library code — migrate 29 calls to raise exceptions, catch at CLI boundary | 3 hrs | High | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
+| 2.6 | Remove `sys.exit()` from library code — migrate 118 calls to raise exceptions, catch at CLI boundary | 3 hrs | High | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 
 ### Success Criteria
 
 - [ ] `lib/protocols.py` defines at least 3 Protocol classes
 - [ ] All managers accept dependencies via constructor (no internal `CampaignManager()` calls)
 - [ ] `CampaignContext` is the single entry point for manager construction
-- [ ] Zero `sys.exit()` calls remain in `lib/` (only in `tools/` CLI scripts or `main()` functions)
+- [ ] Zero `sys.exit()` calls remain in `lib/` (only in `tools/` CLI scripts or `main()` functions) — 118 calls to migrate
 - [ ] Each manager can be instantiated in tests with mock dependencies
 - [ ] `uv run pytest` passes — existing tests updated to use new constructors
 
@@ -164,7 +164,7 @@ Raise test coverage from the current baseline toward 70%+ target.
 | 4.4 | `calendar.py` | 258 | ~80 | Medium | None |
 | 4.5 | `currency.py` | 234 | ~70 | Medium | None |
 | 4.6 | `dice.py` (untested portions) | 778 | ~80 | Medium | None |
-| 4.7 | RAG modules (7 files) | ~2,000 | ~300 | Low | Phase 2.4 |
+| 4.7 | RAG modules (6 files) | ~2,000 | ~300 | Low | Phase 2.4 |
 
 **Note:** Tasks 4.4-4.6 have no DI dependency and can start immediately after Phase 1.
 
@@ -172,7 +172,7 @@ Raise test coverage from the current baseline toward 70%+ target.
 
 - [ ] Core module coverage ≥ 70% (target: majority of remaining modules with tests)
 - [ ] All Priority 1 modules (inventory, time, campaign) have tests
-- [ ] Total test count ≥ 200 (up from ~93)
+- [ ] Total test count ≥ 300 (up from 144)
 - [ ] No untested public method in any Priority 1 module
 - [ ] CI-compatible test suite (all tests pass with `uv run pytest`)
 

@@ -72,7 +72,7 @@
 - Line 419: `[-3:]` / `[-2:]` — recent events limits
 - Line 444: `cid[:4]` — consequence ID truncation length
 - Line 457: `10` — max pending consequences shown
-- Line 489-490: `"facts.json"` filename check for special counting logic
+- Line 199: `"facts.json"` filename check for special counting logic (legacy — data now in world.json)
 
 ---
 
@@ -88,7 +88,7 @@
 | 4 | OCP | 284-306 | Campaign overview template is hardcoded with default values (genre: "Fantasy", tone percentages) — not configurable | Medium |
 | 5 | DIP | 47-55, 60-63, 226-229, 233-240, 243-254 | Repeated pattern of raw `open()` + `json.load()` instead of using a shared JSON utility | Medium |
 | 6 | SRP | 353-453 | CLI parsing (~100 LOC) in same file as domain logic | Medium |
-| 7 | OCP | 307-351 | Hardcoded list of state files (npcs.json, locations.json, facts.json, consequences.json) — adding a new entity type requires modifying this method | Medium |
+| 7 | OCP | 282-341 | `_init_empty_files()` hardcodes the set of created files (`campaign-overview.json`, `world.json`, `campaign-rules.md`, `session-log.md`) — adding a new per-campaign file requires modifying this method | Medium |
 
 **Magic Numbers / Hardcoded Values:**
 - Line 289: `"Fantasy"` — default genre hardcoded
@@ -467,7 +467,7 @@ Six modules in `lib/rag/` (~1,423 LOC) implementing semantic search over campaig
 
 | # | Principle | Lines | Violation | Severity |
 |---|-----------|-------|-----------|----------|
-| 1 | SRP | 135-193 | `enrich_all_npcs()` reads `npcs.json`, queries vectors, merges context, deduplicates, and writes back — at least 4 responsibilities in one method | High |
+| 1 | SRP | 135-193 | `enrich_all_npcs()` reads NPC nodes from `world.json`, queries vectors, merges context, deduplicates, and writes back — at least 4 responsibilities in one method | High |
 | 2 | OCP | 85 | `distance > 1.3` — hardcoded distance threshold for filtering results. This cosine distance cutoff is model-specific and not configurable | Medium |
 | 3 | OCP | 80 | `doc[:200].lower()` — deduplication key uses first 200 chars, a magic number that affects dedup accuracy | Medium |
 | 4 | OCP | 99 | `passages[:10]` — hardcoded limit of 10 passages per NPC | Medium |

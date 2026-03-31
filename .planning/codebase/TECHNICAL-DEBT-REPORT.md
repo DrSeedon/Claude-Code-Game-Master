@@ -10,13 +10,13 @@
 | # | Finding | Severity | Category | Detail Document |
 |---|---------|----------|----------|-----------------|
 | 1 | **WorldGraph is a 2,481-LOC god class** with 87 methods spanning 11 responsibility groups — tick engine alone is 580 LOC with 3x duplicated helper closures | Critical | God Class | [GOD-CLASS-DECOMPOSITION.md](GOD-CLASS-DECOMPOSITION.md) |
-| 2 | **37% test coverage** — only 7/19 core modules tested, 0/7 RAG modules; highest-risk untested module is `inventory_manager.py` (1,559 LOC, 19 public methods) | Critical | Testing | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
+| 2 | **32% test coverage** — only 6/19 core modules tested, 0/6 RAG modules; highest-risk untested module is `inventory_manager.py` (1,559 LOC, 19 public methods); 144 test cases, 1,498 LOC | Critical | Testing | [TEST-COVERAGE-GAPS.md](TEST-COVERAGE-GAPS.md) |
 | 3 | **Zero dependency injection** — every manager constructs its own `CampaignManager` + `JsonOperations`, duplicating bootstrap logic ~6 times with no interfaces/protocols | High | DI | [DI-ASSESSMENT.md](DI-ASSESSMENT.md) |
 | 4 | **D&D 5e rules hardcoded throughout** — XP thresholds, proficiency bonus (duplicated 3x, one copy buggy at `dice.py:369`), die sizes, AC defaults baked into core code | High | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
 | 5 | **22 broad `except Exception` catches** silently swallowing errors — `content_extractor.py` (7), `time_manager.py` (5), `agent_extractor.py` (4) | High | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 | 6 | **38 SOLID violations across 5 core managers** — 10 High severity, including CLI parsing mixed with domain logic in every manager (~510 LOC total) | High | SOLID | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 | 7 | **~130 magic values** across 22 files with no centralized config — file paths duplicated in 3+ files each, ~50 display truncation constants scattered arbitrarily | Medium | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
-| 8 | **16 `sys.exit()` calls in library code** — makes modules untestable; `json_ops.py` (6), `entity_manager.py` (4), `player_manager.py` (3) | Medium | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
+| 8 | **118 `sys.exit()` calls in library code** — makes modules untestable; spread across all managers and world_graph.py | Medium | Error Handling | [ERROR-HANDLING-AUDIT.md](ERROR-HANDLING-AUDIT.md) |
 | 9 | **Validators module has 9 identical methods** (~150 LOC) that could be 1 generic method + data dictionary — worst DRY violation in codebase | Medium | SOLID | [SOLID-VIOLATIONS.md](SOLID-VIOLATIONS.md) |
 | 10 | **Russian strings in production code** — `inventory_manager.py` lines 47-62 has hardcoded Russian keywords for item classification, violating module design principles | Medium | Config | [CONFIG-DEBT.md](CONFIG-DEBT.md) |
 
@@ -26,10 +26,10 @@
 
 | Category | Current Score | Target Score | Gap | Key Metric |
 |----------|:------------:|:------------:|:---:|------------|
-| **Test Coverage** | 3/10 | 7/10 | -4 | 37% modules tested (7/19 core, 0/7 RAG) |
+| **Test Coverage** | 3/10 | 7/10 | -4 | 32% modules tested (6/19 core, 0/6 RAG), 144 test cases |
 | **SOLID Compliance** | 4/10 | 7/10 | -3 | 38 violations (10 High, 22 Medium, 6 Low) |
 | **God Class Health** | 2/10 | 7/10 | -5 | 1 god class (2,481 LOC), 3 large managers (500-950 LOC) |
-| **Error Handling** | 3/10 | 7/10 | -4 | 22 broad catches, 16 sys.exit(), 60+ print errors, 0 exception hierarchy |
+| **Error Handling** | 3/10 | 7/10 | -4 | 29 broad catches, 118 sys.exit(), 60+ print errors, 0 exception hierarchy |
 | **Dependency Injection** | 1/10 | 6/10 | -5 | 0 protocols, 0 injected deps, ~6 duplicated bootstrap sequences |
 | **Config Centralization** | 2/10 | 7/10 | -5 | ~130 magic values, 0 constants files, 11 duplicated file paths |
 | **Architecture** | 6/10 | 8/10 | -2 | Clean 4-layer design, good middleware system, but god class undermines it |
@@ -87,9 +87,9 @@ The tick engine (Group N: 580 LOC, 13 methods, 5 duplicated closures) is the hig
 
 | Metric | Count |
 |--------|:-----:|
-| Broad `except Exception` catches | 22 |
+| Broad `except Exception` catches | 29 |
 | Bare `except:` catches | 0 |
-| `sys.exit()` in library code | 16 |
+| `sys.exit()` in library code | 118 |
 | Print-based error reporting | 60+ |
 | Specific exception catches | 33 |
 | Custom exception classes | 0 |
@@ -130,7 +130,7 @@ EntityManager ──► JsonOperations, Validators, CampaignManager
     ├── PlayerManager ──► SessionManager (lazy)
     └── SessionManager
 
-TimeManager, WorldSearcher,
+TimeManager,
 EntityEnhancer, AgentExtractor ──► CampaignManager + JsonOperations (each creates own)
 
 InventoryManager ──► ModuleDataManager (direct)
@@ -171,10 +171,11 @@ Introduce `CampaignContext` factory that resolves once, shared by all managers. 
 
 | Metric | Value |
 |--------|-------|
-| Core modules tested | 7/19 (37%) |
-| RAG modules tested | 0/7 (0%) |
-| Total test cases | ~93 |
-| Test files | 7 + conftest.py |
+| Core modules tested | 6/19 (32%) |
+| RAG modules tested | 0/6 (0%) |
+| Total test cases | 144 |
+| Test LOC | 1,498 |
+| Test files | 6 + conftest.py |
 | Estimated LOC to reach 70% | ~900 |
 
 ### Priority 1 (Critical — Untested, High Risk)
