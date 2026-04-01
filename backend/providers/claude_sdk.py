@@ -1,49 +1,49 @@
-"""Провайдер для Claude Agent SDK (подписка, не требует API ключ)."""
+"""Провайдер через Claude Code SDK (подписка, без API ключа)."""
 
 import logging
 from typing import AsyncGenerator, List, Dict, Any
 from pathlib import Path
 
-try:
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
-    from backend.providers.base import BaseProvider
-    SDK_AVAILABLE = True
-except ImportError:
-    SDK_AVAILABLE = False
-    BaseProvider = object  # Fallback for type hints
+from backend.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
+SDK_AVAILABLE = False
+try:
+    from claude_code_sdk import query, ClaudeCodeOptions, AssistantMessage, TextBlock, ResultMessage, SystemMessage
 
-class ClaudeSDKProvider(BaseProvider if SDK_AVAILABLE else object):
-    """AI провайдер через Claude Agent SDK (подписка).
+    # Patch SDK to handle unknown message types (rate_limit_event, usage_event, etc.)
+    # Without this, unknown types crash the response stream entirely.
+    import claude_code_sdk._internal.message_parser as _parser
+    import claude_code_sdk._internal.client as _client
 
-    Требует:
-    - Claude Code CLI установлен
-    - OAuth токен из Claude Code (автоматически через CLI)
-    - НЕ требует ANTHROPIC_API_KEY
+    _original_parse = _parser.parse_message
 
-    Этот провайдер подходит для пользователей с подпиской Claude Max/Pro.
+    def _patched_parse(data):
+        try:
+            return _original_parse(data)
+        except Exception as e:
+            if "Unknown message type" in str(e):
+                mt = data.get("type", "unknown") if isinstance(data, dict) else "unknown"
+                logger.debug(f"SDK: skipping unknown message type '{mt}'")
+                return SystemMessage(subtype=f"unknown_{mt}", data=data if isinstance(data, dict) else {})
+            raise
 
-    Важно: Tools должны быть зарегистрированы в allowed_tools как строки
-    ("Read", "Bash", "dm_roll", и т.д.). SDK автоматически вызывает их.
-    """
+    _parser.parse_message = _patched_parse
+    _client.parse_message = _patched_parse
 
-    def __init__(self, project_root: Path, model_name: str = "claude-3-5-sonnet-20241022"):
-        """Инициализация провайдера.
+    SDK_AVAILABLE = True
+except ImportError:
+    pass
 
-        Args:
-            project_root: Корневая директория проекта (для cwd)
-            model_name: Имя модели Claude
-        """
+
+class ClaudeSDKProvider(BaseProvider):
+
+    def __init__(self, project_root: Path, model_name: str = "claude-sonnet-4-6"):
         if not SDK_AVAILABLE:
-            raise ImportError(
-                "claude-agent-sdk не установлен. Установите с помощью: pip install claude-agent-sdk"
-            )
-
+            raise ImportError("claude-code-sdk не установлен: pip install claude-code-sdk")
         self.project_root = project_root
         self.model_name = model_name
-        self.client = None
 
     async def process_message(
         self,
@@ -53,80 +53,28 @@ class ClaudeSDKProvider(BaseProvider if SDK_AVAILABLE else object):
         model_name: str,
         tools: List[Dict[str, Any]]
     ) -> AsyncGenerator[str, None]:
-        """Обрабатывает сообщение через Claude SDK с tool calling.
-
-        Алгоритм SDK:
-        1. client.query(message) отправляет сообщение
-        2. client.receive_response() стримит ответ
-        3. SDK автоматически вызывает tools при необходимости
-        4. Возвращаем только текстовые части ответа
-
-        ВАЖНО: SDK управляет tool calling автоматически. Нам нужно только
-        зарегистрировать tools в allowed_tools и предоставить их имена.
-
-        Args:
-            user_message: Сообщение от игрока
-            conversation_history: История разговора (модифицируется)
-            system_prompt: Системный промпт DM
-            model_name: Имя модели Claude
-            tools: Tool schemas в формате Anthropic (конвертируются в имена)
-
-        Yields:
-            Текстовые чанки стриминг-ответа
-        """
-        # Конвертируем tool schemas в список имен для SDK
-        # SDK ожидает просто список строк: ["Read", "Bash", "dm_roll", ...]
-        allowed_tools = [tool["name"] for tool in tools]
-
-        # Опции для SDK клиента
-        options_kwargs = {
-            "model": model_name,
-            "system_prompt": system_prompt,
-            "allowed_tools": allowed_tools,
-            "max_turns": 10,  # Максимум итераций tool calling
-            "cwd": str(self.project_root.resolve()),
-            "max_thinking_tokens": None,  # Отключаем extended thinking для игры
-        }
-
-        # Создаем клиент SDK
-        client = ClaudeSDKClient(options=ClaudeAgentOptions(**options_kwargs))
+        options = ClaudeCodeOptions(
+            model=model_name or self.model_name,
+            system_prompt=system_prompt,
+            cwd=str(self.project_root.resolve()),
+            max_turns=10,
+            permission_mode="bypassPermissions",
+        )
 
         try:
-            # Используем async context manager
-            async with client:
-                # Отправляем сообщение пользователя
-                await client.query(user_message)
-
-                # Стримим ответ
-                async for msg in client.receive_response():
-                    msg_type = type(msg).__name__
-
-                    # Обрабатываем только текстовые сообщения от ассистента
-                    if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                        # AssistantMessage может содержать текст или tool_use
-                        content = msg.content
-                        if isinstance(content, str):
-                            # Текстовый контент - возвращаем его
-                            yield content
-                        elif hasattr(content, "text") and content.text:
-                            # Structured content с текстом
-                            yield content.text
-
-                    # Игнорируем ToolCallMessage, ToolResultMessage - SDK обрабатывает их сам
-
+            async for msg in query(prompt=user_message, options=options):
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock) and block.text:
+                            yield block.text
+                elif isinstance(msg, ResultMessage):
+                    if msg.is_error and msg.result:
+                        yield f"\n\n[Ошибка: {msg.result}]"
         except Exception as e:
-            logger.error(f"Ошибка Claude SDK провайдера: {e}", exc_info=True)
-            yield f"\n\n[Ошибка: {str(e)}]"
+            logger.error(f"Claude SDK error: {e}", exc_info=True)
+            yield f"\n\n[Ошибка SDK: {str(e)}]"
 
-        # Обновляем историю разговора после обработки
-        # ПРИМЕЧАНИЕ: SDK управляет историей внутри сессии автоматически,
-        # но для совместимости с API провайдером добавляем сообщения в историю
-        conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
-        # Ответ ассистента будет добавлен вызывающим кодом (в claude_dm.py)
+        conversation_history.append({"role": "user", "content": user_message})
 
     def get_provider_name(self) -> str:
-        """Возвращает имя провайдера."""
-        return "Claude SDK (подписка)"
+        return "Claude Code SDK (подписка)"

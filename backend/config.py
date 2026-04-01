@@ -24,7 +24,7 @@ class Config:
     anthropic_api_key: Optional[str] = None  # Required only for "api" provider
 
     # Anthropic API settings (optional)
-    model_name: str = "claude-3-5-sonnet-20241022"
+    model_name: str = "claude-sonnet-4-6"
 
     # Backend server settings
     backend_host: str = "0.0.0.0"
@@ -96,7 +96,7 @@ def get_config() -> Config:
         project_root=project_root,
         world_state_base=world_state_base,
         campaigns_dir=campaigns_dir,
-        model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-3-5-sonnet-20241022",
+        model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
         backend_host=os.environ.get("BACKEND_HOST") or "0.0.0.0",
         backend_port=int(os.environ.get("BACKEND_PORT", "8000")),
     )

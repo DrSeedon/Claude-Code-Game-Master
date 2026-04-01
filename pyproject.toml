@@ -50,7 +50,7 @@ rag = [
 
 # Claude SDK provider (subscription-based, no API key required)
 sdk = [
-    "claude-agent-sdk>=0.9.0",
+    "claude-code-sdk>=0.0.1",
 ]
 
 # Full installation (all features)
