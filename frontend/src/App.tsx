@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Lobby } from './pages/Lobby';
 import { Game } from './screens/Game';
-import { Wizard } from './screens/Wizard';
+import { Wizard } from './pages/Wizard';
 import { Dashboard } from './screens/Dashboard';
 
 /**
