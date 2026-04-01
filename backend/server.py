@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_config
 from backend.game_state import get_character_status
+from backend.claude_dm import process_message, load_system_prompt
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -119,14 +120,50 @@ async def game_websocket(websocket: WebSocket):
     """
     await websocket.accept()
 
+    # Initialize conversation state
+    conversation_history = []
+    system_prompt = None
+    config = None
+
+    # Load configuration and system prompt
+    try:
+        config = get_config()
+        system_prompt = load_system_prompt()
+        print(f"✅ WebSocket connected - API key configured, system prompt loaded ({len(system_prompt)} chars)")
+    except ValueError as e:
+        # No API key configured - send error message and close connection
+        await websocket.send_text(f"❌ Configuration error: {str(e)}")
+        await websocket.send_text("Please set ANTHROPIC_API_KEY in .env file")
+        await websocket.close()
+        return
+
     try:
         while True:
             # Receive message from player
-            message = await websocket.receive_text()
+            user_message = await websocket.receive_text()
+            print(f"📩 Received message: {user_message[:50]}...")
 
-            # Echo back for now (DM agent integration will come in next subtasks)
-            await websocket.send_text(f"Received: {message}")
+            # Process message through DM agent with streaming
+            try:
+                async for text_chunk in process_message(
+                    user_message=user_message,
+                    conversation_history=conversation_history,
+                    api_key=config.anthropic_api_key,
+                    model_name=config.model_name,
+                    system_prompt=system_prompt
+                ):
+                    # Stream each text chunk to frontend
+                    await websocket.send_text(text_chunk)
+
+                print(f"✅ Completed message processing")
+
+            except Exception as e:
+                # Send error to client and log
+                error_message = f"Error: {str(e)}"
+                print(f"❌ DM Agent error: {error_message}")
+                await websocket.send_text(f"\n\n{error_message}")
 
     except WebSocketDisconnect:
         # Client disconnected, cleanup connection
+        print(f"🔌 WebSocket disconnected")
         pass
