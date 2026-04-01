@@ -2,8 +2,9 @@
 # Shared preamble for DM context hooks.
 # Source this, then check: [ -z "$CAMPAIGN_DIR" ] && exit 0
 
-INPUT=$(cat)
-MSG=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('prompt','') or d.get('message',''))" 2>/dev/null)
+INPUT=$(cat 2>/dev/null || true)
+[ -z "$INPUT" ] && exit 0
+MSG=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('prompt','') or d.get('message',''))" 2>/dev/null || true)
 
 case "$MSG" in
   /dm-continue*|/dm\ *|/dm|*"MANDATORY STARTUP CHECKLIST"*|*"dm-continue"*)
