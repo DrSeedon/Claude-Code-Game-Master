@@ -183,7 +183,7 @@ def create_campaign(
     # Create empty world.json
     world_file = campaign_dir / "world.json"
     world_file.write_text(
-        json.dumps({"nodes": [], "edges": []}, ensure_ascii=False, indent=2),
+        json.dumps({"nodes": {}, "edges": []}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -195,7 +195,7 @@ def create_campaign(
     if character:
         from lib.world_graph import WorldGraph
 
-        wg = WorldGraph(world_file)
+        wg = WorldGraph(campaign_dir)
 
         # Create player node with character data
         player_id = f"player-{character.get('name', 'hero').lower().replace(' ', '-')}"
