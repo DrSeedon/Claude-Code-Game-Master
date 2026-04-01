@@ -34,24 +34,35 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
   // Auto-scroll reference
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Track index of currently streaming message (null = no active stream)
+  const streamingMessageIndexRef = useRef<number | null>(null);
+
   // Process raw WebSocket messages into structured Message objects
   useEffect(() => {
     if (rawMessages.length === 0) return;
 
-    // Get the latest raw message
-    const latestRaw = rawMessages[rawMessages.length - 1];
+    // Get the latest raw message chunk
+    const latestChunk = rawMessages[rawMessages.length - 1];
 
-    // Check if this is a streaming chunk (partial DM response)
-    // For now, treat each message as a complete assistant message
-    // TODO: In subtask-7-2, implement proper streaming accumulation
-    setMessageHistory(prev => [
-      ...prev,
-      {
-        role: 'assistant',
-        content: latestRaw,
-        timestamp: Date.now()
+    setMessageHistory(prev => {
+      // If we have an active streaming message, append chunk to it
+      if (streamingMessageIndexRef.current !== null) {
+        const updated = [...prev];
+        updated[streamingMessageIndexRef.current].content += latestChunk;
+        updated[streamingMessageIndexRef.current].timestamp = Date.now();
+        return updated;
+      } else {
+        // Start new streaming message
+        const newMessage: Message = {
+          role: 'assistant',
+          content: latestChunk,
+          timestamp: Date.now()
+        };
+        // Store index of new message for future chunks
+        streamingMessageIndexRef.current = prev.length;
+        return [...prev, newMessage];
       }
-    ]);
+    });
   }, [rawMessages]);
 
   // Auto-scroll to latest message
@@ -74,6 +85,9 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
       timestamp: Date.now()
     };
     setMessageHistory(prev => [...prev, userMessage]);
+
+    // Reset streaming index - next response will start new assistant message
+    streamingMessageIndexRef.current = null;
 
     // Send to backend
     sendMessage(inputValue.trim());
