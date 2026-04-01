@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -351,6 +352,70 @@ async def api_get_template_rules():
     return result
 
 
+# ─────────────────────────── Функции истории чата ─────────────────────────────
+
+def _get_chat_history_path(campaign_dir: Path) -> Path:
+    """Получить путь к файлу истории чата кампании.
+
+    Args:
+        campaign_dir: Директория кампании
+
+    Returns:
+        Path: Путь к chat-history.json
+    """
+    return campaign_dir / "chat-history.json"
+
+
+def load_chat_history(campaign_dir: Path) -> List[dict]:
+    """Загрузить историю чата из файла.
+
+    Читает chat-history.json из директории кампании.
+    Возвращает пустой список если файл отсутствует или повреждён.
+
+    Args:
+        campaign_dir: Директория активной кампании
+
+    Returns:
+        List[dict]: Список сообщений с полями role, content, timestamp
+    """
+    history_file = _get_chat_history_path(campaign_dir)
+    if not history_file.exists():
+        return []
+    try:
+        data = json.loads(history_file.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except (json.JSONDecodeError, OSError):
+        pass
+    return []
+
+
+def save_chat_history(campaign_dir: Path, messages: List[dict]) -> None:
+    """Сохранить историю чата в файл.
+
+    Записывает chat-history.json в директорию кампании.
+    Ошибки записи логируются, но не прерывают работу.
+
+    Args:
+        campaign_dir: Директория активной кампании
+        messages: Список сообщений с полями role, content, timestamp
+    """
+    history_file = _get_chat_history_path(campaign_dir)
+    try:
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        history_file.write_text(
+            json.dumps(messages, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        print(f"⚠️  Ошибка сохранения истории чата: {e}")
+
+
+def _now_iso() -> str:
+    """Получить текущее время в формате ISO 8601 UTC."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 @app.get("/")
 async def root():
     """Root endpoint with basic server info.
@@ -388,6 +453,7 @@ async def game_websocket(websocket: WebSocket):
 
     Handles bi-directional communication between player and DM agent.
     Streams responses from Claude API and executes game tools.
+    Loads chat history on connect and saves after each turn.
 
     Args:
         websocket: WebSocket connection instance
@@ -411,11 +477,35 @@ async def game_websocket(websocket: WebSocket):
         await websocket.close()
         return
 
+    # Загружаем историю чата из файла при подключении
+    campaign_dir: Optional[Path] = config.campaign_dir if config else None
+    if campaign_dir:
+        saved_messages = load_chat_history(campaign_dir)
+        if saved_messages:
+            # Восстанавливаем историю разговора для Claude
+            for msg in saved_messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    conversation_history.append({"role": role, "content": content})
+
+            # Отправляем историю клиенту как JSON-пакет
+            history_packet = json.dumps({"type": "history", "messages": saved_messages})
+            await websocket.send_text(history_packet)
+            print(f"📜 История чата загружена: {len(saved_messages)} сообщений")
+        else:
+            print(f"📜 История чата пуста — начинаем новый разговор")
+    else:
+        print(f"⚠️  Активная кампания не задана — история чата не будет сохраняться")
+
     try:
         while True:
             # Receive message from player
             user_message = await websocket.receive_text()
             print(f"📩 Received message: {user_message[:50]}...")
+
+            # Собираем полный ответ ассистента для сохранения в историю
+            full_response_parts: List[str] = []
 
             # Process message through DM agent with streaming
             try:
@@ -430,8 +520,25 @@ async def game_websocket(websocket: WebSocket):
                 ):
                     # Stream each text chunk to frontend
                     await websocket.send_text(text_chunk)
+                    full_response_parts.append(text_chunk)
 
                 print(f"✅ Completed message processing")
+
+                # Сохраняем ход в историю чата
+                if campaign_dir and full_response_parts:
+                    full_response = "".join(full_response_parts)
+                    timestamp = _now_iso()
+
+                    # Добавляем в conversation_history для следующего хода
+                    conversation_history.append({"role": "user", "content": user_message})
+                    conversation_history.append({"role": "assistant", "content": full_response})
+
+                    # Персистируем историю на диск
+                    all_saved = load_chat_history(campaign_dir)
+                    all_saved.append({"role": "user", "content": user_message, "timestamp": timestamp})
+                    all_saved.append({"role": "assistant", "content": full_response, "timestamp": timestamp})
+                    save_chat_history(campaign_dir, all_saved)
+                    print(f"💾 История чата сохранена ({len(all_saved)} сообщений)")
 
             except Exception as e:
                 # Send error to client and log
