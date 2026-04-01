@@ -74,8 +74,17 @@ def load_system_prompt() -> str:
         if default_style_path.exists():
             narrator_style = f"\n---\n{default_style_path.read_text()}\n"
 
+    # Step 3: Load campaign-specific rules
+    campaign_rules = ""
+    if active_campaign_file.exists():
+        campaign_name = active_campaign_file.read_text().strip()
+        if campaign_name:
+            rules_path = project_root / "world-state" / "campaigns" / campaign_name / "campaign-rules.md"
+            if rules_path.exists():
+                campaign_rules = f"\n---\n# Campaign Rules\n\n{rules_path.read_text()}\n"
+
     # Combine prompts
-    system_prompt = f"{dm_rules}\n{narrator_style}"
+    system_prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}"
 
     # Ensure we return something meaningful
     if len(system_prompt.strip()) < 100:
