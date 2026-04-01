@@ -18,6 +18,7 @@ from backend.campaign_api import (
     activate_campaign,
     delete_campaign,
 )
+from backend.chat_history import load_chat_history, save_chat_history
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -41,26 +42,26 @@ async def startup_event():
     """Initialize application on startup."""
     print(f"🚀 DM Game Master backend starting...")
 
-    # Load configuration (теперь не требует API key для SDK провайдера)
+    # Load configuration (no API key required for SDK provider)
     try:
         config = get_config()
         print(f"📍 Server: {config.backend_host}:{config.backend_port}")
         print(f"🤖 Model: {config.model_name}")
         print(f"🔌 AI Provider: {config.ai_provider}")
 
-        # Показываем информацию о выбранном провайдере
+        # Show selected provider information
         if config.ai_provider == "api":
             if config.anthropic_api_key:
-                print(f"✅ Anthropic API: ключ настроен")
+                print(f"✅ Anthropic API: key configured")
             else:
-                print(f"⚠️  Anthropic API: ключ отсутствует")
+                print(f"⚠️  Anthropic API: key missing")
         elif config.ai_provider == "sdk":
-            print(f"🎫 Claude SDK: работа через подписку")
+            print(f"🎫 Claude SDK: working via subscription")
         else:  # auto
             if config.anthropic_api_key:
-                print(f"🔑 Автовыбор: Anthropic API (найден ключ)")
+                print(f"🔑 Auto-select: Anthropic API (key found)")
             else:
-                print(f"🎫 Автовыбор: Claude SDK (ключ не найден)")
+                print(f"🎫 Auto-select: Claude SDK (key not found)")
 
         if config.campaign_name:
             print(f"🎲 Active campaign: {config.campaign_name}")
@@ -104,10 +105,10 @@ async def get_status():
     return status
 
 
-# ─────────────────────────── Pydantic схемы ────────────────────────────────────
+# ─────────────────────────── Pydantic Schemas ──────────────────────────────────
 
 class CreateCampaignRequest(BaseModel):
-    """Тело запроса для создания кампании."""
+    """Request body for campaign creation."""
 
     name: str
     genre: Optional[str] = ""
@@ -121,23 +122,23 @@ class CreateCampaignRequest(BaseModel):
 
 @app.get("/api/campaigns")
 async def api_list_campaigns():
-    """Получить список всех кампаний.
+    """Get list of all campaigns.
 
     Returns:
-        list: Список кампаний с полями name, active, created_at, genre, tone, description
+        list: Campaign list with fields name, active, created_at, genre, tone, description
     """
     return list_campaigns()
 
 
 @app.post("/api/campaigns", status_code=201)
 async def api_create_campaign(body: CreateCampaignRequest):
-    """Создать новую кампанию.
+    """Create new campaign.
 
     Args:
-        body: Данные новой кампании (name обязательно)
+        body: New campaign data (name is required)
 
     Returns:
-        dict: Информация о созданной кампании или ошибка 400/409
+        dict: Created campaign info or error 400/409
     """
     result = create_campaign(
         name=body.name,
@@ -149,9 +150,9 @@ async def api_create_campaign(body: CreateCampaignRequest):
     )
 
     if not result.get("success"):
-        error_msg = result.get("error", "Ошибка создания кампании")
-        # Кампания уже существует → 409 Conflict, иначе 400 Bad Request
-        status_code = 409 if "уже существует" in error_msg else 400
+        error_msg = result.get("error", "Campaign creation error")
+        # Campaign already exists → 409 Conflict, otherwise 400 Bad Request
+        status_code = 409 if "already exists" in error_msg else 400
         raise HTTPException(status_code=status_code, detail=error_msg)
 
     return result
@@ -159,20 +160,20 @@ async def api_create_campaign(body: CreateCampaignRequest):
 
 @app.post("/api/campaigns/{name}/activate")
 async def api_activate_campaign(name: str):
-    """Активировать кампанию по имени.
+    """Activate campaign by name.
 
     Args:
-        name: Имя кампании для активации
+        name: Campaign name to activate
 
     Returns:
-        dict: {"success": true, "name": "..."}  или ошибка 404
+        dict: {"success": true, "name": "..."} or error 404
     """
     result = activate_campaign(name)
 
     if not result.get("success"):
         raise HTTPException(
             status_code=404,
-            detail=result.get("error", f"Кампания '{name}' не найдена"),
+            detail=result.get("error", f"Campaign '{name}' not found"),
         )
 
     return result
@@ -180,30 +181,43 @@ async def api_activate_campaign(name: str):
 
 @app.delete("/api/campaigns/{name}", status_code=200)
 async def api_delete_campaign(name: str):
-    """Удалить кампанию и все её данные.
+    """Delete campaign and all its data.
 
     Args:
-        name: Имя кампании для удаления
+        name: Campaign name to delete
 
     Returns:
-        dict: {"success": true}  или ошибка 404/409
+        dict: {"success": true} or error 404/409
     """
     result = delete_campaign(name)
 
     if not result.get("success"):
-        error_msg = result.get("error", "Ошибка удаления")
-        status_code = 409 if "активную кампанию" in error_msg else 404
+        error_msg = result.get("error", "Deletion error")
+        status_code = 409 if "active campaign" in error_msg else 404
         raise HTTPException(status_code=status_code, detail=error_msg)
 
     return result
 
 
-# ─────────────────────────── Вспомогательные функции для шаблонов ─────────────
+@app.get("/api/campaigns/active")
+async def get_active_campaign_endpoint():
+    """Get currently active campaign.
+
+    Returns:
+        dict: {"name": "campaign-name"} or {"name": null} if none active
+    """
+    from backend.config import get_active_campaign
+
+    active = get_active_campaign()
+    return {"name": active}
+
+
+# ─────────────────────────── Template Helper Functions ────────────────────────
 
 def _parse_md_frontmatter(path: Path) -> dict:
-    """Извлечь поля id/name/description/genres из markdown-файла стилей.
+    """Extract id/name/description/genres fields from markdown style file.
 
-    Формат файла:
+    File format:
         ## id
         some-id
         ## name
@@ -212,15 +226,15 @@ def _parse_md_frontmatter(path: Path) -> dict:
         Some description text...
 
     Args:
-        path: Путь к .md файлу
+        path: Path to .md file
 
     Returns:
-        dict: Словарь с полями id, name, description и genres (list)
+        dict: Dictionary with id, name, description and genres (list) fields
     """
     text = path.read_text(encoding="utf-8")
     result: dict = {"id": path.stem, "name": path.stem, "description": "", "genres": []}
 
-    # Разбиваем на секции вида "## key\nvalue"
+    # Split into sections of format "## key\nvalue"
     sections = re.split(r'^## ', text, flags=re.MULTILINE)
     for section in sections:
         lines = section.strip().splitlines()
@@ -241,19 +255,19 @@ def _parse_md_frontmatter(path: Path) -> dict:
 
 
 def _get_modules_dir() -> Path:
-    """Получить путь к директории модулей относительно корня проекта."""
+    """Get path to modules directory relative to project root."""
     config = get_config()
     return Path(config.project_root) / ".claude" / "additional" / "modules"
 
 
 def _get_narrator_styles_dir() -> Path:
-    """Получить путь к директории нарраторских стилей."""
+    """Get path to narrator styles directory."""
     config = get_config()
     return Path(config.project_root) / ".claude" / "additional" / "narrator-styles"
 
 
 def _get_campaign_rules_templates_dir() -> Path:
-    """Получить путь к директории шаблонов правил кампании."""
+    """Get path to campaign rules templates directory."""
     config = get_config()
     return Path(config.project_root) / ".claude" / "additional" / "campaign-rules-templates"
 
@@ -262,14 +276,14 @@ def _get_campaign_rules_templates_dir() -> Path:
 
 @app.get("/api/templates/modules")
 async def api_get_template_modules():
-    """Получить список доступных игровых модулей.
+    """Get list of available game modules.
 
-    Читает module.json из каждой поддиректории modules/ и возвращает
-    метаданные: id, name, description, category, genre_tags, tags,
+    Reads module.json from each modules/ subdirectory and returns
+    metadata: id, name, description, category, genre_tags, tags,
     enabled_by_default, features.
 
     Returns:
-        list: Список модулей с полями из module.json
+        list: Module list with fields from module.json
     """
     modules_dir = _get_modules_dir()
     result = []
@@ -296,7 +310,7 @@ async def api_get_template_modules():
                 "features": data.get("features", []),
             })
         except (json.JSONDecodeError, OSError):
-            # Пропускаем некорректные модули
+            # Skip invalid modules
             continue
 
     return result
@@ -304,13 +318,13 @@ async def api_get_template_modules():
 
 @app.get("/api/templates/narrators")
 async def api_get_template_narrators():
-    """Получить список доступных стилей нарратора.
+    """Get list of available narrator styles.
 
-    Читает .md файлы из narrator-styles/ и извлекает секции
-    id, name, description, genres.
+    Reads .md files from narrator-styles/ and extracts
+    id, name, description, genres sections.
 
     Returns:
-        list: Список стилей нарратора с полями id, name, description, genres
+        list: Narrator styles list with id, name, description, genres fields
     """
     styles_dir = _get_narrator_styles_dir()
     result = []
@@ -329,13 +343,13 @@ async def api_get_template_narrators():
 
 @app.get("/api/templates/rules")
 async def api_get_template_rules():
-    """Получить список шаблонов правил кампании.
+    """Get list of campaign rules templates.
 
-    Читает .md файлы из campaign-rules-templates/ и извлекает секции
-    id, name, description, genres.
+    Reads .md files from campaign-rules-templates/ and extracts
+    id, name, description, genres sections.
 
     Returns:
-        list: Список шаблонов правил с полями id, name, description, genres
+        list: Rules templates list with id, name, description, genres fields
     """
     rules_dir = _get_campaign_rules_templates_dir()
     result = []
@@ -352,67 +366,8 @@ async def api_get_template_rules():
     return result
 
 
-# ─────────────────────────── Функции истории чата ─────────────────────────────
-
-def _get_chat_history_path(campaign_dir: Path) -> Path:
-    """Получить путь к файлу истории чата кампании.
-
-    Args:
-        campaign_dir: Директория кампании
-
-    Returns:
-        Path: Путь к chat-history.json
-    """
-    return campaign_dir / "chat-history.json"
-
-
-def load_chat_history(campaign_dir: Path) -> List[dict]:
-    """Загрузить историю чата из файла.
-
-    Читает chat-history.json из директории кампании.
-    Возвращает пустой список если файл отсутствует или повреждён.
-
-    Args:
-        campaign_dir: Директория активной кампании
-
-    Returns:
-        List[dict]: Список сообщений с полями role, content, timestamp
-    """
-    history_file = _get_chat_history_path(campaign_dir)
-    if not history_file.exists():
-        return []
-    try:
-        data = json.loads(history_file.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return data
-    except (json.JSONDecodeError, OSError):
-        pass
-    return []
-
-
-def save_chat_history(campaign_dir: Path, messages: List[dict]) -> None:
-    """Сохранить историю чата в файл.
-
-    Записывает chat-history.json в директорию кампании.
-    Ошибки записи логируются, но не прерывают работу.
-
-    Args:
-        campaign_dir: Директория активной кампании
-        messages: Список сообщений с полями role, content, timestamp
-    """
-    history_file = _get_chat_history_path(campaign_dir)
-    try:
-        campaign_dir.mkdir(parents=True, exist_ok=True)
-        history_file.write_text(
-            json.dumps(messages, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except OSError as e:
-        print(f"⚠️  Ошибка сохранения истории чата: {e}")
-
-
 def _now_iso() -> str:
-    """Получить текущее время в формате ISO 8601 UTC."""
+    """Get current time in ISO 8601 UTC format."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -477,26 +432,26 @@ async def game_websocket(websocket: WebSocket):
         await websocket.close()
         return
 
-    # Загружаем историю чата из файла при подключении
+    # Load chat history from file on connection
     campaign_dir: Optional[Path] = config.campaign_dir if config else None
     if campaign_dir:
         saved_messages = load_chat_history(campaign_dir)
         if saved_messages:
-            # Восстанавливаем историю разговора для Claude
+            # Restore conversation history for Claude
             for msg in saved_messages:
                 role = msg.get("role")
                 content = msg.get("content", "")
                 if role in ("user", "assistant") and content:
                     conversation_history.append({"role": role, "content": content})
 
-            # Отправляем историю клиенту как JSON-пакет
+            # Send history to client as JSON packet
             history_packet = json.dumps({"type": "history", "messages": saved_messages})
             await websocket.send_text(history_packet)
-            print(f"📜 История чата загружена: {len(saved_messages)} сообщений")
+            print(f"📜 Chat history loaded: {len(saved_messages)} messages")
         else:
-            print(f"📜 История чата пуста — начинаем новый разговор")
+            print(f"📜 Chat history empty — starting new conversation")
     else:
-        print(f"⚠️  Активная кампания не задана — история чата не будет сохраняться")
+        print(f"⚠️  Active campaign not set — chat history will not be saved")
 
     try:
         while True:
@@ -504,7 +459,7 @@ async def game_websocket(websocket: WebSocket):
             user_message = await websocket.receive_text()
             print(f"📩 Received message: {user_message[:50]}...")
 
-            # Собираем полный ответ ассистента для сохранения в историю
+            # Collect full assistant response for saving to history
             full_response_parts: List[str] = []
 
             # Process message through DM agent with streaming
@@ -524,21 +479,21 @@ async def game_websocket(websocket: WebSocket):
 
                 print(f"✅ Completed message processing")
 
-                # Сохраняем ход в историю чата
+                # Save turn to chat history
                 if campaign_dir and full_response_parts:
                     full_response = "".join(full_response_parts)
                     timestamp = _now_iso()
 
-                    # Добавляем в conversation_history для следующего хода
+                    # Add to conversation_history for next turn
                     conversation_history.append({"role": "user", "content": user_message})
                     conversation_history.append({"role": "assistant", "content": full_response})
 
-                    # Персистируем историю на диск
+                    # Persist history to disk
                     all_saved = load_chat_history(campaign_dir)
                     all_saved.append({"role": "user", "content": user_message, "timestamp": timestamp})
                     all_saved.append({"role": "assistant", "content": full_response, "timestamp": timestamp})
                     save_chat_history(campaign_dir, all_saved)
-                    print(f"💾 История чата сохранена ({len(all_saved)} сообщений)")
+                    print(f"💾 Chat history saved ({len(all_saved)} messages)")
 
             except Exception as e:
                 # Send error to client and log

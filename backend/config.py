@@ -66,15 +66,15 @@ def get_config() -> Config:
     Raises:
         ValueError: If AI_PROVIDER=api but ANTHROPIC_API_KEY is not set
     """
-    # Определяем тип AI провайдера
+    # Determine AI provider type
     ai_provider = os.environ.get("AI_PROVIDER", "auto")
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
-    # Валидация: если явно выбран API провайдер, ключ обязателен
+    # Validation: if API provider explicitly selected, key is required
     if ai_provider == "api" and not api_key:
         raise ValueError(
-            "AI_PROVIDER=api требует ANTHROPIC_API_KEY в .env файле.\n"
-            "Или используйте AI_PROVIDER=sdk для работы через подписку."
+            "AI_PROVIDER=api requires ANTHROPIC_API_KEY in .env file.\n"
+            "Or use AI_PROVIDER=sdk to work via subscription."
         )
 
     # Get project paths
@@ -92,7 +92,7 @@ def get_config() -> Config:
     # Build config
     config = Config(
         ai_provider=ai_provider,
-        anthropic_api_key=api_key,  # Может быть None для SDK провайдера
+        anthropic_api_key=api_key,  # Can be None for SDK provider
         project_root=project_root,
         world_state_base=world_state_base,
         campaigns_dir=campaigns_dir,

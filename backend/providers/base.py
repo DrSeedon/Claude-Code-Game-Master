@@ -1,13 +1,13 @@
-"""Базовый интерфейс для AI провайдеров."""
+"""Base interface for AI providers."""
 
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
 
 class BaseProvider(ABC):
-    """Абстрактный базовый класс для всех AI провайдеров.
+    """Abstract base class for all AI providers.
 
-    Определяет единый интерфейс для работы с разными AI бэкендами
+    Defines unified interface for working with different AI backends
     (Anthropic API, Claude SDK, etc.).
     """
 
@@ -20,21 +20,21 @@ class BaseProvider(ABC):
         model_name: str,
         tools: List[Dict[str, Any]]
     ) -> AsyncGenerator[str, None]:
-        """Обрабатывает сообщение пользователя и возвращает стриминг-ответ.
+        """Process user message and return streaming response.
 
         Args:
-            user_message: Сообщение от игрока
-            conversation_history: История разговора (модифицируется на месте)
-            system_prompt: Системный промпт с правилами DM
-            model_name: Имя модели Claude
-            tools: Список tool schemas в формате Anthropic
+            user_message: Message from player
+            conversation_history: Conversation history (modified in-place)
+            system_prompt: System prompt with DM rules
+            model_name: Claude model name
+            tools: List of tool schemas in Anthropic format
 
         Yields:
-            Текстовые чанки из стриминг-ответа Claude
+            Text chunks from Claude streaming response
         """
         pass
 
     @abstractmethod
     def get_provider_name(self) -> str:
-        """Возвращает имя провайдера для логирования."""
+        """Return provider name for logging."""
         pass

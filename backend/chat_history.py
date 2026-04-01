@@ -1,7 +1,7 @@
-"""Модуль для хранения и загрузки истории чата по кампаниям.
+"""Module for storing and loading chat history per campaign.
 
-История сохраняется в файл chat-history.json внутри директории кампании.
-Каждое сообщение содержит роль, содержимое и временную метку.
+History is saved to chat-history.json file inside campaign directory.
+Each message contains role, content and timestamp.
 """
 
 import json
@@ -10,35 +10,35 @@ from typing import List, Dict, Optional
 from datetime import datetime
 
 
-# Имя файла истории чата внутри директории кампании
+# Chat history filename inside campaign directory
 CHAT_HISTORY_FILENAME = "chat-history.json"
 
 
 def _get_history_path(campaign_dir: Path) -> Path:
-    """Получить путь к файлу истории чата для кампании.
+    """Get path to chat history file for campaign.
 
     Args:
-        campaign_dir: Директория кампании
+        campaign_dir: Campaign directory
 
     Returns:
-        Path: Путь к файлу chat-history.json
+        Path: Path to chat-history.json file
     """
     return campaign_dir / CHAT_HISTORY_FILENAME
 
 
 def load_chat_history(campaign_dir: Path) -> List[Dict]:
-    """Загрузить историю чата для кампании.
+    """Load chat history for campaign.
 
     Args:
-        campaign_dir: Директория кампании (где хранится chat-history.json)
+        campaign_dir: Campaign directory (where chat-history.json is stored)
 
     Returns:
-        List[Dict]: Список сообщений, каждое содержит:
-            - role (str): Роль отправителя ("user", "assistant", "system")
-            - content (str): Текст сообщения
-            - timestamp (str): ISO 8601 временная метка
+        List[Dict]: List of messages, each containing:
+            - role (str): Sender role ("user", "assistant", "system")
+            - content (str): Message text
+            - timestamp (str): ISO 8601 timestamp
 
-        Возвращает пустой список если файл не существует или повреждён.
+        Returns empty list if file doesn't exist or is corrupted.
     """
     history_path = _get_history_path(campaign_dir)
 
@@ -52,7 +52,7 @@ def load_chat_history(campaign_dir: Path) -> List[Dict]:
         if not isinstance(data, list):
             return []
 
-        # Фильтруем только валидные записи
+        # Filter only valid entries
         messages = []
         for entry in data:
             if (
@@ -70,17 +70,17 @@ def load_chat_history(campaign_dir: Path) -> List[Dict]:
 
 
 def save_chat_history(campaign_dir: Path, messages: List[Dict]) -> None:
-    """Сохранить историю чата для кампании.
+    """Save chat history for campaign.
 
     Args:
-        campaign_dir: Директория кампании (где будет сохранён chat-history.json)
-        messages: Список сообщений, каждое должно содержать:
-            - role (str): Роль отправителя
-            - content (str): Текст сообщения
-            - timestamp (str): ISO 8601 временная метка
+        campaign_dir: Campaign directory (where chat-history.json will be saved)
+        messages: List of messages, each must contain:
+            - role (str): Sender role
+            - content (str): Message text
+            - timestamp (str): ISO 8601 timestamp
 
     Raises:
-        OSError: Если не удаётся записать файл
+        OSError: If file write fails
     """
     campaign_dir.mkdir(parents=True, exist_ok=True)
     history_path = _get_history_path(campaign_dir)
@@ -96,16 +96,16 @@ def append_message(
     content: str,
     timestamp: Optional[str] = None,
 ) -> List[Dict]:
-    """Добавить одно сообщение в историю чата.
+    """Append single message to chat history.
 
     Args:
-        campaign_dir: Директория кампании
-        role: Роль отправителя ("user", "assistant", "system")
-        content: Текст сообщения
-        timestamp: ISO 8601 временная метка (по умолчанию — текущее время UTC)
+        campaign_dir: Campaign directory
+        role: Sender role ("user", "assistant", "system")
+        content: Message text
+        timestamp: ISO 8601 timestamp (defaults to current UTC time)
 
     Returns:
-        List[Dict]: Обновлённый список сообщений
+        List[Dict]: Updated message list
     """
     if timestamp is None:
         timestamp = datetime.utcnow().isoformat() + "Z"
@@ -117,9 +117,9 @@ def append_message(
 
 
 def clear_chat_history(campaign_dir: Path) -> None:
-    """Очистить историю чата для кампании (сохраняет пустой список).
+    """Clear chat history for campaign (saves empty list).
 
     Args:
-        campaign_dir: Директория кампании
+        campaign_dir: Campaign directory
     """
     save_chat_history(campaign_dir, [])

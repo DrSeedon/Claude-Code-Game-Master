@@ -1,4 +1,4 @@
-"""AI провайдеры для DM системы."""
+"""AI providers for DM system."""
 
 from backend.providers.base import BaseProvider
 from backend.providers.anthropic_api import AnthropicAPIProvider

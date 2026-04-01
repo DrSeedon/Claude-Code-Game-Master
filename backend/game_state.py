@@ -1,7 +1,7 @@
-"""Кэш состояния игры для быстрых запросов статуса персонажа.
+"""Game state cache for fast character status queries.
 
-Использует WorldGraph для чтения данных из world.json и кэширует результаты
-для минимизации дисковых операций при частых запросах (например, для обновления sidebar).
+Uses WorldGraph to read data from world.json and caches results
+to minimize disk operations during frequent requests (e.g. sidebar updates).
 """
 
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
-# Добавляем lib/ в путь для импорта world_graph
+# Add lib/ to path for world_graph import
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 try:
@@ -18,55 +18,55 @@ except ImportError:
     WorldGraph = None
 
 
-# Глобальный кэш состояния персонажа
+# Global character state cache
 _character_cache: Optional[Dict] = None
 _cache_timestamp: Optional[datetime] = None
-_cache_ttl = timedelta(seconds=5)  # Кэш действителен 5 секунд
+_cache_ttl = timedelta(seconds=5)  # Cache valid for 5 seconds
 
 
 def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: bool = False) -> Dict:
-    """Получить текущий статус персонажа из world.json.
+    """Get current character status from world.json.
 
     Args:
-        campaign_dir: Путь к директории кампании (опционально)
-        force_refresh: Принудительно обновить кэш (игнорировать TTL)
+        campaign_dir: Path to campaign directory (optional)
+        force_refresh: Force cache refresh (ignore TTL)
 
     Returns:
-        Dict с ключами:
-            - hp (int): Текущее здоровье
-            - max_hp (int): Максимальное здоровье
-            - xp (int): Опыт
-            - gold (int): Золото (в базовых единицах - медяках)
-            - inventory (List[Dict]): Список предметов [{name, quantity}]
-            - name (str): Имя персонажа
-            - location (str): Текущая локация (если есть)
+        Dict with keys:
+            - hp (int): Current health
+            - max_hp (int): Maximum health
+            - xp (int): Experience
+            - gold (int): Gold (in base units - copper)
+            - inventory (List[Dict]): Item list [{name, quantity}]
+            - name (str): Character name
+            - location (str): Current location (if exists)
 
-        Или Dict с ключом error если произошла ошибка:
-            - error (str): Описание ошибки
+        Or Dict with error key if error occurred:
+            - error (str): Error description
     """
     global _character_cache, _cache_timestamp
 
-    # Проверяем кэш
+    # Check cache
     if not force_refresh and _character_cache is not None and _cache_timestamp is not None:
         if datetime.now() - _cache_timestamp < _cache_ttl:
             return _character_cache
 
-    # WorldGraph не доступен
+    # WorldGraph not available
     if WorldGraph is None:
         return {
             "error": "WorldGraph module not available"
         }
 
     try:
-        # Инициализируем WorldGraph
+        # Initialize WorldGraph
         if campaign_dir:
             graph = WorldGraph(campaign_dir=campaign_dir)
         else:
-            # Попытка найти активную кампанию
+            # Try to find active campaign
             try:
                 graph = WorldGraph()
             except SystemExit:
-                # _find_campaign_dir() вызывает sys.exit(1) при отсутствии активной кампании
+                # _find_campaign_dir() calls sys.exit(1) when no active campaign
                 return {
                     "error": "No active campaign found"
                 }
@@ -75,20 +75,20 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
                     "error": f"Failed to initialize WorldGraph: {str(e)}"
                 }
 
-        # Ищем узел игрока (первый узел типа "player")
+        # Find player node (first node of type "player")
         players = graph.list_nodes(node_type="player")
         if not players:
             return {
                 "error": "No player character found in world.json"
             }
 
-        # Берём первого игрока
+        # Take first player
         player = players[0]
         player_id = player.get("id")
         player_name = player.get("name", "Unknown")
         player_data = player.get("data", {})
 
-        # Извлекаем базовые характеристики (hp/xp могут быть объектами)
+        # Extract base stats (hp/xp can be objects)
         hp_raw = player_data.get("hp", 0)
         if isinstance(hp_raw, dict):
             hp = hp_raw.get("current", 0)
@@ -102,7 +102,7 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
 
         gold = player_data.get("money", player_data.get("gold", 0))
 
-        # Получаем инвентарь через рёбра "owns"
+        # Get inventory via "owns" edges
         inventory = []
         owned_edges = graph.get_edges(player_id, edge_type="owns", direction="out")
 
@@ -111,7 +111,7 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
             item_node = graph.get_node(item_id)
             if item_node:
                 item_name = item_node.get("name", item_id)
-                # Количество может храниться в данных ребра или узла
+                # Quantity can be stored in edge data or node
                 quantity = edge.get("data", {}).get("quantity", 1)
                 if "quantity" in item_node.get("data", {}):
                     quantity = item_node["data"]["quantity"]
@@ -121,7 +121,7 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
                     "quantity": quantity
                 })
 
-        # Получаем текущую локацию через рёбра "at"
+        # Get current location via "at" edges
         location = None
         location_edges = graph.get_edges(player_id, edge_type="at", direction="out")
         if location_edges:
@@ -130,7 +130,7 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
             if location_node:
                 location = location_node.get("name", location_id)
 
-        # Формируем результат
+        # Build result
         result = {
             "name": player_name,
             "hp": hp,
@@ -143,7 +143,7 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
         if location:
             result["location"] = location
 
-        # Сохраняем в кэш
+        # Save to cache
         _character_cache = result
         _cache_timestamp = datetime.now()
 
@@ -156,10 +156,10 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
 
 
 def invalidate_cache() -> None:
-    """Инвалидировать кэш состояния персонажа.
+    """Invalidate character state cache.
 
-    Вызывается после выполнения инструментов, которые изменяют состояние персонажа
-    (изменение HP, добавление/удаление предметов, получение опыта, трата золота).
+    Called after executing tools that modify character state
+    (HP changes, add/remove items, gain XP, spend gold).
     """
     global _character_cache, _cache_timestamp
     _character_cache = None
@@ -167,30 +167,30 @@ def invalidate_cache() -> None:
 
 
 def get_inventory(campaign_dir: Optional[Path] = None) -> List[Dict]:
-    """Получить только инвентарь персонажа.
+    """Get only character inventory.
 
     Args:
-        campaign_dir: Путь к директории кампании (опционально)
+        campaign_dir: Path to campaign directory (optional)
 
     Returns:
-        List[Dict]: Список предметов [{name, quantity}] или пустой список при ошибке
+        List[Dict]: Item list [{name, quantity}] or empty list on error
     """
     status = get_character_status(campaign_dir=campaign_dir)
     return status.get("inventory", [])
 
 
 def get_player_stats(campaign_dir: Optional[Path] = None) -> Dict:
-    """Получить только базовые характеристики персонажа (без инвентаря).
+    """Get only base character stats (without inventory).
 
     Args:
-        campaign_dir: Путь к директории кампании (опционально)
+        campaign_dir: Path to campaign directory (optional)
 
     Returns:
-        Dict с ключами: name, hp, max_hp, xp, gold, location (если есть)
+        Dict with keys: name, hp, max_hp, xp, gold, location (if exists)
     """
     status = get_character_status(campaign_dir=campaign_dir)
 
-    # Убираем inventory из результата
+    # Remove inventory from result
     result = {k: v for k, v in status.items() if k != "inventory"}
 
     return result
