@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CampaignList } from '../components/CampaignList';
 
 /**
  * Campaign data structure
@@ -19,11 +18,9 @@ interface Campaign {
  */
 export function Lobby() {
   const navigate = useNavigate();
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   // Handle campaign selection - navigate to game screen
   const handleCampaignSelect = useCallback((campaignId: string) => {
-    setSelectedCampaignId(campaignId);
     // Navigate to game screen with campaign ID in URL or state
     navigate(`/game?campaign=${campaignId}`);
   }, [navigate]);

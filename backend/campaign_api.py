@@ -113,6 +113,8 @@ def create_campaign(
     description: str = "",
     modules: Optional[List[str]] = None,
     narrator_style: str = "",
+    rules: str = "",
+    character: Optional[dict] = None,
 ) -> Dict:
     """Create new campaign.
 
@@ -125,6 +127,8 @@ def create_campaign(
         description: Brief campaign description
         modules: List of active modules
         narrator_style: Narrator style
+        rules: Campaign rules template
+        character: Character data for player node creation
 
     Returns:
         Dict with created campaign info or error:
@@ -187,9 +191,33 @@ def create_campaign(
     session_log = campaign_dir / "session-log.md"
     session_log.write_text(f"# Session Log: {safe_name}\n", encoding="utf-8")
 
+    # Create player node if character data provided
+    if character:
+        from lib.world_graph import WorldGraph
+
+        wg = WorldGraph(world_file)
+
+        # Create player node with character data
+        player_id = f"player-{character.get('name', 'hero').lower().replace(' ', '-')}"
+        wg.add_node(
+            id=player_id,
+            type="player",
+            name=character.get("name", "Hero"),
+            class_=character.get("class", ""),
+            race=character.get("race", ""),
+            level=character.get("level", 1),
+            hp=10,
+            max_hp=10,
+            xp=0,
+            gold=0,
+            inventory=[],
+        )
+        wg.save()
+
     return {
         "success": True,
         "name": safe_name,
+        "id": safe_name,
         "genre": genre,
         "tone": tone,
         "description": description,

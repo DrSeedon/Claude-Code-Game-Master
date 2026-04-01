@@ -116,6 +116,8 @@ class CreateCampaignRequest(BaseModel):
     description: Optional[str] = ""
     modules: Optional[List[str]] = None
     narrator_style: Optional[str] = ""
+    rules: Optional[str] = ""
+    character: Optional[dict] = None
 
 
 # ─────────────────────────── Campaign API ──────────────────────────────────────
@@ -147,6 +149,8 @@ async def api_create_campaign(body: CreateCampaignRequest):
         description=body.description or "",
         modules=body.modules,
         narrator_style=body.narrator_style or "",
+        rules=body.rules or "",
+        character=body.character,
     )
 
     if not result.get("success"):

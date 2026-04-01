@@ -6,6 +6,16 @@ import { RulesSelector } from '../components/WizardSteps/RulesSelector';
 import { CharacterCreator } from '../components/WizardSteps/CharacterCreator';
 
 /**
+ * Character data structure
+ */
+interface CharacterData {
+  name: string;
+  class: string;
+  race: string;
+  level?: number;
+}
+
+/**
  * Campaign creation data
  */
 interface CampaignData {
@@ -13,11 +23,7 @@ interface CampaignData {
   modules: string[];
   narrator: string;
   rules: string;
-  character: {
-    name: string;
-    class: string;
-    race: string;
-  };
+  character: CharacterData;
 }
 
 /**
@@ -89,7 +95,7 @@ export function Wizard() {
   }, []);
 
   // Handle character creation and campaign submission
-  const handleCharacterComplete = useCallback(async (character) => {
+  const handleCharacterComplete = useCallback(async (character: CharacterData) => {
     try {
       setIsSubmitting(true);
       setError(null);
@@ -98,7 +104,7 @@ export function Wizard() {
       const finalCampaignData = {
         name: `${character.name}'s Campaign`,
         modules: campaignData.modules || [],
-        narrator: campaignData.narrator || 'default',
+        narrator_style: campaignData.narrator || 'default',
         rules: campaignData.rules || 'default',
         character
       };
@@ -133,9 +139,6 @@ export function Wizard() {
       setCurrentStep(currentStep - 1);
     }
   }, [currentStep]);
-
-  // Get current step component
-  const CurrentStepComponent = steps[currentStep].component;
 
   return (
     <div className="wizard-page">
