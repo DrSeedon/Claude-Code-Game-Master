@@ -29,19 +29,34 @@ async def startup_event():
     """Initialize application on startup."""
     print(f"🚀 DM Game Master backend starting...")
 
-    # Try to load configuration, but don't fail if API key is missing
-    # (API key will be validated when actually using the Anthropic API)
+    # Load configuration (теперь не требует API key для SDK провайдера)
     try:
         config = get_config()
         print(f"📍 Server: {config.backend_host}:{config.backend_port}")
         print(f"🤖 Model: {config.model_name}")
+        print(f"🔌 AI Provider: {config.ai_provider}")
+
+        # Показываем информацию о выбранном провайдере
+        if config.ai_provider == "api":
+            if config.anthropic_api_key:
+                print(f"✅ Anthropic API: ключ настроен")
+            else:
+                print(f"⚠️  Anthropic API: ключ отсутствует")
+        elif config.ai_provider == "sdk":
+            print(f"🎫 Claude SDK: работа через подписку")
+        else:  # auto
+            if config.anthropic_api_key:
+                print(f"🔑 Автовыбор: Anthropic API (найден ключ)")
+            else:
+                print(f"🎫 Автовыбор: Claude SDK (ключ не найден)")
+
         if config.campaign_name:
             print(f"🎲 Active campaign: {config.campaign_name}")
         else:
             print(f"⚠️  No active campaign loaded")
     except ValueError as e:
-        print(f"⚠️  Configuration warning: {e}")
-        print(f"⚠️  Server will start but AI features will be unavailable until configured")
+        print(f"⚠️  Configuration error: {e}")
+        print(f"⚠️  Server will start but AI features may be unavailable")
 
 
 @app.get("/api/health")
@@ -129,11 +144,11 @@ async def game_websocket(websocket: WebSocket):
     try:
         config = get_config()
         system_prompt = load_system_prompt()
-        print(f"✅ WebSocket connected - API key configured, system prompt loaded ({len(system_prompt)} chars)")
+        print(f"✅ WebSocket connected - system prompt loaded ({len(system_prompt)} chars)")
+        print(f"🔌 AI Provider: {config.ai_provider}")
     except ValueError as e:
-        # No API key configured - send error message and close connection
+        # Configuration error - send error message and close connection
         await websocket.send_text(f"❌ Configuration error: {str(e)}")
-        await websocket.send_text("Please set ANTHROPIC_API_KEY in .env file")
         await websocket.close()
         return
 
@@ -148,9 +163,11 @@ async def game_websocket(websocket: WebSocket):
                 async for text_chunk in process_message(
                     user_message=user_message,
                     conversation_history=conversation_history,
+                    provider_type=config.ai_provider,
                     api_key=config.anthropic_api_key,
                     model_name=config.model_name,
-                    system_prompt=system_prompt
+                    system_prompt=system_prompt,
+                    project_root=config.project_root
                 ):
                     # Stream each text chunk to frontend
                     await websocket.send_text(text_chunk)

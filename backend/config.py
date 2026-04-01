@@ -14,13 +14,14 @@ load_dotenv()
 class Config:
     """Application configuration loaded from environment variables."""
 
-    # Anthropic API settings (required)
-    anthropic_api_key: str
-
-    # Project paths (required)
+    # Project paths (required) - MUST be first (no defaults)
     project_root: Path
     world_state_base: Path
     campaigns_dir: Path
+
+    # AI Provider settings (optional) - with defaults
+    ai_provider: str = "auto"  # "auto", "api", "sdk"
+    anthropic_api_key: Optional[str] = None  # Required only for "api" provider
 
     # Anthropic API settings (optional)
     model_name: str = "claude-3-5-sonnet-20241022"
@@ -63,14 +64,17 @@ def get_config() -> Config:
         Config: Application configuration
 
     Raises:
-        ValueError: If ANTHROPIC_API_KEY environment variable is not set
+        ValueError: If AI_PROVIDER=api but ANTHROPIC_API_KEY is not set
     """
-    # Validate required environment variables
+    # Определяем тип AI провайдера
+    ai_provider = os.environ.get("AI_PROVIDER", "auto")
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+
+    # Валидация: если явно выбран API провайдер, ключ обязателен
+    if ai_provider == "api" and not api_key:
         raise ValueError(
-            "ANTHROPIC_API_KEY environment variable is required. "
-            "Please set it in your .env file or environment."
+            "AI_PROVIDER=api требует ANTHROPIC_API_KEY в .env файле.\n"
+            "Или используйте AI_PROVIDER=sdk для работы через подписку."
         )
 
     # Get project paths
@@ -87,7 +91,8 @@ def get_config() -> Config:
 
     # Build config
     config = Config(
-        anthropic_api_key=api_key,
+        ai_provider=ai_provider,
+        anthropic_api_key=api_key,  # Может быть None для SDK провайдера
         project_root=project_root,
         world_state_base=world_state_base,
         campaigns_dir=campaigns_dir,
