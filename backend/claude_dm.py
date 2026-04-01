@@ -117,18 +117,18 @@ async def process_message(
     """
     Process user message through DM agent with tool calling loop.
 
-    Использует фабрику провайдеров для автоматического выбора между:
-    - Anthropic API (если есть ANTHROPIC_API_KEY)
-    - Claude SDK (если есть подписка, не требует API ключ)
+    Uses provider factory for automatic selection between:
+    - Anthropic API (if ANTHROPIC_API_KEY is present)
+    - Claude SDK (if subscription available, no API key required)
 
     Args:
         user_message: Player's input message
         conversation_history: List of conversation messages (modified in-place)
-        provider_type: Тип провайдера ("auto", "api", "sdk")
-        api_key: Anthropic API key (опционально, берется из env для "auto")
+        provider_type: Provider type ("auto", "api", "sdk")
+        api_key: Anthropic API key (optional, taken from env for "auto")
         model_name: Claude model name to use
         system_prompt: System prompt (loaded from load_system_prompt if None)
-        project_root: Project root directory (нужен для SDK провайдера)
+        project_root: Project root directory (required for SDK provider)
 
     Yields:
         Text chunks from Claude's streaming response
@@ -137,21 +137,21 @@ async def process_message(
     if system_prompt is None:
         system_prompt = load_system_prompt()
 
-    # Получаем project_root если не передан
+    # Get project_root if not provided
     if project_root is None:
         project_root = Path(__file__).parent.parent
 
-    # Создаем провайдер через фабрику
+    # Create provider via factory
     provider = create_provider(
         provider_type=provider_type,
         api_key=api_key,
         project_root=project_root
     )
 
-    # Получаем tool schemas
+    # Get tool schemas
     tools = get_tool_schemas()
 
-    # Делегируем обработку сообщения провайдеру
+    # Delegate message processing to provider
     async for text_chunk in provider.process_message(
         user_message=user_message,
         conversation_history=conversation_history,

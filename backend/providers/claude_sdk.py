@@ -1,4 +1,4 @@
-"""Провайдер через Claude Code SDK (подписка, без API ключа)."""
+"""Provider via Claude Code SDK (subscription, no API key required)."""
 
 import asyncio
 import json
@@ -79,7 +79,7 @@ class ClaudeSDKProvider(BaseProvider):
 
     def __init__(self, project_root: Path, model_name: str = "claude-sonnet-4-6"):
         if not SDK_AVAILABLE:
-            raise ImportError("claude-code-sdk не установлен: pip install claude-code-sdk")
+            raise ImportError("claude-code-sdk not installed: pip install claude-code-sdk")
         self.project_root = project_root
         self.model_name = model_name
 
@@ -119,13 +119,13 @@ class ClaudeSDKProvider(BaseProvider):
                     prefix = "❌" if item.get("is_error") else "✅"
                     yield f"\n{prefix} {item['content'][:300]}\n"
                 elif item["type"] == "error":
-                    yield f"\n\n[Ошибка: {item['content']}]"
+                    yield f"\n\n[Error: {item['content']}]"
         except Exception as e:
             logger.error(f"SDK streaming error: {e}", exc_info=True)
-            yield f"\n\n[Ошибка: {str(e)}]"
+            yield f"\n\n[Error: {str(e)}]"
 
         thread.join(timeout=5)
         conversation_history.append({"role": "user", "content": user_message})
 
     def get_provider_name(self) -> str:
-        return "Claude Code SDK (подписка)"
+        return "Claude Code SDK (subscription)"

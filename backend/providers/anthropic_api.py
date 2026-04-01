@@ -1,4 +1,4 @@
-"""Провайдер для Anthropic API (требует ANTHROPIC_API_KEY)."""
+"""Provider for Anthropic API (requires ANTHROPIC_API_KEY)."""
 
 import json
 from typing import AsyncGenerator, List, Dict, Any
@@ -8,18 +8,18 @@ from backend.tools_registry import execute_tool
 
 
 class AnthropicAPIProvider(BaseProvider):
-    """AI провайдер через Anthropic REST API.
+    """AI provider via Anthropic REST API.
 
-    Требует:
-    - ANTHROPIC_API_KEY в environment переменных
-    - Использует AsyncAnthropic клиент для стриминга
-    - Поддерживает tool calling через API
+    Requirements:
+    - ANTHROPIC_API_KEY in environment variables
+    - Uses AsyncAnthropic client for streaming
+    - Supports tool calling via API
 
-    Этот провайдер подходит для пользователей с API ключами от Anthropic.
+    This provider is suitable for users with Anthropic API keys.
     """
 
     def __init__(self, api_key: str):
-        """Инициализация провайдера.
+        """Initialize provider.
 
         Args:
             api_key: Anthropic API key
@@ -35,39 +35,39 @@ class AnthropicAPIProvider(BaseProvider):
         model_name: str,
         tools: List[Dict[str, Any]]
     ) -> AsyncGenerator[str, None]:
-        """Обрабатывает сообщение через Anthropic API с tool calling loop.
+        """Process message via Anthropic API with tool calling loop.
 
-        Алгоритм:
-        1. Добавляет user_message в историю
-        2. Стримит ответ от Claude
-        3. Если stop_reason == "tool_use" — выполняет tools
-        4. Добавляет результаты в историю и повторяет с шага 2
-        5. Иначе — завершает
+        Algorithm:
+        1. Add user_message to history
+        2. Stream response from Claude
+        3. If stop_reason == "tool_use" — execute tools
+        4. Add results to history and repeat from step 2
+        5. Otherwise — complete
 
         Args:
-            user_message: Сообщение от игрока
-            conversation_history: История разговора (модифицируется)
-            system_prompt: Системный промпт DM
-            model_name: Имя модели Claude
-            tools: Tool schemas в формате Anthropic
+            user_message: Message from player
+            conversation_history: Conversation history (modified in-place)
+            system_prompt: DM system prompt
+            model_name: Claude model name
+            tools: Tool schemas in Anthropic format
 
         Yields:
-            Текстовые чанки стриминг-ответа
+            Text chunks from streaming response
         """
-        # Добавляем сообщение пользователя в историю
+        # Add user message to history
         conversation_history.append({
             "role": "user",
             "content": user_message
         })
 
-        # Tool calling loop: продолжаем до финального текстового ответа
-        max_iterations = 10  # Защита от бесконечных циклов
+        # Tool calling loop: continue until final text response
+        max_iterations = 10  # Protection against infinite loops
         iteration = 0
 
         while iteration < max_iterations:
             iteration += 1
 
-            # Стримим ответ от Claude
+            # Stream response from Claude
             async with self.client.messages.stream(
                 model=model_name,
                 max_tokens=4096,
@@ -75,34 +75,34 @@ class AnthropicAPIProvider(BaseProvider):
                 messages=conversation_history,
                 tools=tools
             ) as stream:
-                # Отдаем стриминг-текст вызывающему коду
+                # Yield streaming text to caller
                 async for text in stream.text_stream:
                     yield text
 
-                # Получаем финальное сообщение для проверки tool calls
+                # Get final message to check for tool calls
                 final_message = await stream.get_final_message()
 
-                # Добавляем ответ ассистента в историю
+                # Add assistant response to history
                 conversation_history.append({
                     "role": "assistant",
                     "content": final_message.content
                 })
 
-                # Проверяем, запросил ли Claude выполнение tools
+                # Check if Claude requested tool execution
                 if final_message.stop_reason == "tool_use":
-                    # Выполняем все запрошенные tools
+                    # Execute all requested tools
                     tool_results = []
 
                     for block in final_message.content:
                         if block.type == "tool_use":
                             try:
-                                # Выполняем tool через tools_registry
+                                # Execute tool via tools_registry
                                 result = execute_tool(block.name, block.input)
 
-                                # Конвертируем результат в строку для Claude
+                                # Convert result to string for Claude
                                 if isinstance(result, dict):
                                     if "error" in result:
-                                        # Tool вернул ошибку
+                                        # Tool returned error
                                         tool_results.append({
                                             "type": "tool_result",
                                             "tool_use_id": block.id,
@@ -110,7 +110,7 @@ class AnthropicAPIProvider(BaseProvider):
                                             "is_error": True
                                         })
                                     else:
-                                        # Tool выполнен успешно
+                                        # Tool executed successfully
                                         result_str = (
                                             json.dumps(result["result"])
                                             if isinstance(result.get("result"), dict)
@@ -122,7 +122,7 @@ class AnthropicAPIProvider(BaseProvider):
                                             "content": result_str
                                         })
                                 else:
-                                    # Fallback для не-dict результатов
+                                    # Fallback for non-dict results
                                     tool_results.append({
                                         "type": "tool_result",
                                         "tool_use_id": block.id,
@@ -130,7 +130,7 @@ class AnthropicAPIProvider(BaseProvider):
                                     })
 
                             except Exception as e:
-                                # Возвращаем ошибку Claude, чтобы он объяснил игроку
+                                # Return error to Claude so it can explain to player
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": block.id,
@@ -138,23 +138,23 @@ class AnthropicAPIProvider(BaseProvider):
                                     "is_error": True
                                 })
 
-                    # Добавляем результаты tools в историю
+                    # Add tool results to history
                     conversation_history.append({
                         "role": "user",
                         "content": tool_results
                     })
 
-                    # Продолжаем цикл — Claude обработает результаты в следующей итерации
-                    # Не возвращаем текст здесь, просто продолжаем к следующему API вызову
+                    # Continue loop — Claude will process results in next iteration
+                    # Don't return text here, just continue to next API call
 
                 else:
-                    # Нет tool use — финальный ответ получен, выходим из цикла
+                    # No tool use — final response received, exit loop
                     break
 
-        # Если достигли максимума итераций, выдаем предупреждение
+        # If reached max iterations, issue warning
         if iteration >= max_iterations:
-            yield "\n\n[Предупреждение: Достигнут лимит итераций tool calling]"
+            yield "\n\n[Warning: Reached tool calling iteration limit]"
 
     def get_provider_name(self) -> str:
-        """Возвращает имя провайдера."""
+        """Return provider name."""
         return "Anthropic API"

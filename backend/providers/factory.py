@@ -1,4 +1,4 @@
-"""Фабрика для создания AI провайдера на основе доступных credentials."""
+"""Factory for creating AI provider based on available credentials."""
 
 import os
 import logging
@@ -16,66 +16,66 @@ def create_provider(
     api_key: Optional[str] = None,
     project_root: Optional[Path] = None
 ) -> BaseProvider:
-    """Создает подходящий AI провайдер на основе доступных credentials.
+    """Create appropriate AI provider based on available credentials.
 
-    Логика выбора:
-    1. Если provider_type == "api" → Anthropic API (требует api_key)
-    2. Если provider_type == "sdk" → Claude SDK (требует подписку)
-    3. Если provider_type == "auto" (по умолчанию):
-       - Если ANTHROPIC_API_KEY есть в env → Anthropic API
-       - Иначе → Claude SDK (подписка)
+    Selection logic:
+    1. If provider_type == "api" → Anthropic API (requires api_key)
+    2. If provider_type == "sdk" → Claude SDK (requires subscription)
+    3. If provider_type == "auto" (default):
+       - If ANTHROPIC_API_KEY exists in env → Anthropic API
+       - Otherwise → Claude SDK (subscription)
 
     Args:
-        provider_type: Тип провайдера ("auto", "api", "sdk")
-        api_key: Anthropic API key (опционально, берется из env если не указан)
-        project_root: Корень проекта для SDK провайдера (нужен для cwd)
+        provider_type: Provider type ("auto", "api", "sdk")
+        api_key: Anthropic API key (optional, taken from env if not specified)
+        project_root: Project root for SDK provider (needed for cwd)
 
     Returns:
-        Экземпляр BaseProvider (AnthropicAPIProvider или ClaudeSDKProvider)
+        BaseProvider instance (AnthropicAPIProvider or ClaudeSDKProvider)
 
     Raises:
-        ValueError: Если запрошенный провайдер недоступен
+        ValueError: If requested provider is unavailable
     """
-    # Получаем API key из env если не передан
+    # Get API key from env if not provided
     if api_key is None:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
 
-    # Определяем project_root если не передан
+    # Determine project_root if not provided
     if project_root is None:
-        # По умолчанию - родительская директория backend/
+        # Default - parent directory of backend/
         project_root = Path(__file__).parent.parent.parent.absolute()
 
-    # Автоматический выбор провайдера
+    # Automatic provider selection
     if provider_type == "auto":
         if api_key:
-            logger.info("🔑 Автовыбор провайдера: Anthropic API (найден ANTHROPIC_API_KEY)")
+            logger.info("🔑 Auto-select provider: Anthropic API (found ANTHROPIC_API_KEY)")
             provider_type = "api"
         else:
-            logger.info("🎫 Автовыбор провайдера: Claude SDK (подписка)")
+            logger.info("🎫 Auto-select provider: Claude SDK (subscription)")
             provider_type = "sdk"
 
-    # Создаем провайдер API
+    # Create API provider
     if provider_type == "api":
         if not api_key:
             raise ValueError(
-                "Anthropic API провайдер требует ANTHROPIC_API_KEY. "
-                "Установите в .env файле или используйте AI_PROVIDER=sdk"
+                "Anthropic API provider requires ANTHROPIC_API_KEY. "
+                "Set in .env file or use AI_PROVIDER=sdk"
             )
-        logger.info("✅ Используем провайдер: Anthropic API")
+        logger.info("✅ Using provider: Anthropic API")
         return AnthropicAPIProvider(api_key=api_key)
 
-    # Создаем провайдер SDK
+    # Create SDK provider
     elif provider_type == "sdk":
         if not SDK_AVAILABLE:
             raise ValueError(
-                "Claude SDK не установлен. Установите с помощью: pip install claude-agent-sdk\n"
-                "Или используйте AI_PROVIDER=api с ANTHROPIC_API_KEY"
+                "Claude SDK not installed. Install with: pip install claude-agent-sdk\n"
+                "Or use AI_PROVIDER=api with ANTHROPIC_API_KEY"
             )
-        logger.info("✅ Используем провайдер: Claude SDK (подписка)")
+        logger.info("✅ Using provider: Claude SDK (subscription)")
         return ClaudeSDKProvider(project_root=project_root)
 
     else:
         raise ValueError(
-            f"Неизвестный тип провайдера: {provider_type}. "
-            f"Доступные: 'auto', 'api', 'sdk'"
+            f"Unknown provider type: {provider_type}. "
+            f"Available: 'auto', 'api', 'sdk'"
         )
