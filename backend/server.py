@@ -1,5 +1,8 @@
 """FastAPI server for DM Game Master web interface."""
 
+import json
+import re
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -190,6 +193,160 @@ async def api_delete_campaign(name: str):
         error_msg = result.get("error", "Ошибка удаления")
         status_code = 409 if "активную кампанию" in error_msg else 404
         raise HTTPException(status_code=status_code, detail=error_msg)
+
+    return result
+
+
+# ─────────────────────────── Вспомогательные функции для шаблонов ─────────────
+
+def _parse_md_frontmatter(path: Path) -> dict:
+    """Извлечь поля id/name/description/genres из markdown-файла стилей.
+
+    Формат файла:
+        ## id
+        some-id
+        ## name
+        Some Name
+        ## description
+        Some description text...
+
+    Args:
+        path: Путь к .md файлу
+
+    Returns:
+        dict: Словарь с полями id, name, description и genres (list)
+    """
+    text = path.read_text(encoding="utf-8")
+    result: dict = {"id": path.stem, "name": path.stem, "description": "", "genres": []}
+
+    # Разбиваем на секции вида "## key\nvalue"
+    sections = re.split(r'^## ', text, flags=re.MULTILINE)
+    for section in sections:
+        lines = section.strip().splitlines()
+        if not lines:
+            continue
+        key = lines[0].strip().lower()
+        value = "\n".join(lines[1:]).strip()
+        if key == "id":
+            result["id"] = value
+        elif key == "name":
+            result["name"] = value
+        elif key == "description":
+            result["description"] = value
+        elif key == "genres":
+            result["genres"] = [g.strip() for g in value.replace(",", " ").split() if g.strip()]
+
+    return result
+
+
+def _get_modules_dir() -> Path:
+    """Получить путь к директории модулей относительно корня проекта."""
+    config = get_config()
+    return Path(config.project_root) / ".claude" / "additional" / "modules"
+
+
+def _get_narrator_styles_dir() -> Path:
+    """Получить путь к директории нарраторских стилей."""
+    config = get_config()
+    return Path(config.project_root) / ".claude" / "additional" / "narrator-styles"
+
+
+def _get_campaign_rules_templates_dir() -> Path:
+    """Получить путь к директории шаблонов правил кампании."""
+    config = get_config()
+    return Path(config.project_root) / ".claude" / "additional" / "campaign-rules-templates"
+
+
+# ─────────────────────────── Template API ──────────────────────────────────────
+
+@app.get("/api/templates/modules")
+async def api_get_template_modules():
+    """Получить список доступных игровых модулей.
+
+    Читает module.json из каждой поддиректории modules/ и возвращает
+    метаданные: id, name, description, category, genre_tags, tags,
+    enabled_by_default, features.
+
+    Returns:
+        list: Список модулей с полями из module.json
+    """
+    modules_dir = _get_modules_dir()
+    result = []
+
+    if not modules_dir.exists():
+        return result
+
+    for module_path in sorted(modules_dir.iterdir()):
+        if not module_path.is_dir():
+            continue
+        manifest = module_path / "module.json"
+        if not manifest.exists():
+            continue
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            result.append({
+                "id": data.get("id", module_path.name),
+                "name": data.get("name", module_path.name),
+                "description": data.get("description", ""),
+                "category": data.get("category", ""),
+                "genre_tags": data.get("genre_tags", []),
+                "tags": data.get("tags", []),
+                "enabled_by_default": data.get("enabled_by_default", False),
+                "features": data.get("features", []),
+            })
+        except (json.JSONDecodeError, OSError):
+            # Пропускаем некорректные модули
+            continue
+
+    return result
+
+
+@app.get("/api/templates/narrators")
+async def api_get_template_narrators():
+    """Получить список доступных стилей нарратора.
+
+    Читает .md файлы из narrator-styles/ и извлекает секции
+    id, name, description, genres.
+
+    Returns:
+        list: Список стилей нарратора с полями id, name, description, genres
+    """
+    styles_dir = _get_narrator_styles_dir()
+    result = []
+
+    if not styles_dir.exists():
+        return result
+
+    for style_path in sorted(styles_dir.glob("*.md")):
+        try:
+            result.append(_parse_md_frontmatter(style_path))
+        except OSError:
+            continue
+
+    return result
+
+
+@app.get("/api/templates/rules")
+async def api_get_template_rules():
+    """Получить список шаблонов правил кампании.
+
+    Читает .md файлы из campaign-rules-templates/ и извлекает секции
+    id, name, description, genres.
+
+    Returns:
+        list: Список шаблонов правил с полями id, name, description, genres
+    """
+    rules_dir = _get_campaign_rules_templates_dir()
+    result = []
+
+    if not rules_dir.exists():
+        return result
+
+    for rule_path in sorted(rules_dir.glob("*.md")):
+        try:
+            result.append(_parse_md_frontmatter(rule_path))
+        except OSError:
+            continue
 
     return result
 
