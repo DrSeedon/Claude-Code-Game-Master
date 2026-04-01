@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Lobby } from './pages/Lobby';
 import { Game } from './pages/Game';
 import { Wizard } from './pages/Wizard';
-import { Dashboard } from './screens/Dashboard';
+import { Dashboard } from './pages/Dashboard';
 
 /**
  * Main application component with routing
