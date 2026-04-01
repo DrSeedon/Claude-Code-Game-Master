@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Lobby } from './screens/Lobby';
+import { Lobby } from './pages/Lobby';
 import { Game } from './screens/Game';
 import { Wizard } from './screens/Wizard';
 import { Dashboard } from './screens/Dashboard';
