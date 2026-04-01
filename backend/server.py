@@ -1,11 +1,19 @@
 """FastAPI server for DM Game Master web interface."""
 
-from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
 
 from backend.config import get_config
 from backend.game_state import get_character_status
 from backend.claude_dm import process_message, load_system_prompt
+from backend.campaign_api import (
+    list_campaigns,
+    create_campaign,
+    activate_campaign,
+    delete_campaign,
+)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -90,6 +98,100 @@ async def get_status():
     """
     status = get_character_status()
     return status
+
+
+# ─────────────────────────── Pydantic схемы ────────────────────────────────────
+
+class CreateCampaignRequest(BaseModel):
+    """Тело запроса для создания кампании."""
+
+    name: str
+    genre: Optional[str] = ""
+    tone: Optional[str] = ""
+    description: Optional[str] = ""
+    modules: Optional[List[str]] = None
+    narrator_style: Optional[str] = ""
+
+
+# ─────────────────────────── Campaign API ──────────────────────────────────────
+
+@app.get("/api/campaigns")
+async def api_list_campaigns():
+    """Получить список всех кампаний.
+
+    Returns:
+        list: Список кампаний с полями name, active, created_at, genre, tone, description
+    """
+    return list_campaigns()
+
+
+@app.post("/api/campaigns", status_code=201)
+async def api_create_campaign(body: CreateCampaignRequest):
+    """Создать новую кампанию.
+
+    Args:
+        body: Данные новой кампании (name обязательно)
+
+    Returns:
+        dict: Информация о созданной кампании или ошибка 400/409
+    """
+    result = create_campaign(
+        name=body.name,
+        genre=body.genre or "",
+        tone=body.tone or "",
+        description=body.description or "",
+        modules=body.modules,
+        narrator_style=body.narrator_style or "",
+    )
+
+    if not result.get("success"):
+        error_msg = result.get("error", "Ошибка создания кампании")
+        # Кампания уже существует → 409 Conflict, иначе 400 Bad Request
+        status_code = 409 if "уже существует" in error_msg else 400
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
+    return result
+
+
+@app.post("/api/campaigns/{name}/activate")
+async def api_activate_campaign(name: str):
+    """Активировать кампанию по имени.
+
+    Args:
+        name: Имя кампании для активации
+
+    Returns:
+        dict: {"success": true, "name": "..."}  или ошибка 404
+    """
+    result = activate_campaign(name)
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("error", f"Кампания '{name}' не найдена"),
+        )
+
+    return result
+
+
+@app.delete("/api/campaigns/{name}", status_code=200)
+async def api_delete_campaign(name: str):
+    """Удалить кампанию и все её данные.
+
+    Args:
+        name: Имя кампании для удаления
+
+    Returns:
+        dict: {"success": true}  или ошибка 404/409
+    """
+    result = delete_campaign(name)
+
+    if not result.get("success"):
+        error_msg = result.get("error", "Ошибка удаления")
+        status_code = 409 if "активную кампанию" in error_msg else 404
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
+    return result
 
 
 @app.get("/")
