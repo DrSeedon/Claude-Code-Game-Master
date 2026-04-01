@@ -1,13 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Chat } from './components/Chat'
 import './index.css'
 
-// Временный компонент-заглушка до создания App.tsx
+// Временный компонент-обёртка для тестирования Chat до создания App.tsx
 function App() {
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>DM Game Master</h1>
-      <p>Web interface загружается...</p>
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      width: '100vw',
+      margin: 0,
+      padding: 0
+    }}>
+      <Chat />
     </div>
   )
 }
