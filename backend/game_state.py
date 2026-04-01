@@ -88,11 +88,19 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
         player_name = player.get("name", "Unknown")
         player_data = player.get("data", {})
 
-        # Извлекаем базовые характеристики
-        hp = player_data.get("hp", 0)
-        max_hp = player_data.get("max_hp", 0)
-        xp = player_data.get("xp", 0)
-        gold = player_data.get("gold", 0)
+        # Извлекаем базовые характеристики (hp/xp могут быть объектами)
+        hp_raw = player_data.get("hp", 0)
+        if isinstance(hp_raw, dict):
+            hp = hp_raw.get("current", 0)
+            max_hp = hp_raw.get("max", 0)
+        else:
+            hp = hp_raw
+            max_hp = player_data.get("max_hp", hp)
+
+        xp_raw = player_data.get("xp", 0)
+        xp = xp_raw.get("current", 0) if isinstance(xp_raw, dict) else xp_raw
+
+        gold = player_data.get("money", player_data.get("gold", 0))
 
         # Получаем инвентарь через рёбра "owns"
         inventory = []
