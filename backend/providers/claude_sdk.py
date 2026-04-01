@@ -1,5 +1,6 @@
 """Провайдер через Claude Code SDK (подписка, без API ключа)."""
 
+import asyncio
 import logging
 from typing import AsyncGenerator, List, Dict, Any
 from pathlib import Path
@@ -12,8 +13,7 @@ SDK_AVAILABLE = False
 try:
     from claude_code_sdk import query, ClaudeCodeOptions, AssistantMessage, TextBlock, ResultMessage, SystemMessage
 
-    # Patch SDK to handle unknown message types (rate_limit_event, usage_event, etc.)
-    # Without this, unknown types crash the response stream entirely.
+    # Patch SDK to handle unknown message types (rate_limit_event etc.)
     import claude_code_sdk._internal.message_parser as _parser
     import claude_code_sdk._internal.client as _client
 
@@ -35,6 +35,20 @@ try:
     SDK_AVAILABLE = True
 except ImportError:
     pass
+
+
+async def _collect_sdk_response(prompt: str, options) -> str:
+    """Run SDK query in isolated context, collect full response text."""
+    parts = []
+    async for msg in query(prompt=prompt, options=options):
+        if isinstance(msg, AssistantMessage):
+            for block in msg.content:
+                if isinstance(block, TextBlock) and block.text:
+                    parts.append(block.text)
+        elif isinstance(msg, ResultMessage):
+            if msg.is_error and msg.result:
+                parts.append(f"\n\n[Ошибка: {msg.result}]")
+    return "".join(parts)
 
 
 class ClaudeSDKProvider(BaseProvider):
@@ -62,14 +76,16 @@ class ClaudeSDKProvider(BaseProvider):
         )
 
         try:
-            async for msg in query(prompt=user_message, options=options):
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock) and block.text:
-                            yield block.text
-                elif isinstance(msg, ResultMessage):
-                    if msg.is_error and msg.result:
-                        yield f"\n\n[Ошибка: {msg.result}]"
+            # Run SDK in separate thread to avoid TaskGroup scope conflicts with uvicorn
+            loop = asyncio.get_event_loop()
+            response_text = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(_collect_sdk_response(user_message, options))
+            )
+            if response_text:
+                yield response_text
+            else:
+                yield "[DM молчит... попробуй ещё раз]"
         except Exception as e:
             logger.error(f"Claude SDK error: {e}", exc_info=True)
             yield f"\n\n[Ошибка SDK: {str(e)}]"
