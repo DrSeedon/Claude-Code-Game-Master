@@ -18,6 +18,8 @@ eggs/
 
 # Package Managers
 .pnpm-store/
+frontend/node_modules/
+frontend/dist/
 
 # Campaign Data (Personal/Runtime)
 world-state/campaigns/*
