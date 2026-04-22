@@ -723,9 +723,16 @@ class WorldGraph:
         node = w["nodes"][pid]
         d = node.get("data", {})
         current = d.get(stat, 0)
-        d[stat] = current + delta
-        if stat == "hp" and "hp_max" in d:
-            d["hp"] = max(0, min(d["hp"], d["hp_max"]))
+        if isinstance(current, dict) and "current" in current:
+            new_current = current["current"] + delta
+            if "max" in current:
+                new_current = max(0, min(new_current, current["max"]))
+            current["current"] = new_current
+            d[stat] = current
+        else:
+            d[stat] = current + delta
+            if stat == "hp" and "hp_max" in d:
+                d["hp"] = max(0, min(d["hp"], d["hp_max"]))
         node["data"] = d
         return self._save(w)
 

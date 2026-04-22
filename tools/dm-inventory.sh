@@ -45,6 +45,7 @@ case "$ACTION" in
         fi
         [ -n "$GOLD" ] && $WG player-gold "$GOLD"
         [ -n "$XP"   ] && $WG player-xp   "$XP"
+        true
         ;;
 
     remove)
