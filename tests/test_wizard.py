@@ -169,35 +169,39 @@ class TestCampaignCreation:
 
 
 class TestWizardMCPTools:
-    def test_show_choices_output(self, tmp_path):
-        output_file = tmp_path / "output.jsonl"
-        with patch.dict("os.environ", {"WIZARD_OUTPUT_FILE": str(output_file)}):
-            # Re-import to pick up env
-            import importlib
-            import backend.wizard_mcp as wm
-            importlib.reload(wm)
+    """In-process MCP tools emit events onto WizardEvents.queue."""
 
-            result = wm.show_choices(
-                step="concept",
-                title="Test",
-                submit_label="Go",
-                controls=[{"type": "radio", "id": "test", "label": "Test"}],
-            )
-            assert "Choices displayed" in result
-            lines = output_file.read_text().strip().splitlines()
-            data = json.loads(lines[0])
-            assert data["tool"] == "show_choices"
-            assert data["data"]["step"] == "concept"
+    def test_show_choices_emits_event(self):
+        from backend.wizard_mcp import WizardEvents
 
-    def test_clear_choices_output(self, tmp_path):
-        output_file = tmp_path / "output.jsonl"
-        with patch.dict("os.environ", {"WIZARD_OUTPUT_FILE": str(output_file)}):
-            import importlib
-            import backend.wizard_mcp as wm
-            importlib.reload(wm)
+        events = WizardEvents()
+        events.emit({
+            "tool": "show_choices",
+            "data": {
+                "step": "concept",
+                "title": "Test",
+                "submit_label": "Go",
+                "controls": [{"type": "radio", "id": "test", "label": "Test"}],
+            },
+        })
+        evt = events.queue.get_nowait()
+        assert evt["tool"] == "show_choices"
+        assert evt["data"]["step"] == "concept"
 
-            result = wm.clear_choices()
-            assert "hidden" in result
-            lines = output_file.read_text().strip().splitlines()
-            data = json.loads(lines[0])
-            assert data["tool"] == "clear_choices"
+    def test_clear_choices_emits_event(self):
+        from backend.wizard_mcp import WizardEvents
+
+        events = WizardEvents()
+        events.emit({"tool": "clear_choices"})
+        evt = events.queue.get_nowait()
+        assert evt["tool"] == "clear_choices"
+
+    def test_build_wizard_mcp_returns_sdk_config(self):
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+
+        events = WizardEvents()
+        server = build_wizard_mcp(events)
+        # SDK returns a dict-shaped McpSdkServerConfig
+        assert server is not None
+        assert isinstance(server, dict)
+        assert server.get("type") == "sdk"

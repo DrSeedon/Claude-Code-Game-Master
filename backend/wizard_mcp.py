@@ -1,125 +1,143 @@
-#!/usr/bin/env python3
-"""MCP server for campaign creation wizard.
+"""In-process MCP tools for the campaign creation wizard.
 
-Provides show_choices and create_campaign tools that the DM calls
-through Claude Code SDK's native MCP integration.
+Each tool is awaited directly by the SDK — no subprocess, no shared file.
+Results are pushed onto an asyncio.Queue that the /ws/wizard handler drains
+between turns.
 
-Results are written to a shared file that the WebSocket handler reads.
+Usage:
+    events = WizardEvents()
+    server = build_wizard_mcp(events)  # -> McpSdkServerConfig
+    # pass server into ClaudeSDKProvider via mcp_servers={"wizard": server}
+    # read events via: event = await events.queue.get()
 """
 
-import json
-import sys
-import os
-from pathlib import Path
-from mcp.server.fastmcp import FastMCP
+import asyncio
+from typing import Any, Dict
 
-mcp = FastMCP("wizard")
-
-# Shared output file — wizard WS handler reads this
-OUTPUT_FILE = os.environ.get("WIZARD_OUTPUT_FILE", "/tmp/wizard-tool-output.jsonl")
+from claude_agent_sdk import tool, create_sdk_mcp_server
 
 
-def _append_output(data: dict):
-    with open(OUTPUT_FILE, "a") as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+class WizardEvents:
+    """Queue-based bridge between MCP tools and the WebSocket handler."""
+
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+
+    def emit(self, data: Dict[str, Any]) -> None:
+        self.queue.put_nowait(data)
 
 
-@mcp.tool()
-def show_choices(
-    step: str,
-    title: str,
-    submit_label: str,
-    controls: list[dict],
-) -> str:
-    """Display interactive choices in the sidebar panel for the player.
+def build_wizard_mcp(events: WizardEvents):
+    """Build an SDK-native MCP server scoped to one wizard session."""
 
-    Each control can be:
-    - type "radio" with options (single select)
-    - type "checkbox" with options (multi select)
-    - type "text_input" with placeholder
-
-    Each option has: id, title, description, color (green/yellow/red), comment.
-    Colors: green=recommended, yellow=situational, red=not ideal.
-
-    Args:
-        step: Current wizard step (concept, settings, character, confirm)
-        title: Panel title
-        submit_label: Submit button text
-        controls: List of UI controls
-    """
-    _append_output({
-        "tool": "show_choices",
-        "data": {
-            "step": step,
-            "title": title,
-            "submit_label": submit_label,
-            "controls": controls,
-        }
-    })
-    return "Choices displayed to user. Wait for their response."
-
-
-@mcp.tool()
-def clear_choices() -> str:
-    """Hide the sidebar choices panel. Call when the player has made their choice via chat or when moving to a new conversation topic without choices."""
-    _append_output({"tool": "clear_choices"})
-    return "Choices panel hidden."
-
-
-@mcp.tool()
-def create_campaign(
-    name: str,
-    character_name: str,
-    genre: str = "",
-    tone: str = "",
-    description: str = "",
-    modules: list[str] | None = None,
-    narrator_style: str = "",
-    rules: str = "",
-    character_class: str = "",
-    character_race: str = "",
-) -> str:
-    """Create campaign with collected settings. Call only after player confirms.
-
-    Args:
-        name: Campaign name in kebab-case (e.g. 'zombie-apocalypse')
-        character_name: Player character name
-        genre: Campaign genre
-        tone: Campaign tone
-        description: Brief description
-        modules: List of module IDs to activate
-        narrator_style: Narrator style ID
-        rules: Rules template ID
-        character_class: Character class (optional)
-        character_race: Character race (optional)
-    """
-    # Import here to avoid circular deps when running as MCP server
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    from backend.campaign_api import create_campaign as _create
-
-    result = _create(
-        name=name,
-        genre=genre,
-        tone=tone,
-        description=description,
-        modules=modules,
-        narrator_style=narrator_style,
-        rules=rules,
-        character={
-            "name": character_name,
-            "class": character_class,
-            "race": character_race,
-        } if character_name else None,
+    @tool(
+        "show_choices",
+        "Display interactive choices in the sidebar panel for the player. "
+        "Each control can be: type 'radio' (single select) with options, "
+        "'checkbox' (multi select) with options, or 'text_input' with a "
+        "placeholder. Each option has id, title, description, color "
+        "(green=recommended / yellow=situational / red=not ideal), comment.",
+        {
+            "step": str,
+            "title": str,
+            "submit_label": str,
+            "controls": list,
+        },
     )
+    async def show_choices(args: Dict[str, Any]) -> Dict[str, Any]:
+        events.emit({
+            "tool": "show_choices",
+            "data": {
+                "step": args.get("step", ""),
+                "title": args.get("title", ""),
+                "submit_label": args.get("submit_label", ""),
+                "controls": args.get("controls", []),
+            },
+        })
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Choices displayed to user. Wait for their response.",
+                }
+            ]
+        }
 
-    if result.get("success"):
-        _append_output({"tool": "create_campaign", "campaign_name": name, "success": True})
-        return f"Campaign '{name}' created successfully!"
-    else:
+    @tool(
+        "clear_choices",
+        "Hide the sidebar choices panel. Call when the player has made "
+        "their choice via chat or when moving to a new topic without choices.",
+        {},
+    )
+    async def clear_choices(args: Dict[str, Any]) -> Dict[str, Any]:
+        events.emit({"tool": "clear_choices"})
+        return {"content": [{"type": "text", "text": "Choices panel hidden."}]}
+
+    @tool(
+        "create_campaign",
+        "Create a campaign with collected settings. Call only after the "
+        "player confirms all choices.",
+        {
+            "name": str,
+            "character_name": str,
+            "genre": str,
+            "tone": str,
+            "description": str,
+            "modules": list,
+            "narrator_style": str,
+            "rules": str,
+            "character_class": str,
+            "character_race": str,
+        },
+    )
+    async def create_campaign(args: Dict[str, Any]) -> Dict[str, Any]:
+        # Local import keeps module importable without project setup
+        from backend.campaign_api import create_campaign as _create
+
+        name = args.get("name", "")
+        character_name = args.get("character_name", "")
+        result = _create(
+            name=name,
+            genre=args.get("genre", ""),
+            tone=args.get("tone", ""),
+            description=args.get("description", ""),
+            modules=args.get("modules") or None,
+            narrator_style=args.get("narrator_style", ""),
+            rules=args.get("rules", ""),
+            character={
+                "name": character_name,
+                "class": args.get("character_class", ""),
+                "race": args.get("character_race", ""),
+            } if character_name else None,
+        )
+
+        if result.get("success"):
+            events.emit({
+                "tool": "create_campaign",
+                "campaign_name": name,
+                "success": True,
+            })
+            return {
+                "content": [
+                    {"type": "text", "text": f"Campaign '{name}' created successfully!"}
+                ]
+            }
+
         error = result.get("error", "unknown error")
-        _append_output({"tool": "create_campaign", "error": error, "success": False})
-        return f"Error creating campaign: {error}"
+        events.emit({
+            "tool": "create_campaign",
+            "error": error,
+            "success": False,
+        })
+        return {
+            "content": [
+                {"type": "text", "text": f"Error creating campaign: {error}"}
+            ],
+            "isError": True,
+        }
 
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    return create_sdk_mcp_server(
+        name="wizard",
+        version="2.0.0",
+        tools=[show_choices, clear_choices, create_campaign],
+    )

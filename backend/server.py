@@ -1,5 +1,6 @@
 """FastAPI server for DM Game Master web interface."""
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ from backend.campaign_api import (
 )
 from backend.chat_history import load_chat_history, save_chat_history
 from backend.wizard_prompt import load_wizard_system_prompt
+from backend.wizard_mcp import WizardEvents, build_wizard_mcp
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -395,7 +397,7 @@ async def root():
 
 @app.websocket("/ws/wizard")
 async def wizard_websocket(websocket: WebSocket):
-    """Campaign creation wizard — ephemeral provider, MCP-driven sidebar."""
+    """Campaign creation wizard — ephemeral provider with in-process MCP tools."""
     await websocket.accept()
 
     try:
@@ -409,15 +411,9 @@ async def wizard_websocket(websocket: WebSocket):
 
     import uuid
     session_id = uuid.uuid4().hex[:8]
-    output_file = f"/tmp/wizard-{session_id}.jsonl"
 
-    wizard_mcp = {
-        "wizard": {
-            "command": "uv",
-            "args": ["run", "python", str(Path(config.project_root) / "backend" / "wizard_mcp.py")],
-            "env": {"WIZARD_OUTPUT_FILE": output_file},
-        }
-    }
+    events = WizardEvents()
+    mcp_servers = {"wizard": build_wizard_mcp(events)}
 
     provider = create_provider(
         provider_type=config.ai_provider,
@@ -429,12 +425,35 @@ async def wizard_websocket(websocket: WebSocket):
     await provider.load_session(f"wizard-{session_id}")
     tools = get_tool_schemas()
 
+    async def drain_wizard_events():
+        while True:
+            evt = await events.queue.get()
+            tool = evt.get("tool")
+            if tool == "show_choices":
+                await websocket.send_text(json.dumps({
+                    "type": "show_choices",
+                    "data": evt["data"],
+                }, ensure_ascii=False))
+            elif tool == "clear_choices":
+                await websocket.send_text(json.dumps({"type": "clear_choices"}))
+            elif tool == "create_campaign":
+                if evt.get("success"):
+                    await websocket.send_text(json.dumps({
+                        "type": "wizard_complete",
+                        "campaign_name": evt.get("campaign_name"),
+                    }))
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "content": evt.get("error", "Creation failed"),
+                    }))
+
+    drainer = asyncio.create_task(drain_wizard_events())
+
     try:
         while True:
             user_message = await websocket.receive_text()
             print(f"🧙 [{session_id}] {user_message[:60]}...")
-
-            Path(output_file).write_text("", encoding="utf-8")
 
             try:
                 async for chunk in provider.process_message(
@@ -442,38 +461,9 @@ async def wizard_websocket(websocket: WebSocket):
                     system_prompt=wizard_prompt,
                     model_name=config.model_name,
                     tools=tools,
-                    mcp_servers=wizard_mcp,
+                    mcp_servers=mcp_servers,
                 ):
                     await websocket.send_text(chunk)
-
-                # Parse MCP tool outputs from the sidecar file
-                if Path(output_file).exists():
-                    for line in Path(output_file).read_text(encoding="utf-8").strip().splitlines():
-                        if not line.strip():
-                            continue
-                        try:
-                            tool_output = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        tool = tool_output.get("tool")
-                        if tool == "show_choices":
-                            await websocket.send_text(json.dumps({
-                                "type": "show_choices",
-                                "data": tool_output["data"],
-                            }, ensure_ascii=False))
-                        elif tool == "clear_choices":
-                            await websocket.send_text(json.dumps({"type": "clear_choices"}))
-                        elif tool == "create_campaign":
-                            if tool_output.get("success"):
-                                await websocket.send_text(json.dumps({
-                                    "type": "wizard_complete",
-                                    "campaign_name": tool_output.get("campaign_name"),
-                                }))
-                            else:
-                                await websocket.send_text(json.dumps({
-                                    "type": "error",
-                                    "content": tool_output.get("error", "Creation failed"),
-                                }))
 
             except Exception as e:
                 print(f"❌ Wizard error: {e}")
@@ -486,11 +476,11 @@ async def wizard_websocket(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print(f"🧙 /ws/wizard disconnected")
+        drainer.cancel()
         await provider.interrupt()
         close = getattr(provider, "close", None)
         if close:
             await close()
-        Path(output_file).unlink(missing_ok=True)
 
 
 def _fetch_modules_list():
