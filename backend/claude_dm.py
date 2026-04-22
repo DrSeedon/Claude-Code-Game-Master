@@ -1,164 +1,90 @@
-"""DM Agent - System prompt builder and tool calling loop."""
+"""DM system prompt loader.
+
+Provider lifecycle moved to server.py — this module is now purely prompt
+assembly. Tools for the API provider are resolved at request time via
+tools_registry.get_tool_schemas().
+"""
 
 import json
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Dict, Any, AsyncGenerator, Optional
-from backend.tools_registry import get_tool_schemas
-from backend.providers.factory import create_provider
 
 
 def load_system_prompt() -> str:
-    """Load DM rules and narrator styles from .claude/additional/.
+    """Assemble DM system prompt: rules + narrator style + campaign rules.
 
-    Loads pre-compiled DM rules from /tmp/dm-rules.md (if exists) or compiles
-    them from .claude/additional/dm-slots/. Appends narrator style from active
-    campaign's campaign-overview.json or falls back to default style.
+    Sources (in order):
+      1. /tmp/dm-rules.md — pre-compiled by UserPromptSubmit hook
+         (falls back to running the compiler script if absent)
+      2. active campaign's narrator_style from campaign-overview.json
+         (falls back to narrator-styles/epic-heroic.md)
+      3. active campaign's campaign-rules.md if present
 
     Returns:
-        str: Complete system prompt combining DM rules and narrator style
+        Combined system prompt. Falls back to a minimal prompt if all
+        sources are empty.
     """
     project_root = Path(__file__).parent.parent
 
-    # Step 1: Load DM rules
     dm_rules_path = Path("/tmp/dm-rules.md")
-
     if dm_rules_path.exists():
-        # Pre-compiled rules exist (created by infrastructure hooks)
         dm_rules = dm_rules_path.read_text()
     else:
-        # Fallback: compile rules from slots
-        rules_compiler = project_root / ".claude" / "additional" / "infrastructure" / "dm-active-modules-rules.sh"
-
-        if rules_compiler.exists():
+        compiler = project_root / ".claude" / "additional" / "infrastructure" / "dm-active-modules-rules.sh"
+        if compiler.exists():
             try:
                 dm_rules = subprocess.check_output(
-                    ["bash", str(rules_compiler)],
+                    ["bash", str(compiler)],
                     cwd=str(project_root),
                     text=True,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.DEVNULL,
                 )
             except subprocess.CalledProcessError:
                 dm_rules = ""
         else:
             dm_rules = ""
 
-    # Step 2: Load narrator style from campaign-overview.json or use default
     narrator_style = ""
-
-    # Try to load from active campaign
+    campaign_rules = ""
     active_campaign_file = project_root / "world-state" / "active-campaign.txt"
     if active_campaign_file.exists():
         campaign_name = active_campaign_file.read_text().strip()
         if campaign_name:
-            overview_path = project_root / "world-state" / "campaigns" / campaign_name / "campaign-overview.json"
+            campaign_dir = project_root / "world-state" / "campaigns" / campaign_name
+            overview_path = campaign_dir / "campaign-overview.json"
             if overview_path.exists():
                 try:
                     with open(overview_path) as f:
                         overview = json.load(f)
-
-                    # Extract narrator style rules from overview
-                    narrator_data = overview.get("narrator_style", {})
-                    if narrator_data:
-                        style_rules = narrator_data.get("rules_raw", "")
-                        style_name = narrator_data.get("name", "")
-                        style_desc = narrator_data.get("description", "")
-
-                        narrator_style = f"\n---\n# Narrator Style: {style_name}\n\n{style_desc}\n\n{style_rules}\n"
+                    narrator = overview.get("narrator_style", {})
+                    if narrator:
+                        style_rules = narrator.get("rules_raw", "")
+                        style_name = narrator.get("name", "")
+                        style_desc = narrator.get("description", "")
+                        narrator_style = (
+                            f"\n---\n# Narrator Style: {style_name}\n\n"
+                            f"{style_desc}\n\n{style_rules}\n"
+                        )
                 except (json.JSONDecodeError, IOError):
                     pass
 
-    # Fallback to default narrator style if none found
-    if not narrator_style:
-        default_style_path = project_root / ".claude" / "additional" / "narrator-styles" / "epic-heroic.md"
-        if default_style_path.exists():
-            narrator_style = f"\n---\n{default_style_path.read_text()}\n"
-
-    # Step 3: Load campaign-specific rules
-    campaign_rules = ""
-    if active_campaign_file.exists():
-        campaign_name = active_campaign_file.read_text().strip()
-        if campaign_name:
-            rules_path = project_root / "world-state" / "campaigns" / campaign_name / "campaign-rules.md"
+            rules_path = campaign_dir / "campaign-rules.md"
             if rules_path.exists():
                 campaign_rules = f"\n---\n# Campaign Rules\n\n{rules_path.read_text()}\n"
 
-    # Combine prompts
-    system_prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}"
+    if not narrator_style:
+        default_style = project_root / ".claude" / "additional" / "narrator-styles" / "epic-heroic.md"
+        if default_style.exists():
+            narrator_style = f"\n---\n{default_style.read_text()}\n"
 
-    # Ensure we return something meaningful
-    if len(system_prompt.strip()) < 100:
-        # Fallback minimal prompt
-        system_prompt = """# DM System - AI Dungeon Master
-
-You are an AI Dungeon Master for D&D 5e campaigns. Guide players through their adventure, narrate scenes, manage combat, and call appropriate tools to track game state.
-
-Use the available tools to:
-- Roll dice for checks, saves, and attacks
-- Manage inventory, HP, XP, and gold
-- Track NPCs, locations, and plot threads
-- Advance game time
-
-Be descriptive, engaging, and fair. Follow D&D 5e rules. Make the game fun!
-"""
-
-    return system_prompt
-
-
-async def process_message(
-    user_message: str,
-    conversation_history: List[Dict[str, Any]],
-    provider_type: str = "auto",
-    api_key: Optional[str] = None,
-    model_name: str = "claude-sonnet-4-6",
-    system_prompt: Optional[str] = None,
-    project_root: Optional[Path] = None,
-    mcp_servers: Optional[Dict] = None
-) -> AsyncGenerator[str, None]:
-    """
-    Process user message through DM agent with tool calling loop.
-
-    Uses provider factory for automatic selection between:
-    - Anthropic API (if ANTHROPIC_API_KEY is present)
-    - Claude SDK (if subscription available, no API key required)
-
-    Args:
-        user_message: Player's input message
-        conversation_history: List of conversation messages (modified in-place)
-        provider_type: Provider type ("auto", "api", "sdk")
-        api_key: Anthropic API key (optional, taken from env for "auto")
-        model_name: Claude model name to use
-        system_prompt: System prompt (loaded from load_system_prompt if None)
-        project_root: Project root directory (required for SDK provider)
-
-    Yields:
-        Text chunks from Claude's streaming response
-    """
-    # Load system prompt if not provided
-    if system_prompt is None:
-        system_prompt = load_system_prompt()
-
-    # Get project_root if not provided
-    if project_root is None:
-        project_root = Path(__file__).parent.parent
-
-    # Create provider via factory
-    provider = create_provider(
-        provider_type=provider_type,
-        api_key=api_key,
-        project_root=project_root
-    )
-
-    # Get tool schemas
-    tools = get_tool_schemas()
-
-    # Delegate message processing to provider
-    async for text_chunk in provider.process_message(
-        user_message=user_message,
-        conversation_history=conversation_history,
-        system_prompt=system_prompt,
-        model_name=model_name,
-        tools=tools,
-        mcp_servers=mcp_servers
-    ):
-        yield text_chunk
+    prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}"
+    if len(prompt.strip()) < 100:
+        prompt = (
+            "# DM System - AI Dungeon Master\n\n"
+            "You are an AI Dungeon Master for D&D 5e campaigns. Guide "
+            "players, narrate scenes, manage combat, and call tools to "
+            "track state. Use tools for dice, inventory, HP/XP, NPCs, "
+            "locations, plot threads, and game time. Be descriptive, "
+            "engaging, and fair.\n"
+        )
+    return prompt
