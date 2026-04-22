@@ -1,12 +1,13 @@
-"""Factory for creating AI provider based on available credentials."""
+"""Factory for AI provider selection based on available credentials."""
 
 import os
 import logging
 from pathlib import Path
 from typing import Optional
+
 from backend.providers.base import BaseProvider
 from backend.providers.anthropic_api import AnthropicAPIProvider
-from backend.providers.claude_sdk import ClaudeSDKProvider, SDK_AVAILABLE
+from backend.providers.claude_sdk import ClaudeSDKProvider
 
 logger = logging.getLogger(__name__)
 
@@ -14,68 +15,51 @@ logger = logging.getLogger(__name__)
 def create_provider(
     provider_type: str = "auto",
     api_key: Optional[str] = None,
-    project_root: Optional[Path] = None
+    project_root: Optional[Path] = None,
+    ephemeral: bool = False,
+    model_name: str = "claude-sonnet-4-6",
 ) -> BaseProvider:
-    """Create appropriate AI provider based on available credentials.
+    """Create appropriate AI provider.
 
-    Selection logic:
-    1. If provider_type == "api" → Anthropic API (requires api_key)
-    2. If provider_type == "sdk" → Claude SDK (requires subscription)
-    3. If provider_type == "auto" (default):
-       - If ANTHROPIC_API_KEY exists in env → Anthropic API
-       - Otherwise → Claude SDK (subscription)
+    Selection:
+      provider_type="api"  → AnthropicAPIProvider (needs api_key)
+      provider_type="sdk"  → ClaudeSDKProvider (needs CLI auth)
+      provider_type="auto" → API if ANTHROPIC_API_KEY set, else SDK
 
     Args:
-        provider_type: Provider type ("auto", "api", "sdk")
-        api_key: Anthropic API key (optional, taken from env if not specified)
-        project_root: Project root for SDK provider (needed for cwd)
+        provider_type: "auto" | "api" | "sdk"
+        api_key: explicit API key; falls back to env ANTHROPIC_API_KEY
+        project_root: project root (SDK needs it for cwd)
+        ephemeral: SDK-only; skip session persistence (wizard-style flows)
+        model_name: default Claude model
 
     Returns:
-        BaseProvider instance (AnthropicAPIProvider or ClaudeSDKProvider)
-
-    Raises:
-        ValueError: If requested provider is unavailable
+        Provider instance (unbound to any session — caller must call load_session)
     """
-    # Get API key from env if not provided
     if api_key is None:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-    # Determine project_root if not provided
     if project_root is None:
-        # Default - parent directory of backend/
         project_root = Path(__file__).parent.parent.parent.absolute()
 
-    # Automatic provider selection
     if provider_type == "auto":
-        if api_key:
-            logger.info("🔑 Auto-select provider: Anthropic API (found ANTHROPIC_API_KEY)")
-            provider_type = "api"
-        else:
-            logger.info("🎫 Auto-select provider: Claude SDK (subscription)")
-            provider_type = "sdk"
+        provider_type = "api" if api_key else "sdk"
+        logger.info("Auto-selected provider: %s", provider_type)
 
-    # Create API provider
     if provider_type == "api":
         if not api_key:
             raise ValueError(
                 "Anthropic API provider requires ANTHROPIC_API_KEY. "
-                "Set in .env file or use AI_PROVIDER=sdk"
+                "Set in .env or use AI_PROVIDER=sdk"
             )
-        logger.info("✅ Using provider: Anthropic API")
         return AnthropicAPIProvider(api_key=api_key)
 
-    # Create SDK provider
-    elif provider_type == "sdk":
-        if not SDK_AVAILABLE:
-            raise ValueError(
-                "Claude SDK not installed. Install with: pip install claude-agent-sdk\n"
-                "Or use AI_PROVIDER=api with ANTHROPIC_API_KEY"
-            )
-        logger.info("✅ Using provider: Claude SDK (subscription)")
-        return ClaudeSDKProvider(project_root=project_root)
-
-    else:
-        raise ValueError(
-            f"Unknown provider type: {provider_type}. "
-            f"Available: 'auto', 'api', 'sdk'"
+    if provider_type == "sdk":
+        return ClaudeSDKProvider(
+            project_root=project_root,
+            model_name=model_name,
+            ephemeral=ephemeral,
         )
+
+    raise ValueError(
+        f"Unknown provider type: {provider_type}. Available: auto, api, sdk"
+    )

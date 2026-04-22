@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-03-25T08:14:36.112152176Z"
+exclude-newer = "2026-04-15T09:16:56.031820264Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -411,16 +411,20 @@ wheels = [
 ]
 
 [[package]]
-name = "claude-code-sdk"
-version = "0.0.25"
+name = "claude-agent-sdk"
+version = "0.1.59"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "mcp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/0d/0f4a71415826578a5ace16817c52df84d76ffbda5cdad02f520a2b963bde/claude_code_sdk-0.0.25.tar.gz", hash = "sha256:0d9e1eba432d4fe8a2f75f06ec9bb4c310f39b1d55246e7e4b2c69bfdd69eab3", size = 41273, upload-time = "2025-09-29T20:14:51.882Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/55/438f5ba33f90cc9cbf3b40f74fbedf6792332e8fe34838f4189e418a4090/claude_agent_sdk-0.1.59.tar.gz", hash = "sha256:061af12a783a3456abfd0def3602a01249b2eee1be783fb3e242392c0ebbd2e2", size = 122887, upload-time = "2026-04-13T22:07:09.576Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/41/c934058080f3233bbc95bc9abac5e0191bf336ad5f69a33b5f54a4737e88/claude_code_sdk-0.0.25-py3-none-any.whl", hash = "sha256:3d6a4ef958182f311d6050776d2675d9b39650a2db221c582a0a5156472dcee3", size = 31031, upload-time = "2025-09-29T20:14:50.687Z" },
+    { url = "https://files.pythonhosted.org/packages/01/6d/1fdfbcce76d7b81e89b29ad11864a48779a880f828c2541df620686693dd/claude_agent_sdk-0.1.59-py3-none-macosx_11_0_arm64.whl", hash = "sha256:b8734b5d630b75ad63b29a802fff40ba087adf463c1004dae65f7a5a912ab13a", size = 59629367, upload-time = "2026-04-13T22:07:14.602Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/c6/aa9c5b310851b74db82e0da73a836335af4ef6767982d93ac04df52ef0cb/claude_agent_sdk-0.1.59-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:b333c0685db3f6e035acd2c6efa6ae4c4d8b077fef99de829ddb2a37ca1d9183", size = 61444059, upload-time = "2026-04-13T22:07:20.677Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/47/4ba5eb8846fcb9ba544d777ff752ff20c10a508931199f9def3e724dcc8b/claude_agent_sdk-0.1.59-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:8ebe1f7e6dc18c5fae6483977ff16fcabe91cbb955f9c423c05a11f013db3957", size = 72938796, upload-time = "2026-04-13T22:07:27.147Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/df/366d8ffb3399426769a08b68bdb4bf4ccb0c8e742418a27c3d369cfab07a/claude_agent_sdk-0.1.59-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:cac6c42f3c554981597a3d023bc87fe5b4bc14da987d9ef30cc2596005c3bc12", size = 73057901, upload-time = "2026-04-13T22:07:35.372Z" },
+    { url = "https://files.pythonhosted.org/packages/27/5a/f7506588831eb664c45241745d2cd21bd095b0f432ef2fa1062b824c538a/claude_agent_sdk-0.1.59-py3-none-win_amd64.whl", hash = "sha256:92d8da9ea5f0b4a7492d074d612d54b5e6ce6800312992aa48b2bcaa6bf7bf5e", size = 75161150, upload-time = "2026-04-13T22:07:43.695Z" },
 ]
 
 [[package]]
@@ -793,6 +797,7 @@ version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "claude-agent-sdk" },
     { name = "fastapi", extra = ["standard"] },
     { name = "matplotlib" },
     { name = "pdfplumber" },
@@ -812,7 +817,7 @@ dev = [
 ]
 full = [
     { name = "chromadb" },
-    { name = "claude-code-sdk" },
+    { name = "claude-agent-sdk" },
     { name = "elevenlabs" },
     { name = "sentence-transformers" },
 ]
@@ -821,7 +826,7 @@ rag = [
     { name = "sentence-transformers" },
 ]
 sdk = [
-    { name = "claude-code-sdk" },
+    { name = "claude-agent-sdk" },
 ]
 voice = [
     { name = "elevenlabs" },
@@ -837,7 +842,8 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.76.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "chromadb", marker = "extra == 'rag'", specifier = ">=0.4.0" },
-    { name = "claude-code-sdk", marker = "extra == 'sdk'", specifier = ">=0.0.1" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.50" },
+    { name = "claude-agent-sdk", marker = "extra == 'sdk'", specifier = ">=0.1.50" },
     { name = "dm-claude", extras = ["rag"], marker = "extra == 'full'" },
     { name = "dm-claude", extras = ["sdk"], marker = "extra == 'full'" },
     { name = "dm-claude", extras = ["voice"], marker = "extra == 'full'" },

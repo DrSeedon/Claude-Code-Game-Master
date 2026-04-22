@@ -1,156 +1,243 @@
-"""Provider via Claude Code SDK (subscription, no API key required)."""
+"""Claude Agent SDK provider via persistent ClaudeSDKClient (subscription auth).
 
-import asyncio
+The SDK spawns the `claude` CLI as a subprocess and inherits its credentials
+(OAuth token from `claude auth login`, or ANTHROPIC_API_KEY env var). No API
+key handling here — that's what the CLI is for.
+
+Sessions persist as `~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl` managed
+by the CLI. We only track the UUID in storage/sessions/<session_key> and pass
+it as options.resume on reconnect.
+"""
+
 import json
 import logging
-import threading
-from typing import AsyncGenerator, List, Dict, Any
 from pathlib import Path
+from typing import AsyncGenerator, Dict, List, Any, Optional
+
+from claude_agent_sdk import (
+    ClaudeSDKClient,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+)
 
 from backend.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-SDK_AVAILABLE = False
-try:
-    from claude_code_sdk import query, ClaudeCodeOptions, AssistantMessage, TextBlock, ToolUseBlock, ToolResultBlock, ResultMessage, SystemMessage
 
-    # Patch SDK to handle unknown message types (rate_limit_event etc.)
-    import claude_code_sdk._internal.message_parser as _parser
-    import claude_code_sdk._internal.client as _client
-
-    _original_parse = _parser.parse_message
-
-    def _patched_parse(data):
-        try:
-            return _original_parse(data)
-        except Exception as e:
-            if "Unknown message type" in str(e):
-                mt = data.get("type", "unknown") if isinstance(data, dict) else "unknown"
-                return SystemMessage(subtype=f"unknown_{mt}", data=data if isinstance(data, dict) else {})
-            raise
-
-    _parser.parse_message = _patched_parse
-    _client.parse_message = _patched_parse
-
-    SDK_AVAILABLE = True
-except ImportError:
-    pass
-
-
-SENTINEL = object()
-
-
-def _run_sdk_query(prompt: str, options, queue: "asyncio.Queue", loop):
-    """Run SDK query in a separate thread, push chunks to queue."""
-
-    async def _inner():
-        try:
-            async for msg in query(prompt=prompt, options=options):
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock) and block.text:
-                            loop.call_soon_threadsafe(queue.put_nowait, {"type": "text", "content": block.text})
-                        elif isinstance(block, ToolUseBlock):
-                            loop.call_soon_threadsafe(queue.put_nowait, {
-                                "type": "tool_call",
-                                "name": block.name,
-                                "input": block.input
-                            })
-                        elif isinstance(block, ToolResultBlock):
-                            content = block.content if isinstance(block.content, str) else str(block.content)
-                            loop.call_soon_threadsafe(queue.put_nowait, {
-                                "type": "tool_result",
-                                "content": content,
-                                "is_error": block.is_error
-                            })
-                elif isinstance(msg, ResultMessage):
-                    if msg.is_error and msg.result:
-                        loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "content": msg.result})
-        except Exception as e:
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "content": str(e)})
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
-
-    asyncio.run(_inner())
+SESSION_DIR = Path(__file__).parent.parent.parent / "storage" / "sessions"
 
 
 class ClaudeSDKProvider(BaseProvider):
+    """Persistent ClaudeSDKClient with per-session resume.
 
-    def __init__(self, project_root: Path, model_name: str = "claude-sonnet-4-6"):
-        if not SDK_AVAILABLE:
-            raise ImportError("claude-code-sdk not installed: pip install claude-code-sdk")
+    One instance binds to one session_key. Call load_session before first
+    process_message; the client reconnects transparently.
+
+    Ephemeral mode (ephemeral=True) skips disk persistence — useful for
+    single-shot wizard flows where no resume is needed.
+    """
+
+    def __init__(
+        self,
+        project_root: Path,
+        model_name: str = "claude-sonnet-4-6",
+        ephemeral: bool = False,
+    ):
         self.project_root = project_root
         self.model_name = model_name
+        self.ephemeral = ephemeral
+
+        self._session_key: Optional[str] = None
+        self._session_id: Optional[str] = None
+        self._session_file: Optional[Path] = None
+        self._client: Optional["ClaudeSDKClient"] = None
+        self._connected = False
+        self._system_prompt: str = ""
+        self._mcp_servers: Optional[Dict] = None
+        self._expected_results = 0
+
+    # ── lifecycle ───────────────────────────────────────────────────────
+
+    async def load_session(self, session_key: str) -> None:
+        self._session_key = session_key
+        if not self.ephemeral:
+            SESSION_DIR.mkdir(parents=True, exist_ok=True)
+            self._session_file = SESSION_DIR / session_key
+            if self._session_file.exists():
+                sid = self._session_file.read_text().strip()
+                if sid:
+                    self._session_id = sid
+                    logger.info(
+                        "Resuming SDK session %s (key=%s)",
+                        sid[:8], session_key,
+                    )
+        if not self._session_id:
+            logger.info("New SDK session (key=%s)", session_key)
+
+    def _save_session_id(self) -> None:
+        if self.ephemeral or not self._session_file or not self._session_id:
+            return
+        self._session_file.write_text(self._session_id)
+
+    def _build_options(
+        self,
+        system_prompt: str,
+        model_name: str,
+        mcp_servers: Optional[Dict],
+    ) -> "ClaudeAgentOptions":
+        opts = ClaudeAgentOptions(
+            model=model_name or self.model_name,
+            cwd=str(self.project_root.resolve()),
+            max_turns=25,
+            permission_mode="bypassPermissions",
+            include_partial_messages=False,
+        )
+        if system_prompt:
+            opts.system_prompt = system_prompt
+        if mcp_servers:
+            opts.mcp_servers = mcp_servers
+        if self._session_id:
+            opts.resume = self._session_id
+        return opts
+
+    async def _ensure_connected(
+        self,
+        system_prompt: str,
+        model_name: str,
+        mcp_servers: Optional[Dict],
+    ) -> None:
+        # Rebuild client if system_prompt/mcp config changed materially,
+        # otherwise just reuse the live subprocess.
+        config_changed = (
+            self._system_prompt != system_prompt
+            or self._mcp_servers != mcp_servers
+        )
+        if self._client and self._connected and not config_changed:
+            return
+
+        if self._client:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
+            self._connected = False
+
+        self._system_prompt = system_prompt
+        self._mcp_servers = mcp_servers
+        opts = self._build_options(system_prompt, model_name, mcp_servers)
+        self._client = ClaudeSDKClient(options=opts)
+        await self._client.connect()
+        self._connected = True
+
+    # ── main API ────────────────────────────────────────────────────────
 
     async def process_message(
         self,
         user_message: str,
-        conversation_history: List[Dict[str, Any]],
         system_prompt: str,
         model_name: str,
         tools: List[Dict[str, Any]],
-        mcp_servers: dict = None
+        mcp_servers: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
-        prompt_parts = []
-        if conversation_history:
-            prompt_parts.append("<conversation_history>")
-            for msg in conversation_history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if content:
-                    prompt_parts.append(f"[{role}]: {content}")
-            prompt_parts.append("</conversation_history>")
-            prompt_parts.append("")
-
-        prompt_parts.append(f"[user]: {user_message}")
-        full_prompt = "\n".join(prompt_parts)
-
-        options = ClaudeCodeOptions(
-            model=model_name or self.model_name,
-            system_prompt=system_prompt,
-            cwd=str(self.project_root.resolve()),
-            max_turns=10,
-            permission_mode="bypassPermissions",
-        )
-
-        if mcp_servers:
-            options.mcp_servers = mcp_servers
-            # Pre-allow MCP tools so CLI doesn't waste turns on ToolSearch
-            mcp_tool_names = []
-            for server_name in mcp_servers:
-                mcp_tool_names.extend([
-                    f"mcp__{server_name}__show_choices",
-                    f"mcp__{server_name}__clear_choices",
-                    f"mcp__{server_name}__create_campaign",
-                ])
-            options.allowed_tools = mcp_tool_names
-
-        queue = asyncio.Queue()
-        loop = asyncio.get_event_loop()
-
-        thread = threading.Thread(target=_run_sdk_query, args=(full_prompt, options, queue, loop), daemon=True)
-        thread.start()
+        if self._session_key is None:
+            raise RuntimeError(
+                "ClaudeSDKProvider.process_message called before load_session"
+            )
 
         try:
-            while True:
-                item = await queue.get()
-                if item is SENTINEL:
-                    break
-                if item["type"] == "text":
-                    yield json.dumps({"type": "text", "content": item["content"]}, ensure_ascii=False)
-                elif item["type"] == "tool_call":
-                    yield json.dumps({"type": "activity", "content": f"🔧 {item['name']}({json.dumps(item['input'], ensure_ascii=False)})"}, ensure_ascii=False)
-                elif item["type"] == "tool_result":
-                    prefix = "❌" if item.get("is_error") else "✅"
-                    yield json.dumps({"type": "activity", "content": f"{prefix} {item['content']}"}, ensure_ascii=False)
-                elif item["type"] == "error":
-                    yield json.dumps({"type": "error", "content": item["content"]}, ensure_ascii=False)
-        except Exception as e:
-            logger.error(f"SDK streaming error: {e}", exc_info=True)
-            yield json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
+            await self._ensure_connected(system_prompt, model_name, mcp_servers)
+            assert self._client is not None  # _ensure_connected guarantees this
+            await self._client.query(user_message)
+            self._expected_results = 1
 
-        thread.join(timeout=5)
+            async for msg in self._client.receive_messages():
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock) and block.text:
+                            yield json.dumps(
+                                {"type": "text", "content": block.text},
+                                ensure_ascii=False,
+                            )
+                        elif isinstance(block, ToolUseBlock):
+                            yield json.dumps(
+                                {
+                                    "type": "activity",
+                                    "content": f"🔧 {block.name}({json.dumps(block.input, ensure_ascii=False)[:200]})",
+                                },
+                                ensure_ascii=False,
+                            )
+                        elif isinstance(block, ToolResultBlock):
+                            content = (
+                                block.content
+                                if isinstance(block.content, str)
+                                else str(block.content)
+                            )
+                            prefix = "❌" if block.is_error else "✅"
+                            yield json.dumps(
+                                {
+                                    "type": "activity",
+                                    "content": f"{prefix} {content[:300]}",
+                                },
+                                ensure_ascii=False,
+                            )
+                elif isinstance(msg, ResultMessage):
+                    sid = getattr(msg, "session_id", None)
+                    if sid and sid != self._session_id:
+                        self._session_id = sid
+                        self._save_session_id()
+                        logger.info("SDK session id saved: %s", sid[:8])
+                    if msg.is_error and msg.result:
+                        yield json.dumps(
+                            {"type": "error", "content": str(msg.result)},
+                            ensure_ascii=False,
+                        )
+                    self._expected_results -= 1
+                    if self._expected_results <= 0:
+                        break
+                elif isinstance(msg, SystemMessage):
+                    logger.debug("SDK system: %s", getattr(msg, "subtype", "?"))
+
+        except Exception as e:
+            logger.error("SDK error: %s", e, exc_info=True)
+            self._connected = False
+            self._client = None
+            yield json.dumps(
+                {"type": "error", "content": str(e)},
+                ensure_ascii=False,
+            )
+
+    async def interrupt(self) -> None:
+        if self._client and self._connected:
+            try:
+                await self._client.interrupt()
+                logger.info("SDK interrupt sent")
+            except Exception as e:
+                logger.error("interrupt error: %s", e)
+
+    async def get_context_usage(self) -> Optional[Dict[str, Any]]:
+        if self._client and self._connected:
+            try:
+                return await self._client.get_context_usage()
+            except Exception as e:
+                logger.debug("get_context_usage error: %s", e)
+        return None
+
+    async def close(self) -> None:
+        if self._client:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
+            self._connected = False
 
     def get_provider_name(self) -> str:
-        return "Claude Code SDK (subscription)"
+        mode = "ephemeral" if self.ephemeral else "persistent"
+        return f"Claude Agent SDK ({mode})"

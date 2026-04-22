@@ -26,6 +26,7 @@ classifiers = [
 # Core dependencies only - minimal for basic functionality
 dependencies = [
     "anthropic>=0.76.0",
+    "claude-agent-sdk>=0.1.50",
     "fastapi[standard]>=0.115.0",
     "matplotlib>=3.10.8",
     "pdfplumber>=0.11.9",
@@ -48,9 +49,9 @@ rag = [
     "chromadb>=0.4.0",
 ]
 
-# Claude SDK provider (subscription-based, no API key required)
+# Claude Agent SDK provider (subscription-based, no API key required)
 sdk = [
-    "claude-code-sdk>=0.0.1",
+    "claude-agent-sdk>=0.1.50",
 ]
 
 # Full installation (all features)
