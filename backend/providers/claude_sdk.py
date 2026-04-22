@@ -61,7 +61,7 @@ def _run_sdk_query(prompt: str, options, queue: "asyncio.Queue", loop):
                             content = block.content if isinstance(block.content, str) else str(block.content)
                             loop.call_soon_threadsafe(queue.put_nowait, {
                                 "type": "tool_result",
-                                "content": content[:500],
+                                "content": content,
                                 "is_error": block.is_error
                             })
                 elif isinstance(msg, ResultMessage):
@@ -89,8 +89,23 @@ class ClaudeSDKProvider(BaseProvider):
         conversation_history: List[Dict[str, Any]],
         system_prompt: str,
         model_name: str,
-        tools: List[Dict[str, Any]]
+        tools: List[Dict[str, Any]],
+        mcp_servers: dict = None
     ) -> AsyncGenerator[str, None]:
+        prompt_parts = []
+        if conversation_history:
+            prompt_parts.append("<conversation_history>")
+            for msg in conversation_history:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if content:
+                    prompt_parts.append(f"[{role}]: {content}")
+            prompt_parts.append("</conversation_history>")
+            prompt_parts.append("")
+
+        prompt_parts.append(f"[user]: {user_message}")
+        full_prompt = "\n".join(prompt_parts)
+
         options = ClaudeCodeOptions(
             model=model_name or self.model_name,
             system_prompt=system_prompt,
@@ -99,11 +114,22 @@ class ClaudeSDKProvider(BaseProvider):
             permission_mode="bypassPermissions",
         )
 
+        if mcp_servers:
+            options.mcp_servers = mcp_servers
+            # Pre-allow MCP tools so CLI doesn't waste turns on ToolSearch
+            mcp_tool_names = []
+            for server_name in mcp_servers:
+                mcp_tool_names.extend([
+                    f"mcp__{server_name}__show_choices",
+                    f"mcp__{server_name}__clear_choices",
+                    f"mcp__{server_name}__create_campaign",
+                ])
+            options.allowed_tools = mcp_tool_names
+
         queue = asyncio.Queue()
         loop = asyncio.get_event_loop()
 
-        # Run SDK in separate thread to avoid anyio/uvicorn conflict
-        thread = threading.Thread(target=_run_sdk_query, args=(user_message, options, queue, loop), daemon=True)
+        thread = threading.Thread(target=_run_sdk_query, args=(full_prompt, options, queue, loop), daemon=True)
         thread.start()
 
         try:
@@ -112,20 +138,19 @@ class ClaudeSDKProvider(BaseProvider):
                 if item is SENTINEL:
                     break
                 if item["type"] == "text":
-                    yield item["content"]
+                    yield json.dumps({"type": "text", "content": item["content"]}, ensure_ascii=False)
                 elif item["type"] == "tool_call":
-                    yield f"\n🔧 `{item['name']}({json.dumps(item['input'], ensure_ascii=False)[:200]})`\n"
+                    yield json.dumps({"type": "activity", "content": f"🔧 {item['name']}({json.dumps(item['input'], ensure_ascii=False)})"}, ensure_ascii=False)
                 elif item["type"] == "tool_result":
                     prefix = "❌" if item.get("is_error") else "✅"
-                    yield f"\n{prefix} {item['content'][:300]}\n"
+                    yield json.dumps({"type": "activity", "content": f"{prefix} {item['content']}"}, ensure_ascii=False)
                 elif item["type"] == "error":
-                    yield f"\n\n[Error: {item['content']}]"
+                    yield json.dumps({"type": "error", "content": item["content"]}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"SDK streaming error: {e}", exc_info=True)
-            yield f"\n\n[Error: {str(e)}]"
+            yield json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
 
         thread.join(timeout=5)
-        conversation_history.append({"role": "user", "content": user_message})
 
     def get_provider_name(self) -> str:
         return "Claude Code SDK (subscription)"

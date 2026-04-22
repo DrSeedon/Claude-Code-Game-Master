@@ -3,7 +3,7 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Dict, Any, AsyncGenerator
+from typing import Optional, List, Dict, Any, AsyncGenerator, Optional
 from backend.tools_registry import get_tool_schemas
 from backend.providers.factory import create_provider
 
@@ -110,9 +110,10 @@ async def process_message(
     conversation_history: List[Dict[str, Any]],
     provider_type: str = "auto",
     api_key: Optional[str] = None,
-    model_name: str = "claude-3-5-sonnet-20241022",
+    model_name: str = "claude-sonnet-4-6",
     system_prompt: Optional[str] = None,
-    project_root: Optional[Path] = None
+    project_root: Optional[Path] = None,
+    mcp_servers: Optional[Dict] = None
 ) -> AsyncGenerator[str, None]:
     """
     Process user message through DM agent with tool calling loop.
@@ -157,6 +158,7 @@ async def process_message(
         conversation_history=conversation_history,
         system_prompt=system_prompt,
         model_name=model_name,
-        tools=tools
+        tools=tools,
+        mcp_servers=mcp_servers
     ):
         yield text_chunk

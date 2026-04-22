@@ -2,6 +2,58 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [3.0.0] - 2026-04-22
+
+### Added
+- 🌐 **Web Client (FastAPI + React)** — полноценный веб-интерфейс вместо CLI
+  - `backend/server.py` — FastAPI сервер на :8800 с WebSocket endpoints (`/ws/game`, `/ws/wizard`)
+  - `frontend/` — Vite + React на :3000, роутинг через react-router-dom
+  - Страницы: Lobby (список кампаний), Wizard (создание), Game (чат + sidebar), Dashboard (будет)
+  - `webui.sh` — единая команда запуска backend + frontend
+  - Triggered case: нужен единый веб-клиент для SaaS, замена CLI для игроков
+- 🧙 **Campaign Creation Wizard** — интерактивный визард через LLM + dynamic sidebar UI
+  - `backend/wizard_mcp.py` — MCP сервер с тулами `show_choices`, `clear_choices`, `create_campaign`
+  - `backend/wizard_prompt.py` — system prompt с полным контентом модулей/нарраторов/правил
+  - DM управляет sidebar через MCP tools — показывает карточки с цветами (🟢🟡🔴) и комментариями
+  - Фронтенд рендерит radio/checkbox/text_input контролы, отправляет выбор как user message
+  - Скрытая мета в сообщениях: `[Sidebar selection for step "..."]` — DM различает sidebar vs chat
+  - Triggered case: пользователь хочет чтобы DM сам подбирал модули и нарратор под концепт
+- 💬 **Streaming Chat с Activity Feed** — текст DM + tool calls/results в правильном порядке
+  - SDK provider (`backend/providers/claude_sdk.py`) шлёт structured JSON events (text/activity/error)
+  - Текст → 🔧 tool → ✅ result → текст — каждый в своём bubble, хронологически
+  - `streamingRef` (useRef) для синхронной финализации streaming content перед activity
+  - Markdown rendering через `react-markdown` (bold, lists, headings)
+  - Triggered case: DM вызывал тулы, но они то пропадали, то были не в том порядке
+- 🔌 **Два AI провайдера** — подписка SDK или Anthropic API key
+  - `backend/providers/claude_sdk.py` — работает через подписку без API key (через CLI subprocess)
+  - `backend/providers/anthropic_api.py` — прямой вызов с prompt caching (`cache_control: ephemeral`)
+  - Factory auto-select: есть `ANTHROPIC_API_KEY` → API, нет → SDK
+  - Triggered case: личное использование через подписку, продакшн через API ключ
+- 📚 **Aperant MCP Integration** — `.mcp.json` подключает Aperant для управления задачами
+  - `create_task`, `list_tasks`, `get_roadmap`, `generate_ideas` доступны прямо в проекте
+  - Roadmap и 30 idea предложений генерируются автоматически
+- 🧪 **Тесты web client** — 22 pytest теста для wizard + campaign API
+  - `tests/test_wizard.py` — wizard prompt, tool schemas, campaign CRUD, MCP tools
+  - `tests/test_campaign_api.py`, `tests/test_chat_history.py` — API endpoints
+
+### Changed
+- **Default model** → `claude-sonnet-4-6` везде (backend/config.py, claude_dm.py)
+- **Backend port** → `:8800` (было `:8000`), frontend `:3000` — не конфликтуют с другими локальными сервисами
+- **SDK provider conversation history** — теперь собирается в `<conversation_history>` блок в промпте (SDK не поддерживает messages array нативно)
+- **Campaign API** — `create_campaign` использует WorldGraph `add_node("player:active", "player", ...)` с правильной сигнатурой
+
+### Fixed
+- **WorldGraph.add_node signature** — `campaign_api.py` передавал `id=` и `type=` как kwargs, теперь positional
+- **WorldGraph.save() не существует** — `add_node` автосейвит, убрали лишний вызов
+- **SDK patched parser** — `_parser.parse_message` AND `_client.parse_message` оба патчатся для `rate_limit_event`
+- **Double user message** в conversation_history — провайдер больше не дублирует, добавляет только server.py
+- **Horizontal scroll** на длинных сообщениях — `word-break: break-word` + `overflow-x: hidden`
+- **UserPromptSubmit hook errors** на пустом stdin — `dm-hook-common.sh` handles empty input gracefully
+
+### Known tradeoff
+- SDK provider через подписку: Anthropic может банить за использование OAuth токенов в Agent SDK для third-party (с 2026-02-19). Для personal use ок, для SaaS нужен API key provider.
+- Нет prompt caching в SDK mode — каждый вызов = full input tokens. API provider решает это через `cache_control`.
+
 ## [2.2.0] - 2026-03-08
 
 ### Added

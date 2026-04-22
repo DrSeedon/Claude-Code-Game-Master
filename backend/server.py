@@ -19,6 +19,7 @@ from backend.campaign_api import (
     delete_campaign,
 )
 from backend.chat_history import load_chat_history, save_chat_history
+from backend.wizard_prompt import load_wizard_system_prompt
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -390,6 +391,161 @@ async def root():
     }
 
 
+@app.websocket("/ws/wizard")
+async def wizard_websocket(websocket: WebSocket):
+    """WebSocket for campaign creation wizard. Uses MCP tools via SDK."""
+    await websocket.accept()
+
+    conversation_history: List = []
+    config = None
+
+    try:
+        config = get_config()
+        wizard_prompt = load_wizard_system_prompt()
+        print(f"🧙 Wizard WebSocket connected ({len(wizard_prompt)} chars prompt)")
+    except ValueError as e:
+        await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
+        await websocket.close()
+        return
+
+    # Unique output file per connection
+    import uuid
+    output_file = f"/tmp/wizard-{uuid.uuid4().hex[:8]}.jsonl"
+
+    # MCP server config for wizard tools
+    wizard_mcp = {
+        "wizard": {
+            "command": "uv",
+            "args": ["run", "python", str(Path(config.project_root) / "backend" / "wizard_mcp.py")],
+            "env": {"WIZARD_OUTPUT_FILE": output_file},
+        }
+    }
+
+    try:
+        while True:
+            user_message = await websocket.receive_text()
+            print(f"🧙 Wizard message: {user_message[:50]}...")
+
+            conversation_history.append({"role": "user", "content": user_message})
+
+            # Clear output file before each turn
+            Path(output_file).write_text("", encoding="utf-8")
+
+            full_response_parts: List[str] = []
+
+            try:
+                async for chunk in process_message(
+                    user_message=user_message,
+                    conversation_history=conversation_history,
+                    provider_type=config.ai_provider,
+                    api_key=config.anthropic_api_key,
+                    model_name=config.model_name,
+                    system_prompt=wizard_prompt,
+                    project_root=config.project_root,
+                    mcp_servers=wizard_mcp,
+                ):
+                    # SDK provider sends structured JSON events
+                    try:
+                        event = json.loads(chunk)
+                        await websocket.send_text(chunk)
+                        if event.get("type") == "text":
+                            full_response_parts.append(event["content"])
+                    except json.JSONDecodeError:
+                        # Fallback for raw text
+                        await websocket.send_text(json.dumps(
+                            {"type": "text", "content": chunk}, ensure_ascii=False
+                        ))
+                        full_response_parts.append(chunk)
+
+                # Read MCP tool outputs
+                if Path(output_file).exists():
+                    for line in Path(output_file).read_text(encoding="utf-8").strip().splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            tool_output = json.loads(line)
+                            if tool_output.get("tool") == "show_choices":
+                                await websocket.send_text(json.dumps({
+                                    "type": "show_choices",
+                                    "data": tool_output["data"],
+                                }, ensure_ascii=False))
+                            elif tool_output.get("tool") == "clear_choices":
+                                await websocket.send_text(json.dumps({
+                                    "type": "clear_choices",
+                                }))
+                            elif tool_output.get("tool") == "create_campaign":
+                                if tool_output.get("success"):
+                                    await websocket.send_text(json.dumps({
+                                        "type": "wizard_complete",
+                                        "campaign_name": tool_output.get("campaign_name"),
+                                    }))
+                                else:
+                                    await websocket.send_text(json.dumps({
+                                        "type": "error",
+                                        "content": tool_output.get("error", "Creation failed"),
+                                    }))
+                        except json.JSONDecodeError:
+                            pass
+
+                full_response = "".join(full_response_parts)
+                conversation_history.append({"role": "assistant", "content": full_response})
+
+            except Exception as e:
+                print(f"❌ Wizard error: {e}")
+                await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
+
+            await websocket.send_text(json.dumps({"type": "done"}))
+
+    except WebSocketDisconnect:
+        print(f"🧙 Wizard WebSocket disconnected")
+        # Cleanup temp file
+        Path(output_file).unlink(missing_ok=True)
+
+
+def _fetch_modules_list():
+    modules_dir = _get_modules_dir()
+    result = []
+    if not modules_dir.exists():
+        return result
+    for module_path in sorted(modules_dir.iterdir()):
+        if not module_path.is_dir():
+            continue
+        manifest = module_path / "module.json"
+        if not manifest.exists():
+            continue
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            result.append({
+                "id": data.get("id", module_path.name),
+                "name": data.get("name", module_path.name),
+                "description": data.get("description", ""),
+                "genre_tags": data.get("genre_tags", []),
+            })
+        except (json.JSONDecodeError, OSError):
+            continue
+    return result
+
+
+def _fetch_narrators_list():
+    styles_dir = _get_narrator_styles_dir()
+    result = []
+    if not styles_dir.exists():
+        return result
+    for path in sorted(styles_dir.glob("*.md")):
+        result.append(_parse_md_frontmatter(path))
+    return result
+
+
+def _fetch_rules_list():
+    rules_dir = _get_campaign_rules_templates_dir()
+    result = []
+    if not rules_dir.exists():
+        return result
+    for path in sorted(rules_dir.glob("*.md")):
+        result.append(_parse_md_frontmatter(path))
+    return result
+
+
 @app.get("/ws/game")
 async def game_websocket_info():
     """HTTP GET handler for WebSocket endpoint.
@@ -463,12 +619,12 @@ async def game_websocket(websocket: WebSocket):
             user_message = await websocket.receive_text()
             print(f"📩 Received message: {user_message[:50]}...")
 
-            # Collect full assistant response for saving to history
+            conversation_history.append({"role": "user", "content": user_message})
             full_response_parts: List[str] = []
 
             # Process message through DM agent with streaming
             try:
-                async for text_chunk in process_message(
+                async for chunk in process_message(
                     user_message=user_message,
                     conversation_history=conversation_history,
                     provider_type=config.ai_provider,
@@ -477,10 +633,19 @@ async def game_websocket(websocket: WebSocket):
                     system_prompt=system_prompt,
                     project_root=config.project_root
                 ):
-                    # Stream each text chunk to frontend
-                    await websocket.send_text(text_chunk)
-                    full_response_parts.append(text_chunk)
+                    try:
+                        event = json.loads(chunk)
+                        await websocket.send_text(chunk)
+                        if event.get("type") == "text":
+                            full_response_parts.append(event["content"])
+                    except json.JSONDecodeError:
+                        await websocket.send_text(json.dumps(
+                            {"type": "text", "content": chunk}, ensure_ascii=False
+                        ))
+                        full_response_parts.append(chunk)
 
+                # Send end-of-message marker
+                await websocket.send_text(json.dumps({"type": "done"}))
                 print(f"✅ Completed message processing")
 
                 # Save turn to chat history
@@ -488,8 +653,8 @@ async def game_websocket(websocket: WebSocket):
                     full_response = "".join(full_response_parts)
                     timestamp = _now_iso()
 
-                    # Add to conversation_history for next turn
-                    conversation_history.append({"role": "user", "content": user_message})
+                    # Add assistant response to conversation_history
+                    # (user message is already added by the provider)
                     conversation_history.append({"role": "assistant", "content": full_response})
 
                     # Persist history to disk

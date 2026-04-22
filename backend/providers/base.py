@@ -1,7 +1,7 @@
 """Base interface for AI providers."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, List, Dict, Any, Optional
+from typing import AsyncGenerator, Dict, List, Any, Optional
 
 
 class BaseProvider(ABC):
@@ -18,7 +18,8 @@ class BaseProvider(ABC):
         conversation_history: List[Dict[str, Any]],
         system_prompt: str,
         model_name: str,
-        tools: List[Dict[str, Any]]
+        tools: List[Dict[str, Any]],
+        mcp_servers: Optional[Dict] = None
     ) -> AsyncGenerator[str, None]:
         """Process user message and return streaming response.
 

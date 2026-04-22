@@ -5,9 +5,12 @@ import { useNavigate } from 'react-router-dom';
  * Campaign data structure
  */
 interface Campaign {
-  id: string;
   name: string;
-  last_played?: string;
+  active: boolean;
+  created_at?: string;
+  genre?: string;
+  tone?: string | Record<string, number>;
+  description?: string;
 }
 
 /**
@@ -156,26 +159,35 @@ function CampaignListWithNavigation({
       <div className="campaigns-grid">
         {campaigns.map(campaign => (
           <div
-            key={campaign.id}
-            className="campaign-card"
-            onClick={() => onSelectCampaign(campaign.id)}
+            key={campaign.name}
+            className={`campaign-card ${campaign.active ? 'campaign-active' : ''}`}
+            onClick={() => onSelectCampaign(campaign.name)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onSelectCampaign(campaign.id);
+                onSelectCampaign(campaign.name);
               }
             }}
           >
             <div className="card-header">
-              <h3 className="campaign-name">{campaign.name}</h3>
+              <h3 className="campaign-name">
+                {campaign.active && '🎲 '}{campaign.name}
+              </h3>
             </div>
             <div className="card-body">
+              {campaign.description && (
+                <p className="campaign-description">{campaign.description}</p>
+              )}
+              <div className="campaign-meta">
+                {campaign.genre && <span className="meta-tag">{campaign.genre}</span>}
+                {campaign.tone && typeof campaign.tone === 'string' && <span className="meta-tag">{campaign.tone}</span>}
+              </div>
               <div className="campaign-info">
-                <span className="info-label">Последняя игра:</span>
+                <span className="info-label">Создана:</span>
                 <span className="info-value">
-                  {formatDate(campaign.last_played)}
+                  {formatDate(campaign.created_at)}
                 </span>
               </div>
             </div>
@@ -307,6 +319,32 @@ const styles = `
   .campaign-card:focus {
     outline: 2px solid #3b82f6;
     outline-offset: 2px;
+  }
+
+  .campaign-active {
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+
+  .campaign-description {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.4;
+  }
+
+  .campaign-meta {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .meta-tag {
+    font-size: 12px;
+    padding: 2px 8px;
+    background-color: rgba(59, 130, 246, 0.15);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.7);
   }
 
   .card-header {

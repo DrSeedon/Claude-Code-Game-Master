@@ -26,7 +26,7 @@ interface RulesSelectorProps {
 export function RulesSelector({
   onNext,
   onPrevious,
-  apiUrl = '/api/rules'
+  apiUrl = '/api/templates/rules'
 }: RulesSelectorProps) {
   const [rules, setRules] = useState<RulesSet[]>([]);
   const [selectedRules, setSelectedRules] = useState<string | null>(null);
@@ -41,14 +41,8 @@ export function RulesSelector({
 
       if (Array.isArray(data)) {
         setRules(data);
-        if (data.length > 0) {
-          setSelectedRules(data[0].id);
-        }
       } else if (data.rules && Array.isArray(data.rules)) {
         setRules(data.rules);
-        if (data.rules.length > 0) {
-          setSelectedRules(data.rules[0].id);
-        }
       } else {
         setError('Неверный формат данных');
       }
@@ -65,9 +59,7 @@ export function RulesSelector({
 
   // Handle next step
   const handleNext = () => {
-    if (selectedRules) {
-      onNext(selectedRules);
-    }
+    onNext(selectedRules || '');
   };
 
   if (isLoading) {
@@ -93,10 +85,23 @@ export function RulesSelector({
     <div className="wizard-step rules-selector">
       <h2>Выбор системы правил</h2>
       <p className="step-description">
-        Выберите систему правил для вашей кампании
+        Выберите систему правил или пропустите этот шаг
       </p>
 
       <div className="rules-list">
+        <label className="rules-item">
+          <input
+            type="radio"
+            name="rules"
+            value=""
+            checked={selectedRules === null || selectedRules === ''}
+            onChange={() => setSelectedRules('')}
+          />
+          <div className="rules-info">
+            <span className="rules-name">Без правил</span>
+            <span className="rules-description">Стандартная игра без дополнительных правил</span>
+          </div>
+        </label>
         {rules.length === 0 ? (
           <p>Нет доступных наборов правил</p>
         ) : (
@@ -124,7 +129,7 @@ export function RulesSelector({
             Назад
           </button>
         )}
-        <button className="btn-primary" onClick={handleNext} disabled={!selectedRules}>
+        <button className="btn-primary" onClick={handleNext}>
           Далее
         </button>
       </div>

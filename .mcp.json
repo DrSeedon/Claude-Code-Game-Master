@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aperant": {
+      "command": "/mnt/data/Projects/Python/Aperant/apps/backend/.venv/bin/python",
+      "args": ["/mnt/data/Projects/Python/Aperant/apps/backend/mcp_server.py"],
+      "env": {
+        "APERANT_PROJECT": "/mnt/data/Projects/Python/Claude-Code-Game-Master"
+      }
+    }
+  }
+}

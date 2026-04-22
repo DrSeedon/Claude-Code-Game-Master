@@ -33,7 +33,8 @@ class AnthropicAPIProvider(BaseProvider):
         conversation_history: List[Dict[str, Any]],
         system_prompt: str,
         model_name: str,
-        tools: List[Dict[str, Any]]
+        tools: List[Dict[str, Any]],
+        mcp_servers: dict = None
     ) -> AsyncGenerator[str, None]:
         """Process message via Anthropic API with tool calling loop.
 
@@ -54,11 +55,7 @@ class AnthropicAPIProvider(BaseProvider):
         Yields:
             Text chunks from streaming response
         """
-        # Add user message to history
-        conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
+        # User message already added to history by server.py
 
         # Tool calling loop: continue until final text response
         max_iterations = 10  # Protection against infinite loops
@@ -71,7 +68,11 @@ class AnthropicAPIProvider(BaseProvider):
             async with self.client.messages.stream(
                 model=model_name,
                 max_tokens=4096,
-                system=system_prompt,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }],
                 messages=conversation_history,
                 tools=tools
             ) as stream:
@@ -90,13 +91,14 @@ class AnthropicAPIProvider(BaseProvider):
 
                 # Check if Claude requested tool execution
                 if final_message.stop_reason == "tool_use":
-                    # Execute all requested tools
                     tool_results = []
 
                     for block in final_message.content:
                         if block.type == "tool_use":
+                            # Show tool call to user
+                            yield f"\n🔧 `{block.name}({json.dumps(block.input, ensure_ascii=False)[:200]})`\n"
+
                             try:
-                                # Execute tool via tools_registry
                                 result = execute_tool(block.name, block.input)
 
                                 # Convert result to string for Claude
@@ -110,19 +112,18 @@ class AnthropicAPIProvider(BaseProvider):
                                             "is_error": True
                                         })
                                     else:
-                                        # Tool executed successfully
                                         result_str = (
                                             json.dumps(result["result"])
                                             if isinstance(result.get("result"), dict)
                                             else str(result.get("result", ""))
                                         )
+                                        yield f"\n✅ {result_str[:300]}\n"
                                         tool_results.append({
                                             "type": "tool_result",
                                             "tool_use_id": block.id,
                                             "content": result_str
                                         })
                                 else:
-                                    # Fallback for non-dict results
                                     tool_results.append({
                                         "type": "tool_result",
                                         "tool_use_id": block.id,

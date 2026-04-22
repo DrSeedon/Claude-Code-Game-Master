@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Markdown from 'react-markdown';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { Message } from '../types';
 
@@ -34,35 +35,67 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
   // Auto-scroll reference
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Track index of currently streaming message (null = no active stream)
   const streamingMessageIndexRef = useRef<number | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  // Process raw WebSocket messages into structured Message objects
   useEffect(() => {
     if (rawMessages.length === 0) return;
 
-    // Get the latest raw message chunk
     const latestChunk = rawMessages[rawMessages.length - 1];
 
-    setMessageHistory(prev => {
-      // If we have an active streaming message, append chunk to it
-      if (streamingMessageIndexRef.current !== null) {
-        const updated = [...prev];
-        updated[streamingMessageIndexRef.current].content += latestChunk;
-        updated[streamingMessageIndexRef.current].timestamp = Date.now();
-        return updated;
-      } else {
-        // Start new streaming message
-        const newMessage: Message = {
-          role: 'assistant',
-          content: latestChunk,
-          timestamp: Date.now()
-        };
-        // Store index of new message for future chunks
-        streamingMessageIndexRef.current = prev.length;
-        return [...prev, newMessage];
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(latestChunk);
+
+      if (parsed.type === 'activity') {
+        streamingMessageIndexRef.current = null;
+        setMessageHistory(prev => [...prev, { role: 'assistant' as const, content: `%%ACTIVITY%%${parsed.content}`, timestamp: Date.now() }]);
+        return;
       }
-    });
+
+      if (parsed.type === 'history' && Array.isArray(parsed.messages)) {
+        setMessageHistory(parsed.messages.map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
+        })));
+        return;
+      }
+
+      if (parsed.type === 'done') {
+        streamingMessageIndexRef.current = null;
+        setIsGenerating(false);
+        return;
+      }
+
+      if (parsed.type === 'text') {
+        if (!isGenerating) setIsGenerating(true);
+        setMessageHistory(prev => {
+          if (streamingMessageIndexRef.current !== null && streamingMessageIndexRef.current < prev.length) {
+            const updated = [...prev];
+            updated[streamingMessageIndexRef.current].content += parsed.content;
+            return updated;
+          } else {
+            streamingMessageIndexRef.current = prev.length;
+            return [...prev, { role: 'assistant', content: parsed.content, timestamp: Date.now() }];
+          }
+        });
+        return;
+      }
+    } catch {
+      // Non-JSON fallback — treat as raw text
+      if (!isGenerating) setIsGenerating(true);
+      setMessageHistory(prev => {
+        if (streamingMessageIndexRef.current !== null) {
+          const updated = [...prev];
+          updated[streamingMessageIndexRef.current].content += latestChunk;
+          return updated;
+        } else {
+          streamingMessageIndexRef.current = prev.length;
+          return [...prev, { role: 'assistant', content: latestChunk, timestamp: Date.now() }];
+        }
+      });
+    }
   }, [rawMessages]);
 
   // Auto-scroll to latest message
@@ -86,8 +119,8 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
     };
     setMessageHistory(prev => [...prev, userMessage]);
 
-    // Reset streaming index - next response will start new assistant message
     streamingMessageIndexRef.current = null;
+    setIsGenerating(true);
 
     // Send to backend
     sendMessage(inputValue.trim());
@@ -125,15 +158,26 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           </div>
         ) : (
           messageHistory.map((msg, idx) => (
-            <div key={idx} className={`message message-${msg.role}`}>
-              <div className="message-role">
-                {msg.role === 'user' ? 'Игрок' : 'DM'}
+            msg.content.startsWith('%%ACTIVITY%%') ? (
+              <div key={idx} className="message-activity">{msg.content.replace('%%ACTIVITY%%', '')}</div>
+            ) : (
+              <div key={idx} className={`message message-${msg.role}`}>
+                <div className="message-role">
+                  {msg.role === 'user' ? 'Игрок' : 'DM'}
+                </div>
+                <div className="message-content">
+                  {msg.role === 'assistant' ? <Markdown>{msg.content}</Markdown> : msg.content}
+                </div>
               </div>
-              <div className="message-content">{msg.content}</div>
-            </div>
+            )
           ))
         )}
-        {/* Auto-scroll target */}
+        {isGenerating && (
+          <div className="generating-indicator">
+            <div className="generating-bar" />
+            <span>DM печатает...</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -210,6 +254,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         .messages-container {
           flex: 1;
           overflow-y: auto;
+          overflow-x: hidden;
           padding: 16px;
           display: flex;
           flex-direction: column;
@@ -256,7 +301,16 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           line-height: 1.5;
           white-space: pre-wrap;
           word-wrap: break-word;
+          word-break: break-word;
+          overflow-wrap: break-word;
+          overflow-x: hidden;
+          max-width: 100%;
         }
+
+        .message-content p { margin: 0 0 8px 0; }
+        .message-content p:last-child { margin: 0; }
+        .message-content ul, .message-content ol { margin: 4px 0; padding-left: 20px; }
+        .message-content strong { color: rgba(255,255,255,1); }
 
         .message-user .message-content {
           background-color: #3b82f6;
@@ -321,6 +375,53 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           opacity: 0.5;
           cursor: not-allowed;
         }
+
+        .message-activity {
+          align-self: flex-start;
+          font-size: 12px;
+          font-family: monospace;
+          color: rgba(255, 255, 255, 0.35);
+          padding: 2px 12px;
+          max-width: 90%;
+          word-break: break-all;
+          white-space: pre-wrap;
+        }
+
+        .generating-indicator {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 16px;
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 13px;
+        }
+
+        .generating-bar {
+          width: 40px;
+          height: 3px;
+          background: rgba(59, 130, 246, 0.3);
+          border-radius: 2px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .generating-bar::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -40px;
+          width: 40px;
+          height: 100%;
+          background: #3b82f6;
+          border-radius: 2px;
+          animation: generating-slide 1s ease-in-out infinite;
+        }
+
+        @keyframes generating-slide {
+          0% { left: -40px; }
+          100% { left: 40px; }
+        }
+
       `}</style>
     </div>
   );

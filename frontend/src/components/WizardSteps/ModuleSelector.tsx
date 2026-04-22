@@ -26,7 +26,7 @@ interface ModuleSelectorProps {
 export function ModuleSelector({
   onNext,
   onPrevious,
-  apiUrl = '/api/modules'
+  apiUrl = '/api/templates/modules'
 }: ModuleSelectorProps) {
   const [modules, setModules] = useState<Module[]>([]);
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set());

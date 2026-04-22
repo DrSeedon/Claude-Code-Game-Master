@@ -26,7 +26,7 @@ interface NarratorSelectorProps {
 export function NarratorSelector({
   onNext,
   onPrevious,
-  apiUrl = '/api/narrators'
+  apiUrl = '/api/templates/narrators'
 }: NarratorSelectorProps) {
   const [narrators, setNarrators] = useState<NarratorStyle[]>([]);
   const [selectedNarrator, setSelectedNarrator] = useState<string | null>(null);

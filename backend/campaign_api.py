@@ -197,22 +197,17 @@ def create_campaign(
 
         wg = WorldGraph(campaign_dir)
 
-        # Create player node with character data
-        player_id = f"player-{character.get('name', 'hero').lower().replace(' ', '-')}"
         wg.add_node(
-            id=player_id,
-            type="player",
-            name=character.get("name", "Hero"),
-            class_=character.get("class", ""),
+            "player:active",
+            "player",
+            character.get("name", "Hero"),
             race=character.get("race", ""),
             level=character.get("level", 1),
-            hp=10,
-            max_hp=10,
+            hp={"current": 10, "max": 10},
             xp=0,
-            gold=0,
-            inventory=[],
+            money=0,
         )
-        wg.save()
+        # add_node auto-saves
 
     return {
         "success": True,

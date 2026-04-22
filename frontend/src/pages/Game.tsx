@@ -1,19 +1,26 @@
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Chat } from '../components/Chat';
 import { CharacterPanel } from '../components/CharacterPanel';
 
-/**
- * Game page component
- *
- * Main game screen displaying chat interface and character panel side-by-side.
- * Uses flexbox layout with chat taking the main area and character panel as fixed-width sidebar.
- */
 export function Game() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const campaignId = searchParams.get('campaign');
+  const [ready, setReady] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
-  // Check if campaign is selected
+  // Activate campaign on mount
+  useEffect(() => {
+    if (!campaignId) return;
+    fetch(`/api/campaigns/${campaignId}/activate`, { method: 'POST' })
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to activate campaign');
+        setReady(true);
+      })
+      .catch(e => setActivateError(e.message));
+  }, [campaignId]);
+
   if (!campaignId) {
     return (
       <div className="game-page error-state">
@@ -27,18 +34,38 @@ export function Game() {
     );
   }
 
+  if (activateError) {
+    return (
+      <div className="game-page error-state">
+        <div className="error-content">
+          <h2>Ошибка активации кампании</h2>
+          <p>{activateError}</p>
+          <button onClick={() => navigate('/')}>Вернуться в лобби</button>
+        </div>
+        <style>{errorStyles}</style>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="game-page error-state">
+        <div className="error-content">
+          <h2>Загрузка кампании...</h2>
+        </div>
+        <style>{errorStyles}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="game-page">
-      {/* Main chat area - takes remaining space */}
       <main className="main-content">
-        <Chat wsUrl={`/ws/game?campaign=${campaignId}`} />
+        <Chat wsUrl="/ws/game" />
       </main>
-
-      {/* Character panel sidebar - fixed width on the right */}
       <aside className="sidebar">
-        <CharacterPanel apiUrl={`/api/status?campaign=${campaignId}`} />
+        <CharacterPanel apiUrl="/api/status" />
       </aside>
-
       <style>{styles}</style>
     </div>
   );
