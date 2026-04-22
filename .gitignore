@@ -89,3 +89,4 @@ docs/production/
 .worktrees/
 .security-key
 logs/security/
+storage/
