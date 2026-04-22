@@ -2,6 +2,24 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [3.1.0] - 2026-04-22
+
+### Added
+- 🧠 **Persistent DM session across backend restarts** — SDK session id stored in `storage/sessions/<campaign_name>`, resumed on next `/ws/game` connect. Closed browser tab / killed server = context lives on, DM remembers the whole conversation
+  - Storage format: one-line UUID file per campaign, plain text. SDK itself writes the `.jsonl` to `~/.claude/projects/<sanitized-cwd>/<uuid>.jsonl`
+  - Triggered case: тестил руками — отправил Стиву кодовое слово ОЗЯБЛИК, рестартнул backend, спросил — вспомнил
+- 🖥 **`ClaudeSDKClient`-based provider** — вместо `query()` subprocess на каждое сообщение теперь **один живой `claude` процесс на сессию**. Латенси первого токена упала с ~3-5s до ~0.5s. Поддержан `interrupt()` через `provider.interrupt()` при WebSocket disconnect
+
+### Changed
+- **Provider architecture** — `BaseProvider` теперь session-oriented: `load_session(session_key)` + `process_message(user_message, ...)` без `conversation_history`. Каждый провайдер сам помнит разговор (SDK — через CLI session, API — через `storage/sessions/<key>_history.json`). `server.py` стал тоньше на ~100 строк
+- **Default SDK package** → `claude-agent-sdk` (официальное имя после ренейма Anthropic'ом `claude-code-sdk`)
+- **chat_history.json** теперь UI-only mirror — источник истины для LLM — SDK session / API history file
+- **Wizard provider** — ephemeral режим, session-id случайный, не пишется на диск (визард одноразовый, resume не нужен)
+
+### Known tradeoff
+- **SDK via subscription** больше не разрешён Anthropic'ом для SaaS/third-party (политика с февраля 2026). Для личного локального использования **технически работает**, но могут задушить без предупреждения. Для прода — переключаемся на API ключ через `ANTHROPIC_API_KEY` env (auto-switch в фабрике)
+- `chat_history.json` теперь чуть опаздывает — пишется после `done` события, но не атомарно с `claude` JSONL. Если kill -9 точно в момент записи — UI история потеряет последний ход, сама сессия Claude — нет
+
 ## [3.0.0] - 2026-04-22
 
 ### Added
