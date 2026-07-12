@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Chat } from '../components/Chat';
 import { CharacterPanel } from '../components/CharacterPanel';
@@ -7,19 +6,6 @@ export function Game() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const campaignId = searchParams.get('campaign');
-  const [ready, setReady] = useState(false);
-  const [activateError, setActivateError] = useState<string | null>(null);
-
-  // Activate campaign on mount
-  useEffect(() => {
-    if (!campaignId) return;
-    fetch(`/api/campaigns/${campaignId}/activate`, { method: 'POST' })
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to activate campaign');
-        setReady(true);
-      })
-      .catch(e => setActivateError(e.message));
-  }, [campaignId]);
 
   if (!campaignId) {
     return (
@@ -34,37 +20,13 @@ export function Game() {
     );
   }
 
-  if (activateError) {
-    return (
-      <div className="game-page error-state">
-        <div className="error-content">
-          <h2>Ошибка активации кампании</h2>
-          <p>{activateError}</p>
-          <button onClick={() => navigate('/')}>Вернуться в лобби</button>
-        </div>
-        <style>{errorStyles}</style>
-      </div>
-    );
-  }
-
-  if (!ready) {
-    return (
-      <div className="game-page error-state">
-        <div className="error-content">
-          <h2>Загрузка кампании...</h2>
-        </div>
-        <style>{errorStyles}</style>
-      </div>
-    );
-  }
-
   return (
     <div className="game-page">
       <main className="main-content">
-        <Chat wsUrl="/ws/game" />
+        <Chat campaign={campaignId} />
       </main>
       <aside className="sidebar">
-        <CharacterPanel apiUrl="/api/status" />
+        <CharacterPanel campaign={campaignId} />
       </aside>
       <style>{styles}</style>
     </div>

@@ -173,7 +173,8 @@ function CampaignListWithNavigation({
           >
             <div className="card-header">
               <h3 className="campaign-name">
-                {campaign.active && '🎲 '}{campaign.name}
+                {campaign.name}
+                {campaign.active && <span className="playing-badge">▶ playing</span>}
               </h3>
             </div>
             <div className="card-body">
@@ -358,6 +359,19 @@ const styles = `
     font-size: 20px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.95);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .playing-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ok, #22c55e);
+    background-color: rgba(34, 197, 94, 0.15);
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
   }
 
   .card-body {

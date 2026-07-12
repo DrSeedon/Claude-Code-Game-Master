@@ -5,8 +5,8 @@ import { CharacterStatus, isValidCharacterStatus } from '../types';
  * CharacterPanel component props
  */
 interface CharacterPanelProps {
-  /** Optional API endpoint override (defaults to /api/status) */
-  apiUrl?: string;
+  /** Campaign whose character status to display */
+  campaign: string;
   /** Optional refresh interval in milliseconds (defaults to 5000ms) */
   refreshInterval?: number;
 }
@@ -19,13 +19,14 @@ interface CharacterPanelProps {
  *
  * @example
  * ```tsx
- * <CharacterPanel />
+ * <CharacterPanel campaign="my-campaign" />
  * ```
  */
 export function CharacterPanel({
-  apiUrl = '/api/status',
+  campaign,
   refreshInterval = 5000
 }: CharacterPanelProps) {
+  const apiUrl = `/api/status?campaign=${encodeURIComponent(campaign)}`;
   // Character status state
   const [status, setStatus] = useState<CharacterStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);

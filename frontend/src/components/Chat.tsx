@@ -1,16 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Markdown from 'react-markdown';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useStreamingBuffer } from '../hooks/useStreamingBuffer';
 import { Message, WsServerEvent } from '../types';
 
 const MAX_MESSAGES = 500;
+const AUTO_SCROLL_THRESHOLD_PX = 80;
 
 /**
  * Chat component props
  */
 interface ChatProps {
-  /** Optional WebSocket URL override (defaults to /ws/game) */
-  wsUrl?: string;
+  /** Campaign this chat streams — becomes the `campaign` query param on the WS connection */
+  campaign: string;
+  /** Optional WebSocket base path override (defaults to /ws/game) */
+  wsPath?: string;
 }
 
 type ChatMessage = Message & {
@@ -25,36 +29,52 @@ function bounded(messages: ChatMessage[]): ChatMessage[] {
 /**
  * Main chat interface component
  *
- * Displays message history between player and DM, with real-time streaming responses.
- * Uses WebSocket for bi-directional communication.
+ * Displays message history between player and DM, with real-time token-by-token
+ * streaming responses (via useStreamingBuffer) over a per-campaign WebSocket.
  *
  * @example
  * ```tsx
- * <Chat />
+ * <Chat campaign="my-campaign" />
  * ```
  */
-export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
+export function Chat({ campaign, wsPath = '/ws/game' }: ChatProps) {
   const [messageHistory, setMessageHistory] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const streamingMessageIndexRef = useRef<number | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const localEchoRef = useRef<Set<string>>(new Set());
+  const afterIdRef = useRef(0);
+
+  const stream = useStreamingBuffer();
 
   const handleEvent = useCallback((event: WsServerEvent) => {
     switch (event.type) {
+      case 'stream':
+        setIsGenerating(true);
+        stream.push(event.content);
+        break;
+
+      case 'text': {
+        const finalText = stream.active ? stream.finalize(event.content) : event.content;
+        setMessageHistory(prev => bounded([...prev, { role: 'assistant', content: finalText, timestamp: Date.now() }]));
+        break;
+      }
+
       case 'activity':
-        streamingMessageIndexRef.current = null;
+        stream.finalize();
         setMessageHistory(prev => bounded([...prev, { role: 'assistant', kind: 'activity', content: event.content, timestamp: Date.now() }]));
         break;
 
       case 'error':
-        streamingMessageIndexRef.current = null;
+        stream.reset();
         setIsGenerating(false);
         setMessageHistory(prev => bounded([...prev, { role: 'assistant', kind: 'error', content: event.content, timestamp: Date.now() }]));
         break;
 
       case 'history':
+        stream.reset();
         setMessageHistory(bounded(event.messages
           .filter(m => !localEchoRef.current.has(`${m.role}:${m.content}`))
           .map(m => ({
@@ -62,36 +82,30 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
             content: m.content,
             timestamp: m.timestamp ?? Date.now()
           }))));
-        streamingMessageIndexRef.current = null;
         break;
 
       case 'done':
-        streamingMessageIndexRef.current = null;
         setIsGenerating(false);
         break;
-
-      case 'text':
-        setIsGenerating(true);
-        setMessageHistory(prev => {
-          if (streamingMessageIndexRef.current !== null && streamingMessageIndexRef.current < prev.length) {
-            const updated = [...prev];
-            const target = updated[streamingMessageIndexRef.current];
-            updated[streamingMessageIndexRef.current] = { ...target, content: target.content + event.content };
-            return updated;
-          }
-          streamingMessageIndexRef.current = prev.length;
-          return bounded([...prev, { role: 'assistant', content: event.content, timestamp: Date.now() }]);
-        });
-        break;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.active, stream.push, stream.finalize, stream.reset]);
+
+  const { sendMessage, connectionStatus } = useWebSocket(wsPath, campaign, { onEvent: handleEvent, afterIdRef });
+
+  // Track whether the user is scrolled near the bottom (Orchestra's 80px gate)
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < AUTO_SCROLL_THRESHOLD_PX;
   }, []);
 
-  const { sendMessage, connectionStatus } = useWebSocket(wsUrl, { onEvent: handleEvent });
-
-  // Auto-scroll to latest message
+  // Auto-scroll to latest message, but only if the user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messageHistory]);
+    if (atBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messageHistory, stream.display]);
 
   // Handle message send
   const handleSend = useCallback(() => {
@@ -106,7 +120,6 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
     const userMessage: ChatMessage = { role: 'user', content, timestamp: Date.now() };
     setMessageHistory(prev => bounded([...prev, userMessage]));
 
-    streamingMessageIndexRef.current = null;
     setIsGenerating(true);
 
     sendMessage(content);
@@ -152,8 +165,8 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
       )}
 
       {/* Message history */}
-      <div className="messages-container">
-        {messageHistory.length === 0 ? (
+      <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+        {messageHistory.length === 0 && !stream.active ? (
           <div className="empty-state">
             <p>Добро пожаловать! Напишите что-нибудь для начала приключения...</p>
           </div>
@@ -175,7 +188,16 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
             )
           ))
         )}
-        {isGenerating && (
+        {stream.active && (
+          <div className="message message-assistant">
+            <div className="message-role">DM</div>
+            <div className="message-content streaming">
+              <Markdown>{stream.display}</Markdown>
+              <span className="typing-cursor">▍</span>
+            </div>
+          </div>
+        )}
+        {isGenerating && !stream.active && (
           <div className="generating-indicator">
             <div className="generating-bar" />
             <span>DM печатает...</span>
@@ -229,16 +251,16 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         }
 
         .status-connecting {
-          background-color: #fbbf24;
+          background-color: var(--warn);
           animation: pulse 2s infinite;
         }
 
         .status-connected {
-          background-color: #10b981;
+          background-color: var(--ok);
         }
 
         .status-reconnecting {
-          background-color: #fbbf24;
+          background-color: var(--warn);
           animation: pulse 1s infinite;
         }
 
@@ -247,7 +269,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         }
 
         .status-failed {
-          background-color: #ef4444;
+          background-color: var(--danger);
         }
 
         @keyframes pulse {
@@ -262,8 +284,8 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
 
         .reconnect-banner {
           padding: 6px 16px;
-          background-color: rgba(251, 191, 36, 0.15);
-          color: #fbbf24;
+          background-color: rgba(234, 179, 8, 0.15);
+          color: var(--warn);
           font-size: 13px;
           text-align: center;
         }
@@ -279,9 +301,9 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         }
 
         .failed-modal {
-          background: #1a1a2e;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--r-lg);
           padding: 24px 32px;
           text-align: center;
         }
@@ -298,10 +320,10 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
 
         .failed-modal button {
           padding: 8px 20px;
-          background-color: #3b82f6;
+          background-color: var(--accent);
           color: white;
           border: none;
-          border-radius: 6px;
+          border-radius: var(--r-sm);
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
@@ -353,7 +375,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
 
         .message-content {
           padding: 12px 16px;
-          border-radius: 12px;
+          border-radius: var(--r-lg);
           line-height: 1.5;
           white-space: pre-wrap;
           word-wrap: break-word;
@@ -369,7 +391,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         .message-content strong { color: rgba(255,255,255,1); }
 
         .message-user .message-content {
-          background-color: #3b82f6;
+          background-color: var(--accent);
           color: white;
         }
 
@@ -384,7 +406,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           padding: 10px 16px;
           background-color: rgba(239, 68, 68, 0.15);
           border: 1px solid rgba(239, 68, 68, 0.4);
-          border-radius: 8px;
+          border-radius: var(--r-md);
           color: #fca5a5;
           font-size: 13px;
           white-space: pre-wrap;
@@ -404,7 +426,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           padding: 12px 16px;
           background-color: rgba(255, 255, 255, 0.1);
           border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 8px;
+          border-radius: var(--r-md);
           color: rgba(255, 255, 255, 0.87);
           font-size: 14px;
           outline: none;
@@ -412,7 +434,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         }
 
         .message-input:focus {
-          border-color: #3b82f6;
+          border-color: var(--accent);
         }
 
         .message-input:disabled {
@@ -426,10 +448,10 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
 
         .send-button {
           padding: 12px 24px;
-          background-color: #3b82f6;
+          background-color: var(--accent);
           color: white;
           border: none;
-          border-radius: 8px;
+          border-radius: var(--r-md);
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
@@ -437,7 +459,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         }
 
         .send-button:hover:not(:disabled) {
-          background-color: #2563eb;
+          filter: brightness(1.1);
         }
 
         .send-button:disabled {
@@ -457,7 +479,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         .generating-bar {
           width: 40px;
           height: 3px;
-          background: rgba(59, 130, 246, 0.3);
+          background: rgba(129, 140, 248, 0.3);
           border-radius: 2px;
           overflow: hidden;
           position: relative;
@@ -470,7 +492,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           left: -40px;
           width: 40px;
           height: 100%;
-          background: #3b82f6;
+          background: var(--accent);
           border-radius: 2px;
           animation: generating-slide 1s ease-in-out infinite;
         }
@@ -511,7 +533,7 @@ function ActivityLine({ content }: { content: string }) {
         }
 
         .activity-toggle {
-          color: rgba(59, 130, 246, 0.7);
+          color: var(--accent);
           font-style: italic;
         }
       `}</style>

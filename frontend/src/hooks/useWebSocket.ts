@@ -8,6 +8,8 @@ const MAX_RECONNECT_DELAY_MS = 30000;
 export interface UseWebSocketOptions {
   /** Called for every parsed server event, in arrival order */
   onEvent: (event: WsServerEvent) => void;
+  /** Replay cursor — sent as `after_id` query param on every (re)connect, bumped on every id-bearing event */
+  afterIdRef: React.MutableRefObject<number>;
 }
 
 export interface UseWebSocketReturn {
@@ -15,27 +17,29 @@ export interface UseWebSocketReturn {
   connectionStatus: ConnectionStatus;
 }
 
-export function useWebSocket(url: string, { onEvent }: UseWebSocketOptions): UseWebSocketReturn {
+export function useWebSocket(basePath: string, campaign: string, { onEvent, afterIdRef }: UseWebSocketOptions): UseWebSocketReturn {
   const ws = useRef<WebSocket | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const mountedRef = useRef(true);
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastEventIdRef = useRef<number | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
-  const connect = useCallback((wsUrl: string) => {
-    const socket = new WebSocket(wsUrl);
+  const buildUrl = useCallback(() => {
+    const base = basePath.startsWith('ws') ? basePath : `ws://${window.location.host}${basePath}`;
+    const params = new URLSearchParams({ campaign, after_id: String(afterIdRef.current) });
+    return `${base}?${params.toString()}`;
+  }, [basePath, campaign, afterIdRef]);
+
+  const connect = useCallback(() => {
+    const socket = new WebSocket(buildUrl());
     ws.current = socket;
 
     socket.onopen = () => {
       if (!mountedRef.current) return;
       attemptRef.current = 0;
       setConnectionStatus('connected');
-      if (lastEventIdRef.current !== null) {
-        socket.send(JSON.stringify({ type: 'replay', after_id: lastEventIdRef.current }));
-      }
     };
 
     socket.onmessage = (event) => {
@@ -47,7 +51,7 @@ export function useWebSocket(url: string, { onEvent }: UseWebSocketOptions): Use
         return;
       }
       if (!isWsServerEvent(parsed)) return;
-      if ('id' in parsed) lastEventIdRef.current = parsed.id;
+      if ('id' in parsed) afterIdRef.current = parsed.id;
       onEventRef.current(parsed);
     };
 
@@ -70,17 +74,15 @@ export function useWebSocket(url: string, { onEvent }: UseWebSocketOptions): Use
       const delay = Math.min(BASE_RECONNECT_DELAY_MS * 2 ** attemptRef.current, MAX_RECONNECT_DELAY_MS);
       attemptRef.current += 1;
       reconnectTimerRef.current = setTimeout(() => {
-        if (mountedRef.current) connect(wsUrl);
+        if (mountedRef.current) connect();
       }, delay);
     };
-  }, []);
+  }, [buildUrl, afterIdRef]);
 
   useEffect(() => {
     mountedRef.current = true;
     attemptRef.current = 0;
-    lastEventIdRef.current = null;
-    const wsUrl = url.startsWith('ws') ? url : `ws://${window.location.host}${url}`;
-    connect(wsUrl);
+    connect();
 
     return () => {
       mountedRef.current = false;
@@ -91,7 +93,7 @@ export function useWebSocket(url: string, { onEvent }: UseWebSocketOptions): Use
       }
       ws.current = null;
     };
-  }, [url, connect]);
+  }, [connect]);
 
   const sendMessage = useCallback((msg: string) => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {

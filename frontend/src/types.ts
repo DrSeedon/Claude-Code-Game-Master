@@ -60,6 +60,7 @@ export type ConnectionStatus =
  * Raw event shapes sent by the backend over the game WebSocket
  */
 export type WsServerEvent =
+  | { type: 'stream'; content: string }
   | { type: 'text'; content: string; id: number }
   | { type: 'activity'; content: string; id: number }
   | { type: 'error'; content: string; id: number }
@@ -72,7 +73,7 @@ export type WsServerEvent =
 export function isWsServerEvent(value: unknown): value is WsServerEvent {
   if (typeof value !== 'object' || value === null || !('type' in value)) return false;
   const type = (value as { type: unknown }).type;
-  return type === 'text' || type === 'activity' || type === 'error' || type === 'done' || type === 'history';
+  return type === 'stream' || type === 'text' || type === 'activity' || type === 'error' || type === 'done' || type === 'history';
 }
 
 /**
