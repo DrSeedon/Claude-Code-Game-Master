@@ -20,7 +20,7 @@ class Config:
     campaigns_dir: Path
 
     # Claude SDK settings
-    model_name: str = "claude-sonnet-4-6"
+    model_name: str = "claude-sonnet-5"
 
     # Backend server settings
     backend_host: str = "127.0.0.1"
@@ -76,7 +76,7 @@ def get_config() -> Config:
         project_root=project_root,
         world_state_base=world_state_base,
         campaigns_dir=campaigns_dir,
-        model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
+        model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-5",
         backend_host=os.environ.get("BACKEND_HOST") or "127.0.0.1",
         backend_port=int(os.environ.get("BACKEND_PORT", "18083")),
     )

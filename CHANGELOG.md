@@ -2,6 +2,27 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.1.0] - 2026-07-12
+
+### Added
+- 🧙 **Persistent wizard drafts** — создание кампании переживает reconnect/reload
+  - `backend/wizard_session.py` — реестр `WizardDraft` по `session_id`: персистентный `ClaudeSDKProvider`
+    (resume через session_id) + event log в `world-state/wizard-drafts/<id>/`
+  - `/ws/wizard?session_id=<id>&after_id=<n>` — resume + history replay (тот же контракт что `/ws/game`)
+  - `show_choices`/`clear_choices` тоже пишутся в log → панель choices восстанавливается при reconnect
+  - `DELETE /api/wizard-session/{id}` — сброс черновика
+  - Frontend: "+" предлагает "Продолжить / Начать заново" если есть незавершённый draft (localStorage
+    `wizard_session_id`); кнопка 🗑️ Сбросить в header; при `create_campaign` черновик удаляется
+  - Turn-lock (`draft.running`) отклоняет параллельные sends в одном черновике
+  - Triggered case: игрок закрывал вкладку на полпути создания и терял весь диалог с DM
+- 🔧 **Tool calls в wizard-чате** — activity events (вызовы show_choices и т.д.) теперь видны как
+  collapsible-блоки в чате визарда (раньше wizard-handler их глотал)
+
+### Changed
+- 🤖 **Модели: убран `claude-opus-4-6`**, дефолт → `claude-sonnet-5`
+  - `config.py` default + `ALLOWED_MODELS` = `[sonnet-5, opus-4-8]`. `/api/models` default = `sonnet-5`
+  - Config и UI-список согласованы (Codex P2 про уважение конфига остаётся жив)
+
 ## [4.0.0] - 2026-07-12
 
 ### Changed

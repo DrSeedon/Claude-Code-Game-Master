@@ -25,6 +25,7 @@ frontend/dist/
 world-state/campaigns/*
 !world-state/campaigns/.gitkeep
 world-state/active-campaign.txt
+world-state/wizard-drafts/
 
 # Source Material (User-provided documents for import)
 source-material/*
