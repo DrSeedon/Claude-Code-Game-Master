@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 BACKEND_PORT=18083
-FRONTEND_PORT=3000
+FRONTEND_PORT=3001
 
 cd "$(dirname "$0")"
 
