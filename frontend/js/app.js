@@ -312,7 +312,7 @@ function closeWs() {
 function gameUrl() {
   const params = new URLSearchParams({ campaign: state.campaign, after_id: String(state.afterId) });
   if (el.modelSelect.value) params.set('model', el.modelSelect.value);
-  return `ws://${location.host}/ws/game?${params.toString()}`;
+  return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/game?${params.toString()}`;
 }
 
 function connect(url) {
@@ -346,7 +346,7 @@ function connect(url) {
     state.attempt += 1;
     state.reconnectTimer = setTimeout(() => {
       if (state.mode === 'game') connect(gameUrl());
-      else if (state.mode === 'wizard') connect(`ws://${location.host}/ws/wizard`);
+      else if (state.mode === 'wizard') connect(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard`);
     }, delay);
   };
 }
@@ -548,7 +548,7 @@ function startWizard() {
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat('Создание кампании');
-  connect(`ws://${location.host}/ws/wizard`);
+  connect(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard`);
   showInitialWizardGreeting();
   el.input.focus();
 }

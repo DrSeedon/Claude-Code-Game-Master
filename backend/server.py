@@ -10,9 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 
+from fastapi import Request, Form
+from starlette.middleware.base import BaseHTTPMiddleware
+
 from backend.config import get_config
 from backend.game_state import get_character_status
 from backend.claude_dm import load_system_prompt
+from backend.auth import is_authenticated, login_page, handle_login
 from backend.campaign_api import (
     list_campaigns,
     create_campaign,
@@ -34,6 +38,36 @@ app = FastAPI(
 
 # Vanilla frontend lives in <project>/frontend — same origin, no CORS needed.
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+
+# ─────────────────────────── Auth middleware ──────────────────────────────────
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Redirect unauthenticated requests to login page.
+    Skips /auth/* and /static/* paths. Disabled when DND_AUTH_PASSWORD unset."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/auth") or path.startswith("/static/css") or path.startswith("/static/js"):
+            return await call_next(request)
+        if not is_authenticated(request):
+            return login_page()
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
+
+
+@app.post("/auth/login")
+async def auth_login(password: str = Form(...)):
+    """Handle login form submission."""
+    return handle_login(password)
+
+
+@app.get("/auth/login")
+async def auth_login_page():
+    """Show login page."""
+    return login_page()
 
 # Models the client may pick in the header select. Order = display order.
 ALLOWED_MODELS = ["claude-sonnet-5", "claude-opus-4-8"]

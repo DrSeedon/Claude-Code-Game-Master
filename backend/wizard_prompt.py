@@ -50,7 +50,16 @@ Ask what kind of campaign. Then show_choices with rules templates as radio + tex
 Based on concept, show_choices with modules (checkbox) + narrator style (radio). Color-code recommendations.
 
 ### Step 3: Character
-show_choices with text_input for name (required), class and race (optional with placeholders).
+For EACH field (name, class, background), show a radio control with 3 AI-generated presets PLUS a text_input for custom entry.
+The presets must fit the campaign genre/setting. Color-code: green=fits perfectly, yellow=works, red=unusual but possible.
+Example structure for each field:
+- radio "name" with 3 options (genre-appropriate names) + comment explaining each
+- text_input "custom_name" with placeholder "Свой вариант..."
+- radio "class" with 3 options (genre-appropriate classes/roles)
+- text_input "custom_class" with placeholder "Свой вариант..."
+- radio "background" with 3 options (genre-appropriate backstories)
+- text_input "custom_background" with placeholder "Свой вариант..."
+Player can pick a preset OR type custom. If both filled, custom takes priority.
 
 ### Step 4: Confirm
 Summarize in chat. When player confirms, output create_campaign block.
