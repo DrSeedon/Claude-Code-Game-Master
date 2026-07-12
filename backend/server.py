@@ -23,7 +23,7 @@ from backend.event_log import read_events, append_event
 from backend.game_session import get_or_create_session
 from backend.live_broker import broker
 from backend.wizard_prompt import load_wizard_system_prompt
-from backend.wizard_session import get_or_create_draft, delete_draft
+from backend.wizard_session import get_or_create_draft, delete_draft, is_valid_session_id
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -388,8 +388,10 @@ async def root():
 @app.delete("/api/wizard-session/{session_id}")
 async def api_delete_wizard_session(session_id: str):
     """Drop a wizard draft (provider + event log). Idempotent."""
+    if not is_valid_session_id(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session_id")
     config = get_config()
-    existed = delete_draft(session_id, config.project_root)
+    existed = await delete_draft(session_id, config.project_root)
     return {"success": True, "existed": existed}
 
 
@@ -413,8 +415,8 @@ async def wizard_websocket(websocket: WebSocket):
         return
 
     session_id = websocket.query_params.get("session_id")
-    if not session_id:
-        await websocket.send_text(json.dumps({"type": "error", "content": "Missing ?session_id= query param"}))
+    if not session_id or not is_valid_session_id(session_id):
+        await websocket.send_text(json.dumps({"type": "error", "content": "Missing or invalid ?session_id= query param"}))
         await websocket.close()
         return
     after_id = int(websocket.query_params.get("after_id", "0"))
@@ -448,8 +450,13 @@ async def wizard_websocket(websocket: WebSocket):
                 await send({"type": "error", "content": "A wizard turn is already in progress"})
                 continue
             draft.running = True
+            completed = False
             print(f"🧙 Wizard[{session_id}] message: {user_message[:50]}...")
             append_event(draft.dir, "user_message", user_message)
+            # A sidebar submit consumes the shown choices — persist a clear so a
+            # reconnect before the DM's reply doesn't resurrect the old panel.
+            if user_message.startswith("[Sidebar selection") or user_message.startswith("[Sidebar skip"):
+                append_event(draft.dir, "clear_choices", "")
             Path(output_file).write_text("", encoding="utf-8")
 
             try:
@@ -483,7 +490,7 @@ async def wizard_websocket(websocket: WebSocket):
                             await send({"type": "clear_choices"})
                         elif tool == "create_campaign":
                             if tool_output.get("success"):
-                                delete_draft(session_id, config.project_root)  # draft consumed → clean up
+                                completed = True
                                 await send({"type": "wizard_complete", "campaign_name": tool_output.get("campaign_name")})
                             else:
                                 await send(append_event(draft.dir, "error", tool_output.get("error", "Creation failed")))
@@ -495,6 +502,13 @@ async def wizard_websocket(websocket: WebSocket):
                 draft.running = False
 
             await send({"type": "done"})
+
+            if completed:
+                # Draft consumed by create_campaign — delete AFTER the turn fully
+                # unwound (provider idle), so nothing appends to a removed log.
+                await delete_draft(session_id, config.project_root)
+                Path(output_file).unlink(missing_ok=True)
+                return
 
     except WebSocketDisconnect:
         print(f"🧙 Wizard[{session_id}] disconnected (draft kept)")

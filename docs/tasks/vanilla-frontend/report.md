@@ -1,5 +1,29 @@
 # Vanilla-frontend rewrite — report
 
+## Follow-up: persistent wizard + Codex round 2 (2026-07-12)
+Shipped persistent wizard drafts, activity-in-wizard, model list trim (sonnet-5 default,
+opus-4-6 removed). Codex re-review (resumed session, reviewing the diff) found 5 issues;
+4 fixed, 1 deferred as design scope:
+
+- **[fixed] Path traversal** — `session_id` was a raw path component; `?session_id=../campaigns/x`
+  could rmtree a real campaign. Added `is_valid_session_id` (`^[A-Za-z0-9_-]{1,64}$`), enforced at
+  the WS handler and DELETE endpoint. Verified: `..`, `/etc/passwd`, spaces, overlong → rejected.
+- **[fixed] set_model race on a just-started turn** — `send()` scheduled `_run_turn` which read the
+  mutable `self.model_name` late; a `set_model()` in the scheduling window could change the turn's
+  model / trigger a mid-turn provider reset. Now `send()` snapshots `model` + `model_dirty` and passes
+  them into `_run_turn`. Verified: mid-turn switch leaves the running turn on the old model, applies next turn.
+- **[fixed] Stale choices resurrected on replay** — submit cleared choices client-side but nothing was
+  persisted, so replay restored the last `show_choices`. Handler now appends a `clear_choices` event when
+  the user message is a `[Sidebar selection…]`/`[Sidebar skip…]`. Verified: replay ends with panel hidden.
+- **[fixed] Draft delete leaked the provider + could recreate the log** — `delete_draft` is now async and
+  `await provider.close()`s the SDK subprocess; the create_campaign path deletes AFTER the turn fully
+  unwinds and `return`s from the handler, so nothing appends to a removed log. Verified: provider closed, idempotent.
+- **[deferred] Disconnect mid-turn aborts wizard generation** — wizard turns run inline (not
+  background-task+broker like game), so a socket drop mid-stream unwinds the turn. Fixing fully = replicating
+  the game's broker/background model for wizard (big rewrite). Flagged to orchestrator as a scoped tradeoff.
+
+185 backend tests pass; browser + WS verified after fixes.
+
 ## Follow-up: 3 UI features (2026-07-12)
 1. **Context usage indicator** — `ClaudeSDKProvider.get_context_usage()` reads `ResultMessage.usage`
    (input + cache_read + cache_creation) / 200k window → `{percent,used_tokens,total_tokens}`, or None

@@ -73,18 +73,25 @@ class GameSession:
         idle_for = time.monotonic() - self._last_turn_end_at if self._last_turn_end_at else 0.0
         append_event(self.campaign_dir, "user_message", user_message)
         self.running = True
-        self._turn_task = asyncio.create_task(self._run_turn(user_message, system_prompt, mcp_servers, idle_for))
+        # Snapshot the model NOW so a set_model() between here and the task actually
+        # running can't change this turn's model or trigger a mid-turn provider reset.
+        model = self.model_name
+        model_dirty = self._model_dirty
+        self._model_dirty = False
+        self._turn_task = asyncio.create_task(
+            self._run_turn(user_message, system_prompt, mcp_servers, idle_for, model, model_dirty)
+        )
         self._turn_task.add_done_callback(self._on_turn_done)
         return True
 
-    async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict], idle_for: float) -> None:
+    async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict],
+                        idle_for: float, model: str, model_dirty: bool) -> None:
         try:
-            if self._model_dirty:
+            if model_dirty:
                 # Model changed — drop the old CLI session so the new model starts a
                 # fresh conversation (resume would keep the old model's session).
                 await self.provider.close()
-                self._model_dirty = False
-                logger.info(f"[{self.campaign}] model switched to {self.model_name}")
+                logger.info(f"[{self.campaign}] model switched to {model}")
             elif idle_for > HIBERNATE_IDLE_SECONDS:
                 # Idle too long — drop the CLI subprocess. process_message() reconnects
                 # and resumes via the provider's cached session_id, so history survives.
@@ -93,7 +100,7 @@ class GameSession:
             async for event in self.provider.process_message(
                 user_message=user_message,
                 system_prompt=system_prompt,
-                model_name=self.model_name,
+                model_name=model,
                 mcp_servers=mcp_servers,
             ):
                 if event["type"] == "text_delta":
