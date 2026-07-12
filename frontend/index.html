@@ -13,6 +13,13 @@
 </head>
 <body>
   <div id="app">
+    <!-- Mobile-only top bar (hidden on desktop). Doubles as list header / chat header. -->
+    <header class="mobile-header">
+      <button class="mobile-back-btn" id="mobile-back" aria-label="Назад" hidden>←</button>
+      <span class="mobile-title" id="mobile-title">🎲 DM Game Master</span>
+      <button class="mobile-new-btn" id="mobile-new-btn" aria-label="Новая кампания">+</button>
+    </header>
+
     <!-- Sidebar: campaign list + new-campaign button -->
     <aside id="sidebar">
       <div class="sidebar-head">

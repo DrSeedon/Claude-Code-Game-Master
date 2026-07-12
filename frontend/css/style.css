@@ -41,6 +41,9 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 /* ─────────────────────────── App shell (2 panels) ──────────────────────── */
 #app { display: flex; height: 100vh; width: 100vw; }
 
+/* Mobile top bar — desktop hides it; the ≤768px block below turns it on. */
+.mobile-header { display: none; }
+
 #sidebar {
   width: var(--sidebar-w); flex-shrink: 0;
   display: flex; flex-direction: column;
@@ -266,10 +269,66 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .choices-footer .submit-btn { flex: 1; }
 
 /* ─────────────────────────── Responsive ────────────────────────────────── */
-@media (max-width: 900px) {
-  :root { --sidebar-w: 100%; }
-  #app { flex-direction: column; }
-  #sidebar { width: 100%; height: 30vh; border-right: none; border-bottom: 1px solid var(--border-soft); }
-  #main { flex: 1; min-height: 0; }
-  .right-panel { width: 100%; height: 40vh; border-left: none; border-top: 1px solid var(--border-soft); }
+
+/* Tablet — just a narrower sidebar, layout otherwise unchanged. */
+@media (min-width: 769px) and (max-width: 900px) {
+  :root { --sidebar-w: 220px; }
+}
+
+/* Mobile — Telegram-style two screens: list ⇄ full-screen chat.
+   #app.show-chat toggles which panel is on screen (JS sets the class). */
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    height: calc(48px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 8px 0;
+    background: var(--surface); border-bottom: 1px solid var(--border-soft);
+  }
+  .mobile-back-btn, .mobile-new-btn {
+    min-width: 44px; height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--ink);
+    font-size: 24px; line-height: 1; cursor: pointer; border-radius: var(--r-md);
+  }
+  .mobile-back-btn:active, .mobile-new-btn:active { background: var(--surface-2); }
+  .mobile-new-btn { color: var(--accent); font-weight: 700; }
+  .mobile-title {
+    flex: 1; min-width: 0; font-size: 16px; font-weight: 700; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+  }
+
+  /* App becomes a positioning context; panels sit below the fixed header.
+     100dvh tracks the *visible* viewport (mobile browser chrome / keyboard),
+     so the input bar isn't hidden under the on-screen keyboard. */
+  #app { display: block; position: relative; height: 100vh; height: 100dvh; width: 100vw; }
+  .sidebar-head { display: none; }  /* replaced by .mobile-header */
+
+  #sidebar, #main {
+    position: absolute; top: calc(48px + env(safe-area-inset-top));
+    left: 0; right: 0; bottom: 0; width: 100%;
+    border: none;
+    transition: transform 0.25s ease;
+  }
+  /* Default (list view): sidebar on screen, chat parked off to the right. */
+  #sidebar { transform: translateX(0); z-index: 10; }
+  #main    { transform: translateX(100%); z-index: 20; }
+  /* Chat view: slide sidebar left off-screen, bring chat in. */
+  #app.show-chat #sidebar { transform: translateX(-100%); }
+  #app.show-chat #main    { transform: translateX(0); }
+
+  .campaign-item { padding: 12px; min-height: 48px; }  /* touch target */
+  .chat-header { display: none; }  /* mobile-header carries title + back */
+  .chat-scroll { padding: 12px; gap: 10px; }
+  .msg { max-width: 92%; }
+  .msg-body { padding: 10px 13px; }
+  .input-bar { padding: 10px 12px 8px; }
+
+  /* Wizard choices become a full-screen overlay above the chat. */
+  .right-panel {
+    position: fixed; top: calc(48px + env(safe-area-inset-top)); left: 0; right: 0; bottom: 0;
+    width: 100%; z-index: 40; border-left: none;
+  }
+  .send-btn { padding: 12px 18px; }
+  .model-select { max-width: 120px; }
 }

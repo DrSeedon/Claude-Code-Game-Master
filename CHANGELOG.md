@@ -2,7 +2,18 @@
 
 All notable changes to DM System will be documented in this file.
 
-## [4.2.0] - 2026-07-12
+## [4.3.0] - 2026-07-12
+
+### Added
+- 📱 **Мобильная адаптация дашборда (Telegram-style)** — на ≤768px два экрана с переключением
+  - `.mobile-header` (48px fixed top bar + iOS safe-area) — на списке: "🎲 DM" + "+"; в чате: "← назад" + название
+  - `#sidebar`/`#main` — full-screen абсолютные панели под хедером, слайд через `transform: translateX`,
+    класс `#app.show-chat` рулит какой экран виден. `.right-panel` (wizard) — full-screen overlay
+  - `app.js`: `isMobile()`, `showMobileChat(title)`/`showMobileSidebar()`/`mobileBack()`; `selectCampaign`
+    и `startWizard` на мобилке слайдят в чат; resize/rotate ре-синкает топбар
+  - Touch targets ≥44px (кнопки) / ≥48px (campaign items), `100dvh` (инпут не прячется под клавиатуру)
+  - Tablet (769-900px): sidebar сужен до 220px. **Десктоп не тронут** (mobile-header `display:none`)
+  - Triggered case: на телефоне был тупой стэк (sidebar 30vh сверху) — теперь как в мессенджере
 
 ### Removed
 - 🧙 **Persistent wizard drafts откачены — wizard снова ephemeral** (отменяет [4.1.0] persistence)

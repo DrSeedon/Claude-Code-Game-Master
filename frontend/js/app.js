@@ -28,6 +28,11 @@ const TOOL_BLOCK_RE = /```tool:\w+\s*\n\{[\s\S]*?\}\s*\n```/g;  // wizard strips
 
 // ─────────────────────────── DOM refs ─────────────────────────────────────
 const el = {
+  app: document.getElementById('app'),
+  mobileHeader: document.querySelector('.mobile-header'),
+  mobileBack: document.getElementById('mobile-back'),
+  mobileNew: document.getElementById('mobile-new-btn'),
+  mobileTitle: document.getElementById('mobile-title'),
   campaignList: document.getElementById('campaign-list'),
   newBtn: document.getElementById('new-campaign-btn'),
   welcomeNewBtn: document.getElementById('welcome-new-btn'),
@@ -473,6 +478,33 @@ function markActiveInList() {
 function showChat() { el.welcome.hidden = true; el.chatPane.hidden = false; }
 function showWelcome() { el.welcome.hidden = false; el.chatPane.hidden = true; }
 
+// ── Mobile navigation (Telegram-style: list ⇄ full-screen chat) ────────────
+const MOBILE_MAX = 768;
+const isMobile = () => window.innerWidth <= MOBILE_MAX;
+
+/** Slide to the chat screen and set the top-bar title + back button. */
+function showMobileChat(title) {
+  el.app.classList.add('show-chat');
+  el.mobileTitle.textContent = title;
+  el.mobileBack.hidden = false;
+  el.mobileNew.hidden = true;   // no "+" while in a chat
+}
+
+/** Slide back to the campaign list; restore the list title + "+" button. */
+function showMobileSidebar() {
+  el.app.classList.remove('show-chat');
+  el.mobileTitle.textContent = '🎲 DM Game Master';
+  el.mobileBack.hidden = true;
+  el.mobileNew.hidden = false;
+}
+
+function mobileBack() {
+  closeWs();            // leaving the chat drops its socket
+  state.mode = null;
+  markActiveInList();
+  showMobileSidebar();
+}
+
 function selectCampaign(name) {
   if (state.mode === 'game' && state.campaign === name) return;
   closeWs();
@@ -491,6 +523,7 @@ function selectCampaign(name) {
   el.modelSelect.hidden = false;     // model selectable in game
   showChat();
   markActiveInList();
+  if (isMobile()) showMobileChat(name);
   connect(gameUrl());
   el.input.focus();
 }
@@ -514,6 +547,7 @@ function startWizard() {
   el.modelSelect.hidden = true;  // model is fixed in wizard (config)
   showChat();
   markActiveInList();
+  if (isMobile()) showMobileChat('Создание кампании');
   connect(`ws://${location.host}/ws/wizard`);
   showInitialWizardGreeting();
   el.input.focus();
@@ -744,6 +778,25 @@ el.sendBtn.addEventListener('click', onSend);
 el.newBtn.addEventListener('click', startWizard);
 el.welcomeNewBtn.addEventListener('click', startWizard);
 el.wizardResetBtn.addEventListener('click', resetWizard);
+
+// Mobile top-bar buttons
+el.mobileNew.addEventListener('click', startWizard);
+el.mobileBack.addEventListener('click', mobileBack);
+
+// Crossing the mobile/desktop boundary (rotate / resize) — re-sync the top bar.
+// Desktop uses flex layout + chat-header; mobile uses the sliding panels + top bar.
+window.addEventListener('resize', () => {
+  if (!isMobile()) {
+    el.app.classList.remove('show-chat');  // desktop shows both panels, no slide
+    return;
+  }
+  // On mobile, mirror the current mode into the top bar.
+  if (state.mode === 'game' || state.mode === 'wizard') {
+    showMobileChat(state.mode === 'wizard' ? 'Создание кампании' : state.campaign);
+  } else {
+    showMobileSidebar();
+  }
+});
 
 // Switching model reconnects the current campaign with the new model (GameSession
 // binds model at creation, so a fresh socket is the only way to swap it).
