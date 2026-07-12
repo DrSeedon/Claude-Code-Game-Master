@@ -2,6 +2,21 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.4.0] - 2026-07-12
+
+### Fixed
+- 🧙 **Wizard: стриминг + in-process MCP** — текст DM больше не появлялся разом, tool-JSON тёк в чат
+  - **Root cause**: handler дропал `text_delta` (`continue`) → нет typewriter; MCP крутился как
+    subprocess с file-polling → хрупко, DM писал tool-call как текст
+  - `/ws/wizard`: `text_delta → {type:"stream"}` (token-by-token как game), `activity` для tool-calls,
+    `text` финализирует. In-process MCP через `WizardEvents` + `build_wizard_mcp` (SDK
+    `create_sdk_mcp_server`) — тулы пушат в queue, handler drain'ит после турна
+  - `backend/wizard_mcp.py`: file-based FastMCP subprocess → in-process (`WizardEvents.push/drain`,
+    `create_sdk_mcp_server` + `tool`). Те же 3 тула, убран stdio-entrypoint
+  - Frontend не тронут — `handleEvent` mode-agnostic, `stream`/`text`/`activity` уже поддержаны
+  - Tests: 2 obsolete file-output теста → 4 новых (config-shape, push/drain, real tool invocation via CallToolRequest)
+  - Triggered case: wizard-чат — каша, стриминга нет, JSON тулов в тексте
+
 ## [4.3.0] - 2026-07-12
 
 ### Added

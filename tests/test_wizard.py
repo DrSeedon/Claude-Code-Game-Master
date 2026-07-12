@@ -169,35 +169,72 @@ class TestCampaignCreation:
 
 
 class TestWizardMCPTools:
-    def test_show_choices_output(self, tmp_path):
-        output_file = tmp_path / "output.jsonl"
-        with patch.dict("os.environ", {"WIZARD_OUTPUT_FILE": str(output_file)}):
-            # Re-import to pick up env
-            import importlib
-            import backend.wizard_mcp as wm
-            importlib.reload(wm)
+    """The wizard MCP is in-process: tools push onto WizardEvents, drained by the
+    /ws/wizard handler. build_wizard_mcp registers the three tools with the SDK."""
 
-            result = wm.show_choices(
-                step="concept",
-                title="Test",
-                submit_label="Go",
-                controls=[{"type": "radio", "id": "test", "label": "Test"}],
-            )
-            assert "Choices displayed" in result
-            lines = output_file.read_text().strip().splitlines()
-            data = json.loads(lines[0])
-            assert data["tool"] == "show_choices"
-            assert data["data"]["step"] == "concept"
+    def test_build_wizard_mcp_config(self):
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+        cfg = build_wizard_mcp(WizardEvents())
+        assert cfg["type"] == "sdk"
+        assert cfg["name"] == "wizard"
 
-    def test_clear_choices_output(self, tmp_path):
-        output_file = tmp_path / "output.jsonl"
-        with patch.dict("os.environ", {"WIZARD_OUTPUT_FILE": str(output_file)}):
-            import importlib
-            import backend.wizard_mcp as wm
-            importlib.reload(wm)
+    def test_events_push_and_drain(self):
+        from backend.wizard_mcp import WizardEvents
+        ev = WizardEvents()
+        assert ev.drain() == []
+        ev.push({"type": "show_choices", "data": {"step": "concept"}})
+        ev.push({"type": "clear_choices"})
+        drained = ev.drain()
+        assert [e["type"] for e in drained] == ["show_choices", "clear_choices"]
+        assert drained[0]["data"]["step"] == "concept"
+        assert ev.drain() == []  # drain clears the buffer
 
-            result = wm.clear_choices()
-            assert "hidden" in result
-            lines = output_file.read_text().strip().splitlines()
-            data = json.loads(lines[0])
-            assert data["tool"] == "clear_choices"
+    @staticmethod
+    async def _invoke(cfg, tool_name, arguments):
+        """Invoke a registered in-process MCP tool by name (real handler body runs)."""
+        import mcp.types as types
+        server = cfg["instance"]
+        handler = server.request_handlers[types.CallToolRequest]
+        req = types.CallToolRequest(
+            method="tools/call",
+            params=types.CallToolRequestParams(name=tool_name, arguments=arguments),
+        )
+        return await handler(req)
+
+    def test_show_choices_pushes_event(self):
+        import asyncio
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+        ev = WizardEvents()
+        cfg = build_wizard_mcp(ev)
+        asyncio.run(self._invoke(cfg, "show_choices", {
+            "step": "concept", "title": "T", "submit_label": "Go", "controls": [],
+        }))
+        out = ev.drain()
+        assert out[0]["type"] == "show_choices"
+        assert out[0]["data"]["step"] == "concept"
+
+    def test_clear_choices_pushes_event(self):
+        import asyncio
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+        ev = WizardEvents()
+        cfg = build_wizard_mcp(ev)
+        asyncio.run(self._invoke(cfg, "clear_choices", {}))
+        out = ev.drain()
+        assert out[0]["type"] == "clear_choices"
+
+    def test_create_campaign_optional_fields(self, tmp_path):
+        """Only name + character_name are required — the DM must not have to supply
+        all 10 fields (regression: dict-shorthand schema made everything required)."""
+        import asyncio
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+        with patch("backend.campaign_api.get_project_root", return_value=tmp_path):
+            (tmp_path / "world-state" / "campaigns").mkdir(parents=True)
+            ev = WizardEvents()
+            cfg = build_wizard_mcp(ev)
+            result = asyncio.run(self._invoke(cfg, "create_campaign",
+                                              {"name": "min-args", "character_name": "Aria"}))
+            cr = result.root if hasattr(result, "root") else result
+            assert cr.isError is False  # not rejected by schema validation
+            out = ev.drain()
+            assert out[0]["type"] == "create_campaign"
+            assert out[0]["success"] is True

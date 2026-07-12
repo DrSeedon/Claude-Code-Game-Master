@@ -28,6 +28,7 @@ from backend.game_session import get_or_create_session
 from backend.live_broker import broker
 from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.wizard_prompt import load_wizard_system_prompt
+from backend.wizard_mcp import WizardEvents, build_wizard_mcp
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -421,11 +422,13 @@ async def root():
 
 @app.websocket("/ws/wizard")
 async def wizard_websocket(websocket: WebSocket):
-    """Ephemeral campaign-creation wizard. Uses MCP tools via SDK.
+    """Ephemeral campaign-creation wizard — streams like the game handler.
 
-    One-shot: a fresh provider lives for the connection only — no session_id, no
-    event log, no resume. Disconnect (or the 🗑️ reset) drops everything and the
-    next connect starts clean. Create the campaign in one sitting or start over.
+    Fresh provider per connection (no session_id / no event log / no resume).
+    Tool calls go through an IN-PROCESS MCP (backend/wizard_mcp.py), so the DM's
+    text streams token-by-token (`stream`) while tool invocations surface as
+    `activity` blocks and their side effects (choices / completion) drain from
+    WizardEvents into show_choices / clear_choices / wizard_complete events.
     """
     await websocket.accept()
 
@@ -437,16 +440,9 @@ async def wizard_websocket(websocket: WebSocket):
         await websocket.close()
         return
 
-    # MCP tool outputs land in this per-connection file
-    import uuid
-    output_file = f"/tmp/wizard-{uuid.uuid4().hex[:8]}.jsonl"
-    wizard_mcp = {
-        "wizard": {
-            "command": "uv",
-            "args": ["run", "python", str(Path(config.project_root) / "backend" / "wizard_mcp.py")],
-            "env": {"WIZARD_OUTPUT_FILE": output_file},
-        }
-    }
+    # In-process MCP: tools push structured events here (no subprocess, no files).
+    events = WizardEvents()
+    wizard_mcp = {"wizard": build_wizard_mcp(events)}
 
     provider = ClaudeSDKProvider(project_root=config.project_root, model_name=config.model_name)
 
@@ -457,7 +453,7 @@ async def wizard_websocket(websocket: WebSocket):
         while True:
             user_message = await websocket.receive_text()
             print(f"🧙 Wizard message: {user_message[:50]}...")
-            Path(output_file).write_text("", encoding="utf-8")
+            events.drain()  # clear any leftovers from a previous turn
 
             try:
                 async for event in provider.process_message(
@@ -466,30 +462,23 @@ async def wizard_websocket(websocket: WebSocket):
                     model_name=config.model_name,
                     mcp_servers=wizard_mcp,
                 ):
-                    if event["type"] == "text_delta":
-                        continue
-                    if event["type"] in ("text", "activity", "error"):
-                        await send({"type": event["type"], "content": event["content"]})
+                    et = event["type"]
+                    if et == "text_delta":
+                        await send({"type": "stream", "content": event["content"]})
+                    elif et in ("text", "activity", "error"):
+                        await send({"type": et, "content": event["content"]})
 
-                # Drain MCP tool outputs (choices + completion signal)
-                if Path(output_file).exists():
-                    for line in Path(output_file).read_text(encoding="utf-8").strip().splitlines():
-                        if not line.strip():
-                            continue
-                        try:
-                            tool_output = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        tool = tool_output.get("tool")
-                        if tool == "show_choices":
-                            await send({"type": "show_choices", "data": tool_output["data"]})
-                        elif tool == "clear_choices":
-                            await send({"type": "clear_choices"})
-                        elif tool == "create_campaign":
-                            if tool_output.get("success"):
-                                await send({"type": "wizard_complete", "campaign_name": tool_output.get("campaign_name")})
-                            else:
-                                await send({"type": "error", "content": tool_output.get("error", "Creation failed")})
+                # Drain tool side effects collected in-process during the turn.
+                for ev in events.drain():
+                    if ev["type"] == "show_choices":
+                        await send({"type": "show_choices", "data": ev["data"]})
+                    elif ev["type"] == "clear_choices":
+                        await send({"type": "clear_choices"})
+                    elif ev["type"] == "create_campaign":
+                        if ev.get("success"):
+                            await send({"type": "wizard_complete", "campaign_name": ev.get("campaign_name")})
+                        else:
+                            await send({"type": "error", "content": ev.get("error", "Creation failed")})
 
             except Exception as e:
                 print(f"❌ Wizard error: {e}")
@@ -499,7 +488,6 @@ async def wizard_websocket(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print(f"🧙 Wizard disconnected")
-        Path(output_file).unlink(missing_ok=True)
 
 
 @app.get("/ws/game")
