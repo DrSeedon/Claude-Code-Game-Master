@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Markdown from 'react-markdown';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { Message } from '../types';
+import { Message, WsServerEvent } from '../types';
+
+const MAX_MESSAGES = 500;
 
 /**
  * Chat component props
@@ -9,6 +11,15 @@ import { Message } from '../types';
 interface ChatProps {
   /** Optional WebSocket URL override (defaults to /ws/game) */
   wsUrl?: string;
+}
+
+type ChatMessage = Message & {
+  /** 'activity' renders as an inline tool-call line, 'error' as a red banner message */
+  kind?: 'activity' | 'error';
+};
+
+function bounded(messages: ChatMessage[]): ChatMessage[] {
+  return messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages;
 }
 
 /**
@@ -23,80 +34,59 @@ interface ChatProps {
  * ```
  */
 export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
-  // WebSocket connection
-  const { messages: rawMessages, sendMessage, connectionStatus } = useWebSocket(wsUrl);
-
-  // Message history as structured Message objects
-  const [messageHistory, setMessageHistory] = useState<Message[]>([]);
-
-  // Current input value
+  const [messageHistory, setMessageHistory] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-
-  // Auto-scroll reference
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const streamingMessageIndexRef = useRef<number | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const localEchoRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (rawMessages.length === 0) return;
-
-    const latestChunk = rawMessages[rawMessages.length - 1];
-
-    // Try to parse as JSON
-    try {
-      const parsed = JSON.parse(latestChunk);
-
-      if (parsed.type === 'activity') {
+  const handleEvent = useCallback((event: WsServerEvent) => {
+    switch (event.type) {
+      case 'activity':
         streamingMessageIndexRef.current = null;
-        setMessageHistory(prev => [...prev, { role: 'assistant' as const, content: `%%ACTIVITY%%${parsed.content}`, timestamp: Date.now() }]);
-        return;
-      }
+        setMessageHistory(prev => bounded([...prev, { role: 'assistant', kind: 'activity', content: event.content, timestamp: Date.now() }]));
+        break;
 
-      if (parsed.type === 'history' && Array.isArray(parsed.messages)) {
-        setMessageHistory(parsed.messages.map((m: any) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now()
-        })));
-        return;
-      }
-
-      if (parsed.type === 'done') {
+      case 'error':
         streamingMessageIndexRef.current = null;
         setIsGenerating(false);
-        return;
-      }
+        setMessageHistory(prev => bounded([...prev, { role: 'assistant', kind: 'error', content: event.content, timestamp: Date.now() }]));
+        break;
 
-      if (parsed.type === 'text') {
-        if (!isGenerating) setIsGenerating(true);
+      case 'history':
+        setMessageHistory(bounded(event.messages
+          .filter(m => !localEchoRef.current.has(`${m.role}:${m.content}`))
+          .map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp ?? Date.now()
+          }))));
+        streamingMessageIndexRef.current = null;
+        break;
+
+      case 'done':
+        streamingMessageIndexRef.current = null;
+        setIsGenerating(false);
+        break;
+
+      case 'text':
+        setIsGenerating(true);
         setMessageHistory(prev => {
           if (streamingMessageIndexRef.current !== null && streamingMessageIndexRef.current < prev.length) {
             const updated = [...prev];
-            updated[streamingMessageIndexRef.current].content += parsed.content;
+            const target = updated[streamingMessageIndexRef.current];
+            updated[streamingMessageIndexRef.current] = { ...target, content: target.content + event.content };
             return updated;
-          } else {
-            streamingMessageIndexRef.current = prev.length;
-            return [...prev, { role: 'assistant', content: parsed.content, timestamp: Date.now() }];
           }
-        });
-        return;
-      }
-    } catch {
-      // Non-JSON fallback — treat as raw text
-      if (!isGenerating) setIsGenerating(true);
-      setMessageHistory(prev => {
-        if (streamingMessageIndexRef.current !== null) {
-          const updated = [...prev];
-          updated[streamingMessageIndexRef.current].content += latestChunk;
-          return updated;
-        } else {
           streamingMessageIndexRef.current = prev.length;
-          return [...prev, { role: 'assistant', content: latestChunk, timestamp: Date.now() }];
-        }
-      });
+          return bounded([...prev, { role: 'assistant', content: event.content, timestamp: Date.now() }]);
+        });
+        break;
     }
-  }, [rawMessages]);
+  }, []);
+
+  const { sendMessage, connectionStatus } = useWebSocket(wsUrl, { onEvent: handleEvent });
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -111,21 +101,15 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
       return;
     }
 
-    // Add user message to history
-    const userMessage: Message = {
-      role: 'user',
-      content: inputValue.trim(),
-      timestamp: Date.now()
-    };
-    setMessageHistory(prev => [...prev, userMessage]);
+    const content = inputValue.trim();
+    localEchoRef.current.add(`user:${content}`);
+    const userMessage: ChatMessage = { role: 'user', content, timestamp: Date.now() };
+    setMessageHistory(prev => bounded([...prev, userMessage]));
 
     streamingMessageIndexRef.current = null;
     setIsGenerating(true);
 
-    // Send to backend
-    sendMessage(inputValue.trim());
-
-    // Clear input
+    sendMessage(content);
     setInputValue('');
   }, [inputValue, sendMessage, connectionStatus]);
 
@@ -137,18 +121,35 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
     }
   }, [handleSend]);
 
+  const statusText: Record<typeof connectionStatus, string> = {
+    connecting: 'Подключение к DM...',
+    connected: 'Подключено',
+    reconnecting: 'Переподключение...',
+    disconnected: 'Отключено',
+    failed: 'Соединение потеряно'
+  };
+
   return (
     <div className="chat-container">
       {/* Connection status indicator */}
       <div className="connection-status">
         <div className={`status-indicator status-${connectionStatus}`} />
-        <span className="status-text">
-          {connectionStatus === 'connecting' && 'Подключение к DM...'}
-          {connectionStatus === 'connected' && 'Подключено'}
-          {connectionStatus === 'disconnected' && 'Отключено'}
-          {connectionStatus === 'error' && 'Ошибка подключения'}
-        </span>
+        <span className="status-text">{statusText[connectionStatus]}</span>
       </div>
+
+      {connectionStatus === 'reconnecting' && (
+        <div className="reconnect-banner">Переподключение...</div>
+      )}
+
+      {connectionStatus === 'failed' && (
+        <div className="failed-modal-overlay">
+          <div className="failed-modal">
+            <h3>Соединение потеряно</h3>
+            <p>Перезагрузите страницу</p>
+            <button onClick={() => window.location.reload()}>Перезагрузить</button>
+          </div>
+        </div>
+      )}
 
       {/* Message history */}
       <div className="messages-container">
@@ -158,8 +159,10 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           </div>
         ) : (
           messageHistory.map((msg, idx) => (
-            msg.content.startsWith('%%ACTIVITY%%') ? (
-              <div key={idx} className="message-activity">{msg.content.replace('%%ACTIVITY%%', '')}</div>
+            msg.kind === 'activity' ? (
+              <ActivityLine key={idx} content={msg.content} />
+            ) : msg.kind === 'error' ? (
+              <div key={idx} className="message-error">⚠ {msg.content}</div>
             ) : (
               <div key={idx} className={`message message-${msg.role}`}>
                 <div className="message-role">
@@ -207,6 +210,7 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           flex-direction: column;
           height: 100%;
           width: 100%;
+          position: relative;
         }
 
         .connection-status {
@@ -233,11 +237,16 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           background-color: #10b981;
         }
 
+        .status-reconnecting {
+          background-color: #fbbf24;
+          animation: pulse 1s infinite;
+        }
+
         .status-disconnected {
           background-color: #6b7280;
         }
 
-        .status-error {
+        .status-failed {
           background-color: #ef4444;
         }
 
@@ -249,6 +258,53 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
         .status-text {
           font-size: 14px;
           color: rgba(255, 255, 255, 0.7);
+        }
+
+        .reconnect-banner {
+          padding: 6px 16px;
+          background-color: rgba(251, 191, 36, 0.15);
+          color: #fbbf24;
+          font-size: 13px;
+          text-align: center;
+        }
+
+        .failed-modal-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10;
+        }
+
+        .failed-modal {
+          background: #1a1a2e;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
+          padding: 24px 32px;
+          text-align: center;
+        }
+
+        .failed-modal h3 {
+          margin: 0 0 8px 0;
+          color: rgba(255, 255, 255, 0.95);
+        }
+
+        .failed-modal p {
+          margin: 0 0 16px 0;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        .failed-modal button {
+          padding: 8px 20px;
+          background-color: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
         }
 
         .messages-container {
@@ -322,6 +378,19 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           color: rgba(255, 255, 255, 0.87);
         }
 
+        .message-error {
+          align-self: center;
+          max-width: 90%;
+          padding: 10px 16px;
+          background-color: rgba(239, 68, 68, 0.15);
+          border: 1px solid rgba(239, 68, 68, 0.4);
+          border-radius: 8px;
+          color: #fca5a5;
+          font-size: 13px;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
         .input-container {
           display: flex;
           gap: 8px;
@@ -376,17 +445,6 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           cursor: not-allowed;
         }
 
-        .message-activity {
-          align-self: flex-start;
-          font-size: 12px;
-          font-family: monospace;
-          color: rgba(255, 255, 255, 0.35);
-          padding: 2px 12px;
-          max-width: 90%;
-          word-break: break-all;
-          white-space: pre-wrap;
-        }
-
         .generating-indicator {
           display: flex;
           align-items: center;
@@ -422,6 +480,40 @@ export function Chat({ wsUrl = '/ws/game' }: ChatProps) {
           100% { left: 40px; }
         }
 
+      `}</style>
+    </div>
+  );
+}
+
+const TOOL_RESULT_COLLAPSE_LENGTH = 200;
+
+/** Renders a single activity/tool-call event, collapsing long output */
+function ActivityLine({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = content.length > TOOL_RESULT_COLLAPSE_LENGTH;
+  const display = isLong && !expanded ? `${content.slice(0, TOOL_RESULT_COLLAPSE_LENGTH)}…` : content;
+
+  return (
+    <div className="message-activity" onClick={isLong ? () => setExpanded(e => !e) : undefined}>
+      <span>{display}</span>
+      {isLong && <span className="activity-toggle">{expanded ? ' [свернуть]' : ' [показать всё]'}</span>}
+      <style>{`
+        .message-activity {
+          align-self: flex-start;
+          font-size: 12px;
+          font-family: monospace;
+          color: rgba(255, 255, 255, 0.35);
+          padding: 2px 12px;
+          max-width: 90%;
+          word-break: break-all;
+          white-space: pre-wrap;
+          cursor: ${isLong ? 'pointer' : 'default'};
+        }
+
+        .activity-toggle {
+          color: rgba(59, 130, 246, 0.7);
+          font-style: italic;
+        }
       `}</style>
     </div>
   );

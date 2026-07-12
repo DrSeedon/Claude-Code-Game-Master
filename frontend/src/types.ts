@@ -50,17 +50,29 @@ export interface CharacterStatus {
  * WebSocket connection status
  */
 export type ConnectionStatus =
-  | 'connecting'   // Initial connection attempt
-  | 'connected'    // Successfully connected
-  | 'disconnected' // Connection lost or closed
-  | 'error';       // Connection error occurred
+  | 'connecting'    // Initial connection attempt
+  | 'connected'     // Successfully connected
+  | 'reconnecting'  // Lost connection, retrying with backoff
+  | 'disconnected'  // Connection closed, not retrying (e.g. clean close)
+  | 'failed';       // Exceeded max reconnect attempts
 
 /**
- * WebSocket message event data
+ * Raw event shapes sent by the backend over the game WebSocket
  */
-export interface WebSocketMessageEvent {
-  /** Message data from server */
-  data: string;
+export type WsServerEvent =
+  | { type: 'text'; content: string; id: number }
+  | { type: 'activity'; content: string; id: number }
+  | { type: 'error'; content: string; id: number }
+  | { type: 'done'; id: number }
+  | { type: 'history'; messages: Message[] };
+
+/**
+ * Type guard for known server event shapes. Unknown/malformed events are dropped.
+ */
+export function isWsServerEvent(value: unknown): value is WsServerEvent {
+  if (typeof value !== 'object' || value === null || !('type' in value)) return false;
+  const type = (value as { type: unknown }).type;
+  return type === 'text' || type === 'activity' || type === 'error' || type === 'done' || type === 'history';
 }
 
 /**
