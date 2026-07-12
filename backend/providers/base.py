@@ -1,41 +1,38 @@
-"""Base interface for AI providers."""
+"""Base interface for the AI provider."""
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Dict, List, Any, Optional
+from typing import AsyncGenerator, Dict, Optional
 
 
 class BaseProvider(ABC):
-    """Abstract base class for all AI providers.
+    """Abstract base for the Claude SDK provider.
 
-    Defines unified interface for working with different AI backends
-    (Anthropic API, Claude SDK, etc.).
+    The provider owns a persistent SDK client (resumed across turns via
+    session_id) — callers no longer pass conversation_history manually.
     """
 
     @abstractmethod
-    async def process_message(
+    def process_message(
         self,
         user_message: str,
-        conversation_history: List[Dict[str, Any]],
         system_prompt: str,
         model_name: str,
-        tools: List[Dict[str, Any]],
-        mcp_servers: Optional[Dict] = None
-    ) -> AsyncGenerator[str, None]:
-        """Process user message and return streaming response.
+        mcp_servers: Optional[Dict] = None,
+    ) -> AsyncGenerator[dict, None]:
+        """Send a message and stream structured events back.
 
         Args:
             user_message: Message from player
-            conversation_history: Conversation history (modified in-place)
-            system_prompt: System prompt with DM rules
+            system_prompt: System prompt with DM rules (used only on first connect)
             model_name: Claude model name
-            tools: List of tool schemas in Anthropic format
+            mcp_servers: Optional MCP server config (e.g. wizard tools)
 
         Yields:
-            Text chunks from Claude streaming response
+            dict events: {"type": "text"|"text_delta"|"activity"|"error", "content": str}
         """
-        pass
+        ...
 
     @abstractmethod
     def get_provider_name(self) -> str:
         """Return provider name for logging."""
-        pass
+        ...

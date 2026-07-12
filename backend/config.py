@@ -19,15 +19,11 @@ class Config:
     world_state_base: Path
     campaigns_dir: Path
 
-    # AI Provider settings (optional) - with defaults
-    ai_provider: str = "auto"  # "auto", "api", "sdk"
-    anthropic_api_key: Optional[str] = None  # Required only for "api" provider
-
-    # Anthropic API settings (optional)
+    # Claude SDK settings
     model_name: str = "claude-sonnet-4-6"
 
     # Backend server settings
-    backend_host: str = "0.0.0.0"
+    backend_host: str = "127.0.0.1"
     backend_port: int = 8000
 
     # Active campaign paths (set after initialization)
@@ -62,21 +58,7 @@ def get_config() -> Config:
 
     Returns:
         Config: Application configuration
-
-    Raises:
-        ValueError: If AI_PROVIDER=api but ANTHROPIC_API_KEY is not set
     """
-    # Determine AI provider type
-    ai_provider = os.environ.get("AI_PROVIDER", "auto")
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-    # Validation: if API provider explicitly selected, key is required
-    if ai_provider == "api" and not api_key:
-        raise ValueError(
-            "AI_PROVIDER=api requires ANTHROPIC_API_KEY in .env file.\n"
-            "Or use AI_PROVIDER=sdk to work via subscription."
-        )
-
     # Get project paths
     project_root = get_project_root()
     world_state_base = project_root / "world-state"
@@ -91,13 +73,11 @@ def get_config() -> Config:
 
     # Build config
     config = Config(
-        ai_provider=ai_provider,
-        anthropic_api_key=api_key,  # Can be None for SDK provider
         project_root=project_root,
         world_state_base=world_state_base,
         campaigns_dir=campaigns_dir,
         model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
-        backend_host=os.environ.get("BACKEND_HOST") or "0.0.0.0",
+        backend_host=os.environ.get("BACKEND_HOST") or "127.0.0.1",
         backend_port=int(os.environ.get("BACKEND_PORT", "8000")),
     )
 

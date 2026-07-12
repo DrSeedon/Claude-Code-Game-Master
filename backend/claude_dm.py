@@ -1,11 +1,8 @@
-"""DM Agent - System prompt builder and tool calling loop."""
+"""DM Agent - System prompt builder."""
 
 import json
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Dict, Any, AsyncGenerator, Optional
-from backend.tools_registry import get_tool_schemas
-from backend.providers.factory import create_provider
 
 
 def load_system_prompt() -> str:
@@ -103,62 +100,3 @@ Be descriptive, engaging, and fair. Follow D&D 5e rules. Make the game fun!
 """
 
     return system_prompt
-
-
-async def process_message(
-    user_message: str,
-    conversation_history: List[Dict[str, Any]],
-    provider_type: str = "auto",
-    api_key: Optional[str] = None,
-    model_name: str = "claude-sonnet-4-6",
-    system_prompt: Optional[str] = None,
-    project_root: Optional[Path] = None,
-    mcp_servers: Optional[Dict] = None
-) -> AsyncGenerator[str, None]:
-    """
-    Process user message through DM agent with tool calling loop.
-
-    Uses provider factory for automatic selection between:
-    - Anthropic API (if ANTHROPIC_API_KEY is present)
-    - Claude SDK (if subscription available, no API key required)
-
-    Args:
-        user_message: Player's input message
-        conversation_history: List of conversation messages (modified in-place)
-        provider_type: Provider type ("auto", "api", "sdk")
-        api_key: Anthropic API key (optional, taken from env for "auto")
-        model_name: Claude model name to use
-        system_prompt: System prompt (loaded from load_system_prompt if None)
-        project_root: Project root directory (required for SDK provider)
-
-    Yields:
-        Text chunks from Claude's streaming response
-    """
-    # Load system prompt if not provided
-    if system_prompt is None:
-        system_prompt = load_system_prompt()
-
-    # Get project_root if not provided
-    if project_root is None:
-        project_root = Path(__file__).parent.parent
-
-    # Create provider via factory
-    provider = create_provider(
-        provider_type=provider_type,
-        api_key=api_key,
-        project_root=project_root
-    )
-
-    # Get tool schemas
-    tools = get_tool_schemas()
-
-    # Delegate message processing to provider
-    async for text_chunk in provider.process_message(
-        user_message=user_message,
-        conversation_history=conversation_history,
-        system_prompt=system_prompt,
-        model_name=model_name,
-        tools=tools,
-        mcp_servers=mcp_servers
-    ):
-        yield text_chunk

@@ -1,8 +1,8 @@
 """FastAPI server for DM Game Master web interface."""
 
+import asyncio
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,14 +11,17 @@ from typing import List, Optional
 
 from backend.config import get_config
 from backend.game_state import get_character_status
-from backend.claude_dm import process_message, load_system_prompt
+from backend.claude_dm import load_system_prompt
 from backend.campaign_api import (
     list_campaigns,
     create_campaign,
     activate_campaign,
     delete_campaign,
 )
-from backend.chat_history import load_chat_history, save_chat_history
+from backend.event_log import read_events
+from backend.game_session import get_or_create_session
+from backend.live_broker import broker
+from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.wizard_prompt import load_wizard_system_prompt
 
 # Initialize FastAPI app
@@ -43,34 +46,15 @@ async def startup_event():
     """Initialize application on startup."""
     print(f"🚀 DM Game Master backend starting...")
 
-    # Load configuration (no API key required for SDK provider)
-    try:
-        config = get_config()
-        print(f"📍 Server: {config.backend_host}:{config.backend_port}")
-        print(f"🤖 Model: {config.model_name}")
-        print(f"🔌 AI Provider: {config.ai_provider}")
+    config = get_config()
+    print(f"📍 Server: {config.backend_host}:{config.backend_port}")
+    print(f"🤖 Model: {config.model_name}")
+    print(f"🎫 Claude SDK: working via subscription")
 
-        # Show selected provider information
-        if config.ai_provider == "api":
-            if config.anthropic_api_key:
-                print(f"✅ Anthropic API: key configured")
-            else:
-                print(f"⚠️  Anthropic API: key missing")
-        elif config.ai_provider == "sdk":
-            print(f"🎫 Claude SDK: working via subscription")
-        else:  # auto
-            if config.anthropic_api_key:
-                print(f"🔑 Auto-select: Anthropic API (key found)")
-            else:
-                print(f"🎫 Auto-select: Claude SDK (key not found)")
-
-        if config.campaign_name:
-            print(f"🎲 Active campaign: {config.campaign_name}")
-        else:
-            print(f"⚠️  No active campaign loaded")
-    except ValueError as e:
-        print(f"⚠️  Configuration error: {e}")
-        print(f"⚠️  Server will start but AI features may be unavailable")
+    if config.campaign_name:
+        print(f"🎲 Active campaign: {config.campaign_name}")
+    else:
+        print(f"⚠️  No active campaign loaded")
 
 
 @app.get("/api/health")
@@ -371,11 +355,6 @@ async def api_get_template_rules():
     return result
 
 
-def _now_iso() -> str:
-    """Get current time in ISO 8601 UTC format."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 @app.get("/")
 async def root():
     """Root endpoint with basic server info.
@@ -393,11 +372,12 @@ async def root():
 
 @app.websocket("/ws/wizard")
 async def wizard_websocket(websocket: WebSocket):
-    """WebSocket for campaign creation wizard. Uses MCP tools via SDK."""
-    await websocket.accept()
+    """WebSocket for campaign creation wizard. Uses MCP tools via SDK.
 
-    conversation_history: List = []
-    config = None
+    One-shot setup flow (no persistent campaign yet) — provider lives for the
+    connection's lifetime, no GameSession/broker needed.
+    """
+    await websocket.accept()
 
     try:
         config = get_config()
@@ -421,41 +401,33 @@ async def wizard_websocket(websocket: WebSocket):
         }
     }
 
+    provider = ClaudeSDKProvider(project_root=config.project_root, model_name=config.model_name)
+
     try:
         while True:
             user_message = await websocket.receive_text()
             print(f"🧙 Wizard message: {user_message[:50]}...")
 
-            conversation_history.append({"role": "user", "content": user_message})
-
             # Clear output file before each turn
             Path(output_file).write_text("", encoding="utf-8")
 
-            full_response_parts: List[str] = []
-
             try:
-                async for chunk in process_message(
+                async for event in provider.process_message(
                     user_message=user_message,
-                    conversation_history=conversation_history,
-                    provider_type=config.ai_provider,
-                    api_key=config.anthropic_api_key,
-                    model_name=config.model_name,
                     system_prompt=wizard_prompt,
-                    project_root=config.project_root,
+                    model_name=config.model_name,
                     mcp_servers=wizard_mcp,
                 ):
-                    # SDK provider sends structured JSON events
-                    try:
-                        event = json.loads(chunk)
-                        await websocket.send_text(chunk)
-                        if event.get("type") == "text":
-                            full_response_parts.append(event["content"])
-                    except json.JSONDecodeError:
-                        # Fallback for raw text
+                    if event["type"] == "text_delta":
+                        continue
+                    if event["type"] == "text":
                         await websocket.send_text(json.dumps(
-                            {"type": "text", "content": chunk}, ensure_ascii=False
+                            {"type": "text", "content": event["content"]}, ensure_ascii=False
                         ))
-                        full_response_parts.append(chunk)
+                    elif event["type"] == "error":
+                        await websocket.send_text(json.dumps(
+                            {"type": "error", "content": event["content"]}, ensure_ascii=False
+                        ))
 
                 # Read MCP tool outputs
                 if Path(output_file).exists():
@@ -487,9 +459,6 @@ async def wizard_websocket(websocket: WebSocket):
                         except json.JSONDecodeError:
                             pass
 
-                full_response = "".join(full_response_parts)
-                conversation_history.append({"role": "assistant", "content": full_response})
-
             except Exception as e:
                 print(f"❌ Wizard error: {e}")
                 await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
@@ -498,52 +467,7 @@ async def wizard_websocket(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print(f"🧙 Wizard WebSocket disconnected")
-        # Cleanup temp file
         Path(output_file).unlink(missing_ok=True)
-
-
-def _fetch_modules_list():
-    modules_dir = _get_modules_dir()
-    result = []
-    if not modules_dir.exists():
-        return result
-    for module_path in sorted(modules_dir.iterdir()):
-        if not module_path.is_dir():
-            continue
-        manifest = module_path / "module.json"
-        if not manifest.exists():
-            continue
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            result.append({
-                "id": data.get("id", module_path.name),
-                "name": data.get("name", module_path.name),
-                "description": data.get("description", ""),
-                "genre_tags": data.get("genre_tags", []),
-            })
-        except (json.JSONDecodeError, OSError):
-            continue
-    return result
-
-
-def _fetch_narrators_list():
-    styles_dir = _get_narrator_styles_dir()
-    result = []
-    if not styles_dir.exists():
-        return result
-    for path in sorted(styles_dir.glob("*.md")):
-        result.append(_parse_md_frontmatter(path))
-    return result
-
-
-def _fetch_rules_list():
-    rules_dir = _get_campaign_rules_templates_dir()
-    result = []
-    if not rules_dir.exists():
-        return result
-    for path in sorted(rules_dir.glob("*.md")):
-        result.append(_parse_md_frontmatter(path))
-    return result
 
 
 @app.get("/ws/game")
@@ -566,111 +490,52 @@ async def game_websocket_info():
 async def game_websocket(websocket: WebSocket):
     """WebSocket endpoint for real-time game communication.
 
-    Handles bi-directional communication between player and DM agent.
-    Streams responses from Claude API and executes game tools.
-    Loads chat history on connect and saves after each turn.
-
-    Args:
-        websocket: WebSocket connection instance
+    Gets/creates the campaign's GameSession, subscribes to its broker channel,
+    and replays the event log. Turns run independently of this connection —
+    disconnecting does NOT stop an in-flight turn; reconnecting resumes seeing
+    live output plus anything missed (via after_id replay).
     """
     await websocket.accept()
 
-    # Initialize conversation state
-    conversation_history = []
-    system_prompt = None
-    config = None
-
-    # Load configuration and system prompt
-    try:
-        config = get_config()
-        system_prompt = load_system_prompt()
-        print(f"✅ WebSocket connected - system prompt loaded ({len(system_prompt)} chars)")
-        print(f"🔌 AI Provider: {config.ai_provider}")
-    except ValueError as e:
-        # Configuration error - send error message and close connection
-        await websocket.send_text(f"❌ Configuration error: {str(e)}")
+    config = get_config()
+    if not config.campaign_name or not config.campaign_dir:
+        await websocket.send_text(json.dumps({"type": "error", "content": "No active campaign"}))
         await websocket.close()
         return
 
-    # Load chat history from file on connection
-    campaign_dir: Optional[Path] = config.campaign_dir if config else None
-    if campaign_dir:
-        saved_messages = load_chat_history(campaign_dir)
-        if saved_messages:
-            # Restore conversation history for Claude
-            for msg in saved_messages:
-                role = msg.get("role")
-                content = msg.get("content", "")
-                if role in ("user", "assistant") and content:
-                    conversation_history.append({"role": role, "content": content})
+    system_prompt = load_system_prompt()
+    session = get_or_create_session(config.campaign_name, config.project_root, config.model_name)
 
-            # Send history to client as JSON packet
-            history_packet = json.dumps({"type": "history", "messages": saved_messages})
-            await websocket.send_text(history_packet)
-            print(f"📜 Chat history loaded: {len(saved_messages)} messages")
-        else:
-            print(f"📜 Chat history empty — starting new conversation")
-    else:
-        print(f"⚠️  Active campaign not set — chat history will not be saved")
+    # Replay persisted history so a reconnecting client sees what it missed
+    history = read_events(session.campaign_dir)
+    if history:
+        await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
 
+    queue = broker.subscribe(config.campaign_name)
     try:
         while True:
-            # Receive message from player
-            user_message = await websocket.receive_text()
-            print(f"📩 Received message: {user_message[:50]}...")
+            receive_task = asyncio.ensure_future(websocket.receive_text())
+            queue_task = asyncio.ensure_future(queue.get())
+            done, _ = await asyncio.wait(
+                {receive_task, queue_task}, return_when=asyncio.FIRST_COMPLETED
+            )
 
-            conversation_history.append({"role": "user", "content": user_message})
-            full_response_parts: List[str] = []
+            if receive_task in done:
+                queue_task.cancel()
+                user_message = receive_task.result()
+                print(f"📩 Received message: {user_message[:50]}...")
+                if not session.send(user_message, system_prompt):
+                    await websocket.send_text(json.dumps(
+                        {"type": "error", "content": "A turn is already in progress"}, ensure_ascii=False
+                    ))
+                continue
 
-            # Process message through DM agent with streaming
-            try:
-                async for chunk in process_message(
-                    user_message=user_message,
-                    conversation_history=conversation_history,
-                    provider_type=config.ai_provider,
-                    api_key=config.anthropic_api_key,
-                    model_name=config.model_name,
-                    system_prompt=system_prompt,
-                    project_root=config.project_root
-                ):
-                    try:
-                        event = json.loads(chunk)
-                        await websocket.send_text(chunk)
-                        if event.get("type") == "text":
-                            full_response_parts.append(event["content"])
-                    except json.JSONDecodeError:
-                        await websocket.send_text(json.dumps(
-                            {"type": "text", "content": chunk}, ensure_ascii=False
-                        ))
-                        full_response_parts.append(chunk)
-
-                # Send end-of-message marker
-                await websocket.send_text(json.dumps({"type": "done"}))
-                print(f"✅ Completed message processing")
-
-                # Save turn to chat history
-                if campaign_dir and full_response_parts:
-                    full_response = "".join(full_response_parts)
-                    timestamp = _now_iso()
-
-                    # Add assistant response to conversation_history
-                    # (user message is already added by the provider)
-                    conversation_history.append({"role": "assistant", "content": full_response})
-
-                    # Persist history to disk
-                    all_saved = load_chat_history(campaign_dir)
-                    all_saved.append({"role": "user", "content": user_message, "timestamp": timestamp})
-                    all_saved.append({"role": "assistant", "content": full_response, "timestamp": timestamp})
-                    save_chat_history(campaign_dir, all_saved)
-                    print(f"💾 Chat history saved ({len(all_saved)} messages)")
-
-            except Exception as e:
-                # Send error to client and log
-                error_message = f"Error: {str(e)}"
-                print(f"❌ DM Agent error: {error_message}")
-                await websocket.send_text(f"\n\n{error_message}")
+            if queue_task in done:
+                receive_task.cancel()
+                event = queue_task.result()
+                await websocket.send_text(json.dumps(event, ensure_ascii=False))
 
     except WebSocketDisconnect:
-        # Client disconnected, cleanup connection
-        print(f"🔌 WebSocket disconnected")
-        pass
+        print(f"🔌 WebSocket disconnected (turn keeps running if active)")
+    finally:
+        broker.unsubscribe(config.campaign_name, queue)
