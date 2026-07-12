@@ -75,18 +75,15 @@ class GameSession:
                 if event["type"] == "text_delta":
                     broker.publish(self.campaign, {"type": "stream", "content": event["content"]})
                     continue
-                if event["type"] == "text":
-                    append_event(self.campaign_dir, "text", event["content"])
-                elif event["type"] == "activity":
-                    append_event(self.campaign_dir, "activity", event["content"])
-                elif event["type"] == "error":
-                    append_event(self.campaign_dir, "error", event["content"])
-                broker.publish(self.campaign, event)
+                if event["type"] in ("text", "activity", "error"):
+                    stored = append_event(self.campaign_dir, event["type"], event["content"])
+                    broker.publish(self.campaign, stored)
+                else:
+                    broker.publish(self.campaign, event)
         except Exception as e:
             logger.error(f"[{self.campaign}] turn failed: {e}", exc_info=True)
-            err_event = {"type": "error", "content": str(e)}
-            append_event(self.campaign_dir, "error", str(e))
-            broker.publish(self.campaign, err_event)
+            stored = append_event(self.campaign_dir, "error", str(e))
+            broker.publish(self.campaign, stored)
         finally:
             self.running = False
             self._last_turn_end_at = time.monotonic()

@@ -68,11 +68,15 @@ async def health_check():
 
 
 @app.get("/api/status")
-async def get_status():
+async def get_status(campaign: Optional[str] = None):
     """Get current character status for sidebar.
 
     Returns character stats, inventory, and location from world.json via WorldGraph.
     Uses game_state cache to minimize disk operations.
+
+    Args:
+        campaign: Campaign name (optional). If given, reads that campaign's
+            world.json instead of the global active campaign.
 
     Returns:
         dict: Character status with keys:
@@ -86,7 +90,11 @@ async def get_status():
             Or error dict if failed:
             - error (str): Error message
     """
-    status = get_character_status()
+    campaign_dir = None
+    if campaign:
+        config = get_config()
+        campaign_dir = config.campaigns_dir / campaign
+    status = get_character_status(campaign_dir=campaign_dir)
     return status
 
 
@@ -490,28 +498,38 @@ async def game_websocket_info():
 async def game_websocket(websocket: WebSocket):
     """WebSocket endpoint for real-time game communication.
 
+    Campaign-addressed: `/ws/game?campaign=<name>&after_id=<n>` — mirrors
+    Orchestra's per-session sockets so multiple campaigns can stream
+    independently instead of sharing one global active campaign.
+
     Gets/creates the campaign's GameSession, subscribes to its broker channel,
-    and replays the event log. Turns run independently of this connection —
-    disconnecting does NOT stop an in-flight turn; reconnecting resumes seeing
-    live output plus anything missed (via after_id replay).
+    and replays the event log after `after_id`. Turns run independently of
+    this connection — disconnecting does NOT stop an in-flight turn;
+    reconnecting resumes seeing live output plus anything missed.
+
+    `receive_text()` is ALWAYS a player turn — there is no client→server
+    control message. Replay is driven entirely by the `after_id` query param
+    on (re)connect, never by an in-band message.
     """
     await websocket.accept()
 
-    config = get_config()
-    if not config.campaign_name or not config.campaign_dir:
-        await websocket.send_text(json.dumps({"type": "error", "content": "No active campaign"}))
+    campaign = websocket.query_params.get("campaign")
+    if not campaign:
+        await websocket.send_text(json.dumps({"type": "error", "content": "Missing ?campaign= query param"}))
         await websocket.close()
         return
+    after_id = int(websocket.query_params.get("after_id", "0"))
 
+    config = get_config()
     system_prompt = load_system_prompt()
-    session = get_or_create_session(config.campaign_name, config.project_root, config.model_name)
+    session = get_or_create_session(campaign, config.project_root, config.model_name)
 
-    # Replay persisted history so a reconnecting client sees what it missed
-    history = read_events(session.campaign_dir)
+    # Replay only what the client missed, driven by the after_id cursor it sent
+    history = read_events(session.campaign_dir, after_id=after_id)
     if history:
         await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
 
-    queue = broker.subscribe(config.campaign_name)
+    queue = broker.subscribe(campaign)
     try:
         while True:
             receive_task = asyncio.ensure_future(websocket.receive_text())
@@ -523,7 +541,7 @@ async def game_websocket(websocket: WebSocket):
             if receive_task in done:
                 queue_task.cancel()
                 user_message = receive_task.result()
-                print(f"📩 Received message: {user_message[:50]}...")
+                print(f"📩 [{campaign}] Received message: {user_message[:50]}...")
                 if not session.send(user_message, system_prompt):
                     await websocket.send_text(json.dumps(
                         {"type": "error", "content": "A turn is already in progress"}, ensure_ascii=False
@@ -536,6 +554,6 @@ async def game_websocket(websocket: WebSocket):
                 await websocket.send_text(json.dumps(event, ensure_ascii=False))
 
     except WebSocketDisconnect:
-        print(f"🔌 WebSocket disconnected (turn keeps running if active)")
+        print(f"🔌 [{campaign}] WebSocket disconnected (turn keeps running if active)")
     finally:
-        broker.unsubscribe(config.campaign_name, queue)
+        broker.unsubscribe(campaign, queue)
