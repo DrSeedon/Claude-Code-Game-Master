@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-BACKEND_PORT=8800
+BACKEND_PORT=18083
 FRONTEND_PORT=3000
 
 cd "$(dirname "$0")"
@@ -12,7 +12,7 @@ done
 sleep 0.3
 
 # Start backend
-nohup uv run uvicorn backend.server:app --host 0.0.0.0 --port $BACKEND_PORT > /tmp/dm-backend.log 2>&1 &
+nohup uv run uvicorn backend.server:app --host 127.0.0.1 --port $BACKEND_PORT > /tmp/dm-backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Start frontend

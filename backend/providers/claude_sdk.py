@@ -158,6 +158,11 @@ class ClaudeSDKProvider(BaseProvider):
                 pass
             self._client = None
 
+    async def close(self) -> None:
+        """Drop the CLI subprocess (e.g. on idle hibernate). Next process_message()
+        call reconnects and resumes via the cached session_id — history survives."""
+        await self._disconnect()
+
     async def reconnect(self, system_prompt: str, mcp_servers: Optional[Dict] = None) -> None:
         await self._disconnect()
         self._client = await self._connect(self.model_name, system_prompt, mcp_servers)
