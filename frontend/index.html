@@ -1,13 +1,66 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DM Game Master</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DM Game Master</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar: campaign list + new-campaign button -->
+    <aside id="sidebar">
+      <div class="sidebar-head">
+        <div class="brand">
+          <span class="brand-mark">🎲</span>
+          <span class="brand-name">DM Game Master</span>
+        </div>
+        <button id="new-campaign-btn" class="btn btn-primary btn-icon" title="Новая кампания">+</button>
+      </div>
+      <div id="campaign-list" class="campaign-list"></div>
+    </aside>
+
+    <!-- Main panel: chat + input, or wizard -->
+    <main id="main">
+      <!-- Empty / welcome state -->
+      <section id="welcome" class="pane welcome">
+        <div class="welcome-inner">
+          <div class="welcome-mark">🎲</div>
+          <h1>DM Game Master</h1>
+          <p>Выберите кампанию слева или создайте новую, чтобы начать приключение.</p>
+          <button id="welcome-new-btn" class="btn btn-primary">+ Новая кампания</button>
+        </div>
+      </section>
+
+      <!-- Game / wizard chat pane -->
+      <section id="chat-pane" class="pane chat-pane" hidden>
+        <header id="chat-header" class="chat-header">
+          <div class="chat-title">
+            <span id="chat-title-text">Кампания</span>
+            <span id="conn-status" class="conn-status" title="Статус соединения">
+              <span class="conn-dot"></span><span class="conn-label"></span>
+            </span>
+          </div>
+        </header>
+
+        <div id="chat" class="chat-scroll"></div>
+
+        <!-- Wizard dynamic choices render here, above the input -->
+        <div id="choices" class="choices" hidden></div>
+
+        <div class="input-bar">
+          <textarea id="input" class="input" rows="1" placeholder="Введите сообщение..."></textarea>
+          <button id="send-btn" class="btn btn-primary send-btn">Отправить</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
 </html>

@@ -5,7 +5,8 @@ import json
 import re
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -31,14 +32,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CRITICAL: Add CORS middleware BEFORE route definitions
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for localhost development
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
-)
+# Vanilla frontend lives in <project>/frontend — same origin, no CORS needed.
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 @app.on_event("startup")
@@ -365,17 +360,8 @@ async def api_get_template_rules():
 
 @app.get("/")
 async def root():
-    """Root endpoint with basic server info.
-
-    Returns:
-        dict: Welcome message and API documentation link
-    """
-    return {
-        "message": "DM Game Master API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/api/health",
-    }
+    """Serve the single-page vanilla frontend."""
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 @app.websocket("/ws/wizard")
@@ -557,3 +543,7 @@ async def game_websocket(websocket: WebSocket):
         print(f"🔌 [{campaign}] WebSocket disconnected (turn keeps running if active)")
     finally:
         broker.unsubscribe(campaign, queue)
+
+
+# Static assets (css/js) — mounted last so it never shadows /api or /ws routes.
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
