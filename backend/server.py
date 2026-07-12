@@ -19,11 +19,11 @@ from backend.campaign_api import (
     activate_campaign,
     delete_campaign,
 )
-from backend.event_log import read_events, append_event
+from backend.event_log import read_events
 from backend.game_session import get_or_create_session
 from backend.live_broker import broker
+from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.wizard_prompt import load_wizard_system_prompt
-from backend.wizard_session import get_or_create_draft, delete_draft, is_valid_session_id
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -385,24 +385,13 @@ async def root():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
-@app.delete("/api/wizard-session/{session_id}")
-async def api_delete_wizard_session(session_id: str):
-    """Drop a wizard draft (provider + event log). Idempotent."""
-    if not is_valid_session_id(session_id):
-        raise HTTPException(status_code=400, detail="Invalid session_id")
-    config = get_config()
-    existed = await delete_draft(session_id, config.project_root)
-    return {"success": True, "existed": existed}
-
-
 @app.websocket("/ws/wizard")
 async def wizard_websocket(websocket: WebSocket):
-    """Persistent wizard for campaign creation. Uses MCP tools via SDK.
+    """Ephemeral campaign-creation wizard. Uses MCP tools via SDK.
 
-    Keyed by `?session_id=<id>` so a draft survives reconnect: the SDK provider
-    resumes the conversation and the event log replays via `after_id` (same
-    contract as /ws/game). Turns run inline (wizard is single-user); an in-draft
-    `running` flag rejects overlapping sends.
+    One-shot: a fresh provider lives for the connection only — no session_id, no
+    event log, no resume. Disconnect (or the 🗑️ reset) drops everything and the
+    next connect starts clean. Create the campaign in one sitting or start over.
     """
     await websocket.accept()
 
@@ -413,21 +402,6 @@ async def wizard_websocket(websocket: WebSocket):
         await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
         await websocket.close()
         return
-
-    session_id = websocket.query_params.get("session_id")
-    if not session_id or not is_valid_session_id(session_id):
-        await websocket.send_text(json.dumps({"type": "error", "content": "Missing or invalid ?session_id= query param"}))
-        await websocket.close()
-        return
-    after_id = int(websocket.query_params.get("after_id", "0"))
-
-    draft = get_or_create_draft(session_id, config.project_root, config.model_name)
-    print(f"🧙 Wizard connected: session_id={session_id}, after_id={after_id}")
-
-    # Replay what the client missed (chat text/activity + last shown choices)
-    history = read_events(draft.dir, after_id=after_id)
-    if history:
-        await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
 
     # MCP tool outputs land in this per-connection file
     import uuid
@@ -440,27 +414,19 @@ async def wizard_websocket(websocket: WebSocket):
         }
     }
 
+    provider = ClaudeSDKProvider(project_root=config.project_root, model_name=config.model_name)
+
     async def send(event: dict) -> None:
         await websocket.send_text(json.dumps(event, ensure_ascii=False))
 
     try:
         while True:
             user_message = await websocket.receive_text()
-            if draft.running:
-                await send({"type": "error", "content": "A wizard turn is already in progress"})
-                continue
-            draft.running = True
-            completed = False
-            print(f"🧙 Wizard[{session_id}] message: {user_message[:50]}...")
-            append_event(draft.dir, "user_message", user_message)
-            # A sidebar submit consumes the shown choices — persist a clear so a
-            # reconnect before the DM's reply doesn't resurrect the old panel.
-            if user_message.startswith("[Sidebar selection") or user_message.startswith("[Sidebar skip"):
-                append_event(draft.dir, "clear_choices", "")
+            print(f"🧙 Wizard message: {user_message[:50]}...")
             Path(output_file).write_text("", encoding="utf-8")
 
             try:
-                async for event in draft.provider.process_message(
+                async for event in provider.process_message(
                     user_message=user_message,
                     system_prompt=wizard_prompt,
                     model_name=config.model_name,
@@ -469,7 +435,7 @@ async def wizard_websocket(websocket: WebSocket):
                     if event["type"] == "text_delta":
                         continue
                     if event["type"] in ("text", "activity", "error"):
-                        await send(append_event(draft.dir, event["type"], event["content"]))
+                        await send({"type": event["type"], "content": event["content"]})
 
                 # Drain MCP tool outputs (choices + completion signal)
                 if Path(output_file).exists():
@@ -482,37 +448,23 @@ async def wizard_websocket(websocket: WebSocket):
                             continue
                         tool = tool_output.get("tool")
                         if tool == "show_choices":
-                            # Persist so the panel is restored on reconnect
-                            append_event(draft.dir, "show_choices", json.dumps(tool_output["data"], ensure_ascii=False))
                             await send({"type": "show_choices", "data": tool_output["data"]})
                         elif tool == "clear_choices":
-                            append_event(draft.dir, "clear_choices", "")
                             await send({"type": "clear_choices"})
                         elif tool == "create_campaign":
                             if tool_output.get("success"):
-                                completed = True
                                 await send({"type": "wizard_complete", "campaign_name": tool_output.get("campaign_name")})
                             else:
-                                await send(append_event(draft.dir, "error", tool_output.get("error", "Creation failed")))
+                                await send({"type": "error", "content": tool_output.get("error", "Creation failed")})
 
             except Exception as e:
                 print(f"❌ Wizard error: {e}")
-                await send(append_event(draft.dir, "error", str(e)))
-            finally:
-                draft.running = False
+                await send({"type": "error", "content": str(e)})
 
             await send({"type": "done"})
 
-            if completed:
-                # Draft consumed by create_campaign — delete AFTER the turn fully
-                # unwound (provider idle), so nothing appends to a removed log.
-                await delete_draft(session_id, config.project_root)
-                Path(output_file).unlink(missing_ok=True)
-                return
-
     except WebSocketDisconnect:
-        print(f"🧙 Wizard[{session_id}] disconnected (draft kept)")
-        draft.running = False
+        print(f"🧙 Wizard disconnected")
         Path(output_file).unlink(missing_ok=True)
 
 

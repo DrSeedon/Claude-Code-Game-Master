@@ -1,6 +1,20 @@
 # Vanilla-frontend rewrite — report
 
-## Follow-up: persistent wizard + Codex round 2 (2026-07-12)
+## Reverted: wizard back to ephemeral (2026-07-12)
+Product decision: persistent wizard drafts removed — wizard is a one-shot flow again.
+Deleted `backend/wizard_session.py`, the `DELETE /api/wizard-session/{id}` endpoint, and all
+session_id/event-log/replay logic in `/ws/wizard` (fresh provider per connection, no resume).
+Frontend lost the Continue/Start-over dialog + localStorage; "+" opens the wizard directly, 🗑️
+reset just reconnects a fresh wizard WS. `world-state/wizard-drafts/` + its gitignore line gone.
+**Kept**: `activity` tool-calls in the wizard chat; the `set_model` snapshot fix in game_session
+(that was a game-side race, unrelated to wizard). Net −195 lines. 185 tests pass; ephemeral flow
+browser-verified (no resume prompt, reset reconnects fresh, stale localStorage ignored).
+
+> Note: hit a stale-server trap during verification — a uvicorn from the MAIN repo checkout was
+> bound to :18083 serving its old app.js. Always confirm the server serving :18083 runs from THIS
+> worktree (`pgrep -af uvicorn`), not the main project dir.
+
+## Follow-up: persistent wizard + Codex round 2 (2026-07-12) — REVERTED, see above
 Shipped persistent wizard drafts, activity-in-wizard, model list trim (sonnet-5 default,
 opus-4-6 removed). Codex re-review (resumed session, reviewing the diff) found 5 issues;
 4 fixed, 1 deferred as design scope:

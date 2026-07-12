@@ -2,6 +2,19 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.2.0] - 2026-07-12
+
+### Removed
+- 🧙 **Persistent wizard drafts откачены — wizard снова ephemeral** (отменяет [4.1.0] persistence)
+  - Удалён `backend/wizard_session.py`, `DELETE /api/wizard-session/{id}`, весь session_id/event-log/replay
+    в `/ws/wizard` — теперь свежий provider на соединение, без resume. Disconnect = потеряно
+  - Frontend: убран диалог "Продолжить / Начать заново", localStorage `wizard_session_id`, `wizardUrl()`.
+    "+" сразу открывает wizard. Кнопка 🗑️ Сбросить осталась — просто reconnect свежего wizard WS
+  - `world-state/wizard-drafts/` удалена, строка из `.gitignore` убрана
+  - **Оставлено**: tool calls (`activity`) в wizard-чате; фикс `set_model` snapshot в game_session (не про wizard)
+  - Reasoning: wizard = интерактивный одноразовый flow. Создание кампании за один заход; потеря середины
+    не критична. Persistence добавляла сложность (path-traversal, provider-leak, race-риски) без ценности
+
 ## [4.1.0] - 2026-07-12
 
 ### Added

@@ -157,9 +157,6 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .msg-activity.clickable { cursor: pointer; }
 .activity-toggle { color: var(--accent-alt); font-style: italic; }
 
-/* Wizard resume prompt buttons */
-.resume-actions { display: flex; gap: 8px; margin-top: 12px; }
-
 /* Error banner */
 .msg-error {
   align-self: center; max-width: 90%;

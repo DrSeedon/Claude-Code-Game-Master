@@ -60,14 +60,10 @@ const state = {
   generating: false,     // a turn is in flight (show waiting indicator)
   localEcho: new Set(),  // "role:content" keys to dedup on history replay
   wizardFirstMsgSent: false,   // inject sidebar-preset context on first wizard message
-  wizardSessionId: null, // persistent wizard draft id (localStorage-backed)
-  wizardResuming: false, // reconnecting to an existing draft → skip client greeting/presets
   activeChoices: null,   // current wizard choices payload
   choiceSel: {},         // radio/checkbox selections {controlId: id | id[]}
   choiceText: {},        // text_input values {controlId: value}
 };
-
-const WIZARD_LS_KEY = 'wizard_session_id';
 
 // ─────────────────────────── Streaming buffer (Orchestra port) ────────────
 const stream = {
@@ -314,11 +310,6 @@ function gameUrl() {
   return `ws://${location.host}/ws/game?${params.toString()}`;
 }
 
-function wizardUrl() {
-  const params = new URLSearchParams({ session_id: state.wizardSessionId, after_id: String(state.afterId) });
-  return `ws://${location.host}/ws/wizard?${params.toString()}`;
-}
-
 function connect(url) {
   setConnStatus(state.attempt === 0 ? 'connecting' : 'reconnecting');
   const sock = new WebSocket(url);
@@ -350,7 +341,7 @@ function connect(url) {
     state.attempt += 1;
     state.reconnectTimer = setTimeout(() => {
       if (state.mode === 'game') connect(gameUrl());
-      else if (state.mode === 'wizard') connect(wizardUrl());
+      else if (state.mode === 'wizard') connect(`ws://${location.host}/ws/wizard`);
     }, delay);
   };
 }
@@ -410,18 +401,12 @@ function handleEvent(data) {
   }
 }
 
-/** Replay past events. Each carries id/type/content; dedup local echoes. */
+/** Replay past events (game only). Each carries id/type/content; dedup local echoes. */
 function renderHistory(messages) {
   resetStream();
   clearChat();
-  clearChoices();  // choices are rebuilt from show_choices/clear_choices events below
   for (const m of messages) {
     if (typeof m.id === 'number' && m.id > state.afterId) state.afterId = m.id;
-    if (m.type === 'show_choices') {          // wizard: restore the last shown panel
-      try { renderChoices(JSON.parse(m.content)); } catch {}
-      continue;
-    }
-    if (m.type === 'clear_choices') { clearChoices(); continue; }
     const role = m.type === 'user_message' ? 'user' : 'assistant';
     if (state.localEcho.has(`${role}:${m.content}`)) continue;
     if (m.type === 'user_message') addUserMessage(m.content);
@@ -510,91 +495,33 @@ function selectCampaign(name) {
   el.input.focus();
 }
 
-function newWizardSessionId() {
-  return 'wizard-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-/** Entry from the "+" button. Offers to resume an unfinished draft, else starts fresh. */
+/** Entry from "+" (and the 🗑️ reset). Ephemeral: opens a fresh one-shot wizard WS. */
 function startWizard() {
-  const saved = localStorage.getItem(WIZARD_LS_KEY);
-  if (saved) {
-    // Show the shell, then ask in-chat whether to continue or restart (no WS yet).
-    enterWizardShell();
-    showResumePrompt(saved);
-  } else {
-    beginWizard(newWizardSessionId(), false);
-  }
-}
-
-/** Prepare the wizard view without connecting (used before the resume prompt). */
-function enterWizardShell() {
   closeWs();
   clearChoices();
   clearChat();
   hideCtxUsage();
   state.mode = 'wizard';
   state.campaign = null;
+  state.wizardFirstMsgSent = false;
+  state.activeChoices = null;
+  state.attempt = 0;
+  state.generating = false;
+  state.localEcho = new Set();
   el.titleText.textContent = 'Создание кампании';
   el.input.placeholder = 'Опишите мир или выберите вариант…';
   el.wizardResetBtn.hidden = false;
   el.modelSelect.hidden = true;  // model is fixed in wizard (config)
   showChat();
   markActiveInList();
-}
-
-function showResumePrompt(sessionId) {
-  const wrap = document.createElement('div');
-  wrap.className = 'msg msg-dm';
-  wrap.innerHTML = '<div class="msg-role">DM</div>';
-  const body = document.createElement('div');
-  body.className = 'msg-body';
-  body.innerHTML = '<div class="markdown-body">У вас есть незавершённое создание кампании. Продолжить или начать заново?</div>';
-  const row = document.createElement('div');
-  row.className = 'resume-actions';
-  const cont = document.createElement('button');
-  cont.className = 'btn btn-primary';
-  cont.textContent = 'Продолжить';
-  cont.addEventListener('click', () => { wrap.remove(); beginWizard(sessionId, true); });
-  const fresh = document.createElement('button');
-  fresh.className = 'btn';
-  fresh.textContent = 'Начать заново';
-  fresh.addEventListener('click', () => {
-    wrap.remove();
-    deleteWizardDraft(sessionId);
-    beginWizard(newWizardSessionId(), false);
-  });
-  row.appendChild(cont); row.appendChild(fresh);
-  body.appendChild(row);
-  wrap.appendChild(body);
-  el.chat.appendChild(wrap);
-}
-
-/** Connect to a wizard draft. resume=true → replay restores state; false → fresh greeting+presets. */
-function beginWizard(sessionId, resume) {
-  enterWizardShell();
-  state.wizardSessionId = sessionId;
-  state.wizardResuming = resume;
-  state.wizardFirstMsgSent = resume;   // a resumed draft already sent its first message
-  state.activeChoices = null;
-  state.afterId = 0;
-  state.attempt = 0;
-  state.generating = false;
-  state.localEcho = new Set();
-  localStorage.setItem(WIZARD_LS_KEY, sessionId);
-  connect(wizardUrl());
-  if (!resume) showInitialWizardGreeting();  // fresh draft: client-side greeting + preset choices
+  connect(`ws://${location.host}/ws/wizard`);
+  showInitialWizardGreeting();
   el.input.focus();
 }
 
-function deleteWizardDraft(sessionId) {
-  localStorage.removeItem(WIZARD_LS_KEY);
-  fetch('/api/wizard-session/' + encodeURIComponent(sessionId), { method: 'DELETE' }).catch(() => {});
-}
-
-/** 🗑️ reset button — drop the current draft and start a brand-new one. */
+/** 🗑️ reset — just start a brand-new ephemeral wizard (old socket is dropped). */
 function resetWizard() {
-  if (state.wizardSessionId) deleteWizardDraft(state.wizardSessionId);
-  beginWizard(newWizardSessionId(), false);
+  startWizard();
 }
 
 // ─────────────────────────── Wizard ───────────────────────────────────────
@@ -656,9 +583,6 @@ function sendWizard(text, meta) {
 }
 
 function onWizardComplete(campaignName) {
-  // Draft consumed — backend already deleted it; drop the local pointer too.
-  localStorage.removeItem(WIZARD_LS_KEY);
-  state.wizardSessionId = null;
   clearChoices();
   selectCampaign(campaignName);  // switch to the freshly created campaign's game socket
   pollCampaigns();
