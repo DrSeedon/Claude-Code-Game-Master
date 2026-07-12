@@ -24,17 +24,18 @@ HIBERNATE_IDLE_SECONDS = 5 * 60
 
 
 def get_or_create_session(campaign: str, project_root: Path, model_name: str) -> "GameSession":
-    """One GameSession per campaign. If the requested model differs from the
-    live session's (user switched in the header), recreate it so the change
-    actually takes effect — but never mid-turn (that would drop a running reply)."""
+    """Exactly one GameSession per campaign, ever — so all sockets for a campaign
+    share one provider and turn lock (no concurrent turns, no orphaned sessions).
+
+    A header model switch is applied in place via `set_model()`, which takes effect
+    on the next turn. We never recreate the session, so open sockets can't diverge.
+    """
     session = _sessions.get(campaign)
-    if session is not None and session.model_name != model_name and not session.running:
-        # Rebuild with the new model. The CLI conversation resets (fresh session_id),
-        # but the on-disk event log — everything the player sees — is untouched.
-        session = None
     if session is None:
         session = GameSession(campaign, project_root, model_name)
         _sessions[campaign] = session
+    else:
+        session.set_model(model_name)
     return session
 
 
@@ -50,6 +51,16 @@ class GameSession:
         self.running = False
         self._turn_task: Optional[asyncio.Task] = None
         self._last_turn_end_at: float = 0.0
+        self._model_dirty = False  # model changed since last turn → reset CLI session on next send
+
+    def set_model(self, model_name: str) -> None:
+        """Switch model for future turns. No effect on a running turn (its model
+        is already captured). The CLI conversation resets on the next send so the
+        new model starts clean — the on-disk event log (what the player sees) is kept."""
+        if model_name == self.model_name:
+            return
+        self.model_name = model_name
+        self._model_dirty = True
 
     def send(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict] = None) -> bool:
         """Start a turn in the background. Does not block on WS connection.
@@ -68,7 +79,13 @@ class GameSession:
 
     async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict], idle_for: float) -> None:
         try:
-            if idle_for > HIBERNATE_IDLE_SECONDS:
+            if self._model_dirty:
+                # Model changed — drop the old CLI session so the new model starts a
+                # fresh conversation (resume would keep the old model's session).
+                await self.provider.close()
+                self._model_dirty = False
+                logger.info(f"[{self.campaign}] model switched to {self.model_name}")
+            elif idle_for > HIBERNATE_IDLE_SECONDS:
                 # Idle too long — drop the CLI subprocess. process_message() reconnects
                 # and resumes via the provider's cached session_id, so history survives.
                 await self.provider.close()

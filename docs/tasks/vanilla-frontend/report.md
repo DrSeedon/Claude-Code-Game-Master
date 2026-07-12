@@ -24,7 +24,23 @@ this the select would lie for existing campaigns.
 - Browser (Playwright): model-select populated, right-panel + "Настройки кампании" + 10 cards, ctx bar
   updates+colors, wizard→campaign switch abandons wizard WS cleanly, history replay intact. No console errors.
 - 185 backend tests pass. `usage` event confirmed NOT persisted to event log (history contract intact).
-- Codex bg review requested but produced no artifact (known Codex CWD bug) — relied on self-review + tests.
+
+### Codex review round (3× P2, all fixed)
+Codex flagged the model-switch design (my session-recreation was too clever):
+1. **Orphaned sessions / concurrent turns** — recreating a session on model switch left old
+   WS handlers holding the old GameSession → two turns could write one campaign's log.
+2. **Mid-turn switch dropped** — "don't recreate while running" meant a switch during streaming
+   was silently lost.
+3. **Config default bypassed** — `/api/models` hardcoded `sonnet-5` as default, overriding
+   `config.model_name` for every game socket.
+
+Fix (simpler than the original): **never recreate the session.** `get_or_create_session` now
+keeps one session per campaign forever and calls `session.set_model()` in place. `set_model`
+updates the model + a `_model_dirty` flag (works even mid-turn — applies next turn). `_run_turn`
+resets the CLI session (`provider.close()`) when dirty, so the new model starts fresh; the event
+log is untouched. `_model_options()` makes the default = `config.model_name` (included in the list
+even if not in the static whitelist). E2E-verified: switch → next turn closes provider once + uses
+new model + clears dirty; one session throughout; config model is the default.
 
 ---
 

@@ -35,8 +35,19 @@ app = FastAPI(
 # Vanilla frontend lives in <project>/frontend — same origin, no CORS needed.
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-# Models the client may pick in the header select. Order = display order; first = default.
+# Models the client may pick in the header select. Order = display order.
 ALLOWED_MODELS = ["claude-sonnet-5", "claude-opus-4-6", "claude-opus-4-8"]
+
+
+def _model_options() -> tuple[list[str], str]:
+    """(selectable models, default). Default is the configured model so game
+    sessions honour config.model_name; the configured model is included even if
+    it isn't in the static list, so it's never silently swapped."""
+    configured = get_config().model_name or ALLOWED_MODELS[0]
+    models = list(ALLOWED_MODELS)
+    if configured not in models:
+        models.insert(0, configured)
+    return models, configured
 
 
 @app.on_event("startup")
@@ -363,8 +374,9 @@ async def api_get_template_rules():
 
 @app.get("/api/models")
 async def api_models():
-    """Selectable models for the header select. First entry is the default."""
-    return {"models": ALLOWED_MODELS, "default": ALLOWED_MODELS[0]}
+    """Selectable models + the default (the configured model)."""
+    models, default = _model_options()
+    return {"models": models, "default": default}
 
 
 @app.get("/")
@@ -518,8 +530,9 @@ async def game_websocket(websocket: WebSocket):
     config = get_config()
     system_prompt = load_system_prompt()
     # Optional model override from the client's model-select. Unknown/absent → config default.
+    allowed, default_model = _model_options()
     requested_model = websocket.query_params.get("model")
-    model_name = requested_model if requested_model in ALLOWED_MODELS else config.model_name
+    model_name = requested_model if requested_model in allowed else default_model
     session = get_or_create_session(campaign, config.project_root, model_name)
 
     # Replay only what the client missed, driven by the after_id cursor it sent
