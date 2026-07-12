@@ -24,7 +24,7 @@ class Config:
 
     # Backend server settings
     backend_host: str = "127.0.0.1"
-    backend_port: int = 8000
+    backend_port: int = 18083
 
     # Active campaign paths (set after initialization)
     campaign_name: Optional[str] = None
@@ -78,7 +78,7 @@ def get_config() -> Config:
         campaigns_dir=campaigns_dir,
         model_name=os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
         backend_host=os.environ.get("BACKEND_HOST") or "127.0.0.1",
-        backend_port=int(os.environ.get("BACKEND_PORT", "8000")),
+        backend_port=int(os.environ.get("BACKEND_PORT", "18083")),
     )
 
     # Set campaign-specific paths if active campaign exists

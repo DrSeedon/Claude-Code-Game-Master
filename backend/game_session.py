@@ -8,6 +8,7 @@ reconnecting resumes seeing live output.
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -18,6 +19,8 @@ from backend.providers.claude_sdk import ClaudeSDKProvider
 logger = logging.getLogger(__name__)
 
 _sessions: Dict[str, "GameSession"] = {}
+
+HIBERNATE_IDLE_SECONDS = 5 * 60
 
 
 def get_or_create_session(campaign: str, project_root: Path, model_name: str) -> "GameSession":
@@ -39,6 +42,7 @@ class GameSession:
         self.campaign_dir = project_root / "world-state" / "campaigns" / campaign
         self.running = False
         self._turn_task: Optional[asyncio.Task] = None
+        self._last_turn_end_at: float = 0.0
 
     def send(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict] = None) -> bool:
         """Start a turn in the background. Does not block on WS connection.
@@ -48,14 +52,20 @@ class GameSession:
         """
         if self.running:
             return False
+        idle_for = time.monotonic() - self._last_turn_end_at if self._last_turn_end_at else 0.0
         append_event(self.campaign_dir, "user_message", user_message)
         self.running = True
-        self._turn_task = asyncio.create_task(self._run_turn(user_message, system_prompt, mcp_servers))
+        self._turn_task = asyncio.create_task(self._run_turn(user_message, system_prompt, mcp_servers, idle_for))
         self._turn_task.add_done_callback(self._on_turn_done)
         return True
 
-    async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict]) -> None:
+    async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict], idle_for: float) -> None:
         try:
+            if idle_for > HIBERNATE_IDLE_SECONDS:
+                # Idle too long — drop the CLI subprocess. process_message() reconnects
+                # and resumes via the provider's cached session_id, so history survives.
+                await self.provider.close()
+                logger.info(f"[{self.campaign}] hibernated after {idle_for:.0f}s idle")
             async for event in self.provider.process_message(
                 user_message=user_message,
                 system_prompt=system_prompt,
@@ -79,6 +89,7 @@ class GameSession:
             broker.publish(self.campaign, err_event)
         finally:
             self.running = False
+            self._last_turn_end_at = time.monotonic()
             done_event = {"type": "done"}
             broker.publish(self.campaign, done_event)
 
