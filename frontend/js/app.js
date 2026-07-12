@@ -37,6 +37,11 @@ const el = {
   titleText: document.getElementById('chat-title-text'),
   connStatus: document.getElementById('conn-status'),
   connLabel: document.querySelector('#conn-status .conn-label'),
+  modelSelect: document.getElementById('model-select'),
+  ctxUsage: document.getElementById('ctx-usage'),
+  ctxFill: document.querySelector('#ctx-usage .ctx-fill'),
+  ctxLabel: document.querySelector('#ctx-usage .ctx-label'),
+  rightPanel: document.getElementById('right-panel'),
   choices: document.getElementById('choices'),
   input: document.getElementById('input'),
   sendBtn: document.getElementById('send-btn'),
@@ -267,10 +272,24 @@ function setConnStatus(s) {
   updateInputEnabled();
 }
 function updateInputEnabled() {
-  const ok = state.connStatus === 'connected' && !state.generating;
   const connected = state.connStatus === 'connected';
   el.input.disabled = !connected;
   el.sendBtn.disabled = !connected || !el.input.value.trim();
+}
+
+// Context usage indicator ---------------------------------------------------
+function updateCtxUsage(percent, used, total) {
+  const pct = Math.max(0, Math.min(100, percent || 0));
+  el.ctxUsage.hidden = false;
+  el.ctxFill.style.width = pct + '%';
+  el.ctxFill.style.background = pct > 80 ? 'var(--danger)' : pct >= 50 ? 'var(--warn)' : 'var(--ok)';
+  el.ctxLabel.textContent = pct + '% ctx';
+  el.ctxUsage.title = total ? `${(used || 0).toLocaleString()} / ${total.toLocaleString()} токенов контекста` : 'Использование контекста';
+}
+function hideCtxUsage() {
+  el.ctxUsage.hidden = true;
+  el.ctxFill.style.width = '0';
+  el.ctxLabel.textContent = '0%';
 }
 
 // ─────────────────────────── WebSocket lifecycle ──────────────────────────
@@ -286,6 +305,7 @@ function closeWs() {
 
 function gameUrl() {
   const params = new URLSearchParams({ campaign: state.campaign, after_id: String(state.afterId) });
+  if (el.modelSelect.value) params.set('model', el.modelSelect.value);
   return `ws://${location.host}/ws/game?${params.toString()}`;
 }
 
@@ -354,6 +374,10 @@ function handleEvent(data) {
 
     case 'history':
       renderHistory(data.messages || []);
+      break;
+
+    case 'usage':
+      updateCtxUsage(data.percent, data.used, data.total);
       break;
 
     case 'done':
@@ -454,6 +478,7 @@ function selectCampaign(name) {
   closeWs();
   clearChoices();
   clearChat();
+  hideCtxUsage();
   state.mode = 'game';
   state.campaign = name;
   state.afterId = 0;
@@ -472,6 +497,7 @@ function startWizard() {
   closeWs();
   clearChoices();
   clearChat();
+  hideCtxUsage();
   state.mode = 'wizard';
   state.campaign = null;
   state.attempt = 0;
@@ -563,7 +589,7 @@ function clearChoices() {
   state.activeChoices = null;
   state.choiceSel = {};
   state.choiceText = {};
-  el.choices.hidden = true;
+  el.rightPanel.hidden = true;
   el.choices.innerHTML = '';
 }
 
@@ -572,7 +598,7 @@ function renderChoices(data) {
   state.activeChoices = data;
   state.choiceSel = {};
   state.choiceText = {};
-  el.choices.hidden = false;
+  el.rightPanel.hidden = false;
   el.choices.innerHTML = '';
 
   const head = document.createElement('div');
@@ -708,7 +734,33 @@ el.sendBtn.addEventListener('click', onSend);
 el.newBtn.addEventListener('click', startWizard);
 el.welcomeNewBtn.addEventListener('click', startWizard);
 
+// Switching model reconnects the current campaign with the new model (GameSession
+// binds model at creation, so a fresh socket is the only way to swap it).
+el.modelSelect.addEventListener('change', () => {
+  if (state.mode === 'game' && state.campaign) {
+    const name = state.campaign;
+    state.campaign = null;   // force selectCampaign to act (it early-returns on same name)
+    selectCampaign(name);
+  }
+});
+
+// ─────────────────────────── Model select ─────────────────────────────────
+async function loadModels() {
+  let data;
+  try { data = await (await fetch('/api/models')).json(); } catch { return; }
+  const models = Array.isArray(data.models) ? data.models : [];
+  el.modelSelect.innerHTML = '';
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m.replace(/^claude-/, '');  // "claude-opus-4-8" → "opus-4-8"
+    if (m === data.default) opt.selected = true;
+    el.modelSelect.appendChild(opt);
+  }
+}
+
 // ─────────────────────────── Boot ─────────────────────────────────────────
 showWelcome();
+loadModels();
 pollCampaigns();
 setInterval(pollCampaigns, CAMPAIGN_POLL_MS);

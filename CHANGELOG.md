@@ -2,6 +2,33 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.0.0] - 2026-07-12
+
+### Changed
+- 🔥 **Frontend: React → vanilla JS** — снесён весь React/Vite/TS фронт (~8000 строк), заменён на
+  чистый HTML/CSS/JS, отдаётся напрямую FastAPI. Zero npm, zero build, zero frameworks. CDN: marked + DOMPurify
+  - `frontend/index.html` (single-page shell), `frontend/css/style.css` (Orchestra `:root` токены),
+    `frontend/js/app.js` (плоский: campaign poll, game WS с `after_id` replay + backoff reconnect,
+    RAF typewriter, wizard mode)
+  - `backend/server.py` — `/` отдаёт index.html, `/static` mount, CORS убран (same-origin). API+WS без изменений
+  - `webui.sh` — одна команда uvicorn на :18083 (без vite dev-сервера)
+  - WS-протокол сохранён 1:1: stream/text/activity/error/done/history/show_choices/clear_choices/wizard_complete
+  - Triggered case: React-стек избыточен для одностраничного чат-UI; переход на Orchestra-паттерн (один процесс)
+
+### Added
+- 📊 **Context usage indicator** — полоска в chat-header показывает % заполнения контекста
+  - `ClaudeSDKProvider.get_context_usage()` — читает `ResultMessage.usage` (input + cache_read + cache_creation) / 200000
+  - `game_session._run_turn` публикует `{type:"usage",percent,used,total}` перед `done` (live-only, НЕ в event log)
+  - Цвета: <50% зелёный, 50-80% жёлтый, >80% красный. Label "N% ctx"
+  - Triggered case: игрок не видел когда контекст DM близок к переполнению
+- 🤖 **Model select** — выбор модели в chat-header (`claude-sonnet-5` / `opus-4-6` / `opus-4-8`)
+  - `/api/models` endpoint + `ALLOWED_MODELS` whitelist; WS `/ws/game?model=` валидируется против whitelist
+  - `get_or_create_session` пересоздаёт сессию при смене модели (но НЕ mid-turn — не роняет живой ответ)
+  - Смена модели → reconnect game WS; CLI-сессия сбрасывается, но event log (что видит игрок) цел
+  - Triggered case: нужно гонять дешёвый sonnet на рутине и opus на сложных сценах
+- 📋 **Right panel** — wizard choices переехали из нижнего бара в правую колонку (340px) с заголовком "Настройки кампании"
+  - Triggered case: choices снизу конфликтовали с инпутом; правая панель как в исходном React-визарде
+
 ## [3.0.0] - 2026-04-22
 
 ### Added

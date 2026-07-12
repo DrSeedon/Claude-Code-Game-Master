@@ -35,6 +35,9 @@ app = FastAPI(
 # Vanilla frontend lives in <project>/frontend — same origin, no CORS needed.
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
+# Models the client may pick in the header select. Order = display order; first = default.
+ALLOWED_MODELS = ["claude-sonnet-5", "claude-opus-4-6", "claude-opus-4-8"]
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -358,6 +361,12 @@ async def api_get_template_rules():
     return result
 
 
+@app.get("/api/models")
+async def api_models():
+    """Selectable models for the header select. First entry is the default."""
+    return {"models": ALLOWED_MODELS, "default": ALLOWED_MODELS[0]}
+
+
 @app.get("/")
 async def root():
     """Serve the single-page vanilla frontend."""
@@ -508,7 +517,10 @@ async def game_websocket(websocket: WebSocket):
 
     config = get_config()
     system_prompt = load_system_prompt()
-    session = get_or_create_session(campaign, config.project_root, config.model_name)
+    # Optional model override from the client's model-select. Unknown/absent → config default.
+    requested_model = websocket.query_params.get("model")
+    model_name = requested_model if requested_model in ALLOWED_MODELS else config.model_name
+    session = get_or_create_session(campaign, config.project_root, model_name)
 
     # Replay only what the client missed, driven by the after_id cursor it sent
     history = read_events(session.campaign_dir, after_id=after_id)

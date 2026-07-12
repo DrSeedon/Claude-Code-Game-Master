@@ -46,12 +46,16 @@
               <span class="conn-dot"></span><span class="conn-label"></span>
             </span>
           </div>
+          <div class="chat-controls">
+            <span id="ctx-usage" class="ctx-usage" title="Использование контекста" hidden>
+              <span class="ctx-bar"><span class="ctx-fill"></span></span>
+              <span class="ctx-label">0%</span>
+            </span>
+            <select id="model-select" class="model-select" title="Модель"></select>
+          </div>
         </header>
 
         <div id="chat" class="chat-scroll"></div>
-
-        <!-- Wizard dynamic choices render here, above the input -->
-        <div id="choices" class="choices" hidden></div>
 
         <div class="input-bar">
           <textarea id="input" class="input" rows="1" placeholder="Введите сообщение..."></textarea>
@@ -59,6 +63,12 @@
         </div>
       </section>
     </main>
+
+    <!-- Right panel: wizard dynamic choices ("Настройки кампании") -->
+    <aside id="right-panel" class="right-panel" hidden>
+      <div class="right-panel-head">Настройки кампании</div>
+      <div id="choices" class="choices"></div>
+    </aside>
   </div>
 
   <script src="/static/js/app.js"></script>

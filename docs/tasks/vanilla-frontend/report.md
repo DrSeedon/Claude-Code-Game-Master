@@ -1,5 +1,33 @@
 # Vanilla-frontend rewrite — report
 
+## Follow-up: 3 UI features (2026-07-12)
+1. **Context usage indicator** — `ClaudeSDKProvider.get_context_usage()` reads `ResultMessage.usage`
+   (input + cache_read + cache_creation) / 200k window → `{percent,used_tokens,total_tokens}`, or None
+   pre-turn. `game_session._run_turn` publishes a `usage` event before `done` (live-only, never logged).
+   Header bar: green <50 / yellow 50-80 / red >80, label "N% ctx".
+2. **Model select** — `/api/models` + `ALLOWED_MODELS` whitelist (sonnet-5 / opus-4-6 / opus-4-8).
+   `/ws/game?model=` validated against whitelist → falls back to config default on unknown.
+   `get_or_create_session` recreates the session on a *different* model **only when not running**
+   (mid-turn safety — verified: switching mid-turn keeps the live session). Select `change` reconnects.
+3. **Right panel** — wizard choices moved from a bottom bar into a 340px right column with a static
+   "Настройки кампании" header. `#app` is now 3 columns; stacks on ≤900px.
+
+### Self-review catch
+Model switch on an existing campaign was a **silent no-op** — `get_or_create_session` returned the
+cached session with the old model. Fixed: recreate on model change (guarded against mid-turn). Without
+this the select would lie for existing campaigns.
+
+### Verify (follow-up)
+- `get_context_usage`: None → 50% → 85% unit-tested; colors map correctly in browser (30/65/92 → green/yellow/red).
+- `/api/models` returns whitelist + default. Session recreation: 4 cases pass (create / switch-recreate /
+  same-noop / running-kept).
+- Browser (Playwright): model-select populated, right-panel + "Настройки кампании" + 10 cards, ctx bar
+  updates+colors, wizard→campaign switch abandons wizard WS cleanly, history replay intact. No console errors.
+- 185 backend tests pass. `usage` event confirmed NOT persisted to event log (history contract intact).
+- Codex bg review requested but produced no artifact (known Codex CWD bug) — relied on self-review + tests.
+
+---
+
 ## What
 Killed the entire React/Vite/TypeScript frontend, replaced with plain
 HTML/CSS/JS served by FastAPI (Orchestra pattern). One process, zero npm,

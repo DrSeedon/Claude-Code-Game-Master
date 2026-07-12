@@ -43,11 +43,15 @@ def _extract_tool_result(block: ToolResultBlock) -> str:
 
 class ClaudeSDKProvider(BaseProvider):
 
+    # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
+    CONTEXT_WINDOW = 200_000
+
     def __init__(self, project_root: Path, model_name: str = "claude-sonnet-4-6"):
         self.project_root = project_root
         self.model_name = model_name
         self._client: Optional[ClaudeSDKClient] = None
         self._session_id: Optional[str] = None
+        self._last_usage: Optional[dict] = None  # token counts from the latest ResultMessage
 
     def _make_options(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeAgentOptions:
         options = ClaudeAgentOptions(
@@ -146,6 +150,9 @@ class ClaudeSDKProvider(BaseProvider):
             elif isinstance(msg, ResultMessage):
                 if msg.session_id:
                     self._session_id = msg.session_id
+                usage = getattr(msg, "usage", None)
+                if isinstance(usage, dict):
+                    self._last_usage = usage
                 if msg.is_error and msg.result:
                     yield {"type": "error", "content": msg.result}
                 return
@@ -157,6 +164,25 @@ class ClaudeSDKProvider(BaseProvider):
             except Exception:
                 pass
             self._client = None
+
+    def get_context_usage(self) -> Optional[dict]:
+        """Context footprint of the last turn, or None if no turn ran yet.
+
+        Context = all input-side tokens (fresh input + cache read + cache create)
+        of the latest ResultMessage, as a fraction of the model's window. Mirrors
+        Orchestra's ctx% calc. Output tokens don't count — they aren't in context.
+        """
+        u = self._last_usage
+        if not u:
+            return None
+        used = (
+            (u.get("input_tokens") or 0)
+            + (u.get("cache_read_input_tokens") or 0)
+            + (u.get("cache_creation_input_tokens") or 0)
+        )
+        total = self.CONTEXT_WINDOW
+        percent = min(100, round(used * 100 / total)) if total else 0
+        return {"percent": percent, "used_tokens": used, "total_tokens": total}
 
     async def close(self) -> None:
         """Drop the CLI subprocess (e.g. on idle hibernate). Next process_message()

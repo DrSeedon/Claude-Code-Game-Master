@@ -24,7 +24,14 @@ HIBERNATE_IDLE_SECONDS = 5 * 60
 
 
 def get_or_create_session(campaign: str, project_root: Path, model_name: str) -> "GameSession":
+    """One GameSession per campaign. If the requested model differs from the
+    live session's (user switched in the header), recreate it so the change
+    actually takes effect — but never mid-turn (that would drop a running reply)."""
     session = _sessions.get(campaign)
+    if session is not None and session.model_name != model_name and not session.running:
+        # Rebuild with the new model. The CLI conversation resets (fresh session_id),
+        # but the on-disk event log — everything the player sees — is untouched.
+        session = None
     if session is None:
         session = GameSession(campaign, project_root, model_name)
         _sessions[campaign] = session
@@ -87,8 +94,15 @@ class GameSession:
         finally:
             self.running = False
             self._last_turn_end_at = time.monotonic()
-            done_event = {"type": "done"}
-            broker.publish(self.campaign, done_event)
+            usage = self.provider.get_context_usage()
+            if usage:
+                broker.publish(self.campaign, {
+                    "type": "usage",
+                    "percent": usage["percent"],
+                    "used": usage["used_tokens"],
+                    "total": usage["total_tokens"],
+                })
+            broker.publish(self.campaign, {"type": "done"})
 
     def _on_turn_done(self, task: asyncio.Task) -> None:
         if task.cancelled():
