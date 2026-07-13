@@ -29,7 +29,7 @@ def sent():
 
 @pytest.fixture
 def client(tmp_path, monkeypatch, sent):
-    monkeypatch.setattr(server_module, "load_system_prompt", lambda: "system prompt")
+    monkeypatch.setattr(server_module, "load_system_prompt", lambda *a, **k: "system prompt")
 
     class FakeConfig:
         project_root = tmp_path

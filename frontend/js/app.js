@@ -126,6 +126,7 @@ function resetStream() {
 }
 
 function createStreamBubble() {
+  removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-dm';
   wrap.innerHTML = '<div class="msg-role">DM</div>';
@@ -186,7 +187,32 @@ function maybeAutoScroll() {
 }
 el.chat.addEventListener('scroll', () => { _stickBottom = scrollAtBottom(); });
 
+/** Empty-game placeholder with a "▶ Начать игру" button. Removed once any message renders. */
+function showChatStart() {
+  if (el.chat.querySelector('.chat-start')) return;
+  const div = document.createElement('div');
+  div.className = 'chat-start';
+  div.innerHTML = '<div class="chat-start-mark">⚔️</div><h2>Готов к приключению?</h2>';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.textContent = '▶ Начать игру';
+  btn.addEventListener('click', () => sendChat('Начать игру'));
+  div.appendChild(btn);
+  el.chat.appendChild(div);
+}
+function removeChatStart() {
+  const s = el.chat.querySelector('.chat-start');
+  if (s) s.remove();
+}
+
+/** Send text into the current mode's socket (game or wizard), with local echo. */
+function sendChat(text) {
+  el.input.value = text;
+  onSend();
+}
+
 function addUserMessage(content) {
+  removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-user';
   wrap.innerHTML = '<div class="msg-role">Игрок</div>';
@@ -199,6 +225,7 @@ function addUserMessage(content) {
 }
 
 function addDmMessage(content) {
+  removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-dm';
   wrap.innerHTML = '<div class="msg-role">DM</div>';
@@ -526,6 +553,7 @@ function selectCampaign(name) {
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat(name);
+  showChatStart();   // empty campaign → "▶ Начать игру"; removed when history/messages arrive
   connect(gameUrl());
   el.input.focus();
 }
@@ -619,9 +647,23 @@ function sendWizard(text, meta) {
 }
 
 function onWizardComplete(campaignName) {
+  // Do NOT auto-switch — let the user keep tweaking with the wizard. Offer a button
+  // to jump into the game when they're ready; the campaign also appears in the sidebar.
   clearChoices();
-  selectCampaign(campaignName);  // switch to the freshly created campaign's game socket
-  pollCampaigns();
+  addDmMessage('✅ Кампания создана! Можешь продолжить настройку или перейти к игре.');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg msg-dm';
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.textContent = '▶ Начать играть';
+  btn.addEventListener('click', () => selectCampaign(campaignName));
+  body.appendChild(btn);
+  wrap.appendChild(body);
+  insertBeforeStream(wrap);
+  maybeAutoScroll();
+  pollCampaigns();  // campaign shows up in the sidebar
 }
 
 // ─────────────────────────── Choices UI (wizard) ──────────────────────────

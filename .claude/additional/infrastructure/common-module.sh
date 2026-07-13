@@ -10,10 +10,12 @@ unset VIRTUAL_ENV
 find_project_root() {
     local start="${1:-$(pwd)}"
     local dir="$start"
-    while [ ! -d "$dir/.git" ] && [ "$dir" != "/" ]; do
+    # `.git` is a DIRECTORY in a normal clone but a FILE in a git worktree —
+    # test for existence (-e), not -d, so this resolves the worktree root too.
+    while [ ! -e "$dir/.git" ] && [ "$dir" != "/" ]; do
         dir="$(dirname "$dir")"
     done
-    if [ -d "$dir/.git" ]; then
+    if [ -e "$dir/.git" ]; then
         echo "$dir"
     else
         echo ""

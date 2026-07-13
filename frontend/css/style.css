@@ -127,6 +127,9 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
   user-select: text;
 }
 .chat-empty { margin: auto; color: var(--ink-faintest); font-style: italic; text-align: center; padding: 32px; }
+.chat-start { margin: auto; text-align: center; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.chat-start-mark { font-size: 48px; }
+.chat-start h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
 
 .msg { display: flex; flex-direction: column; gap: 4px; max-width: 82%; }
 .msg-role { font-size: 11px; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.5px; }

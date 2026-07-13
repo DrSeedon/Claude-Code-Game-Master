@@ -70,6 +70,16 @@ async def auth_login_page():
     """Show login page."""
     return login_page()
 
+# Campaign name becomes a directory component (campaigns/<name>/) and a bash env
+# var fed to the rules compiler — keep it to a safe alphabet so it can't traverse
+# ("../…") out of the campaigns dir or inject anything.
+_VALID_CAMPAIGN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _valid_campaign_name(name: str) -> bool:
+    return bool(name) and _VALID_CAMPAIGN.match(name) is not None
+
+
 # Models the client may pick in the header select. Order = display order.
 ALLOWED_MODELS = ["claude-sonnet-5", "claude-opus-4-8"]
 
@@ -526,14 +536,14 @@ async def game_websocket(websocket: WebSocket):
     await websocket.accept()
 
     campaign = websocket.query_params.get("campaign")
-    if not campaign:
-        await websocket.send_text(json.dumps({"type": "error", "content": "Missing ?campaign= query param"}))
+    if not campaign or not _valid_campaign_name(campaign):
+        await websocket.send_text(json.dumps({"type": "error", "content": "Missing or invalid ?campaign= query param"}))
         await websocket.close()
         return
     after_id = int(websocket.query_params.get("after_id", "0"))
 
     config = get_config()
-    system_prompt = load_system_prompt()
+    system_prompt = load_system_prompt(campaign)  # scope rules/narrator to THIS campaign
     # Optional model override from the client's model-select. Unknown/absent → config default.
     allowed, default_model = _model_options()
     requested_model = websocket.query_params.get("model")

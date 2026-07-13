@@ -8,11 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common-module.sh"
 PROJECT_ROOT="$(find_project_root "$SCRIPT_DIR")"
 
-ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
-[ -z "$ACTIVE" ] && exit 0
+# Campaign source: DM_ACTIVE_CAMPAIGN env override (per-call, race-free for the
+# campaign-addressed web sessions) falls back to the global active-campaign.txt.
+ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")}"
 
+# No overview → still emit CORE slots (the DnD rules are campaign-independent);
+# an empty path just means "no modules". Pass "" so the Python step reads no modules.
 OVERVIEW="$PROJECT_ROOT/world-state/campaigns/$ACTIVE/campaign-overview.json"
-[ -f "$OVERVIEW" ] || exit 0
+[ -f "$OVERVIEW" ] || OVERVIEW=""
 
 MODE="full"
 [ "${1:-}" = "--modules-only" ] && MODE="modules"
@@ -25,8 +28,11 @@ project_root = sys.argv[1]
 overview_path = sys.argv[2]
 mode = sys.argv[3]  # full | modules | core
 
-with open(overview_path) as f:
-    d = json.load(f)
+# Empty overview path (no campaign / no overview) → no modules, CORE slots only.
+d = {}
+if overview_path and os.path.isfile(overview_path):
+    with open(overview_path) as f:
+        d = json.load(f)
 
 mods = d.get('modules', {})
 enabled = [k for k, v in mods.items() if v]
