@@ -2,7 +2,16 @@
 
 All notable changes to DM System will be documented in this file.
 
-## [4.4.0] - 2026-07-12
+## [4.4.1] - 2026-07-12
+
+### Changed
+- 🔘 **Model selector: dropdown → click-cycle pill** (Orchestra-style)
+  - `<select>` заменён на `<button class="model-btn">` — показывает текущую модель текстом
+    (короткое имя без `claude-`), клик циклит на следующую из `/api/models`
+  - `state.availableModels`/`state.currentModel` (было `el.modelSelect.value`); `gameUrl()` берёт
+    `state.currentModel`; клик в game-режиме → reconnect через `selectCampaign` (сброс afterId/chat)
+  - CSS: пилюля `border-radius:12px`, mono-шрифт; убран dropdown-arrow SVG. Mobile: ellipsis
+  - Triggered case: dropdown-select — не в стиле Orchestra header'а
 
 ### Fixed
 - 🧙 **Wizard: стриминг + in-process MCP** — текст DM больше не появлялся разом, tool-JSON тёк в чат

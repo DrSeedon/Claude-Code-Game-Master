@@ -62,10 +62,8 @@ Schema with `"required": ["name", "character_name"]` and the rest optional. Veri
 - **events reused across turns**: `drain()` at turn start (clear leftovers) + after (emit). One
   `WizardEvents` per connection.
 
-## Codex review — NOT obtained (honest gap)
-Ran `codex_review` on the diff (bg-40ff1c7461, reported "done") but it produced **no artifact** at
-`docs/tasks/wizard-streaming/codex-review-impl.md` (known Codex CWD/output bug — other projects'
-files exist, this one doesn't). Rather than burn rounds fighting the tool, I verified the exact
-concerns it would raise myself: event timing (empirical), SDK `@tool` schema/return shape (real
-invocation), and the optional-fields regression (caught + fixed + tested). If a Codex pass is
-required before merge, re-run with the diff uncommitted.
+## Codex review — CLEAN
+`codex_review` (bg-40ff1c7461) landed after an initial artifact-write delay. Verdict:
+**"No introduced correctness issues were identified in the wizard streaming and in-process MCP
+changes."** See `docs/tasks/wizard-streaming/codex-review-impl.md`. The one real bug (optional-fields
+schema) was caught and fixed in self-review *before* the commit, so Codex saw the corrected code.

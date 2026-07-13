@@ -68,6 +68,8 @@ const state = {
   activeChoices: null,   // current wizard choices payload
   choiceSel: {},         // radio/checkbox selections {controlId: id | id[]}
   choiceText: {},        // text_input values {controlId: value}
+  availableModels: [],   // models from /api/models (cycle order)
+  currentModel: null,    // selected model — sent as ?model= on the game WS
 };
 
 // ─────────────────────────── Streaming buffer (Orchestra port) ────────────
@@ -311,7 +313,7 @@ function closeWs() {
 
 function gameUrl() {
   const params = new URLSearchParams({ campaign: state.campaign, after_id: String(state.afterId) });
-  if (el.modelSelect.value) params.set('model', el.modelSelect.value);
+  if (state.currentModel) params.set('model', state.currentModel);
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/game?${params.toString()}`;
 }
 
@@ -798,9 +800,15 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Switching model reconnects the current campaign with the new model (GameSession
-// binds model at creation, so a fresh socket is the only way to swap it).
-el.modelSelect.addEventListener('change', () => {
+// Click the model pill → cycle to the next model. Switching mid-game reconnects
+// the campaign with the new model (GameSession binds model at creation, so a
+// fresh socket via selectCampaign is the only way to swap it).
+el.modelSelect.addEventListener('click', () => {
+  const models = state.availableModels;
+  if (models.length < 2) return;
+  const idx = models.indexOf(state.currentModel);
+  state.currentModel = models[(idx + 1) % models.length];
+  renderModelLabel();
   if (state.mode === 'game' && state.campaign) {
     const name = state.campaign;
     state.campaign = null;   // force selectCampaign to act (it early-returns on same name)
@@ -808,19 +816,17 @@ el.modelSelect.addEventListener('change', () => {
   }
 });
 
-// ─────────────────────────── Model select ─────────────────────────────────
+// ─────────────────────────── Model pill ───────────────────────────────────
+function renderModelLabel() {
+  el.modelSelect.textContent = (state.currentModel || '').replace(/^claude-/, '');  // "claude-opus-4-8" → "opus-4-8"
+}
+
 async function loadModels() {
   let data;
   try { data = await (await fetch('/api/models')).json(); } catch { return; }
-  const models = Array.isArray(data.models) ? data.models : [];
-  el.modelSelect.innerHTML = '';
-  for (const m of models) {
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.textContent = m.replace(/^claude-/, '');  // "claude-opus-4-8" → "opus-4-8"
-    if (m === data.default) opt.selected = true;
-    el.modelSelect.appendChild(opt);
-  }
+  state.availableModels = Array.isArray(data.models) ? data.models : [];
+  state.currentModel = data.default || state.availableModels[0] || null;
+  renderModelLabel();
 }
 
 // ─────────────────────────── Boot ─────────────────────────────────────────

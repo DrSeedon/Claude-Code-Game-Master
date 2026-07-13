@@ -97,15 +97,13 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .chat-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .wizard-reset-btn { font-size: 12px; padding: 5px 10px; }
 .wizard-reset-btn:hover { border-color: var(--danger); color: #fca5a5; }
-.model-select {
-  padding: 5px 26px 5px 10px; font-size: 12px; color: var(--ink-soft);
-  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm);
-  cursor: pointer; outline: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center;
+/* Model pill — click cycles to the next model (Orchestra-style, not a dropdown). */
+.model-btn {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 4px 10px; font-size: 11px; font-weight: 500; color: var(--ink-soft);
+  cursor: pointer; font-family: var(--font-mono); transition: all 0.15s; outline: none;
 }
-.model-select:hover { border-color: #475569; color: var(--ink); }
+.model-btn:hover { border-color: var(--accent); color: var(--ink); }
 
 /* Context usage indicator (Orchestra-style) */
 .ctx-usage { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-faint); }
@@ -330,5 +328,5 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
     width: 100%; z-index: 40; border-left: none;
   }
   .send-btn { padding: 12px 18px; }
-  .model-select { max-width: 120px; }
+  .model-btn { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
