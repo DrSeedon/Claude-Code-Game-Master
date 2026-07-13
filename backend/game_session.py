@@ -39,6 +39,11 @@ def get_or_create_session(campaign: str, project_root: Path, model_name: str) ->
     return session
 
 
+def peek_session(campaign: str) -> Optional["GameSession"]:
+    """The live session for a campaign, or None if none is running."""
+    return _sessions.get(campaign)
+
+
 class GameSession:
     """Owns the provider + turn task for one campaign."""
 
@@ -61,6 +66,15 @@ class GameSession:
             return
         self.model_name = model_name
         self._model_dirty = True
+
+    async def reset_session(self) -> bool:
+        """Forget Claude's conversation context (fresh session_id) — the event log,
+        and thus the visible chat history, is kept. Refused while a turn is running.
+        Returns True if reset, False if a turn is in flight."""
+        if self.running:
+            return False
+        await self.provider.reset()
+        return True
 
     def send(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict] = None) -> bool:
         """Start a turn in the background. Does not block on WS connection.

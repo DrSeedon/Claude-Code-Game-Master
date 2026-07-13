@@ -24,7 +24,7 @@ from backend.campaign_api import (
     delete_campaign,
 )
 from backend.event_log import read_events
-from backend.game_session import get_or_create_session
+from backend.game_session import get_or_create_session, peek_session
 from backend.live_broker import broker
 from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.wizard_prompt import load_wizard_system_prompt
@@ -234,6 +234,21 @@ async def api_activate_campaign(name: str):
         )
 
     return result
+
+
+@app.post("/api/campaigns/{name}/reset-session")
+async def api_reset_session(name: str):
+    """Start a fresh Claude conversation for the campaign — clears the DM's working
+    context (session_id) but keeps the event log / chat history. No-op if the
+    campaign has no live session. 409 if a turn is currently running."""
+    if not _valid_campaign_name(name):
+        raise HTTPException(status_code=400, detail="Invalid campaign name")
+    session = peek_session(name)
+    if session is None:
+        return {"success": True, "reset": False}  # nothing live to reset
+    if not await session.reset_session():
+        raise HTTPException(status_code=409, detail="A turn is in progress")
+    return {"success": True, "reset": True}
 
 
 @app.delete("/api/campaigns/{name}", status_code=200)

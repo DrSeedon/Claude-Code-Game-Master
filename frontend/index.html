@@ -55,6 +55,7 @@
             </span>
           </div>
           <div class="chat-controls">
+            <button id="new-session-btn" class="btn new-session-btn" title="Сбросить контекст Claude (история сохранится)" hidden>🔄 Новая сессия</button>
             <button id="wizard-reset-btn" class="btn wizard-reset-btn" title="Начать создание заново" hidden>🗑️ Сбросить</button>
             <span id="ctx-usage" class="ctx-usage" title="Использование контекста" hidden>
               <span class="ctx-bar"><span class="ctx-fill"></span></span>
@@ -63,6 +64,12 @@
             <button id="model-select" class="model-btn" title="Сменить модель"></button>
           </div>
         </header>
+
+        <!-- Character dashboard strip (game mode) -->
+        <div id="char-panel" class="char-panel" hidden></div>
+
+        <!-- Rate / session limit warning -->
+        <div id="rate-limit-bar" class="rate-limit-bar" hidden></div>
 
         <div id="chat" class="chat-scroll"></div>
 

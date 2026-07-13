@@ -96,8 +96,13 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
         if rules_path.exists():
             campaign_rules = f"\n---\n# Campaign Rules\n\n{rules_path.read_text()}\n"
 
+    # Step 4: Active-campaign context — so the DM knows it is ALREADY inside this
+    # campaign and should just run the session (narrate + offer actions), NOT show a
+    # campaign menu / list. Without this the DM treats every turn as a fresh boot.
+    campaign_context = _campaign_context(project_root, campaign_name) if campaign_name else ""
+
     # Combine prompts
-    system_prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}"
+    system_prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}\n{campaign_context}"
 
     # Ensure we return something meaningful
     if len(system_prompt.strip()) < 100:
@@ -116,3 +121,45 @@ Be descriptive, engaging, and fair. Follow D&D 5e rules. Make the game fun!
 """
 
     return system_prompt
+
+
+def _campaign_context(project_root: Path, campaign_name: str) -> str:
+    """A short 'you are inside this campaign' block: setting + character + location.
+
+    Tells the DM to resume/run THIS session rather than boot a menu. Best-effort —
+    a missing overview or character just yields a thinner block, never an error.
+    """
+    campaign_dir = project_root / "world-state" / "campaigns" / campaign_name
+    lines = [f'# Current Campaign: "{campaign_name}"', ""]
+
+    overview_path = campaign_dir / "campaign-overview.json"
+    if overview_path.exists():
+        try:
+            ov = json.loads(overview_path.read_text(encoding="utf-8"))
+            for label, key in (("Genre", "genre"), ("Tone", "tone"), ("Setting", "description")):
+                val = ov.get(key)
+                if isinstance(val, str) and val.strip():
+                    lines.append(f"- {label}: {val.strip()}")
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Character (best-effort — game_state reads world.json via WorldGraph).
+    try:
+        from backend.game_state import get_character_status
+        status = get_character_status(campaign_dir=campaign_dir, force_refresh=True)
+        if not status.get("error"):
+            name = status.get("name") or "the player character"
+            loc = status.get("location")
+            lines.append(f"- Character: {name} (HP {status.get('hp')}/{status.get('max_hp')}, XP {status.get('xp')})")
+            if loc:
+                lines.append(f"- Location: {loc}")
+    except Exception:
+        pass
+
+    lines += [
+        "",
+        "You are ALREADY running this campaign. When the player says \"Начать игру\" or sends "
+        "their first message, immediately narrate the current scene and offer concrete actions — "
+        "do NOT list campaigns, do NOT ask which campaign to play, do NOT run any campaign-selection flow.",
+    ]
+    return "\n---\n" + "\n".join(lines) + "\n"

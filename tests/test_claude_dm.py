@@ -37,6 +37,32 @@ def test_wizard_shaped_campaign_does_not_crash(tmp_path, monkeypatch):
     assert isinstance(d["modules"], list)          # list, not dict
 
 
+def test_prompt_has_current_campaign_context(tmp_path):
+    """The prompt must tell the DM it is ALREADY inside this campaign (setting +
+    'do not list campaigns'), so 'Начать игру' runs the session, not a menu.
+    _campaign_context takes project_root directly, so point it at a tmp tree."""
+    import json
+    from backend.claude_dm import _campaign_context
+    camp = tmp_path / "world-state" / "campaigns" / "ctx-camp"
+    camp.mkdir(parents=True)
+    (camp / "campaign-overview.json").write_text(
+        json.dumps({"genre": "sci-fi", "tone": "gritty", "description": "Dead colony"}),
+        encoding="utf-8")
+    ctx = _campaign_context(tmp_path, "ctx-camp")
+    assert "Current Campaign" in ctx
+    assert "sci-fi" in ctx
+    assert "do NOT list campaigns" in ctx
+
+
+def test_rate_limit_info_classifies():
+    """Provider must recognise rate/session limits and extract retry_after."""
+    from backend.providers.claude_sdk import _rate_limit_info
+    assert _rate_limit_info(Exception("rate limit exceeded, retry-after 30")) == {
+        "content": "rate limit exceeded, retry-after 30", "retry_after": 30}
+    assert _rate_limit_info(Exception("session limit reached"))["content"]  # no retry_after
+    assert _rate_limit_info(Exception("connection refused")) is None
+
+
 def test_campaign_name_validation_matches_creation():
     """Codex P2: the WS validator must accept every legally-created campaign name
     (spaces/dots/Unicode/long allowed by create_campaign) while blocking traversal."""

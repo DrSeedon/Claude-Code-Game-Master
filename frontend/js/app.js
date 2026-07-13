@@ -49,6 +49,9 @@ const el = {
   rightPanel: document.getElementById('right-panel'),
   choices: document.getElementById('choices'),
   wizardResetBtn: document.getElementById('wizard-reset-btn'),
+  newSessionBtn: document.getElementById('new-session-btn'),
+  charPanel: document.getElementById('char-panel'),
+  rateLimitBar: document.getElementById('rate-limit-bar'),
   input: document.getElementById('input'),
   sendBtn: document.getElementById('send-btn'),
 };
@@ -327,6 +330,61 @@ function hideCtxUsage() {
   el.ctxLabel.textContent = '0%';
 }
 
+// ── Character dashboard (game mode) ────────────────────────────────────────
+function formatGold(copper) {
+  copper = copper || 0;
+  const g = Math.floor(copper / 100), s = Math.floor((copper % 100) / 10), c = copper % 10;
+  const parts = [];
+  if (g) parts.push(`${g}з`); if (s) parts.push(`${s}с`); if (c) parts.push(`${c}м`);
+  return parts.join(' ') || '0м';
+}
+async function loadCharPanel(campaign) {
+  let s;
+  try { s = await (await fetch('/api/status?campaign=' + encodeURIComponent(campaign))).json(); }
+  catch { return; }
+  if (state.campaign !== campaign || state.mode !== 'game') return;  // switched away meanwhile
+  if (!s || s.error) { el.charPanel.hidden = true; return; }
+  const hpPct = s.max_hp ? Math.round((s.hp / s.max_hp) * 100) : 0;
+  const hpColor = hpPct > 50 ? 'var(--ok)' : hpPct > 25 ? 'var(--warn)' : 'var(--danger)';
+  const items = (s.inventory || []).length;
+  el.charPanel.innerHTML =
+    `<span class="cp-name">${escapeHtml(s.name || 'Персонаж')}</span>` +
+    (s.location ? `<span class="cp-stat">📍 ${escapeHtml(s.location)}</span>` : '') +
+    `<span class="cp-stat">❤ <b>${s.hp}/${s.max_hp}</b>` +
+      `<span class="cp-hpbar"><span class="cp-hpfill" style="width:${hpPct}%;background:${hpColor}"></span></span></span>` +
+    `<span class="cp-stat">✨ <b>${s.xp}</b> XP</span>` +
+    `<span class="cp-stat">💰 <b>${formatGold(s.gold)}</b></span>` +
+    `<span class="cp-stat">🎒 <b>${items}</b></span>`;
+  el.charPanel.hidden = false;
+}
+function hideCharPanel() { el.charPanel.hidden = true; el.charPanel.innerHTML = ''; }
+
+// ── Rate / session limit warning ───────────────────────────────────────────
+function showRateLimit(content, retryAfter) {
+  const base = typeof retryAfter === 'number'
+    ? `⏳ Лимит: подождите ~${retryAfter}с`
+    : '⏳ Достигнут лимит запросов/сессии Claude — подождите и попробуйте снова';
+  el.rateLimitBar.textContent = content ? `${base}` : base;
+  el.rateLimitBar.hidden = false;
+}
+function hideRateLimit() { el.rateLimitBar.hidden = true; el.rateLimitBar.textContent = ''; }
+
+// ── New session (reset Claude context, keep history) ───────────────────────
+async function newSession() {
+  if (state.mode !== 'game' || !state.campaign) return;
+  if (!confirm('Сбросить контекст Claude? История чата сохранится.')) return;
+  const name = state.campaign;
+  // Close the socket FIRST so no turn can start between the reset check and the
+  // provider.reset() on the server (avoids resetting mid-turn).
+  closeWs();
+  try { await fetch(`/api/campaigns/${encodeURIComponent(name)}/reset-session`, { method: 'POST' }); }
+  catch { /* reconnect anyway */ }
+  hideCtxUsage();
+  // Keep the current afterId → no history replay on reconnect (chat already shows it,
+  // and reset does NOT touch the event log). The next turn just runs contextless.
+  connect(gameUrl());
+}
+
 // ─────────────────────────── WebSocket lifecycle ──────────────────────────
 function closeWs() {
   if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
@@ -415,10 +473,18 @@ function handleEvent(data) {
       updateCtxUsage(data.percent, data.used, data.total);
       break;
 
+    case 'rate_limit':
+      resetStream();
+      setGenerating(false);
+      showRateLimit(data.content, data.retry_after);
+      break;
+
     case 'done':
       // flush any leftover streamed text into a finalized bubble (wizard has no `text` event)
       if (stream.active) { const t = finalizeStream(); if (t.trim()) addDmMessage(t); }
       setGenerating(false);
+      // a fresh DM reply arrived → the last rate-limit warning is stale
+      if (el.charPanel && state.mode === 'game') loadCharPanel(state.campaign);
       break;
 
     case 'show_choices':
@@ -455,6 +521,7 @@ function renderHistory(messages) {
 function sendGame() {
   const content = el.input.value.trim();
   if (!content || state.connStatus !== 'connected') return;
+  hideRateLimit();  // user is retrying → clear the stale limit warning
   state.localEcho.add(`user:${content}`);
   addUserMessage(content);
   setGenerating(true);
@@ -530,6 +597,8 @@ function showMobileSidebar() {
 function mobileBack() {
   closeWs();            // leaving the chat drops its socket
   state.mode = null;
+  hideCharPanel();
+  hideRateLimit();
   markActiveInList();
   showMobileSidebar();
 }
@@ -550,10 +619,13 @@ function selectCampaign(name) {
   el.input.placeholder = 'Введите сообщение…';
   el.wizardResetBtn.hidden = true;   // game mode: no wizard reset
   el.modelSelect.hidden = false;     // model selectable in game
+  el.newSessionBtn.hidden = false;   // game mode: allow context reset
+  hideRateLimit();
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat(name);
   showChatStart();   // empty campaign → "▶ Начать игру"; removed when history/messages arrive
+  loadCharPanel(name);  // dashboard: HP/XP/gold/location
   connect(gameUrl());
   el.input.focus();
 }
@@ -575,6 +647,9 @@ function startWizard() {
   el.input.placeholder = 'Опишите мир или выберите вариант…';
   el.wizardResetBtn.hidden = false;
   el.modelSelect.hidden = true;  // model is fixed in wizard (config)
+  el.newSessionBtn.hidden = true;  // wizard has no game session to reset
+  hideCharPanel();
+  hideRateLimit();
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat('Создание кампании');
@@ -822,6 +897,7 @@ el.sendBtn.addEventListener('click', onSend);
 el.newBtn.addEventListener('click', startWizard);
 el.welcomeNewBtn.addEventListener('click', startWizard);
 el.wizardResetBtn.addEventListener('click', resetWizard);
+el.newSessionBtn.addEventListener('click', newSession);
 
 // Mobile top-bar buttons
 el.mobileNew.addEventListener('click', startWizard);

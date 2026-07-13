@@ -32,6 +32,28 @@ def _proxy_env() -> dict:
     return env
 
 
+def _rate_limit_info(err: Exception) -> Optional[dict]:
+    """If `err` is a rate/session/usage limit, return {message, retry_after?} else None.
+
+    The SDK surfaces these as plain exceptions (no typed class), so match on the
+    message text and pull a seconds value from 'retry-after'/'try again in Ns' if present.
+    """
+    import re
+    msg = str(err).lower()
+    signals = ("rate limit", "rate_limit", "429", "too many requests",
+               "usage limit", "session limit", "overloaded")
+    if not any(s in msg for s in signals):
+        return None
+    retry_after = None
+    m = re.search(r"(?:retry[- ]after|try again in|wait)\D{0,12}(\d+)", msg)
+    if m:
+        retry_after = int(m.group(1))
+    out: dict = {"content": str(err)}
+    if retry_after is not None:
+        out["retry_after"] = retry_after
+    return out
+
+
 def _extract_tool_result(block: ToolResultBlock) -> str:
     raw = getattr(block, "content", "")
     if isinstance(raw, list):
@@ -117,6 +139,12 @@ class ClaudeSDKProvider(BaseProvider):
                 consecutive_failures += 1
                 logger.error(f"SDK turn failed (attempt {consecutive_failures}/{max_failures}): {e}", exc_info=True)
                 await self._disconnect()
+                rl = _rate_limit_info(e)
+                if rl is not None:
+                    # Rate / session limit — retrying won't help within the window.
+                    # Surface it to the UI and stop (don't burn the retry budget).
+                    yield {"type": "rate_limit", **rl}
+                    return
                 if consecutive_failures >= max_failures:
                     yield {"type": "error", "content": str(e)}
                     return
@@ -188,6 +216,13 @@ class ClaudeSDKProvider(BaseProvider):
         """Drop the CLI subprocess (e.g. on idle hibernate). Next process_message()
         call reconnects and resumes via the cached session_id — history survives."""
         await self._disconnect()
+
+    async def reset(self) -> None:
+        """Start a FRESH conversation: drop the subprocess AND forget the session_id
+        so the next turn does not resume the old context. The on-disk event log is
+        untouched — only Claude's working memory is cleared."""
+        await self._disconnect()
+        self._session_id = None
 
     async def reconnect(self, system_prompt: str, mcp_servers: Optional[Dict] = None) -> None:
         await self._disconnect()
