@@ -31,8 +31,12 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
             campaign_name = active_campaign_file.read_text().strip() or None
 
     # Defense-in-depth: campaign_name feeds a dir path + a bash env var. Reject any
-    # path separators / traversal so a bad value can't escape the campaigns dir.
-    if campaign_name and ("/" in campaign_name or "\\" in campaign_name or ".." in campaign_name):
+    # path separators / traversal / leading dot so a bad value can't escape the
+    # campaigns dir. (The WS handler already validates; this guards other callers.)
+    if campaign_name and (
+        "/" in campaign_name or "\\" in campaign_name
+        or ".." in campaign_name or campaign_name.startswith(".")
+    ):
         campaign_name = None
 
     # Step 1: Compile DM rules for this campaign (dm-slots + its modules).
@@ -57,15 +61,22 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
                 dm_rules = ""
 
     # Step 2: Narrator style from the campaign's overview, else default.
+    # `narrator_style` in overview.json can be a STRING id (wizard/API — the common
+    # case) or an embedded object; handle both, never crash on the string form.
     narrator_style = ""
+    styles_dir = project_root / ".claude" / "additional" / "narrator-styles"
     if campaign_name:
         overview_path = project_root / "world-state" / "campaigns" / campaign_name / "campaign-overview.json"
         if overview_path.exists():
             try:
                 with open(overview_path) as f:
                     overview = json.load(f)
-                narrator_data = overview.get("narrator_style", {})
-                if narrator_data:
+                narrator_data = overview.get("narrator_style", "")
+                if isinstance(narrator_data, str) and narrator_data.strip():
+                    style_file = styles_dir / f"{narrator_data.strip()}.md"
+                    if style_file.exists():
+                        narrator_style = f"\n---\n{style_file.read_text()}\n"
+                elif isinstance(narrator_data, dict) and narrator_data:
                     style_rules = narrator_data.get("rules_raw", "")
                     style_name = narrator_data.get("name", "")
                     style_desc = narrator_data.get("description", "")
@@ -74,7 +85,7 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
                 pass
 
     if not narrator_style:
-        default_style_path = project_root / ".claude" / "additional" / "narrator-styles" / "epic-heroic.md"
+        default_style_path = styles_dir / "epic-heroic.md"
         if default_style_path.exists():
             narrator_style = f"\n---\n{default_style_path.read_text()}\n"
 

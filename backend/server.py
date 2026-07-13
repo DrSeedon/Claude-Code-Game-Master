@@ -71,13 +71,19 @@ async def auth_login_page():
     return login_page()
 
 # Campaign name becomes a directory component (campaigns/<name>/) and a bash env
-# var fed to the rules compiler — keep it to a safe alphabet so it can't traverse
-# ("../…") out of the campaigns dir or inject anything.
-_VALID_CAMPAIGN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# var fed to the rules compiler. Reject only what lets it escape the campaigns dir
+# (path separators + traversal) — mirror campaign_api.create_campaign's forbidden
+# set so every legally-created campaign (spaces/dots/Unicode allowed) stays playable.
+_FORBIDDEN_CAMPAIGN_CHARS = set('/\\:*?"<>|')
 
 
 def _valid_campaign_name(name: str) -> bool:
-    return bool(name) and _VALID_CAMPAIGN.match(name) is not None
+    return (
+        bool(name)
+        and not (_FORBIDDEN_CAMPAIGN_CHARS & set(name))
+        and ".." not in name
+        and not name.startswith(".")
+    )
 
 
 # Models the client may pick in the header select. Order = display order.

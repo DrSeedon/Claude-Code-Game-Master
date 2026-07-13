@@ -34,8 +34,14 @@ if overview_path and os.path.isfile(overview_path):
     with open(overview_path) as f:
         d = json.load(f)
 
-mods = d.get('modules', {})
-enabled = [k for k, v in mods.items() if v]
+# `modules` is a LIST of enabled ids (wizard/API) or a dict {id: bool} (legacy).
+mods = d.get('modules', [])
+if isinstance(mods, dict):
+    enabled = [k for k, v in mods.items() if v]
+elif isinstance(mods, list):
+    enabled = list(mods)
+else:
+    enabled = []
 
 # Collect slot replacements and addons from active modules
 slot_replacements = {}  # slot_name -> (module_id, rules_content)

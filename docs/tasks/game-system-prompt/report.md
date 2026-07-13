@@ -58,11 +58,22 @@ can keep talking to the wizard; the campaign appears in the sidebar via poll.
 - **chat-start lifecycle**: guarded against duplicates (`if querySelector('.chat-start') return`) and
   removed by every message-add path; can't get stuck once a message renders.
 
-## Codex
-`codex_review` ran (bg-8b82e3fe53, reported done) but wrote **no artifact** (known Codex CWD/output
-bug — recurred on the wizard task too). I proactively fixed the one load-bearing concern it would
-raise (campaign-name path traversal) and verified the rest by measurement/tests. Re-run on the
-uncommitted diff if a formal pass is required.
+## Codex — 3 findings (2×P1, 1×P2), all fixed
+The artifact landed late (`codex-review-impl.md`). Codex caught 3 real bugs my change activated —
+all confirmed against `campaign_api.create_campaign` source and fixed:
+
+- **[P1] narrator_style is a STRING id** (not the object my code assumed) → `AttributeError` on
+  every wizard/API campaign → game wouldn't start. Fixed: handle string (load
+  `narrator-styles/<id>.md`) and dict. Verified: real API campaign → 74452 chars, no crash.
+- **[P1] modules is a LIST** (not a dict) → compiler `mods.items()` crashed → `dm_rules=""` →
+  regressed to narrator-only (the very bug I was fixing). Fixed: normalize list/dict in the
+  compiler. Verified: `modules=["world-travel"]` → rules present.
+- **[P2] name regex too strict** — my `^[A-Za-z0-9_-]{1,64}$` rejected legal names (spaces,
+  Unicode, dots, long) that `create_campaign` allows → those campaigns unplayable. Fixed: mirror the
+  creation API (reject only `/\:*?"<>|` + traversal). Verified: legal names pass, traversal blocked.
+
+Regression tests added. 192 backend tests pass. (Earlier bg run reported "done" with no file — the
+artifact arrived on a later poll; findings above are from it.)
 
 ## Not deployed
 Per instruction — commit only. Orchestrator deploys.
