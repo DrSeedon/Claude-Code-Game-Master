@@ -145,14 +145,12 @@ case "$ACTION" in
         ;;
 
     craft)
-        # TODO: needs world_graph.py subcommand inventory-craft
         OWNER="${1:-_auto}"
         shift
         $WG inventory-craft "$OWNER" "$@"
         ;;
 
     use)
-        # TODO: needs world_graph.py subcommand inventory-use
         OWNER="${1:-_auto}"
         ITEM="$2"
         $WG inventory-use "$OWNER" "$ITEM"

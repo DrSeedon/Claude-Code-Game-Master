@@ -1,6 +1,7 @@
 """Unit tests for the append-only JSONL event log."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from backend.event_log import append_event, read_events, EVENT_LOG_FILENAME
@@ -78,3 +79,28 @@ def test_event_schema_has_type_content_timestamp(campaign_dir):
 
     stored = json.loads((campaign_dir / EVENT_LOG_FILENAME).read_text().splitlines()[0])
     assert stored == event
+
+
+def test_concurrent_appends_get_unique_monotonic_ids(campaign_dir):
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        events = list(
+            pool.map(
+                lambda index: append_event(campaign_dir, "text", f"event-{index}"),
+                range(40),
+            )
+        )
+
+    assert sorted(event["id"] for event in events) == list(range(1, 41))
+    assert [event["id"] for event in read_events(campaign_dir)] == list(range(1, 41))
+
+
+def test_append_uses_last_valid_tail_event_after_corrupt_line(campaign_dir):
+    path = campaign_dir / EVENT_LOG_FILENAME
+    path.write_text(
+        '{"id": 7, "type": "text", "content": "ok"}\nnot-json\n',
+        encoding="utf-8",
+    )
+
+    event = append_event(campaign_dir, "text", "next")
+
+    assert event["id"] == 8

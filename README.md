@@ -54,7 +54,7 @@ At campaign creation you get a module selection menu, narrator style picker, and
 
 | Module | What it does | Good for |
 |--------|-------------|----------|
-| 🧭 **world-travel** | Coordinate navigation, route finding, travel time, random encounters, hierarchical interiors, vehicles, and ASCII/GUI maps. | Open worlds, wilderness travel, ships, and settlements |
+| 🧭 **world-travel** | Coordinate navigation, route finding, travel time, random encounters, hierarchical interiors, vehicles, and a Cytoscape web map. | Open worlds, wilderness travel, ships, and settlements |
 | ⚔️ **firearms-combat** | Automated combat resolver. RPM → shots per round, fire modes (single/burst/full\_auto), PEN vs PROT damage scaling, subclass bonuses. | Modern or military campaigns |
 | 🛡️ **mass-combat** | Individual unit tracking, group attacks, AOE damage, cover, and battle XP for large encounters. | Squad and army-scale battles |
 

@@ -12,7 +12,7 @@ Move = distance/time calc + clock advance + auto encounter check.
 
 ### Adding World Locations [MANDATORY]
 
-**NEVER** use CORE `dm-location.sh add` for world-level locations — it creates locations WITHOUT coordinates, invisible on GUI map.
+**NEVER** use CORE `dm-location.sh add` for world-level locations — it creates locations without coordinates, so the web map cannot position them.
 
 **ALWAYS** use the world-travel navigation manager which auto-calculates coordinates from bearing + distance:
 
@@ -21,7 +21,7 @@ bash .claude/additional/modules/world-travel/tools/dm-navigation.sh add "New Pla
   --from "Known Location" --bearing 45 --distance 800 --terrain forest
 ```
 
-This calculates coordinates from the origin location + bearing/distance, creates the connection, and ensures the location appears on the GUI map immediately.
+This calculates coordinates from the origin location plus bearing/distance, creates the connection, and makes the location available to the web map immediately.
 
 - `--from` — any existing location with coordinates
 - `--bearing` — degrees (0=N, 90=E, 180=S, 270=W)
@@ -55,12 +55,7 @@ bash .claude/additional/modules/world-travel/tools/dm-navigation.sh block "Cliff
 bash .claude/additional/modules/world-travel/tools/dm-navigation.sh unblock "Cliff Edge" 160 200
 ```
 
-Map:
-```bash
-bash .claude/additional/modules/world-travel/tools/dm-map.sh             # ASCII
-bash .claude/additional/modules/world-travel/tools/dm-map.sh --minimap   # nearby
-bash .claude/additional/modules/world-travel/tools/dm-map.sh --gui       # Pygame GUI
-```
+The campaign web UI projects the canonical WorldGraph into a Cytoscape map.
 
 ---
 
@@ -144,13 +139,13 @@ NPCs use `tags.locations[]` — association tags, not positional tracking. DM de
 
 ### Interior Rules
 
-- No `coordinates` — GUI uses force-directed layout
+- No `coordinates` — the web map uses a deterministic interior layout
 - Connections are canonical (stored once, read bidirectionally)
 - `diameter_meters` on compounds = visual size on global map
 
 ### Interior Terrain [MANDATORY]
 
-Every interior location MUST have a `terrain` field set to distinguish area types on the GUI map. The terrain value maps to `terrain_colors` in `module-data/world-travel.json`.
+Every interior location MUST have a `terrain` field set to distinguish area types on the web map. The terrain value maps to `terrain_colors` in `module-data/world-travel.json`.
 
 Common interior terrain types:
 
@@ -174,13 +169,13 @@ When creating a compound with rooms:
 }
 ```
 
-### GUI
+### Web Map
 
 - **Global**: top-level locations only. Compounds = squares.
-- **Interior**: click compound → select. Click again / Enter button → drill down. Radial tree layout. Node colors reflect terrain type (indoor vs outdoor).
+- **Interior**: shows the current compound using a deterministic force layout.
 - **Breadcrumb**: `World > City > Castle > Room`. Click = navigate.
 - **Player location**: highlighted on both global (parent compound) and interior views.
-- **ESC**: go up. **R**: refresh.
+- The dashboard refreshes the map after every completed turn.
 
 ---
 
@@ -248,7 +243,7 @@ No defaults. DM creates types per campaign. Unknown types use `default` fallback
 
 ### Connection Terrain vs Location Terrain [MANDATORY]
 
-Connection `terrain` = what you WALK THROUGH to get there. It controls the color of the path on the GUI map.
+Connection `terrain` = what you walk through to get there. It is exposed as path metadata to the web map.
 
 - Connection terrain must be a **traversable surface**: `wasteland`, `forest`, `road`, `swamp`, `plains`, `space`, etc.
 - NEVER use destination-specific terrain on connections: `anomaly`, `ruins`, `radiation`, `cave` on a 5km path makes no sense.

@@ -29,9 +29,11 @@ from backend.campaign_api import (
     delete_campaign,
 )
 from backend.event_log import read_events
-from backend.game_session import get_or_create_session, peek_session
+from backend.game_session import get_or_create_session, get_runtime_registry, peek_session
 from backend.live_broker import broker
 from backend.providers.claude_sdk import ClaudeSDKProvider
+from backend.campaign_views import get_campaign_views
+from backend.map_view import get_map_snapshot
 from backend.wizard_prompt import load_wizard_system_prompt
 from backend.wizard_mcp import WizardEvents, build_wizard_mcp
 
@@ -107,19 +109,13 @@ def _valid_campaign_name(name: str) -> bool:
     )
 
 
-# Models the client may pick in the header select. Order = display order.
-ALLOWED_MODELS = ["claude-sonnet-5", "claude-opus-4-8"]
-
-
 def _model_options() -> tuple[list[str], str]:
-    """(selectable models, default). Default is the configured model so game
-    sessions honour config.model_name; the configured model is included even if
-    it isn't in the static list, so it's never silently swapped."""
-    configured = get_config().model_name or ALLOWED_MODELS[0]
-    models = list(ALLOWED_MODELS)
-    if configured not in models:
-        models.insert(0, configured)
-    return models, configured
+    """Legacy helper retained for callers that only need model identifiers."""
+    registry = get_runtime_registry()
+    models = [model.id for model in registry.list_models()]
+    configured = get_config().model_name
+    default = configured if configured in models else "claude-sonnet-5"
+    return models, default
 
 
 @app.get("/api/health")
@@ -259,6 +255,35 @@ async def api_reset_session(name: str):
     if not await session.reset_session():
         raise HTTPException(status_code=409, detail="A turn is in progress")
     return {"success": True, "reset": True}
+
+
+@app.post("/api/campaigns/{name}/interrupt")
+async def api_interrupt_session(name: str):
+    if not _valid_campaign_name(name):
+        raise HTTPException(status_code=400, detail="Invalid campaign name")
+    session = peek_session(name)
+    interrupted = await session.interrupt() if session else False
+    return {"success": True, "interrupted": interrupted}
+
+
+def _campaign_path(name: str) -> Path:
+    if not _valid_campaign_name(name):
+        raise HTTPException(status_code=400, detail="Invalid campaign name")
+    config = get_config()
+    try:
+        return resolve_campaign_dir(config.campaigns_dir, name, must_exist=True)
+    except (InvalidCampaignName, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail="Campaign not found") from exc
+
+
+@app.get("/api/campaigns/{name}/views")
+async def api_campaign_views(name: str):
+    return get_campaign_views(_campaign_path(name))
+
+
+@app.get("/api/campaigns/{name}/map")
+async def api_campaign_map(name: str):
+    return get_map_snapshot(_campaign_path(name))
 
 
 @app.delete("/api/campaigns/{name}", status_code=200)
@@ -450,9 +475,31 @@ async def api_get_template_rules():
 
 @app.get("/api/models")
 async def api_models():
-    """Selectable models + the default (the configured model)."""
-    models, default = _model_options()
-    return {"models": models, "default": default}
+    """Provider capabilities and their selectable models."""
+    registry = get_runtime_registry()
+    _, default_model = _model_options()
+    default_definition = registry.get_model(default_model)
+    runtimes = []
+    for runtime_id in ("claude", "codex"):
+        runtime = registry.get_runtime(runtime_id)
+        runtimes.append(
+            {
+                "id": runtime.id,
+                "display_name": runtime.display_name,
+                "capabilities": runtime.capabilities.to_dict(),
+                "models": [
+                    model.to_dict() for model in registry.list_models(runtime.id)
+                ],
+            }
+        )
+    return {
+        "runtimes": runtimes,
+        "models": [model.to_dict() for model in registry.list_models()],
+        "default": {
+            "runtime": default_definition.runtime_id,
+            "model": default_definition.id,
+        },
+    }
 
 
 @app.get("/")
@@ -503,11 +550,14 @@ async def wizard_websocket(websocket: WebSocket):
                     model_name=config.model_name,
                     mcp_servers=wizard_mcp,
                 ):
-                    et = event["type"]
+                    payload = event.to_dict()
+                    et = payload["type"]
                     if et == "text_delta":
-                        await send({"type": "stream", "content": event["content"]})
-                    elif et in ("text", "activity", "error"):
-                        await send({"type": et, "content": event["content"]})
+                        await send({"type": "stream", "content": payload["content"]})
+                    elif et in ("text", "error"):
+                        await send({"type": et, "content": payload["content"]})
+                    elif et in ("tool_use", "tool_result", "activity"):
+                        await send({"type": "activity", "content": payload["content"]})
 
                 # Drain tool side effects collected in-process during the turn.
                 for ev in events.drain():
@@ -571,7 +621,12 @@ async def game_websocket(websocket: WebSocket):
         await websocket.send_text(json.dumps({"type": "error", "content": "Missing or invalid ?campaign= query param"}))
         await websocket.close()
         return
-    after_id = int(websocket.query_params.get("after_id", "0"))
+    try:
+        after_id = max(0, int(websocket.query_params.get("after_id", "0")))
+    except ValueError:
+        await websocket.send_text(json.dumps({"type": "error", "content": "Invalid after_id"}))
+        await websocket.close()
+        return
 
     config = get_config()
     system_prompt = load_system_prompt(campaign)  # scope rules/narrator to THIS campaign
@@ -579,7 +634,17 @@ async def game_websocket(websocket: WebSocket):
     allowed, default_model = _model_options()
     requested_model = websocket.query_params.get("model")
     model_name = requested_model if requested_model in allowed else default_model
-    session = get_or_create_session(campaign, config.project_root, model_name)
+    registry = get_runtime_registry()
+    model_runtime = registry.get_model(model_name).runtime_id
+    requested_runtime = websocket.query_params.get("provider") or model_runtime
+    try:
+        session = get_or_create_session(
+            campaign, config.project_root, model_name, requested_runtime
+        )
+    except (ValueError, RuntimeError) as exc:
+        await websocket.send_text(json.dumps({"type": "error", "content": str(exc)}))
+        await websocket.close(code=1008)
+        return
 
     # Replay only what the client missed, driven by the after_id cursor it sent
     history = read_events(session.campaign_dir, after_id=after_id)

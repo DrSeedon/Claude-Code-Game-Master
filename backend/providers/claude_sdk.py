@@ -18,7 +18,7 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import ToolResultBlock
 
-from backend.providers.base import BaseProvider
+from backend.runtime.events import AgentEvent, ContextUsage
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def _extract_tool_result(block: ToolResultBlock) -> str:
     return str(raw)
 
 
-class ClaudeSDKProvider(BaseProvider):
+class ClaudeSDKProvider:
 
     # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
     CONTEXT_WINDOW = 200_000
@@ -73,16 +73,19 @@ class ClaudeSDKProvider(BaseProvider):
         project_root: Path,
         model_name: str = "claude-sonnet-4-6",
         campaign_name: str | None = None,
+        resume_session_id: str | None = None,
+        environment: dict[str, str] | None = None,
     ):
         self.project_root = project_root
         self.model_name = model_name
         self.campaign_name = campaign_name
         self._client: Optional[ClaudeSDKClient] = None
-        self._session_id: Optional[str] = None
+        self._session_id: Optional[str] = resume_session_id
+        self._environment = dict(environment or {})
         self._last_usage: Optional[dict] = None  # token counts from the latest ResultMessage
 
     def _make_options(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeAgentOptions:
-        process_env = _proxy_env()
+        process_env = {**_proxy_env(), **self._environment}
         if self.campaign_name:
             process_env["DM_ACTIVE_CAMPAIGN"] = self.campaign_name
         options = ClaudeAgentOptions(
@@ -123,7 +126,7 @@ class ClaudeSDKProvider(BaseProvider):
         system_prompt: str,
         model_name: str,
         mcp_servers: Optional[Dict] = None,
-    ) -> AsyncGenerator[dict, None]:
+    ) -> AsyncGenerator[AgentEvent, None]:
         """Send a message and stream structured events back.
 
         Reuses the connected client across turns (resumes via session_id) so the
@@ -152,14 +155,16 @@ class ClaudeSDKProvider(BaseProvider):
                 if rl is not None:
                     # Rate / session limit — retrying won't help within the window.
                     # Surface it to the UI and stop (don't burn the retry budget).
-                    yield {"type": "rate_limit", **rl}
+                    content = str(rl.pop("content", ""))
+                    yield AgentEvent("rate_limit", content, rl)
                     return
                 if consecutive_failures >= max_failures:
-                    yield {"type": "error", "content": str(e)}
+                    yield AgentEvent("error", str(e))
+                    yield AgentEvent("turn_end", "Turn failed", {"ok": False})
                     return
                 await asyncio.sleep(2)
 
-    async def _stream_events(self) -> AsyncGenerator[dict, None]:
+    async def _stream_events(self) -> AsyncGenerator[AgentEvent, None]:
         async for msg in self._client.receive_messages():
             if isinstance(msg, StreamEvent):
                 ev = msg.event or {}
@@ -170,20 +175,24 @@ class ClaudeSDKProvider(BaseProvider):
                     continue
                 text = delta.get("text") or ""
                 if text:
-                    yield {"type": "text_delta", "content": text}
+                    yield AgentEvent("text_delta", text)
             elif isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, TextBlock) and block.text:
-                        yield {"type": "text", "content": block.text}
+                        yield AgentEvent("text", block.text)
                     elif isinstance(block, ToolUseBlock):
                         try:
                             inp = json.dumps(block.input, ensure_ascii=False)
                         except Exception:
                             inp = str(block.input)
-                        yield {"type": "activity", "content": f"🔧 {block.name}({inp})"}
+                        yield AgentEvent(
+                            "tool_use",
+                            f"🔧 {block.name}({inp})",
+                            {"tool_name": block.name},
+                        )
                     elif isinstance(block, ToolResultBlock):
                         prefix = "❌" if block.is_error else "✅"
-                        yield {"type": "activity", "content": f"{prefix} {_extract_tool_result(block)}"}
+                        yield AgentEvent("tool_result", f"{prefix} {_extract_tool_result(block)}")
             elif isinstance(msg, ResultMessage):
                 if msg.session_id:
                     self._session_id = msg.session_id
@@ -191,7 +200,12 @@ class ClaudeSDKProvider(BaseProvider):
                 if isinstance(usage, dict):
                     self._last_usage = usage
                 if msg.is_error and msg.result:
-                    yield {"type": "error", "content": msg.result}
+                    yield AgentEvent("error", msg.result)
+                yield AgentEvent(
+                    "turn_end",
+                    "Turn completed" if not msg.is_error else "Turn failed",
+                    {"ok": not msg.is_error, "stop_reason": "end_turn"},
+                )
                 return
 
     async def _disconnect(self) -> None:
@@ -202,7 +216,11 @@ class ClaudeSDKProvider(BaseProvider):
                 pass
             self._client = None
 
-    def get_context_usage(self) -> Optional[dict]:
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id
+
+    def get_context_usage(self) -> Optional[ContextUsage]:
         """Context footprint of the last turn, or None if no turn ran yet.
 
         Context = all input-side tokens (fresh input + cache read + cache create)
@@ -218,8 +236,18 @@ class ClaudeSDKProvider(BaseProvider):
             + (u.get("cache_creation_input_tokens") or 0)
         )
         total = self.CONTEXT_WINDOW
-        percent = min(100, round(used * 100 / total)) if total else 0
-        return {"percent": percent, "used_tokens": used, "total_tokens": total}
+        return ContextUsage(used_tokens=used, total_tokens=total)
+
+    async def interrupt(self) -> bool:
+        client = self._client
+        if client is None:
+            return False
+        interrupt = getattr(client, "interrupt", None)
+        if interrupt is None:
+            await self._disconnect()
+            return True
+        await interrupt()
+        return True
 
     async def close(self) -> None:
         """Drop the CLI subprocess (e.g. on idle hibernate). Next process_message()

@@ -42,7 +42,19 @@ const el = {
   titleText: document.getElementById('chat-title-text'),
   connStatus: document.getElementById('conn-status'),
   connLabel: document.querySelector('#conn-status .conn-label'),
+  providerSelect: document.getElementById('provider-select'),
   modelSelect: document.getElementById('model-select'),
+  stopBtn: document.getElementById('stop-btn'),
+  viewTabs: document.getElementById('view-tabs'),
+  chatView: document.getElementById('chat-view'),
+  dashboardView: document.getElementById('dashboard-view'),
+  dashboardLoading: document.getElementById('dashboard-loading'),
+  dashboardContent: document.getElementById('dashboard-content'),
+  mapView: document.getElementById('map-view'),
+  mapBreadcrumb: document.getElementById('map-breadcrumb'),
+  mapContainer: document.getElementById('campaign-map'),
+  mapEmpty: document.getElementById('map-empty'),
+  mapFitBtn: document.getElementById('map-fit-btn'),
   ctxUsage: document.getElementById('ctx-usage'),
   ctxFill: document.querySelector('#ctx-usage .ctx-fill'),
   ctxLabel: document.querySelector('#ctx-usage .ctx-label'),
@@ -72,7 +84,13 @@ const state = {
   choiceSel: {},         // radio/checkbox selections {controlId: id | id[]}
   choiceText: {},        // text_input values {controlId: value}
   availableModels: [],   // models from /api/models (cycle order)
+  runtimes: [],
+  currentProvider: null,
   currentModel: null,    // selected model — sent as ?model= on the game WS
+  currentView: 'chat',
+  campaignViews: null,
+  mapData: null,
+  map: null,
 };
 
 // ─────────────────────────── Streaming buffer (Orchestra port) ────────────
@@ -294,6 +312,7 @@ function hideWaiting() {
 
 function setGenerating(on) {
   state.generating = on;
+  el.stopBtn.hidden = !on || state.mode !== 'game';
   if (on) { if (!stream.active) showWaiting(); }
   else hideWaiting();
 }
@@ -398,6 +417,7 @@ function closeWs() {
 
 function gameUrl() {
   const params = new URLSearchParams({ campaign: state.campaign, after_id: String(state.afterId) });
+  if (state.currentProvider) params.set('provider', state.currentProvider);
   if (state.currentModel) params.set('model', state.currentModel);
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/game?${params.toString()}`;
 }
@@ -484,7 +504,10 @@ function handleEvent(data) {
       if (stream.active) { const t = finalizeStream(); if (t.trim()) addDmMessage(t); }
       setGenerating(false);
       // a fresh DM reply arrived → the last rate-limit warning is stale
-      if (el.charPanel && state.mode === 'game') loadCharPanel(state.campaign);
+      if (el.charPanel && state.mode === 'game') {
+        loadCharPanel(state.campaign);
+        refreshCampaignData();
+      }
       break;
 
     case 'show_choices':
@@ -574,6 +597,125 @@ function markActiveInList() {
 function showChat() { el.welcome.hidden = true; el.chatPane.hidden = false; }
 function showWelcome() { el.welcome.hidden = false; el.chatPane.hidden = true; }
 
+function switchView(view) {
+  state.currentView = view;
+  el.chatView.hidden = view !== 'chat';
+  el.dashboardView.hidden = view === 'chat' || view === 'map';
+  el.mapView.hidden = view !== 'map';
+  el.viewTabs.querySelectorAll('.view-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.view === view);
+  });
+  if (view !== 'chat' && view !== 'map') renderDashboard(view);
+  if (view === 'map') renderMap();
+}
+
+async function refreshCampaignData() {
+  if (!state.campaign || state.mode !== 'game') return;
+  const campaign = state.campaign;
+  try {
+    const [viewsResponse, mapResponse] = await Promise.all([
+      fetch(`/api/campaigns/${encodeURIComponent(campaign)}/views`),
+      fetch(`/api/campaigns/${encodeURIComponent(campaign)}/map`),
+    ]);
+    if (!viewsResponse.ok || !mapResponse.ok) throw new Error('Campaign data unavailable');
+    const [views, map] = await Promise.all([viewsResponse.json(), mapResponse.json()]);
+    if (campaign !== state.campaign) return;
+    state.campaignViews = views;
+    state.mapData = map;
+    if (state.currentView === 'map') renderMap();
+    else if (state.currentView !== 'chat') renderDashboard(state.currentView);
+  } catch (error) {
+    if (campaign === state.campaign) {
+      el.dashboardLoading.hidden = false;
+      el.dashboardLoading.textContent = error.message;
+    }
+  }
+}
+
+function field(label, value) {
+  if (value == null || value === '' || (Array.isArray(value) && !value.length)) return '';
+  const shown = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return `<div class="dashboard-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(shown)}</b></div>`;
+}
+
+function cards(items, render) {
+  if (!items || !items.length) return '<div class="dashboard-state">Пока пусто</div>';
+  return `<div class="dashboard-grid">${items.map(render).join('')}</div>`;
+}
+
+function renderDashboard(view) {
+  const data = state.campaignViews;
+  if (!data) {
+    el.dashboardLoading.hidden = false;
+    el.dashboardLoading.textContent = 'Загрузка...';
+    return;
+  }
+  el.dashboardLoading.hidden = true;
+  let html = '';
+  if (view === 'character') {
+    const c = data.character || {};
+    html = `<div class="dashboard-head"><h2>${escapeHtml(c.name || 'Персонаж')}</h2></div>` +
+      field('Класс', c.class) + field('Уровень', c.level) + field('Здоровье', c.hp ? `${c.hp.current}/${c.hp.max}` : '') +
+      field('Опыт', c.xp?.current) + field('Локация', c.location) + field('Состояния', c.conditions);
+  } else if (view === 'inventory') {
+    html = `<div class="dashboard-head"><h2>Инвентарь</h2></div>` + cards(data.inventory?.items, item =>
+      `<article class="dashboard-card"><h3>${escapeHtml(item.name)}</h3>${field('Количество', item.quantity)}${field('Вес', item.weight)}</article>`);
+  } else if (view === 'quests') {
+    html = `<div class="dashboard-head"><h2>Задания</h2></div>` + cards(data.quests, quest =>
+      `<article class="dashboard-card"><h3>${escapeHtml(quest.name)}</h3><p>${escapeHtml(quest.description || '')}</p>${field('Статус', quest.status)}${field('Цели', (quest.objectives || []).map(o => `${o.done ? '✓' : '○'} ${o.text}`).join(' · '))}</article>`);
+  } else if (view === 'party') {
+    const npcs = data.npcs || {};
+    html = `<div class="dashboard-head"><h2>Группа и знакомые</h2></div>` + cards([...(npcs.party || []), ...(npcs.known || []).filter(n => !(npcs.party || []).some(p => p.id === n.id))], npc =>
+      `<article class="dashboard-card"><h3>${escapeHtml(npc.name)}</h3><p>${escapeHtml(npc.description || '')}</p>${field('Отношение', npc.attitude)}${field('Локация', npc.location)}</article>`);
+  } else if (view === 'wiki') {
+    html = `<div class="dashboard-head"><h2>Wiki</h2></div>` + cards(data.wiki, entry =>
+      `<article class="dashboard-card"><h3>${escapeHtml(entry.name)}</h3><div class="dashboard-meta">${escapeHtml(entry.type)}</div><p>${escapeHtml(entry.description || '')}</p></article>`);
+  }
+  el.dashboardContent.innerHTML = html;
+}
+
+function renderMap() {
+  const data = state.mapData;
+  if (state.map) { state.map.destroy(); state.map = null; }
+  if (!data?.enabled || !data.nodes?.length || typeof cytoscape !== 'function') {
+    el.mapEmpty.hidden = false;
+    el.mapEmpty.textContent = data?.enabled === false ? 'Модуль world-travel отключён' : 'Карта пока пуста';
+    return;
+  }
+  el.mapEmpty.hidden = true;
+  el.mapBreadcrumb.textContent = (data.breadcrumb || ['World']).join(' › ');
+  const context = data.current?.context || 'global';
+  const compound = data.current?.compound;
+  const visible = data.nodes.filter(node => context === 'interior'
+    ? node.parent === compound && node.visibility?.interior
+    : node.visibility?.global);
+  const ids = new Set(visible.map(node => node.id));
+  const elements = [
+    ...visible.map(node => ({
+      data: {
+        id: node.id,
+        label: node.name,
+        ...(node.name === data.current?.location ? { current: true } : {}),
+      },
+      position: context === 'interior' ? data.layouts?.[compound]?.[node.name] : node.coordinates,
+    })),
+    ...(data.connections || []).filter(edge => ids.has(edge.source) && ids.has(edge.target)).map((edge, i) => ({
+      data: { id: `edge-${i}`, source: edge.source, target: edge.target, label: edge.distance_meters ? `${edge.distance_meters} м` : '' },
+    })),
+  ];
+  state.map = cytoscape({
+    container: el.mapContainer,
+    elements,
+    layout: { name: elements.some(e => e.position) ? 'preset' : 'cose', animate: false, padding: 40 },
+    style: [
+      { selector: 'node', style: { 'background-color': '#334155', label: 'data(label)', color: '#e5e7eb', 'font-size': 11, 'text-valign': 'bottom', 'text-margin-y': 8, width: 28, height: 28 } },
+      { selector: 'node[current = true]', style: { 'background-color': '#d97706', width: 38, height: 38, 'border-width': 3, 'border-color': '#fbbf24' } },
+      { selector: 'edge', style: { width: 2, 'line-color': '#475569', 'curve-style': 'bezier', label: 'data(label)', color: '#94a3b8', 'font-size': 9 } },
+    ],
+  });
+  state.map.fit(undefined, 36);
+}
+
 // ── Mobile navigation (Telegram-style: list ⇄ full-screen chat) ────────────
 const MOBILE_MAX = 768;
 const isMobile = () => window.innerWidth <= MOBILE_MAX;
@@ -619,13 +761,17 @@ function selectCampaign(name) {
   el.input.placeholder = 'Введите сообщение…';
   el.wizardResetBtn.hidden = true;   // game mode: no wizard reset
   el.modelSelect.hidden = false;     // model selectable in game
+  el.providerSelect.hidden = false;
   el.newSessionBtn.hidden = false;   // game mode: allow context reset
+  el.viewTabs.hidden = false;
+  switchView('chat');
   hideRateLimit();
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat(name);
   showChatStart();   // empty campaign → "▶ Начать игру"; removed when history/messages arrive
   loadCharPanel(name);  // dashboard: HP/XP/gold/location
+  refreshCampaignData();
   connect(gameUrl());
   el.input.focus();
 }
@@ -647,7 +793,10 @@ function startWizard() {
   el.input.placeholder = 'Опишите мир или выберите вариант…';
   el.wizardResetBtn.hidden = false;
   el.modelSelect.hidden = true;  // model is fixed in wizard (config)
+  el.providerSelect.hidden = true;
   el.newSessionBtn.hidden = true;  // wizard has no game session to reset
+  el.viewTabs.hidden = true;
+  switchView('chat');
   hideCharPanel();
   hideRateLimit();
   showChat();
@@ -898,6 +1047,15 @@ el.newBtn.addEventListener('click', startWizard);
 el.welcomeNewBtn.addEventListener('click', startWizard);
 el.wizardResetBtn.addEventListener('click', resetWizard);
 el.newSessionBtn.addEventListener('click', newSession);
+el.stopBtn.addEventListener('click', async () => {
+  if (!state.campaign || !state.generating) return;
+  await fetch(`/api/campaigns/${encodeURIComponent(state.campaign)}/interrupt`, { method: 'POST' });
+});
+el.viewTabs.addEventListener('click', event => {
+  const tab = event.target.closest('.view-tab');
+  if (tab) switchView(tab.dataset.view);
+});
+el.mapFitBtn.addEventListener('click', () => state.map?.fit(undefined, 36));
 
 // Mobile top-bar buttons
 el.mobileNew.addEventListener('click', startWizard);
@@ -918,34 +1076,53 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Click the model pill → cycle to the next model. Switching mid-game reconnects
-// the campaign with the new model (GameSession binds model at creation, so a
-// fresh socket via selectCampaign is the only way to swap it).
-el.modelSelect.addEventListener('click', () => {
-  const models = state.availableModels;
-  if (models.length < 2) return;
-  const idx = models.indexOf(state.currentModel);
-  state.currentModel = models[(idx + 1) % models.length];
-  renderModelLabel();
-  if (state.mode === 'game' && state.campaign) {
-    const name = state.campaign;
-    state.campaign = null;   // force selectCampaign to act (it early-returns on same name)
-    selectCampaign(name);
-  }
-});
+function modelsForRuntime(runtimeId) {
+  return state.availableModels.filter(model => model.runtime === runtimeId);
+}
 
-// ─────────────────────────── Model pill ───────────────────────────────────
-function renderModelLabel() {
-  el.modelSelect.textContent = (state.currentModel || '').replace(/^claude-/, '');  // "claude-opus-4-8" → "opus-4-8"
+function renderRuntimeControls() {
+  el.providerSelect.innerHTML = state.runtimes.map(runtime =>
+    `<option value="${escapeHtml(runtime.id)}">${escapeHtml(runtime.display_name)}</option>`).join('');
+  el.providerSelect.value = state.currentProvider || '';
+  const models = modelsForRuntime(state.currentProvider);
+  el.modelSelect.innerHTML = models.map(model =>
+    `<option value="${escapeHtml(model.id)}">${escapeHtml(model.display_name)}</option>`).join('');
+  if (!models.some(model => model.id === state.currentModel)) state.currentModel = models[0]?.id || null;
+  el.modelSelect.value = state.currentModel || '';
+}
+
+function reconnectRuntime() {
+  if (state.mode !== 'game' || !state.campaign || state.generating) {
+    renderRuntimeControls();
+    return;
+  }
+  closeWs();
+  state.attempt = 0;
+  connect(gameUrl());
 }
 
 async function loadModels() {
   let data;
   try { data = await (await fetch('/api/models')).json(); } catch { return; }
+  state.runtimes = Array.isArray(data.runtimes) ? data.runtimes : [];
   state.availableModels = Array.isArray(data.models) ? data.models : [];
-  state.currentModel = data.default || state.availableModels[0] || null;
-  renderModelLabel();
+  state.currentProvider = data.default?.runtime || state.runtimes[0]?.id || null;
+  state.currentModel = data.default?.model || modelsForRuntime(state.currentProvider)[0]?.id || null;
+  renderRuntimeControls();
 }
+
+el.providerSelect.addEventListener('change', () => {
+  if (state.generating) { renderRuntimeControls(); return; }
+  state.currentProvider = el.providerSelect.value;
+  state.currentModel = modelsForRuntime(state.currentProvider)[0]?.id || null;
+  renderRuntimeControls();
+  reconnectRuntime();
+});
+el.modelSelect.addEventListener('change', () => {
+  if (state.generating) { renderRuntimeControls(); return; }
+  state.currentModel = el.modelSelect.value;
+  reconnectRuntime();
+});
 
 // ─────────────────────────── Boot ─────────────────────────────────────────
 showWelcome();

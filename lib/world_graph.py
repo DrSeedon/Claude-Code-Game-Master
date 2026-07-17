@@ -2175,6 +2175,9 @@ def main():
     # ── Player ────────────────────────────────────────────────────────────────
     sub.add_parser("player-show", help="Show player character sheet")
 
+    p = sub.add_parser("player-get", help="Print one player node as JSON")
+    p.add_argument("name", help="Player name or ID")
+
     p = sub.add_parser("player-hp", help="Adjust player HP by delta")
     p.add_argument("delta", type=int)
 
@@ -2629,6 +2632,14 @@ def main():
     # ── Player handlers ───────────────────────────────────────────────────────
     elif args.command == "player-show":
         print(g.player_show())
+
+    elif args.command == "player-get":
+        pid = resolve(args.name, "player")
+        node = g.get_node(pid)
+        if not node:
+            print(f"  Player '{args.name}' not found", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(node, ensure_ascii=False, indent=2))
 
     elif args.command == "player-hp":
         ok = g.player_update_stat("hp", args.delta)

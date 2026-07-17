@@ -16,8 +16,7 @@ case "$ACTION" in
         ;;
 
     list)
-        # TODO: needs world_graph.py subcommand player-list
-        $WG player-show
+        $WG list-nodes --type player
         ;;
 
     get)
@@ -25,8 +24,7 @@ case "$ACTION" in
             echo "Usage: dm-player.sh get <character_name>"
             exit 1
         fi
-        # TODO: needs world_graph.py subcommand player-get <name>
-        $WG player-show
+        $WG player-get "$1"
         ;;
 
     save-json)
@@ -43,7 +41,6 @@ case "$ACTION" in
             echo "Usage: dm-player.sh set <character_name>"
             exit 1
         fi
-        # TODO: needs world_graph.py subcommand player-set <name>
         $WG player-set "$1"
         ;;
 

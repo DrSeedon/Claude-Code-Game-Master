@@ -22,7 +22,7 @@ on every move — all without touching CORE.
 | Location data | `{ "name": "...", "description": "..." }` | Plus `coordinates`, `connections[]` with distance/terrain/bearing, `blocked_ranges[]` |
 | Travel time | Not tracked | Characters have `speed_kmh`; elapsed hours calculated per move |
 | Random encounters | Nothing | Segmented DC check per journey, waypoint creation on trigger |
-| Map | Nothing | ASCII render + Pygame GUI |
+| Map | Nothing | Cytoscape campaign web map |
 
 ---
 
@@ -200,22 +200,8 @@ bash tools/dm-encounter.sh status
 
 ### Map rendering
 
-ASCII map scaled to location coordinates, printed to terminal:
-
-```bash
-bash tools/dm-map.sh                # default 80×40 ASCII
-bash tools/dm-map.sh --color        # ANSI colors
-bash tools/dm-map.sh --minimap      # compact view around current location
-bash tools/dm-map.sh --width 120 --height 60
-bash tools/dm-map.sh --no-labels    # coordinates only, no names
-```
-
-Interactive GUI (requires `pygame`):
-
-```bash
-bash tools/dm-map.sh --gui
-# Pan with mouse drag, zoom with scroll wheel
-```
+The main campaign web UI renders world and interior projections with Cytoscape.
+WorldGraph remains canonical; the browser never receives hidden game-master data.
 
 ---
 
@@ -301,7 +287,7 @@ If the module is disabled, both tools behave as vanilla CORE.
   encounter DC set to taste
 - **Realistic travel simulation**: `speed_kmh` from character sheet, time advances
   proportionally, encounters scale with distance traveled
-- **Visual DM aid**: ASCII map in terminal or Pygame window on secondary monitor
+- **Visual DM aid**: campaign web map with global and interior projections
 
 ---
 

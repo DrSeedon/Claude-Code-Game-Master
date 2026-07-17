@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
+from backend.campaign_views import inventory_items, player_location
+
 # Add lib/ to path for world_graph import
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
@@ -102,33 +104,20 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
 
         gold = player_data.get("money", player_data.get("gold", 0))
 
-        # Get inventory via "owns" edges
-        inventory = []
-        owned_edges = graph.get_edges(player_id, edge_type="owns", direction="out")
+        inventory = [
+            {"name": item["name"], "quantity": item["quantity"]}
+            for item in inventory_items(graph, player_id, player)
+        ]
 
-        for edge in owned_edges:
-            item_id = edge.get("to")
-            item_node = graph.get_node(item_id)
-            if item_node:
-                item_name = item_node.get("name", item_id)
-                # Quantity can be stored in edge data or node
-                quantity = edge.get("data", {}).get("quantity", 1)
-                if "quantity" in item_node.get("data", {}):
-                    quantity = item_node["data"]["quantity"]
+        overview = {}
+        overview_file = graph.campaign_dir / "campaign-overview.json"
+        if overview_file.exists():
+            import json
 
-                inventory.append({
-                    "name": item_name,
-                    "quantity": quantity
-                })
-
-        # Get current location via "at" edges
-        location = None
-        location_edges = graph.get_edges(player_id, edge_type="at", direction="out")
-        if location_edges:
-            location_id = location_edges[0].get("to")
-            location_node = graph.get_node(location_id)
-            if location_node:
-                location = location_node.get("name", location_id)
+            loaded = json.loads(overview_file.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                overview = loaded
+        location = player_location(graph, player_id, player, overview)
 
         # Build result
         result = {

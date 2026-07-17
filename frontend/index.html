@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/static/css/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.31.2/dist/cytoscape.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -61,21 +62,49 @@
               <span class="ctx-bar"><span class="ctx-fill"></span></span>
               <span class="ctx-label">0%</span>
             </span>
-            <button id="model-select" class="model-btn" title="Сменить модель"></button>
+            <select id="provider-select" class="runtime-select" title="AI-провайдер" hidden></select>
+            <select id="model-select" class="runtime-select" title="Модель"></select>
+            <button id="stop-btn" class="btn stop-btn" title="Остановить ход" hidden>■ Стоп</button>
           </div>
         </header>
 
         <!-- Character dashboard strip (game mode) -->
         <div id="char-panel" class="char-panel" hidden></div>
 
+        <nav id="view-tabs" class="view-tabs" aria-label="Разделы кампании" hidden>
+          <button class="view-tab active" data-view="chat">Игра</button>
+          <button class="view-tab" data-view="character">Персонаж</button>
+          <button class="view-tab" data-view="inventory">Инвентарь</button>
+          <button class="view-tab" data-view="quests">Задания</button>
+          <button class="view-tab" data-view="party">Группа</button>
+          <button class="view-tab" data-view="wiki">Wiki</button>
+          <button class="view-tab" data-view="map">Карта</button>
+        </nav>
+
         <!-- Rate / session limit warning -->
         <div id="rate-limit-bar" class="rate-limit-bar" hidden></div>
 
-        <div id="chat" class="chat-scroll"></div>
+        <div id="chat-view" class="content-view chat-view">
+          <div id="chat" class="chat-scroll"></div>
 
-        <div class="input-bar">
-          <textarea id="input" class="input" rows="1" placeholder="Введите сообщение..."></textarea>
-          <button id="send-btn" class="btn btn-primary send-btn">Отправить</button>
+          <div class="input-bar">
+            <textarea id="input" class="input" rows="1" placeholder="Введите сообщение..."></textarea>
+            <button id="send-btn" class="btn btn-primary send-btn">Отправить</button>
+          </div>
+        </div>
+
+        <div id="dashboard-view" class="content-view dashboard-view" hidden>
+          <div id="dashboard-loading" class="dashboard-state">Загрузка...</div>
+          <div id="dashboard-content"></div>
+        </div>
+
+        <div id="map-view" class="content-view map-view" hidden>
+          <div class="map-toolbar">
+            <div id="map-breadcrumb" class="map-breadcrumb"></div>
+            <button id="map-fit-btn" class="btn btn-icon map-fit-btn" title="Показать всю карту" aria-label="Показать всю карту">⌗</button>
+          </div>
+          <div id="campaign-map" class="campaign-map"></div>
+          <div id="map-empty" class="dashboard-state" hidden></div>
         </div>
       </section>
     </main>

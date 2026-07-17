@@ -1,154 +1,222 @@
-"""GameSession — turn lifecycle independent of any single WebSocket connection.
+"""Provider-neutral, campaign-scoped game turn lifecycle."""
 
-One campaign = one GameSession (module-level registry). A turn runs in a
-background asyncio.Task; WebSocket handlers only subscribe/publish to the
-session's broker channel. Disconnecting a WS does not stop the turn —
-reconnecting resumes seeing live output.
-"""
+from __future__ import annotations
 
 import asyncio
 import logging
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any
 
 from backend.event_log import append_event
 from backend.live_broker import broker
-from backend.providers.claude_sdk import ClaudeSDKProvider
+from backend.runtime import (
+    AgentEvent,
+    ProviderBuildContext,
+    RuntimeRegistry,
+    create_default_registry,
+)
 
 logger = logging.getLogger(__name__)
 
-_sessions: Dict[str, "GameSession"] = {}
+_sessions: dict[str, "GameSession"] = {}
+_registry: RuntimeRegistry | None = None
 
 HIBERNATE_IDLE_SECONDS = 5 * 60
 
 
-def get_or_create_session(campaign: str, project_root: Path, model_name: str) -> "GameSession":
-    """Exactly one GameSession per campaign, ever — so all sockets for a campaign
-    share one provider and turn lock (no concurrent turns, no orphaned sessions).
+def get_runtime_registry() -> RuntimeRegistry:
+    global _registry
+    if _registry is None:
+        _registry = create_default_registry()
+    return _registry
 
-    A header model switch is applied in place via `set_model()`, which takes effect
-    on the next turn. We never recreate the session, so open sockets can't diverge.
-    """
+
+def get_or_create_session(
+    campaign: str,
+    project_root: Path,
+    model_name: str,
+    runtime_id: str | None = None,
+) -> "GameSession":
+    """Return the sole mutation/turn owner for a campaign."""
+    registry = get_runtime_registry()
+    model = registry.get_model(model_name)
+    requested_runtime = runtime_id or model.runtime_id
+    if model.runtime_id != requested_runtime:
+        raise ValueError(f"model '{model_name}' does not belong to runtime '{requested_runtime}'")
+
     session = _sessions.get(campaign)
     if session is None:
-        session = GameSession(campaign, project_root, model_name)
+        session = GameSession(
+            campaign,
+            project_root,
+            model_name,
+            runtime_id=requested_runtime,
+            registry=registry,
+        )
         _sessions[campaign] = session
     else:
-        session.set_model(model_name)
+        session.configure(requested_runtime, model_name)
     return session
 
 
-def peek_session(campaign: str) -> Optional["GameSession"]:
-    """The live session for a campaign, or None if none is running."""
+def peek_session(campaign: str) -> "GameSession | None":
     return _sessions.get(campaign)
 
 
 class GameSession:
-    """Owns the provider + turn task for one campaign."""
+    """Own one provider, one turn task, and one mutation lock per campaign."""
 
-    def __init__(self, campaign: str, project_root: Path, model_name: str):
+    def __init__(
+        self,
+        campaign: str,
+        project_root: Path,
+        model_name: str,
+        *,
+        runtime_id: str | None = None,
+        registry: RuntimeRegistry | None = None,
+    ) -> None:
         self.campaign = campaign
-        self.project_root = project_root
+        self.project_root = Path(project_root)
+        self.registry = registry or get_runtime_registry()
+        model = self.registry.get_model(model_name)
+        self.runtime_id = runtime_id or model.runtime_id
+        if model.runtime_id != self.runtime_id:
+            raise ValueError(f"model '{model_name}' does not belong to runtime '{self.runtime_id}'")
         self.model_name = model_name
-        self.provider = ClaudeSDKProvider(
-            project_root=project_root,
-            model_name=model_name,
-            campaign_name=campaign,
-        )
-        self.campaign_dir = project_root / "world-state" / "campaigns" / campaign
+        self.provider = self._build_provider()
+        self.campaign_dir = self.project_root / "world-state" / "campaigns" / campaign
         self.running = False
-        self._turn_task: Optional[asyncio.Task] = None
-        self._last_turn_end_at: float = 0.0
-        self._model_dirty = False  # model changed since last turn → reset CLI session on next send
+        self._turn_task: asyncio.Task[None] | None = None
+        self._last_turn_end_at = 0.0
+        self._mutation_lock = asyncio.Lock()
+
+    def _build_provider(self):
+        return self.registry.build(
+            ProviderBuildContext(
+                project_root=self.project_root,
+                campaign_name=self.campaign,
+                model_name=self.model_name,
+            )
+        )
+
+    def configure(self, runtime_id: str, model_name: str) -> bool:
+        """Apply runtime/model selection only between turns."""
+        if runtime_id == self.runtime_id and model_name == self.model_name:
+            return False
+        if self.running:
+            raise RuntimeError("provider cannot be switched while a turn is in progress")
+        model = self.registry.get_model(model_name)
+        if model.runtime_id != runtime_id:
+            raise ValueError(f"model '{model_name}' does not belong to runtime '{runtime_id}'")
+        old_provider = self.provider
+        self.runtime_id = runtime_id
+        self.model_name = model_name
+        self.provider = self._build_provider()
+        asyncio.create_task(old_provider.close())
+        return True
 
     def set_model(self, model_name: str) -> None:
-        """Switch model for future turns. No effect on a running turn (its model
-        is already captured). The CLI conversation resets on the next send so the
-        new model starts clean — the on-disk event log (what the player sees) is kept."""
-        if model_name == self.model_name:
-            return
-        self.model_name = model_name
-        self._model_dirty = True
+        model = self.registry.get_model(model_name)
+        self.configure(model.runtime_id, model_name)
 
     async def reset_session(self) -> bool:
-        """Forget Claude's conversation context (fresh session_id) — the event log,
-        and thus the visible chat history, is kept. Refused while a turn is running.
-        Returns True if reset, False if a turn is in flight."""
         if self.running:
             return False
         await self.provider.reset()
         return True
 
-    def send(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict] = None) -> bool:
-        """Start a turn in the background. Does not block on WS connection.
+    async def interrupt(self) -> bool:
+        if not self.running:
+            return False
+        return await self.provider.interrupt()
 
-        Returns False (and does nothing) if a turn is already running — the SDK
-        client is not safe for concurrent queries. Caller should queue/reject.
-        """
-        if self.running:
+    def send(
+        self,
+        user_message: str,
+        system_prompt: str,
+        mcp_servers: Mapping[str, Any] | None = None,
+    ) -> bool:
+        if self.running or self._mutation_lock.locked():
             return False
         idle_for = time.monotonic() - self._last_turn_end_at if self._last_turn_end_at else 0.0
         append_event(self.campaign_dir, "user_message", user_message)
         self.running = True
-        # Snapshot the model NOW so a set_model() between here and the task actually
-        # running can't change this turn's model or trigger a mid-turn provider reset.
-        model = self.model_name
-        model_dirty = self._model_dirty
-        self._model_dirty = False
         self._turn_task = asyncio.create_task(
-            self._run_turn(user_message, system_prompt, mcp_servers, idle_for, model, model_dirty)
+            self._run_turn(user_message, system_prompt, mcp_servers, idle_for)
         )
         self._turn_task.add_done_callback(self._on_turn_done)
         return True
 
-    async def _run_turn(self, user_message: str, system_prompt: str, mcp_servers: Optional[Dict],
-                        idle_for: float, model: str, model_dirty: bool) -> None:
+    @staticmethod
+    def _event(value: AgentEvent | Mapping[str, Any]) -> AgentEvent:
+        if isinstance(value, AgentEvent):
+            return value
+        return AgentEvent(
+            str(value.get("type", "")),
+            str(value.get("content", "")),
+            value.get("metadata", {}) if isinstance(value.get("metadata"), Mapping) else {},
+        )
+
+    async def _run_turn(
+        self,
+        user_message: str,
+        system_prompt: str,
+        mcp_servers: Mapping[str, Any] | None,
+        idle_for: float,
+    ) -> None:
         try:
-            if model_dirty:
-                # Model changed — drop the old CLI session so the new model starts a
-                # fresh conversation (resume would keep the old model's session).
-                await self.provider.close()
-                logger.info(f"[{self.campaign}] model switched to {model}")
-            elif idle_for > HIBERNATE_IDLE_SECONDS:
-                # Idle too long — drop the CLI subprocess. process_message() reconnects
-                # and resumes via the provider's cached session_id, so history survives.
-                await self.provider.close()
-                logger.info(f"[{self.campaign}] hibernated after {idle_for:.0f}s idle")
-            async for event in self.provider.process_message(
-                user_message=user_message,
-                system_prompt=system_prompt,
-                model_name=model,
-                mcp_servers=mcp_servers,
-            ):
-                if event["type"] == "text_delta":
-                    broker.publish(self.campaign, {"type": "stream", "content": event["content"]})
-                    continue
-                if event["type"] in ("text", "activity", "error"):
-                    stored = append_event(self.campaign_dir, event["type"], event["content"])
-                    broker.publish(self.campaign, stored)
-                else:
-                    broker.publish(self.campaign, event)
-        except Exception as e:
-            logger.error(f"[{self.campaign}] turn failed: {e}", exc_info=True)
-            stored = append_event(self.campaign_dir, "error", str(e))
+            async with self._mutation_lock:
+                if idle_for > HIBERNATE_IDLE_SECONDS:
+                    await self.provider.close()
+                    logger.info("[%s] hibernated after %.0fs idle", self.campaign, idle_for)
+                async for raw_event in self.provider.process_message(
+                    user_message=user_message,
+                    system_prompt=system_prompt,
+                    model_name=self.model_name,
+                    mcp_servers=mcp_servers,
+                ):
+                    event = self._event(raw_event)
+                    if event.type == "text_delta":
+                        broker.publish(self.campaign, {"type": "stream", "content": event.content})
+                    elif event.type in {"text", "error"}:
+                        stored = append_event(self.campaign_dir, event.type, event.content)
+                        broker.publish(self.campaign, stored)
+                    elif event.type in {"tool_use", "tool_result", "thinking", "file_change", "activity"}:
+                        stored = append_event(self.campaign_dir, "activity", event.content)
+                        broker.publish(self.campaign, stored)
+                    elif event.type == "rate_limit":
+                        payload = event.to_dict()
+                        payload.update(event.metadata)
+                        broker.publish(self.campaign, payload)
+                    elif event.type != "turn_end":
+                        broker.publish(self.campaign, event.to_dict())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("[%s] turn failed: %s", self.campaign, exc, exc_info=True)
+            stored = append_event(self.campaign_dir, "error", str(exc))
             broker.publish(self.campaign, stored)
         finally:
             self.running = False
             self._last_turn_end_at = time.monotonic()
             usage = self.provider.get_context_usage()
             if usage:
-                broker.publish(self.campaign, {
-                    "type": "usage",
-                    "percent": usage["percent"],
-                    "used": usage["used_tokens"],
-                    "total": usage["total_tokens"],
-                })
+                broker.publish(
+                    self.campaign,
+                    {
+                        "type": "usage",
+                        "percent": usage.percent,
+                        "used": usage.used_tokens,
+                        "total": usage.total_tokens,
+                    },
+                )
             broker.publish(self.campaign, {"type": "done"})
 
-    def _on_turn_done(self, task: asyncio.Task) -> None:
+    def _on_turn_done(self, task: asyncio.Task[None]) -> None:
         if task.cancelled():
             return
         exc = task.exception()
         if exc:
-            logger.error(f"[{self.campaign}] turn task crashed: {exc}", exc_info=exc)
+            logger.error("[%s] turn task crashed: %s", self.campaign, exc, exc_info=exc)
