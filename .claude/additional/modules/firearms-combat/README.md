@@ -130,8 +130,8 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Stalker" \
   --weapon "AK-74" \
   --fire-mode full_auto \
-  --ammo 90 \
-  --targets "Bandit:14:25:3" "Bandit2:12:20:2"
+  --target "Bandit" \
+  --target "Bandit2"
 ```
 
 Add `--test` to simulate without writing any changes:
@@ -141,8 +141,7 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Stalker" \
   --weapon "SVD" \
   --fire-mode single \
-  --ammo 10 \
-  --targets "Mercenary:16:30:3" \
+  --target "Mercenary" \
   --test
 ```
 
@@ -153,8 +152,9 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
 | `--attacker` | yes | Character name (must match active character) |
 | `--weapon` | yes | Weapon node name or ID from `world.json` |
 | `--fire-mode` | yes | `single`, `burst`, or `full_auto` |
-| `--ammo` | yes | Rounds available before this combat action |
-| `--targets` | yes | One or more targets in `Name:AC:HP:PROT` format |
+| `--target` | yes | WorldGraph target name or ID; repeat for full auto |
+| `--ammo` | no | Explicit ammo override; defaults to player inventory |
+| `--targets` | no | Legacy manual targets; accepted only with `--test` |
 | `--test` | no | Dry run: print results, do not update character or inventory |
 
 ### Target Format
@@ -247,10 +247,10 @@ From the template, enemies for modern/STALKER campaigns:
 | Mercenary | 16 | 30 | 3 | 450 |
 | Controller | 12 | 60 | 0 | 1800 |
 
-Pass any enemy as a CLI target directly:
+Persistent targets are resolved directly from WorldGraph:
 
 ```bash
---targets "Snork:14:25:1" "Mercenary:16:30:3"
+--target "Snork" --target "Mercenary"
 ```
 
 ---

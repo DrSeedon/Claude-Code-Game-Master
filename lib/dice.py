@@ -8,6 +8,13 @@ import random
 import re
 from typing import Dict
 
+try:
+    from lib.combat_rules import first_present, node_mechanics, penetration_damage
+    from lib.world_graph import WorldGraph
+except ImportError:
+    from combat_rules import first_present, node_mechanics, penetration_damage
+    from world_graph import WorldGraph
+
 # Import colors for formatted output
 try:
     from lib.colors import Colors, format_roll_result
@@ -312,15 +319,7 @@ def _load_character():
 
 def _extract_mechanics(node):
     """Extract mechanics dict from a WorldGraph node (handles nested data.mechanics)."""
-    data = node.get("data", {})
-    if isinstance(data, dict):
-        if "mechanics" in data:
-            return data["mechanics"]
-        if "ac" in data or "hp" in data or "attack_bonus" in data:
-            return data
-    if "mechanics" in node:
-        return node["mechanics"]
-    return data if isinstance(data, dict) else {}
+    return node_mechanics(node)
 
 
 def _load_creature(name):
@@ -340,13 +339,13 @@ def _load_creature(name):
         for prefix in (f"creature:{name_lower}", name_lower):
             if prefix in nodes and nodes[prefix].get("type") == "creature":
                 node = nodes[prefix]
-                return {"type": "creature", "name": node.get("name", name),
+                return {"id": prefix, "type": "creature", "name": node.get("name", name),
                         "mechanics": _extract_mechanics(node)}
         for nid, node in nodes.items():
             if node.get("type") != "creature":
                 continue
             if name_lower in nid.lower() or name_lower in node.get("name", "").lower():
-                return {"type": "creature", "name": node.get("name", name),
+                return {"id": nid, "type": "creature", "name": node.get("name", name),
                         "mechanics": _extract_mechanics(node)}
 
     return None
@@ -438,6 +437,27 @@ def _resolve_attack(char, weapon_name=None):
     return mod, 'ближний бой', '1d4', None, None, None
 
 
+def _weapon_pen(char, resolved_name):
+    """Return penetration for the weapon selected by _resolve_attack."""
+    weapons = char.get("equipment", {}).get("weapons", [])
+    for weapon in weapons:
+        if weapon.get("name") == resolved_name:
+            return int(first_present(weapon, "pen", "penetration", default=0))
+    return 0
+
+
+def _persist_auto_damage(target_id, raw_damage, pen, prot):
+    """Apply armor scaling and persist damage to a WorldGraph combatant."""
+    campaign_dir = _get_campaign_path()
+    if not campaign_dir:
+        raise RuntimeError("No active campaign for automatic damage")
+    final_damage, scaling = penetration_damage(raw_damage, pen, prot)
+    transition = WorldGraph(campaign_dir).apply_damage(target_id, final_damage)
+    if not transition:
+        raise RuntimeError(f"Failed to apply damage to {target_id}")
+    return final_damage, scaling, transition
+
+
 def _load_spell(name):
     """Load spell/ability from world.json (WorldGraph)."""
     import json
@@ -514,6 +534,9 @@ def main():
     atk_range_l = None
     atk_name = None
     atk_damage = None
+    damage_target_id = None
+    damage_pen = 0
+    damage_prot = 0
 
     if args.skill or args.save or args.attack is not None:
         char = _load_character()
@@ -593,6 +616,8 @@ def main():
         mechanics = creature_data.get('mechanics', {})
         creature_ac = int(mechanics.get('ac', mechanics.get('AC', 10)))
         creature_name = creature_data.get('name', args.target)
+        damage_target_id = creature_data.get("id")
+        damage_prot = int(first_present(mechanics, "prot", "protection", default=0))
 
         if spell_data:
             s_mechanics = spell_data.get('mechanics', {})
@@ -607,6 +632,7 @@ def main():
                     dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
                     label = f"Spell: {spell_name} → {creature_name} ({char_name}){dmg_tag}"
                 damage_dice = spell_damage
+                damage_pen = int(first_present(s_mechanics, "pen", "penetration", default=0))
             elif spell_save_type:
                 if not char:
                     char = _load_character()
@@ -632,6 +658,7 @@ def main():
                     dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
                     label = f"{creature_name} {spell_save_type.upper()} Save vs {spell_name}{dmg_tag}"
                 damage_dice = spell_damage
+                damage_pen = int(first_present(s_mechanics, "pen", "penetration", default=0))
             else:
                 if spell_damage:
                     notation = spell_damage
@@ -643,6 +670,7 @@ def main():
             if not label:
                 label = f"Attack: {atk_name} → {creature_name} ({char_name})"
             damage_dice = atk_damage
+            damage_pen = _weapon_pen(char, atk_name)
         elif args.skill:
             pass
         else:
@@ -656,6 +684,7 @@ def main():
                 if not label:
                     label = f"Attack: {atk_name} → {creature_name} ({char_name})"
                 damage_dice = atk_damage
+                damage_pen = _weapon_pen(char, atk_name)
 
     if args.defend and args.from_creature:
         creature_data = _load_creature(args.from_creature)
@@ -664,8 +693,10 @@ def main():
             sys.exit(1)
         mechanics = creature_data.get('mechanics', {})
         creature_name = creature_data.get('name', args.from_creature)
-        atk_bonus = int(mechanics.get('attack_bonus', mechanics.get('attack', 0)))
-        creature_dmg = mechanics.get('damage', '1d6')
+        atk_bonus = int(
+            first_present(mechanics, "attack_bonus", "attack", "atk", default=0)
+        )
+        creature_dmg = str(first_present(mechanics, "damage", "dmg", default="1d6"))
         notation = f"1d20+{atk_bonus}" if atk_bonus >= 0 else f"1d20{atk_bonus}"
         if not char:
             char = _load_character()
@@ -673,14 +704,23 @@ def main():
             char_name = char.get('name', '?')
             equipment = char.get('equipment', {})
             armor = equipment.get('armor', {})
-            player_ac = armor.get('base_ac', 10)
-            if armor.get('dex_bonus', True):
+            player_ac = first_present(char, "ac", "AC")
+            if player_ac is None:
+                player_ac = first_present(armor, "ac", "base_ac", default=10)
+            if "ac" not in armor and "base_ac" in armor and armor.get('dex_bonus', True):
                 dex_mod = (char.get('stats', {}).get('dex', 10) - 10) // 2
                 max_dex = armor.get('max_dex')
                 if max_dex is not None:
                     dex_mod = min(dex_mod, max_dex)
                 player_ac += dex_mod
-            ac = player_ac
+            ac = int(player_ac)
+            damage_target_id = "player:active"
+            damage_prot = int(
+                first_present(char, "prot", "protection", default=armor.get("prot", 0))
+            )
+            damage_pen = int(
+                first_present(mechanics, "pen", "penetration", default=0)
+            )
         if not label:
             label = f"{creature_name} attacks {char_name if char else '?'} [dmg: {creature_dmg}]"
         damage_dice = creature_dmg
@@ -757,6 +797,19 @@ def main():
                 dmg_result = roller.roll(damage_dice)
                 dmg_line = format_enhanced(dmg_result, label="Damage")
             print(dmg_line)
+            if damage_target_id:
+                final_damage, scaling, transition = _persist_auto_damage(
+                    damage_target_id,
+                    dmg_result["total"],
+                    damage_pen,
+                    damage_prot,
+                )
+                print(
+                    f"  PEN {damage_pen} vs PROT {damage_prot} [{scaling}]"
+                    f" -> {final_damage} HP"
+                    f" -> {transition['name']}:"
+                    f" {transition['old_hp']} -> {transition['new_hp']} HP"
+                )
         elif damage_dice and not is_hit:
             pass
 

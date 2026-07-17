@@ -6,7 +6,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-from dice import DiceRoller, _resolve_attack, _resolve_spell_attack, _load_creature, _load_spell
+from dice import (
+    DiceRoller,
+    _load_creature,
+    _load_spell,
+    _resolve_attack,
+    _resolve_spell_attack,
+    main,
+)
 
 
 @pytest.fixture
@@ -91,6 +98,7 @@ class TestLoadCreature:
         with patch("dice._get_campaign_path", return_value=tmp_path):
             result = _load_creature("goblin")
             assert result is not None
+            assert result["id"] == "creature:goblin"
             assert result["name"] == "Goblin"
             assert result["mechanics"]["ac"] == "13"
 
@@ -111,6 +119,141 @@ class TestLoadCreature:
     def test_no_wiki(self, tmp_path):
         with patch("dice._get_campaign_path", return_value=tmp_path):
             assert _load_creature("goblin") is None
+
+
+class TestAutomaticDamage:
+    def test_creature_attack_resolves_and_persists_in_one_call(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Steve",
+                    "data": {
+                        "hp": {"current": 12, "max": 12},
+                        "ac": 15,
+                        "prot": 6,
+                        "stats": {"dex": 16},
+                        "equipment": {"armor": {"ac": 15, "prot": 6}},
+                    },
+                },
+                "creature:infested-miner": {
+                    "type": "creature",
+                    "name": "Infested Miner",
+                    "data": {
+                        "hp": 16,
+                        "ac": 12,
+                        "atk": 3,
+                        "dmg": "1d6+1",
+                        "pen": 1,
+                        "prot": 1,
+                    },
+                },
+            },
+        )
+        rolls = iter([13, 5])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dice.py", "--defend", "--from", "infested-miner"],
+        )
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+
+        world = json.loads((tmp_path / "world.json").read_text())
+        assert world["nodes"]["player:active"]["data"]["hp"]["current"] == 11
+        output = capsys.readouterr().out
+        assert "PEN 1 vs PROT 6 [QUARTER] -> 1 HP" in output
+        assert "Steve: 12 -> 11 HP" in output
+
+    def test_player_attack_persists_creature_hp(self, tmp_path, monkeypatch):
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Hero",
+                    "data": {
+                        "level": 1,
+                        "stats": {"str": 16},
+                        "equipment": {
+                            "weapons": [{
+                                "name": "Sword",
+                                "stat": "str",
+                                "proficient": True,
+                                "equipped": True,
+                                "damage": "1d6+3",
+                                "pen": 2,
+                            }],
+                        },
+                    },
+                },
+                "creature:guard": {
+                    "type": "creature",
+                    "name": "Guard",
+                    "data": {"hp": 10, "ac": 10, "prot": 2},
+                },
+            },
+        )
+        rolls = iter([15, 5])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(sys, "argv", ["dice.py", "--target", "guard"])
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+
+        world = json.loads((tmp_path / "world.json").read_text())
+        assert world["nodes"]["creature:guard"]["data"]["hp_current"] == 6
+
+    def test_damage_spell_persists_creature_hp(self, tmp_path, monkeypatch):
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Mage",
+                    "data": {
+                        "level": 1,
+                        "stats": {"int": 16},
+                        "casting_stat": "int",
+                    },
+                },
+                "spell:plasma-bolt": {
+                    "type": "spell",
+                    "name": "Plasma Bolt",
+                    "data": {
+                        "damage": "1d6",
+                        "attack_type": "ranged",
+                        "pen": 3,
+                    },
+                },
+                "creature:drone": {
+                    "type": "creature",
+                    "name": "Drone",
+                    "data": {"hp": 10, "ac": 10, "prot": 1},
+                },
+            },
+        )
+        rolls = iter([15, 4])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dice.py", "--spell", "plasma-bolt", "--target", "drone"],
+        )
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+
+        world = json.loads((tmp_path / "world.json").read_text())
+        assert world["nodes"]["creature:drone"]["data"]["hp_current"] == 6
 
 
 def _write_world(tmp_path, nodes):

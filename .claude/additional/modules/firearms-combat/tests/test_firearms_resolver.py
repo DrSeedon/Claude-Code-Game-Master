@@ -110,6 +110,17 @@ def fake_campaign(tmp_path):
                     "ammo_type": "8mm spike",
                     "source_module": "firearms-combat"
                 }
+            },
+            "creature:test-target": {
+                "type": "creature",
+                "name": "Test Target",
+                "data": {
+                    "hp": 20,
+                    "ac": 12,
+                    "prot": 2,
+                    "atk": 3,
+                    "dmg": "1d6+1"
+                }
             }
         },
         "edges": []
@@ -144,6 +155,36 @@ def test_attack_bonus_calculation(fake_campaign):
 
     expected = dex_mod + prof_bonus + subclass_bonus
     assert attack_bonus == expected
+
+
+def test_world_graph_target_and_ammo_lookup(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+
+    target = resolver.load_target("Test Target")
+
+    assert target == {
+        "id": "creature:test-target",
+        "name": "Test Target",
+        "ac": 12,
+        "hp": 20,
+        "prot": 2,
+    }
+    assert resolver.ammunition_available("AK-74") == 100
+
+
+def test_firearms_persists_target_hp_and_ammo(fake_campaign, monkeypatch):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: 15)
+    monkeypatch.setattr(resolver, "_roll_damage", lambda _dice: 8)
+    target = resolver.load_target("Test Target")
+
+    result = resolver.resolve_single("AK-74", 100, [target])
+    resolver.update_character_after_combat(result)
+
+    creature = resolver.world_graph.get_node("creature:test-target")
+    player = resolver.world_graph.get_node("player:active")
+    assert creature["data"]["hp_current"] == 12
+    assert player["inventory"]["stackable"]["5.45x39mm"]["qty"] == 99
 
 
 def test_is_sharpshooter(fake_campaign):

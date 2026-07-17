@@ -65,6 +65,20 @@ Common edge types are `at`, `owns`, `connected`, `requires`, `involves`,
 All graph writes go through `WorldRepository`. It uses a stable lock file,
 atomic replacement, a monotonic revision, and transactions.
 
+### Combatant fields
+
+`WorldGraph.combatant_stats()` normalizes player, NPC, and creature schemas.
+Creature templates may provide `attack_bonus`/`damage` or the mass-combat
+aliases `atk`/`dmg`. `pen` and `prot` default to zero.
+
+Player HP uses `hp.current` and `hp.max`. NPC party HP uses
+`character_sheet.hp`. A creature keeps its configured maximum in `hp`; the
+first persisted injury creates `hp_current`, which becomes its current HP.
+
+Do not decrement these fields directly. Use `WorldGraph.apply_damage()` or a
+complete combat command such as `dm-roll.sh --target`,
+`dm-roll.sh --defend --from`, or the firearms resolver.
+
 ## campaign-overview.json
 
 This file contains campaign metadata, not gameplay entities:

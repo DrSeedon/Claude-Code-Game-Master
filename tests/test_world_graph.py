@@ -314,6 +314,59 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestIntegration:
+    def test_combatant_stats_normalize_mass_combat_aliases(self, graph):
+        graph.add_node(
+            "creature:infested-miner",
+            "creature",
+            "Infested Miner",
+            data={"hp": 16, "ac": 12, "atk": 3, "dmg": "1d6+1", "pen": 1, "prot": 1},
+        )
+
+        stats = graph.combatant_stats("creature:infested-miner")
+
+        assert stats == {
+            "id": "creature:infested-miner",
+            "type": "creature",
+            "name": "Infested Miner",
+            "ac": 12,
+            "hp": 16,
+            "hp_max": 16,
+            "prot": 1,
+            "attack_bonus": 3,
+            "damage": "1d6+1",
+            "pen": 1,
+        }
+
+    def test_apply_damage_supports_player_npc_and_creature(self, graph):
+        graph.add_node(
+            "player:active",
+            "player",
+            "Hero",
+            data={"hp": {"current": 12, "max": 12}, "ac": 15},
+        )
+        graph.add_node(
+            "npc:ally",
+            "npc",
+            "Ally",
+            data={"character_sheet": {"hp": 10, "hp_max": 10, "ac": 12}},
+        )
+        graph.add_node(
+            "creature:target",
+            "creature",
+            "Target",
+            data={"hp": 8, "ac": 10},
+        )
+
+        assert graph.apply_damage("player:active", 3)["new_hp"] == 9
+        assert graph.apply_damage("npc:ally", 4)["new_hp"] == 6
+        assert graph.apply_damage("creature:target", 5)["new_hp"] == 3
+
+        assert graph.get_node("player:active")["data"]["hp"]["current"] == 9
+        assert graph.get_node("npc:ally")["data"]["character_sheet"]["hp"] == 6
+        creature = graph.get_node("creature:target")["data"]
+        assert creature["hp"] == 8
+        assert creature["hp_current"] == 3
+
     def test_inventory_loot_commits_once(self, graph):
         graph.add_node(
             "player:active",

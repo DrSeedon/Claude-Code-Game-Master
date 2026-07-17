@@ -17,11 +17,17 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "[char]" \
   --weapon "AK-74" \
   --fire-mode full_auto \
-  --ammo 30 \
-  --targets "Bandit:13:20:2" "Bandit:13:20:2"
+  --target "Bandit" \
+  --target "Bandit 2"
 ```
 
-**Target format:** `Name:AC:HP:PROT`
+`--target` resolves names or IDs from WorldGraph. AC, current HP, PROT, and
+available ammunition are loaded automatically. The command persists target HP,
+ammunition, and earned XP in one transaction.
+
+Use `--ammo` only as an explicit override. Legacy
+`--targets "Name:AC:HP:PROT"` values are allowed only with `--test` because
+they have no persistent entity ID.
 
 Use `--test` to preview without writing changes.
 

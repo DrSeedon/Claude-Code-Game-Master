@@ -7,7 +7,6 @@ DM (Claude) calls this via dm-combat.sh for firearms combat resolution.
 """
 
 import argparse
-import json
 import random
 import re
 import sys
@@ -19,6 +18,7 @@ PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from lib.campaign_manager import CampaignManager
+from lib.combat_rules import penetration_damage
 from lib.world_graph import WorldGraph
 
 from lib.module_data import ModuleDataManager
@@ -257,13 +257,37 @@ class FirearmsCombatResolver:
         return counts
 
     def _apply_pen_vs_prot(self, damage: int, pen: int, prot: int) -> int:
-        """Apply penetration vs protection damage scaling"""
-        if pen > prot:
-            return damage
-        elif pen <= prot / 2:
-            return damage // 4
-        else:
-            return damage // 2
+        """Apply shared penetration vs protection damage scaling."""
+        return penetration_damage(damage, pen, prot)[0]
+
+    def load_target(self, name_or_id: str) -> Dict[str, Any]:
+        """Load a persistent combat target directly from WorldGraph."""
+        stats = self.world_graph.combatant_stats(name_or_id)
+        if not stats:
+            raise ValueError(f"Combat target not found: {name_or_id}")
+        if stats["id"] == "player:active":
+            raise ValueError("The active player cannot target itself")
+        return {
+            "id": stats["id"],
+            "name": stats["name"],
+            "ac": stats["ac"],
+            "hp": stats["hp"],
+            "prot": stats["prot"],
+        }
+
+    def ammunition_available(self, weapon_name: str) -> int:
+        """Read available ammunition for a weapon from player inventory."""
+        weapon = self._get_weapon_stats(weapon_name)
+        ammo_type = weapon.get("ammo_type")
+        if not ammo_type:
+            return int(weapon.get("magazine", 0))
+        player = self.world_graph.get_node("player:active") or {}
+        entry = (
+            player.get("inventory", {})
+            .get("stackable", {})
+            .get(ammo_type, 0)
+        )
+        return int(entry.get("qty", 0) if isinstance(entry, dict) else entry)
 
     def resolve_single(
         self,
@@ -292,6 +316,7 @@ class FirearmsCombatResolver:
             hit = True
 
         target_result = {
+            "id": target.get("id"),
             "name": target["name"],
             "ac": target["ac"],
             "initial_hp": target["hp"],
@@ -470,9 +495,10 @@ class FirearmsCombatResolver:
         total_xp = 0
 
         for target, rounds_allocated, salvo_count in zip(
-            targets, rounds_by_target, salvos_by_target
+            targets, rounds_by_target, salvos_by_target, strict=True
         ):
             target_result = {
+                "id": target.get("id"),
                 "name": target["name"],
                 "ac": target["ac"],
                 "initial_hp": target["hp"],
@@ -615,10 +641,27 @@ class FirearmsCombatResolver:
         )
 
     def update_character_after_combat(self, result: Dict):
-        """Persist earned XP and physical ammunition to WorldGraph."""
+        """Persist target HP, earned XP, and ammunition in one transaction."""
         ammo_type = result.get("ammo_type")
         shots_fired = result.get("shots_fired", 0)
         with self.world_graph.transaction():
+            for target in result.get("targets", []):
+                damage = int(target.get("damage_dealt", 0))
+                target_id = target.get("id")
+                if damage <= 0:
+                    continue
+                if not target_id:
+                    raise RuntimeError(
+                        "Cannot persist damage for a target without a WorldGraph ID"
+                    )
+                transition = self.world_graph.apply_damage(target_id, damage)
+                if not transition:
+                    raise RuntimeError(f"Failed to persist target HP: {target_id}")
+                print(
+                    f"[AUTO-HP] {transition['name']}: "
+                    f"{transition['old_hp']} -> {transition['new_hp']} HP"
+                )
+
             if result.get("total_xp", 0) > 0:
                 xp_result = self.progression.award_xp(result["total_xp"])
                 if not xp_result.get("success"):
@@ -736,8 +779,9 @@ def main():
     resolve_parser.add_argument('--attacker', required=True, help='Attacker name')
     resolve_parser.add_argument('--weapon', required=True, help='Weapon name')
     resolve_parser.add_argument('--fire-mode', required=True, choices=['single', 'burst', 'full_auto'])
-    resolve_parser.add_argument('--ammo', type=int, required=True, help='Available ammo')
-    resolve_parser.add_argument('--targets', nargs='+', help='Targets as Name:AC:HP:PROT')
+    resolve_parser.add_argument('--ammo', type=int, help='Available ammo override; defaults to WorldGraph inventory')
+    resolve_parser.add_argument('--target', action='append', help='WorldGraph target name or ID; repeat for full auto')
+    resolve_parser.add_argument('--targets', nargs='+', help='Legacy targets as Name:AC:HP:PROT; test mode only')
     resolve_parser.add_argument('--enemy-type', help='Enemy type from campaign_rules')
     resolve_parser.add_argument('--enemy-count', type=int, help='Number of enemies')
     resolve_parser.add_argument('--test', action='store_true', help='Test mode: show results but DO NOT update inventory/XP')
@@ -752,7 +796,16 @@ def main():
         resolver = FirearmsCombatResolver()
 
         targets = []
-        if args.targets:
+        if args.target:
+            targets = [resolver.load_target(target) for target in args.target]
+        elif args.targets:
+            if not args.test:
+                print(
+                    "[ERROR] Legacy --targets have no persistent WorldGraph IDs; "
+                    "use --target or add --test",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             for target_str in args.targets:
                 parts = target_str.split(':')
                 if len(parts) != 4:
@@ -770,15 +823,20 @@ def main():
             print("[ERROR] --enemy-type not yet implemented", file=sys.stderr)
             sys.exit(1)
         else:
-            print("[ERROR] Must specify either --targets or --enemy-type + --enemy-count", file=sys.stderr)
+            print("[ERROR] Must specify --target, --targets, or --enemy-type + --enemy-count", file=sys.stderr)
             sys.exit(1)
 
+        ammo_available = (
+            args.ammo
+            if args.ammo is not None
+            else resolver.ammunition_available(args.weapon)
+        )
         if args.fire_mode == 'full_auto':
-            result = resolver.resolve_full_auto(args.weapon, args.ammo, targets)
+            result = resolver.resolve_full_auto(args.weapon, ammo_available, targets)
         elif args.fire_mode == 'single':
-            result = resolver.resolve_single(args.weapon, args.ammo, targets)
+            result = resolver.resolve_single(args.weapon, ammo_available, targets)
         elif args.fire_mode == 'burst':
-            result = resolver.resolve_burst(args.weapon, args.ammo, targets)
+            result = resolver.resolve_burst(args.weapon, ammo_available, targets)
 
         print(format_combat_output(result))
 
@@ -787,6 +845,7 @@ def main():
             print("  🧪 TEST MODE - NO CHANGES APPLIED")
             print("=" * 68)
             print(f"Would update character XP: +{result['total_xp']}")
+            print(f"Would update target HP: -{result['total_damage']}")
             print(f"Would deduct ammo: {result['shots_fired']}x {result.get('ammo_type', '?')}")
         else:
             resolver.update_character_after_combat(result)

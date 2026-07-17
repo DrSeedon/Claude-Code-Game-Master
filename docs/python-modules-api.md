@@ -17,6 +17,34 @@ with graph.transaction():
 The transaction loads `world.json` once and commits once. An exception before
 exit leaves the file unchanged.
 
+## Combat State
+
+Use normalized combatants instead of branching on player, NPC, and creature
+storage shapes:
+
+```python
+target = graph.combatant_stats("creature:infested-miner")
+transition = graph.apply_damage(target["id"], 4)
+```
+
+At the shell boundary, one auto-combat call owns lookup, attack, damage,
+PEN/PROT scaling, and HP persistence:
+
+```bash
+bash tools/dm-roll.sh --target "goblin"
+bash tools/dm-roll.sh --defend --from "goblin"
+```
+
+The firearms module additionally owns fire-mode salvos and ammunition:
+
+```bash
+bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
+  --attacker "Ada" --weapon "C-14" --fire-mode burst \
+  --target "creature:hydralisk"
+```
+
+Do not follow these commands with a manual damage roll or a second HP update.
+
 ## Metadata
 
 Use `JsonOperations` only for non-entity JSON such as

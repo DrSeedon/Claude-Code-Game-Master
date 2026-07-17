@@ -34,13 +34,13 @@ Use auto-lookup for ALL player character rolls. Fall back to manual notation onl
 Creatures stored in world.json as type `creature` with mechanics (hp, ac, attack_bonus, damage). Auto-combat rolls attack + damage in one call.
 
 ```bash
-# Player attacks creature — weapon from player node in world.json, AC from creature node in world.json, auto-damage on hit
+# Player attacks creature — one command resolves hit, damage, armor, target HP, and one round of ammunition
 bash tools/dm-roll.sh --attack "Longsword" --target "goblin"
 
 # Same but auto-picks equipped weapon
 bash tools/dm-roll.sh --target "goblin"
 
-# Creature attacks player — attack_bonus+damage from creature node in world.json, player AC from player node in world.json
+# Creature attacks player — one command resolves attack aliases, damage, PEN/PROT, and player HP
 bash tools/dm-roll.sh --defend --from "goblin"
 
 # With advantage/disadvantage
@@ -154,6 +154,11 @@ Damage has no pass/fail — just `--label`. No `--dc` or `--ac` needed.
 | `--label "text"` | Who and what | NPC/monster/custom rolls |
 | `--dc N` | Difficulty Class | Skill checks, saving throws |
 | `--ac N` | Armor Class | Attack rolls |
+
+`--target` and `--defend --from` are complete state-changing combat actions.
+Do not run a separate damage roll, `dm-player.sh hp`, or inventory HP update
+after either command. Manual notation remains for temporary opponents that are
+not stored in WorldGraph.
 
 ---
 

@@ -28,6 +28,7 @@ except ImportError:
         RESET = RS = B = C = G = R = Y = DIM = DM = MAGENTA = BOLD_GREEN = BOLD_RED = BOLD_CYAN = BOLD_YELLOW = CYAN = ""
 
 from world_repository import ConcurrentWriteError, WorldRepository
+from combat_rules import first_present, node_mechanics
 from campaign_context import (
     InvalidCampaignName,
     resolve_campaign_dir,
@@ -440,6 +441,105 @@ class WorldGraph:
             if node.get("type") == "player":
                 return nid
         return None
+
+    def combatant_stats(self, name_or_id: str) -> Optional[dict]:
+        """Return normalized combat stats for a player, NPC, or creature."""
+        node_id = (
+            name_or_id
+            if name_or_id in self._load()["nodes"]
+            else self._resolve_id(name_or_id)
+        )
+        if not node_id:
+            return None
+        node = self._load()["nodes"].get(node_id)
+        if not node or node.get("type") not in {"player", "npc", "creature"}:
+            return None
+
+        data = node.get("data", {})
+        mechanics = node_mechanics(node)
+        sheet = data.get("character_sheet", {}) if isinstance(data, dict) else {}
+        if not isinstance(sheet, dict):
+            sheet = {}
+
+        hp_value = first_present(mechanics, "hp_current", "current_hp")
+        hp_max = first_present(mechanics, "hp_max", "max_hp")
+        raw_hp = mechanics.get("hp")
+        if node.get("type") == "player" and isinstance(raw_hp, dict):
+            hp_value = raw_hp.get("current", hp_value)
+            hp_max = raw_hp.get("max", hp_max)
+        elif node.get("type") == "npc" and sheet:
+            hp_value = first_present(sheet, "hp_current", "current_hp", "hp", default=hp_value)
+            hp_max = first_present(sheet, "hp_max", "max_hp", default=hp_max)
+        elif hp_value is None:
+            hp_value = raw_hp
+        if hp_max is None:
+            hp_max = raw_hp if not isinstance(raw_hp, dict) else hp_value
+
+        equipment = data.get("equipment", {}) if isinstance(data, dict) else {}
+        armor = equipment.get("armor", {}) if isinstance(equipment, dict) else {}
+        if not isinstance(armor, dict):
+            armor = {}
+        ac = first_present(mechanics, "ac", "AC", default=first_present(sheet, "ac", default=10))
+        prot = first_present(
+            mechanics,
+            "prot",
+            "protection",
+            default=first_present(armor, "prot", default=0),
+        )
+
+        return {
+            "id": node_id,
+            "type": node.get("type"),
+            "name": node.get("name", name_or_id),
+            "ac": int(ac or 10),
+            "hp": int(hp_value or 0),
+            "hp_max": int(hp_max or hp_value or 0),
+            "prot": int(prot or 0),
+            "attack_bonus": int(
+                first_present(mechanics, "attack_bonus", "attack", "atk", default=0)
+            ),
+            "damage": str(first_present(mechanics, "damage", "dmg", default="1d6")),
+            "pen": int(first_present(mechanics, "pen", "penetration", default=0)),
+        }
+
+    def apply_damage(self, name_or_id: str, amount: int) -> Optional[dict]:
+        """Apply damage to any canonical combatant and return the HP transition."""
+        if amount < 0:
+            raise ValueError("Damage amount cannot be negative")
+        stats = self.combatant_stats(name_or_id)
+        if not stats:
+            print(f"  Combatant '{name_or_id}' not found", file=sys.stderr)
+            return None
+
+        w = self._load()
+        node = w["nodes"][stats["id"]]
+        data = node.setdefault("data", {})
+        old_hp = stats["hp"]
+        new_hp = max(0, old_hp - int(amount))
+
+        if stats["type"] == "player":
+            hp = data.get("hp")
+            if isinstance(hp, dict):
+                hp["current"] = new_hp
+            else:
+                data["hp"] = new_hp
+        elif stats["type"] == "npc" and isinstance(data.get("character_sheet"), dict):
+            data["character_sheet"]["hp"] = new_hp
+        else:
+            mechanics = data.get("mechanics")
+            target = mechanics if isinstance(mechanics, dict) else data
+            target["hp_current"] = new_hp
+
+        if not self._save(w):
+            return None
+        return {
+            "id": stats["id"],
+            "name": stats["name"],
+            "old_hp": old_hp,
+            "new_hp": new_hp,
+            "damage": int(amount),
+            "killed": old_hp > 0 and new_hp == 0,
+        }
 
     def _fact_next_id(self, category: str) -> str:
         slug = self._slug(category)

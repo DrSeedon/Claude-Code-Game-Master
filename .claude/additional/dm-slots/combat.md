@@ -63,8 +63,10 @@ bash tools/dm-roll.sh --spell "fire-bolt" --target "goblin"
 # Save-based spell — creature rolls save vs spell DC + auto-damage on fail
 bash tools/dm-roll.sh --spell "shyish-bolt" --target "goblin"
 ```
-3. Ranged weapons with `ammo_type` auto-deduct ammo from inventory. No ammo = cannot fire.
-4. Update enemy HP and narrate
+3. The same command rolls damage, applies PEN/PROT when present, persists target
+   HP, and deducts one round for weapons with `ammo_type`.
+4. Never run a second damage roll or a separate HP command after successful
+   auto-combat. Narrate the persisted result.
 
 **Enemy Turn — Auto-Combat (PREFERRED):**
 1. Choose target (usually nearest/most damaged)
@@ -72,7 +74,9 @@ bash tools/dm-roll.sh --spell "shyish-bolt" --target "goblin"
 # Creature attacks player — auto-lookup creature attack + player AC + auto-damage
 bash tools/dm-roll.sh --defend --from "goblin"
 ```
-2. If hit, update player HP and narrate
+2. The same command accepts `attack_bonus`/`damage` and `atk`/`dmg` aliases,
+   applies attacker PEN against player PROT, and persists player HP.
+3. Never follow it with a manual damage roll or HP update.
 
 **Fallback (no wiki entry):** Manual rolls as before:
 ```bash
