@@ -44,20 +44,26 @@ MW_RC=$?
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 
 case "$ACTION" in
-    create)
-        if [ "$#" -lt 3 ]; then
-            echo "Usage: dm-npc.sh create <name> <description> <attitude>"
+    create|add)
+        if [ "$#" -lt 2 ]; then
+            echo "Usage: dm-npc.sh create <name> <description> [attitude|--attitude attitude]"
             exit 1
         fi
-        $WG npc-create "$1" "$2" --attitude "$3"
+        ATTITUDE="neutral"
+        if [ "$#" -ge 4 ] && [ "$3" = "--attitude" ]; then
+            ATTITUDE="$4"
+        elif [ "$#" -ge 3 ]; then
+            ATTITUDE="$3"
+        fi
+        $WG npc-create "$1" "$2" --attitude "$ATTITUDE"
         ;;
 
     list)
-        $WG npc-list
+        $WG npc-list "$@"
         ;;
 
     party)
-        $WG npc-list
+        $WG npc-list --party
         ;;
 
     show|status)
@@ -112,15 +118,7 @@ case "$ACTION" in
             echo "Usage: dm-npc.sh demote <name>"
             exit 1
         fi
-        NPC_ID=$($PYTHON_CMD -c "
-import sys; sys.path.insert(0,'$LIB_DIR')
-from world_graph import WorldGraph
-g = WorldGraph()
-nid = g._resolve_id('$1', 'npc')
-print(nid or '')
-" 2>/dev/null)
-        if [ -z "$NPC_ID" ]; then echo "Error: NPC '$1' not found"; exit 1; fi
-        $WG update-node "$NPC_ID" --data '{"party_member": false}'
+        $WG npc-demote "$1"
         ;;
 
     attitude)
@@ -128,15 +126,7 @@ print(nid or '')
             echo "Usage: dm-npc.sh attitude <name> <attitude>"
             exit 1
         fi
-        NPC_ID=$($PYTHON_CMD -c "
-import sys; sys.path.insert(0,'$LIB_DIR')
-from world_graph import WorldGraph
-g = WorldGraph()
-nid = g._resolve_id('$1', 'npc')
-print(nid or '')
-" 2>/dev/null)
-        if [ -z "$NPC_ID" ]; then echo "Error: NPC '$1' not found"; exit 1; fi
-        $WG update-node "$NPC_ID" --data "{\"attitude\": \"$2\"}"
+        $WG npc-attitude "$1" "$2"
         ;;
 
     hp)
@@ -144,15 +134,7 @@ print(nid or '')
             echo "Usage: dm-npc.sh hp <name> <+/-amount>"
             exit 1
         fi
-        NPC_ID=$($PYTHON_CMD -c "
-import sys; sys.path.insert(0,'$LIB_DIR')
-from world_graph import WorldGraph
-g = WorldGraph()
-nid = g._resolve_id('$1', 'npc')
-print(nid or '')
-" 2>/dev/null)
-        if [ -z "$NPC_ID" ]; then echo "Error: NPC '$1' not found"; exit 1; fi
-        $WG update-node "$NPC_ID" --data "{\"hp_delta\": $2}"
+        $WG npc-hp "$1" "$2"
         ;;
 
     locate)

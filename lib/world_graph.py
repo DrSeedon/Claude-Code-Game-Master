@@ -575,7 +575,7 @@ class WorldGraph:
 
     def npc_event(self, node_id: str, event_text: str) -> bool:
         w = self._load()
-        if node_id not in w["nodes"]:
+        if node_id not in w["nodes"] or w["nodes"][node_id].get("type") != "npc":
             print(f"  Node '{node_id}' not found", file=sys.stderr)
             return False
         node = w["nodes"][node_id]
@@ -587,19 +587,93 @@ class WorldGraph:
 
     def npc_promote(self, node_id: str) -> bool:
         w = self._load()
-        if node_id not in w["nodes"]:
+        if node_id not in w["nodes"] or w["nodes"][node_id].get("type") != "npc":
             print(f"  Node '{node_id}' not found", file=sys.stderr)
             return False
         node = w["nodes"][node_id]
-        node["data"].setdefault("party_member", True)
+        node["data"]["party_member"] = True
         node["data"].setdefault("character_sheet", {
             "hp": 10, "hp_max": 10, "ac": 10, "level": 1,
         })
         return self._save(w)
 
+    def npc_demote(self, node_id: str) -> bool:
+        w = self._load()
+        if node_id not in w["nodes"] or w["nodes"][node_id].get("type") != "npc":
+            print(f"  Node '{node_id}' not found", file=sys.stderr)
+            return False
+        w["nodes"][node_id].setdefault("data", {})["party_member"] = False
+        return self._save(w)
+
+    def npc_set_attitude(self, node_id: str, attitude: str) -> bool:
+        w = self._load()
+        if node_id not in w["nodes"] or w["nodes"][node_id].get("type") != "npc":
+            print(f"  Node '{node_id}' not found", file=sys.stderr)
+            return False
+        w["nodes"][node_id].setdefault("data", {})["attitude"] = attitude
+        return self._save(w)
+
+    def npc_adjust_hp(self, node_id: str, amount: int) -> Optional[dict]:
+        w = self._load()
+        node = w["nodes"].get(node_id)
+        if not node or node.get("type") != "npc":
+            print(f"  Node '{node_id}' not found", file=sys.stderr)
+            return None
+        sheet = node.setdefault("data", {}).get("character_sheet")
+        if not isinstance(sheet, dict) or "hp" not in sheet:
+            print(f"  NPC '{node_id}' has no character sheet", file=sys.stderr)
+            return None
+
+        old_hp = int(sheet["hp"])
+        hp_max = int(sheet.get("hp_max", old_hp))
+        new_hp = max(0, min(hp_max, old_hp + int(amount)))
+        sheet["hp"] = new_hp
+        if not self._save(w):
+            return None
+        return {
+            "id": node_id,
+            "name": node.get("name", node_id),
+            "old_hp": old_hp,
+            "new_hp": new_hp,
+            "hp_max": hp_max,
+            "change": new_hp - old_hp,
+        }
+
+    def npc_list(
+        self,
+        *,
+        attitude: str = None,
+        location_id: str = None,
+        party_only: bool = False,
+    ) -> List[dict]:
+        w = self._load()
+        located_ids = None
+        if location_id:
+            located_ids = {
+                edge["from"]
+                for edge in w["edges"]
+                if edge.get("type") == "at" and edge.get("to") == location_id
+            }
+
+        result = []
+        for node_id, node in w["nodes"].items():
+            if node.get("type") != "npc":
+                continue
+            data = node.get("data", {})
+            if party_only and not (
+                data.get("party_member") or data.get("is_party_member")
+            ):
+                continue
+            if attitude and str(data.get("attitude", "")).casefold() != attitude.casefold():
+                continue
+            if located_ids is not None and node_id not in located_ids:
+                continue
+            result.append({"id": node_id, **node})
+        return sorted(result, key=lambda node: node.get("name", "").casefold())
+
     def npc_locate(self, node_id: str, location_id: str) -> bool:
         w = self._load()
-        if node_id not in w["nodes"]:
+        if node_id not in w["nodes"] or w["nodes"][node_id].get("type") != "npc":
             print(f"  Node '{node_id}' not found", file=sys.stderr)
             return False
         if location_id not in w["nodes"]:
@@ -1986,13 +2060,27 @@ def main():
     p.add_argument("id", help="NPC name or ID")
     p.add_argument("text")
 
-    sub.add_parser("npc-list", help="List all NPCs")
+    p = sub.add_parser("npc-list", help="List NPCs")
+    p.add_argument("--attitude", default=None)
+    p.add_argument("--location", default=None, help="Location name or ID")
+    p.add_argument("--party", action="store_true", help="List party members only")
 
     p = sub.add_parser("npc-show", help="Show NPC details")
     p.add_argument("id", help="NPC name or ID")
 
     p = sub.add_parser("npc-promote", help="Promote NPC to party member")
     p.add_argument("id", help="NPC name or ID")
+
+    p = sub.add_parser("npc-demote", help="Remove NPC from party")
+    p.add_argument("id", help="NPC name or ID")
+
+    p = sub.add_parser("npc-attitude", help="Set NPC attitude")
+    p.add_argument("id", help="NPC name or ID")
+    p.add_argument("attitude")
+
+    p = sub.add_parser("npc-hp", help="Adjust NPC HP")
+    p.add_argument("id", help="NPC name or ID")
+    p.add_argument("amount", type=int, help="Positive heals, negative damages")
 
     p = sub.add_parser("npc-locate", help="Set NPC location")
     p.add_argument("id", help="NPC name or ID")
@@ -2287,7 +2375,12 @@ def main():
             sys.exit(1)
 
     elif args.command == "npc-list":
-        nodes = g.list_nodes("npc")
+        location_id = resolve(args.location, "location") if args.location else None
+        nodes = g.npc_list(
+            attitude=args.attitude,
+            location_id=location_id,
+            party_only=args.party,
+        )
         B, RS, C, DM, G_ = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.BOLD_GREEN
         for n in nodes:
             att = n.get("data", {}).get("attitude", "")
@@ -2303,6 +2396,33 @@ def main():
         ok = g.npc_promote(nid)
         if ok:
             print(f"  ✓ Promoted {nid} to party member")
+        else:
+            sys.exit(1)
+
+    elif args.command == "npc-demote":
+        nid = resolve(args.id, "npc")
+        ok = g.npc_demote(nid)
+        if ok:
+            print(f"  ✓ Removed {nid} from party")
+        else:
+            sys.exit(1)
+
+    elif args.command == "npc-attitude":
+        nid = resolve(args.id, "npc")
+        ok = g.npc_set_attitude(nid, args.attitude)
+        if ok:
+            print(f"  ✓ {nid} attitude → {args.attitude}")
+        else:
+            sys.exit(1)
+
+    elif args.command == "npc-hp":
+        nid = resolve(args.id, "npc")
+        result = g.npc_adjust_hp(nid, args.amount)
+        if result:
+            print(
+                f"  ✓ {result['name']} HP: "
+                f"{result['old_hp']} → {result['new_hp']}/{result['hp_max']}"
+            )
         else:
             sys.exit(1)
 

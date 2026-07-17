@@ -314,6 +314,66 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestIntegration:
+    def test_npc_party_state_attitude_and_hp_use_canonical_data(self, graph):
+        graph.add_node(
+            "npc:ally",
+            "npc",
+            "Ally",
+            data={
+                "attitude": "neutral",
+                "party_member": False,
+                "character_sheet": {"hp": 8, "hp_max": 10, "ac": 12},
+            },
+        )
+
+        assert graph.npc_promote("npc:ally")
+        assert graph.npc_set_attitude("npc:ally", "friendly")
+        assert graph.npc_adjust_hp("npc:ally", -3)["new_hp"] == 5
+        assert graph.npc_adjust_hp("npc:ally", 20)["new_hp"] == 10
+
+        node = graph.get_node("npc:ally")
+        assert node["data"]["party_member"] is True
+        assert node["data"]["attitude"] == "friendly"
+        assert node["data"]["character_sheet"]["hp"] == 10
+        assert "hp_delta" not in node["data"]
+
+        assert graph.npc_demote("npc:ally")
+        assert graph.npc_list(party_only=True) == []
+        assert graph.npc_promote("npc:ally")
+        assert [node["id"] for node in graph.npc_list(party_only=True)] == ["npc:ally"]
+
+    def test_npc_list_filters_attitude_location_and_legacy_party_flag(self, graph):
+        graph.add_node(
+            "npc:local",
+            "npc",
+            "Local",
+            data={"attitude": "Friendly"},
+        )
+        graph.add_node(
+            "npc:remote",
+            "npc",
+            "Remote",
+            data={"attitude": "hostile", "is_party_member": True},
+        )
+        graph.add_node("location:base", "location", "Base")
+        graph.add_edge("npc:local", "location:base", "at")
+
+        assert [node["id"] for node in graph.npc_list(attitude="friendly")] == [
+            "npc:local"
+        ]
+        assert [
+            node["id"]
+            for node in graph.npc_list(location_id="location:base")
+        ] == ["npc:local"]
+        assert [node["id"] for node in graph.npc_list(party_only=True)] == [
+            "npc:remote"
+        ]
+
+    def test_npc_hp_requires_character_sheet(self, graph):
+        graph.add_node("npc:civilian", "npc", "Civilian")
+
+        assert graph.npc_adjust_hp("npc:civilian", -1) is None
+
     def test_combatant_stats_normalize_mass_combat_aliases(self, graph):
         graph.add_node(
             "creature:infested-miner",
