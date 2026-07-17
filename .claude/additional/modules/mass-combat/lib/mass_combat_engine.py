@@ -300,12 +300,13 @@ class MassCombatEngine:
         return self.add_units(
             faction, group, template_id, count,
             tmpl["ac"], tmpl["hp"], tmpl["atk"], tmpl["dmg"], names, w,
+            unit_range=tmpl.get("range"),
             pen=tmpl.get("pen", 0), prot=tmpl.get("prot", 0)
         )
 
     def list_templates(self) -> str:
         if not self.templates:
-            return "[INFO] No templates in module-data/mass-combat.json"
+            return "[INFO] No mass-combat creature templates in world.json"
         lines = [C.c("═══ UNIT TEMPLATES ═══", C.BOLD, C.BYELLOW)]
         for tid, t in self.templates.items():
             tgt = t.get("targeting", "random")
@@ -1038,7 +1039,7 @@ def main():
     p_add = sub.add_parser("add")
     p_add.add_argument("--faction", required=True)
     p_add.add_argument("--group", required=True)
-    p_add.add_argument("--template", help="Template ID from module-data")
+    p_add.add_argument("--template", help="Creature template ID from world.json")
     p_add.add_argument("--type", dest="unit_type", help="Unit type (when not using template)")
     p_add.add_argument("--count", type=int, default=1)
     p_add.add_argument("--ac", type=int, help="AC (required without template)")

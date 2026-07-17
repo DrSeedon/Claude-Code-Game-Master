@@ -7,12 +7,13 @@ spawns_at, known_by, relationship, triggers, crafted_with).
 Data lives in world.json per campaign.
 """
 
+import copy
 import json
-import os
 import random
 import re
 import sys
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -25,6 +26,13 @@ try:
 except ImportError:
     class Colors:
         RESET = RS = B = C = G = R = Y = DIM = DM = MAGENTA = BOLD_GREEN = BOLD_RED = BOLD_CYAN = BOLD_YELLOW = CYAN = ""
+
+from world_repository import ConcurrentWriteError, WorldRepository
+from campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    scoped_campaign_name,
+)
 
 NODE_TYPES = [
     "player", "npc", "location", "item", "creature",
@@ -57,12 +65,15 @@ TYPE_COLORS = {
 
 def _find_campaign_dir() -> Path:
     root = next(p for p in Path(__file__).parents if (p / ".git").exists())
-    active_file = root / "world-state" / "active-campaign.txt"
-    if active_file.exists():
-        name = active_file.read_text().strip()
-        d = root / "world-state" / "campaigns" / name
-        if d.exists():
-            return d
+    world_state = root / "world-state"
+    try:
+        name = scoped_campaign_name(world_state)
+        if name:
+            return resolve_campaign_dir(
+                world_state / "campaigns", name, must_exist=True
+            )
+    except (InvalidCampaignName, FileNotFoundError):
+        pass
     print("No active campaign", file=sys.stderr)
     sys.exit(1)
 
@@ -71,26 +82,59 @@ class WorldGraph:
     def __init__(self, campaign_dir: Path = None):
         self.campaign_dir = Path(campaign_dir) if campaign_dir else _find_campaign_dir()
         self.world_file = self.campaign_dir / "world.json"
+        self.repository = WorldRepository(self.world_file, self._empty_world)
+        self._transaction_data: Optional[dict] = None
+        self._transaction_depth = 0
 
     def _load(self) -> dict:
-        if self.world_file.exists():
-            with open(self.world_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return self._empty_world()
+        if self._transaction_data is not None:
+            return self._transaction_data
+        return self.repository.load()
 
     def _save(self, data: dict) -> bool:
-        tmp = self.world_file.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, self.world_file)
-        return True
+        if self._transaction_data is not None:
+            if data is not self._transaction_data:
+                self._transaction_data.clear()
+                self._transaction_data.update(data)
+            return True
+        try:
+            return self.repository.save(data)
+        except ConcurrentWriteError as exc:
+            print(f"  Concurrent world update rejected: {exc}", file=sys.stderr)
+            return False
+
+    @contextmanager
+    def transaction(self):
+        """Run multiple graph operations against one load and one commit."""
+        if self._transaction_data is not None:
+            self._transaction_depth += 1
+            try:
+                yield self._transaction_data
+            finally:
+                self._transaction_depth -= 1
+            return
+
+        with self.repository.transaction() as data:
+            self._transaction_data = data
+            self._transaction_depth = 1
+            try:
+                yield data
+            finally:
+                self._transaction_depth = 0
+                self._transaction_data = None
 
     def _empty_world(self) -> dict:
         return {
-            "meta": {"version": SCHEMA_VERSION, "schema": "graph"},
+            "meta": {"version": SCHEMA_VERSION, "schema": "graph", "revision": 0},
             "nodes": {},
             "edges": []
         }
+
+    def ensure_initialized(self) -> bool:
+        return self.repository.initialize()
+
+    def reset(self) -> bool:
+        return self.repository.replace(self._empty_world())
 
     def _validate_node_id(self, node_id: str) -> bool:
         if ":" not in node_id:
@@ -100,17 +144,31 @@ class WorldGraph:
             return False
         return bool(re.match(r"^[a-z0-9][a-z0-9-]*$", parts[1]))
 
-    def add_node(self, node_id: str, node_type: str, name: str, data: dict = None, **extra) -> bool:
+    def add_node(
+        self,
+        node_id: str,
+        node_type: str,
+        name: str,
+        data: dict = None,
+    ) -> bool:
         if not self._validate_node_id(node_id):
             print(f"  Invalid node ID '{node_id}'. Format: type:kebab-name", file=sys.stderr)
+            return False
+        if node_type not in NODE_TYPES or node_id.split(":", 1)[0] != node_type:
+            print(
+                f"  Node type '{node_type}' does not match ID '{node_id}'",
+                file=sys.stderr,
+            )
             return False
         w = self._load()
         if node_id in w["nodes"]:
             print(f"  Node '{node_id}' already exists", file=sys.stderr)
             return False
-        node = {"type": node_type, "name": name, "data": data or {}}
-        node.update(extra)
-        w["nodes"][node_id] = node
+        w["nodes"][node_id] = {
+            "type": node_type,
+            "name": name,
+            "data": data or {},
+        }
         return self._save(w)
 
     def get_node(self, node_id: str) -> Optional[dict]:
@@ -123,6 +181,7 @@ class WorldGraph:
             print(f"  Node '{node_id}' not found", file=sys.stderr)
             return False
         node = w["nodes"][node_id]
+        updates = copy.deepcopy(updates)
         if "data" in updates and isinstance(updates["data"], dict) and isinstance(node.get("data"), dict):
             node["data"].update(updates.pop("data"))
         node.update(updates)
@@ -248,9 +307,10 @@ class WorldGraph:
             f"{'─' * 60}",
         ]
         data = node.get("data", {})
-        if data:
+        display_data = {key: value for key, value in data.items() if key != "events"}
+        if display_data:
             lines.append(f"  {B}DATA{RS}")
-            for k, v in data.items():
+            for k, v in display_data.items():
                 if isinstance(v, dict):
                     v_str = ", ".join(f"{kk}: {vv}" for kk, vv in v.items())
                 elif isinstance(v, list):
@@ -269,7 +329,7 @@ class WorldGraph:
             for item in inventory.get("unique", []):
                 lines.append(f"    {G}•{RS} {item}")
             lines.append("")
-        events = node.get("events", [])
+        events = data.get("events", [])
         if events:
             lines.append(f"  {B}EVENTS{RS} ({len(events)})")
             for ev in events[-3:]:
@@ -313,7 +373,7 @@ class WorldGraph:
         return "\n".join(lines)
 
     def stats(self) -> str:
-        B, RS, C, DM = Colors.B, Colors.RESET, Colors.C, Colors.DIM
+        B, RS, C = Colors.B, Colors.RESET, Colors.C
         w = self._load()
         node_counts: Dict[str, int] = {}
         for node in w["nodes"].values():
@@ -419,9 +479,10 @@ class WorldGraph:
             print(f"  Node '{node_id}' not found", file=sys.stderr)
             return False
         node = w["nodes"][node_id]
-        if "events" not in node:
-            node["events"] = []
-        node["events"].append({"timestamp": self._now(), "event": event_text})
+        node.setdefault("data", {}).setdefault("events", []).append({
+            "timestamp": self._now(),
+            "event": event_text,
+        })
         return self._save(w)
 
     def npc_promote(self, node_id: str) -> bool:
@@ -696,19 +757,37 @@ class WorldGraph:
         return "\n".join(lines)
 
     def inventory_transfer(self, from_id: str, to_id: str, item_name: str, qty: int) -> bool:
+        if qty <= 0:
+            print("  Transfer quantity must be positive", file=sys.stderr)
+            return False
         w = self._load()
         for nid in (from_id, to_id):
             if not self._ensure_inventory(w, nid):
                 return False
-        self._save(w)
-        if not self.inventory_remove(from_id, item_name, qty):
+        source = w["nodes"][from_id]["inventory"]["stackable"]
+        if item_name not in source:
+            print(f"  Item '{item_name}' not in inventory", file=sys.stderr)
             return False
-        w2 = self._load()
-        src_inv = w2["nodes"][from_id]["inventory"]["stackable"]
-        weight = 0.5
-        if item_name in src_inv:
-            weight = src_inv[item_name].get("weight", 0.5)
-        return self.inventory_add(to_id, item_name, qty, weight)
+        source_entry = source[item_name]
+        current = source_entry.get("qty", 0)
+        if current < qty:
+            print(f"  Not enough '{item_name}': have {current}, need {qty}", file=sys.stderr)
+            return False
+        if from_id == to_id:
+            return True
+
+        weight = source_entry.get("weight", 0.5)
+        if current == qty:
+            del source[item_name]
+        else:
+            source_entry["qty"] = current - qty
+
+        target = w["nodes"][to_id]["inventory"]["stackable"]
+        if item_name in target:
+            target[item_name]["qty"] = target[item_name].get("qty", 0) + qty
+        else:
+            target[item_name] = {"qty": qty, "weight": weight}
+        return self._save(w)
 
     # ─────────────────────────────────────────────
     # Player domain
@@ -796,13 +875,12 @@ class WorldGraph:
         if not overview_file.exists():
             print(f"  campaign-overview.json not found in {self.campaign_dir}", file=sys.stderr)
             return False
-        with open(overview_file, "r", encoding="utf-8") as f:
-            overview = json.load(f)
-        overview["character"] = name
-        tmp = overview_file.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(overview, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, overview_file)
+        from json_ops import JsonOperations
+        if not JsonOperations(str(self.campaign_dir)).update_json(
+            "campaign-overview.json",
+            {"current_character": name},
+        ):
+            return False
         print(f"  ✓ Active character set: {name}")
         return True
 
@@ -814,9 +892,15 @@ class WorldGraph:
         node = self.get_node(pid)
         name = node.get("name", pid)
         d = node.get("data", {})
-        hp = d.get("hp", "?")
-        hp_max = d.get("hp_max", "?")
-        xp = d.get("xp", 0)
+        hp_data = d.get("hp", "?")
+        if isinstance(hp_data, dict):
+            hp = hp_data.get("current", "?")
+            hp_max = hp_data.get("max", d.get("hp_max", "?"))
+        else:
+            hp = hp_data
+            hp_max = d.get("hp_max", "?")
+        xp_data = d.get("xp", 0)
+        xp = xp_data.get("current", 0) if isinstance(xp_data, dict) else xp_data
         money = d.get("money", 0)
         lines = [
             f"{'─' * 40}",
@@ -838,6 +922,9 @@ class WorldGraph:
 
     def wiki_add(self, entity_id: str, entity_type: str, name: str,
                  mechanics: dict = None, recipe: dict = None) -> str:
+        if self._transaction_data is None:
+            with self.transaction():
+                return self.wiki_add(entity_id, entity_type, name, mechanics, recipe)
         full_id = f"{entity_type}:{self._slug(entity_id)}" if ":" not in entity_id else entity_id
         data = {"mechanics": mechanics or {}}
         if recipe:
@@ -862,7 +949,10 @@ class WorldGraph:
         return full_id
 
     def inventory_craft(self, owner_id: str, recipe_id: str, qty: int = 1) -> bool:
-        B, RS, C, DM, G_ = Colors.B, Colors.RESET, Colors.C, Colors.DIM, Colors.G
+        if self._transaction_data is None:
+            with self.transaction():
+                return self.inventory_craft(owner_id, recipe_id, qty)
+        B, RS, DM, G_ = Colors.B, Colors.RESET, Colors.DIM, Colors.G
         w = self._load()
         if owner_id not in w["nodes"]:
             print(f"  Node '{owner_id}' not found", file=sys.stderr)
@@ -886,7 +976,6 @@ class WorldGraph:
         for ing_id, need_qty in ingredients.items():
             total_need = need_qty * qty
             ing_name = w["nodes"].get(ing_id, {}).get("name", ing_id)
-            have_qty = inv.get(ing_name, {}).get("qty", 0) if isinstance(inv.get(ing_name), dict) else 0
             if ing_name not in inv and ing_id not in inv:
                 print(f"  Missing ingredient: {ing_name} x{total_need}", file=sys.stderr)
                 return False
@@ -941,6 +1030,9 @@ class WorldGraph:
         return effects if effects else {}
 
     def inventory_loot(self, owner_id: str, items: list = None, gold: int = 0, xp: int = 0) -> bool:
+        if self._transaction_data is None:
+            with self.transaction():
+                return self.inventory_loot(owner_id, items, gold, xp)
         G_, RS, B = Colors.G, Colors.RESET, Colors.B
         w = self._load()
         if owner_id not in w["nodes"]:
@@ -986,7 +1078,7 @@ class WorldGraph:
         return cs.get(stat_name)
 
     def custom_stat_set(self, stat_name: str, delta: float = None, absolute: float = None, reason: str = "") -> bool:
-        B, RS, C, G, R = Colors.B, Colors.RESET, Colors.C, Colors.G, Colors.R
+        RS, C, G, R = Colors.RESET, Colors.C, Colors.G, Colors.R
         pid = self._player_id()
         if not pid:
             print("  No player node found", file=sys.stderr)
@@ -1320,7 +1412,7 @@ class WorldGraph:
         return results
 
     def _tick_expenses(self, w: dict, elapsed_hours: float) -> List[dict]:
-        economy_id = "campaign:economy"
+        economy_id = "misc:economy"
         if economy_id not in w["nodes"]:
             return []
         econ = w["nodes"][economy_id].get("data", {})
@@ -1363,7 +1455,7 @@ class WorldGraph:
         return results
 
     def _tick_income(self, w: dict, elapsed_hours: float) -> List[dict]:
-        economy_id = "campaign:economy"
+        economy_id = "misc:economy"
         if economy_id not in w["nodes"]:
             return []
         econ = w["nodes"][economy_id].get("data", {})
@@ -1433,7 +1525,7 @@ class WorldGraph:
         return results
 
     def _tick_random_events(self, w: dict, elapsed_hours: float) -> List[dict]:
-        economy_id = "campaign:economy"
+        economy_id = "misc:economy"
         if economy_id not in w["nodes"]:
             return []
         econ = w["nodes"][economy_id].get("data", {})
@@ -1647,7 +1739,7 @@ class WorldGraph:
 
         if production:
             print(f"\n{B}🏭 Production:{RS}")
-            for loc_id, prods in production.items():
+            for _loc_id, prods in production.items():
                 for p in prods:
                     color = G if p["outcome"] == "success" else R
                     mark = "✓" if p["outcome"] == "success" else "✗"
@@ -1782,6 +1874,7 @@ def main():
     p.add_argument("--direction", choices=["in", "out", "both"], default="out")
 
     sub.add_parser("stats", help="Node and edge counts by type")
+    sub.add_parser("reset", help="Replace the graph with an empty world")
 
     # ── NPC ──────────────────────────────────────────────────────────────────
     p = sub.add_parser("npc-create", help="Create NPC node")
@@ -2073,6 +2166,12 @@ def main():
 
     elif args.command == "stats":
         print(g.stats())
+
+    elif args.command == "reset":
+        if g.reset():
+            print("  ✓ WorldGraph cleared")
+        else:
+            sys.exit(1)
 
     # ── NPC handlers ─────────────────────────────────────────────────────────
     elif args.command == "npc-create":

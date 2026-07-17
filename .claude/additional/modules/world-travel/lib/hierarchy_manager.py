@@ -17,26 +17,25 @@ def _find_project_root() -> Path:
 
 
 PROJECT_ROOT = _find_project_root()
-sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-
-from json_ops import JsonOperations
+sys.path.insert(0, str(PROJECT_ROOT))
 
 MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from connection_utils import get_connections
+from world_travel_store import WorldTravelStore, active_campaign_dir
 
 
 class HierarchyManager:
 
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
-        self.ops = JsonOperations(str(campaign_dir))
+        self.store = WorldTravelStore(campaign_dir)
 
     def create_compound(self, name: str, parent: Optional[str] = None,
                         entry_points: Optional[List[str]] = None,
                         mobile: bool = False, description: str = "") -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if name in locations:
             return {"success": False, "error": f"Location '{name}' already exists"}
@@ -62,7 +61,7 @@ class HierarchyManager:
             loc_data["mobile"] = True
 
         locations[name] = loc_data
-        self.ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
         return {"success": True, "name": name, "type": "compound"}
 
     def add_interior(self, name: str, parent: str,
@@ -70,7 +69,7 @@ class HierarchyManager:
                      is_entry_point: bool = False,
                      entry_config: Optional[Dict[str, Any]] = None,
                      description: str = "") -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if name in locations:
             return {"success": False, "error": f"Location '{name}' already exists"}
@@ -97,12 +96,12 @@ class HierarchyManager:
             locations[parent]["children"].append(name)
 
         locations[name] = loc_data
-        self.ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
         return {"success": True, "name": name, "parent": parent, "is_entry_point": is_entry_point}
 
     def enter_compound(self, compound_name: str,
                        entry_point: Optional[str] = None) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if compound_name not in locations:
             return {"success": False, "error": f"Compound '{compound_name}' not found"}
@@ -129,15 +128,14 @@ class HierarchyManager:
         return {"success": True, "location": target, "location_stack": stack}
 
     def exit_compound(self) -> Dict[str, Any]:
-        overview = self.ops.load_json("campaign-overview.json")
+        overview = self.store.load_overview()
         pp = overview.get("player_position", {})
-        stack = pp.get("location_stack", [])
         current = pp.get("current_location")
 
         if not current:
             return {"success": False, "error": "No current location"}
 
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         current_data = locations.get(current, {})
         parent_name = current_data.get("parent")
 
@@ -158,7 +156,7 @@ class HierarchyManager:
         return {"success": True, "location": target, "location_stack": new_stack}
 
     def move_interior(self, target: str) -> Dict[str, Any]:
-        overview = self.ops.load_json("campaign-overview.json")
+        overview = self.store.load_overview()
         pp = overview.get("player_position", {})
         current = pp.get("current_location")
         stack = pp.get("location_stack", [])
@@ -166,7 +164,7 @@ class HierarchyManager:
         if not current:
             return {"success": False, "error": "No current location"}
 
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if target not in locations:
             return {"success": False, "error": f"Location '{target}' not found"}
@@ -194,7 +192,7 @@ class HierarchyManager:
         return {"success": True, "location": target, "location_stack": new_stack}
 
     def get_tree(self, root: Optional[str] = None) -> Any:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if root:
             if root not in locations:
@@ -208,7 +206,7 @@ class HierarchyManager:
         return top_level
 
     def get_ancestors(self, name: str) -> List[str]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         chain = []
         current = name
         visited = set()
@@ -224,11 +222,11 @@ class HierarchyManager:
         return chain
 
     def get_children(self, name: str) -> List[str]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         return locations.get(name, {}).get("children", [])
 
     def get_entry_points(self, compound: str) -> List[Dict[str, Any]]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         compound_data = locations.get(compound, {})
         ep_names = compound_data.get("entry_points", [])
 
@@ -243,11 +241,11 @@ class HierarchyManager:
         return result
 
     def get_location_type(self, name: str) -> str:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         return locations.get(name, {}).get("type", "")
 
     def validate_hierarchy(self) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         errors = []
 
         for name, data in locations.items():
@@ -277,13 +275,13 @@ class HierarchyManager:
         return {"valid": len(errors) == 0, "errors": errors}
 
     def resolve_player_position(self) -> Dict[str, Any]:
-        overview = self.ops.load_json("campaign-overview.json")
+        overview = self.store.load_overview()
         pp = overview.get("player_position", {})
         current = pp.get("current_location")
         if not current:
             return {"success": False, "error": "No current location"}
 
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         loc_data = locations.get(current, {})
 
         if loc_data.get("type") != "compound":
@@ -336,23 +334,16 @@ class HierarchyManager:
 
     def _update_player_position(self, current_location: str,
                                 location_stack: List[str]) -> None:
-        overview = self.ops.load_json("campaign-overview.json")
-        pp = overview.setdefault("player_position", {})
-        pp["current_location"] = current_location
-        pp["location_stack"] = location_stack
-        self.ops.save_json("campaign-overview.json", overview)
+        self.store.update_player_position({
+            "current_location": current_location,
+            "location_stack": location_stack,
+        })
 
 
 if __name__ == "__main__":
     def get_campaign_dir():
-        project_root = _find_project_root()
-        active_file = project_root / "world-state" / "active-campaign.txt"
-        if active_file.exists():
-            name = active_file.read_text().strip()
-            d = project_root / "world-state" / "campaigns" / name
-            if d.exists():
-                return str(d)
-        return None
+        campaign = active_campaign_dir()
+        return str(campaign) if campaign else None
 
     campaign_dir = get_campaign_dir()
     if not campaign_dir:

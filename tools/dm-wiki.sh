@@ -26,7 +26,9 @@ require_active_campaign
 ACTION="$1"
 shift
 
-dispatch_middleware "dm-wiki.sh" "$ACTION" "$@" && exit $?
+dispatch_middleware "dm-wiki.sh" "$ACTION" "$@"
+MW_RC=$?
+[ $MW_RC -ne 64 ] && exit $MW_RC
 
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 

@@ -6,21 +6,17 @@ Manages concurrent agent extraction from D&D modules
 Uses RAG-based semantic extraction for document categorization.
 """
 
-import os
 import sys
 import json
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
-from lib.extraction_schemas import (
-    get_schema, validate_extraction,
-    EXTRACTION_RESULT_SCHEMA
-)
 from lib.json_ops import JsonOperations
 from lib.validators import Validators
 from lib.campaign_manager import CampaignManager
+from lib.world_graph import WorldGraph
 
 # RAG imports - required, no fallback
 from lib.rag import check_rag_available, get_missing_deps
@@ -681,12 +677,7 @@ class AgentExtractor:
 
     def _ensure_world_json(self):
         """Create an empty world.json if it doesn't exist yet."""
-        world_file = self.extraction_dir / "world.json"
-        if not world_file.exists():
-            world_file.write_text(json.dumps(
-                {"meta": {"version": 2, "schema": "graph"}, "nodes": {}, "edges": []},
-                indent=2, ensure_ascii=False
-            ))
+        WorldGraph(self.extraction_dir).ensure_initialized()
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitize campaign name for use as directory name"""

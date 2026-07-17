@@ -33,36 +33,47 @@ LIB_DIR="$PROJECT_ROOT/lib"
 # Base world state directory
 WORLD_STATE_BASE="$PROJECT_ROOT/world-state"
 
-# Get active campaign directory
-# Returns the campaign-specific directory if an active campaign is set,
-# otherwise returns empty string and prints error
-get_campaign_dir() {
+_scoped_campaign_name() {
+    local campaign_name="${DM_ACTIVE_CAMPAIGN:-}"
     local active_file="$WORLD_STATE_BASE/active-campaign.txt"
-    if [ -f "$active_file" ]; then
-        local campaign_name
-        campaign_name=$(cat "$active_file" | tr -d '[:space:]')
-        if [ -n "$campaign_name" ] && [ -d "$WORLD_STATE_BASE/campaigns/$campaign_name" ]; then
-            echo "$WORLD_STATE_BASE/campaigns/$campaign_name"
-            return 0
-        fi
+    if [ -z "$campaign_name" ] && [ -f "$active_file" ]; then
+        IFS= read -r campaign_name < "$active_file"
     fi
-    # No active campaign - return empty string
+    case "$campaign_name" in
+        ""|"."|".."|.*|*..*|*/*|*\\*) return 1 ;;
+    esac
+    printf '%s\n' "$campaign_name"
+}
+
+# Get active campaign directory. DM_ACTIVE_CAMPAIGN scopes one process (web);
+# active-campaign.txt remains the interactive CLI fallback.
+get_campaign_dir() {
+    local campaign_name
+    campaign_name=$(_scoped_campaign_name) || {
+        echo ""
+        return 1
+    }
+    if [ -d "$WORLD_STATE_BASE/campaigns/$campaign_name" ]; then
+        printf '%s\n' "$WORLD_STATE_BASE/campaigns/$campaign_name"
+        return 0
+    fi
     echo ""
     return 1
 }
 
 # Get the active campaign name (or empty string if none)
 get_active_campaign() {
-    local active_file="$WORLD_STATE_BASE/active-campaign.txt"
-    if [ -f "$active_file" ]; then
-        local campaign_name
-        campaign_name=$(cat "$active_file" | tr -d '[:space:]')
-        if [ -n "$campaign_name" ] && [ -d "$WORLD_STATE_BASE/campaigns/$campaign_name" ]; then
-            echo "$campaign_name"
-            return 0
-        fi
+    local campaign_name
+    campaign_name=$(_scoped_campaign_name) || {
+        echo ""
+        return 1
+    }
+    if [ -d "$WORLD_STATE_BASE/campaigns/$campaign_name" ]; then
+        printf '%s\n' "$campaign_name"
+        return 0
     fi
     echo ""
+    return 1
 }
 
 # Campaigns directory
@@ -80,21 +91,10 @@ if [ -n "$WORLD_STATE_DIR" ]; then
     WORLD_FILE="$WORLD_STATE_DIR/world.json"
     SESSION_LOG="$WORLD_STATE_DIR/session-log.md"
     CAMPAIGN_OVERVIEW="$WORLD_STATE_DIR/campaign-overview.json"
-    # Legacy flat files (only used by dm-reset.sh for cleanup)
-    NPCS_FILE="$WORLD_STATE_DIR/npcs.json"
-    LOCATIONS_FILE="$WORLD_STATE_DIR/locations.json"
-    FACTS_FILE="$WORLD_STATE_DIR/facts.json"
-    CONSEQUENCES_FILE="$WORLD_STATE_DIR/consequences.json"
-    CHARACTER_FILE="$WORLD_STATE_DIR/character.json"
 else
     WORLD_FILE=""
     SESSION_LOG=""
     CAMPAIGN_OVERVIEW=""
-    NPCS_FILE=""
-    LOCATIONS_FILE=""
-    FACTS_FILE=""
-    CONSEQUENCES_FILE=""
-    CHARACTER_FILE=""
 fi
 
 # Helper to check if campaign is active and exit with error if not

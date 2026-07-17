@@ -64,22 +64,28 @@ bash tools/dm-session.sh move "[new_location]"
 
 **For dungeons/buildings/special locations (basements, labs, etc.):**
 
-If destination doesn't exist yet, create it manually FIRST:
+Create, connect, move the party, and advance time in one scene transition:
 ```bash
-# Create the location
-bash tools/dm-location.sh add "[location_name]" "[description]"
-
-# Create connection manually
-bash tools/dm-location.sh connect "[from]" "[to]" --terrain [type] --distance [meters]
-
-# Then move
-bash tools/dm-session.sh move "[location_name]"
+bash tools/dm-scene.sh "[location_name]" \
+  --description "[description]" \
+  --path "[terrain and distance]" \
+  --elapsed 0.1 \
+  --with "[non-party NPC]"
 ```
 
-**Why manual for dungeons?**
+`dm-scene.sh` automatically:
+- Reuses an existing destination or creates it when missing
+- Connects it to the current location with the supplied path
+- Moves the player and all party-member NPCs
+- Moves each repeated `--with` NPC
+- Advances time and ticks consequences
+- Applies repeated `--resolve` and `--objective` updates
+
+**Why use a scene transition for dungeons?**
 - More control over terrain type (underground, cave, building_interior)
 - Prevents accidental auto-connections to wrong places
 - Allows setting specific distance (stairs = 10m, long corridor = 100m)
+- Persists the complete beat in one command
 
 **Time advancement (when NOT using move --elapsed):**
 ```bash

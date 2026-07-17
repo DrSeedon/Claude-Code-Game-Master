@@ -183,9 +183,8 @@ from pathlib import Path
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from lib.json_ops import JsonOperations
-from lib.player_manager import PlayerManager
 from lib.campaign_manager import CampaignManager
+from lib.world_graph import WorldGraph
 ```
 
 Use `PROJECT_ROOT` finder instead of `.parent.parent...` chains. Import CORE modules for data access.
@@ -194,9 +193,12 @@ Use `PROJECT_ROOT` finder instead of `.parent.parent...` chains. Import CORE mod
 
 | Module | Key methods |
 |--------|------------|
-| `JsonOperations(campaign_dir)` | `load_json(file)`, `save_json(file, data)` |
-| `PlayerManager(world_state_dir)` | `get_player(name)`, `modify_hp(name, delta)`, `modify_condition(name, action, condition)` |
-| `CampaignManager(world_state_dir)` | `get_active_campaign_dir()`, `get_active_campaign_name()` |
+| `CampaignManager(world_state_dir)` | `get_active_campaign_dir()`, `get_active()` |
+| `WorldGraph(campaign_dir)` | Entity CRUD, inventory, player stats, quests, locations, consequences, and `transaction()` |
+
+Modules must treat `world.json` as the only gameplay entity store. Use
+`WorldGraph` methods instead of reading or writing `world.json` directly. Group
+related mutations in `with graph.transaction():` so they commit together.
 
 ---
 
@@ -263,13 +265,14 @@ mdm.save("my-module", config)
 
 ### Per-character data
 
-Store per-character data in `character.json`:
+Store per-character data on the active player node in `world.json`:
 
-```json
-{
-  "custom_stats": { ... },
-  "my_module_data": { ... }
-}
+```python
+graph = WorldGraph(campaign_dir)
+with graph.transaction():
+    graph.update_node("player:active", {
+        "data": {"my_module_data": {"setting": "value"}}
+    })
 ```
 
 ---
@@ -279,12 +282,12 @@ Store per-character data in `character.json`:
 If your module requires another:
 
 ```json
-"dependencies": ["custom-stats"]
+"dependencies": ["mass-combat"]
 ```
 
 The system will:
-- Block activation if `custom-stats` is not enabled
-- Block deactivation of `custom-stats` if your module depends on it
+- Block activation if `mass-combat` is not enabled
+- Block deactivation of `mass-combat` if your module depends on it
 
 ---
 
@@ -293,9 +296,10 @@ The system will:
 Use pytest with tmp campaign directories:
 
 ```python
+import json
 import pytest
 from pathlib import Path
-from lib.json_ops import JsonOperations
+from lib.world_graph import WorldGraph
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 
@@ -305,9 +309,9 @@ def make_campaign(tmp_path, overview, character):
     campaigns.mkdir(parents=True)
     (ws / "active-campaign.txt").write_text("test")
 
-    ops = JsonOperations(str(campaigns))
-    ops.save_json("campaign-overview.json", overview)
-    ops.save_json("character.json", character)
+    (campaigns / "campaign-overview.json").write_text(json.dumps(overview))
+    graph = WorldGraph(campaigns)
+    graph.add_node("player:active", "player", character["name"], character)
     return ws
 
 class TestMyModule:

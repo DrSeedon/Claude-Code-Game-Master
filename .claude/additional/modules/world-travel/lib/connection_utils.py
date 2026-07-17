@@ -5,7 +5,7 @@ Each edge is stored ONCE in the alphabetically-first location.
 All modules should use these helpers instead of raw connection access.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 
 
 def canonical_pair(a: str, b: str) -> Tuple[str, str]:
@@ -144,8 +144,8 @@ def add_canonical_connection(a: str, b: str, locations_data: Dict, force: bool =
     if blockers and not force:
         import sys
         print(f"⚠️  WARNING: Direct path {a} → {b} passes through: {', '.join(blockers)}", file=sys.stderr)
-        print(f"   Connection NOT created. Route through intermediate locations instead.", file=sys.stderr)
-        print(f"   Use --force to override.", file=sys.stderr)
+        print("   Connection NOT created. Route through intermediate locations instead.", file=sys.stderr)
+        print("   Use --force to override.", file=sys.stderr)
         return False
 
     conn_data = {'to': second}

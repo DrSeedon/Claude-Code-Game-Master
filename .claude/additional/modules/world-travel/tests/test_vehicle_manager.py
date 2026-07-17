@@ -3,7 +3,6 @@
 
 import pytest
 import sys
-import json
 from pathlib import Path
 
 
@@ -19,6 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "lib"))
 sys.path.insert(0, str(PROJECT_ROOT / ".claude/additional/modules/world-travel/lib"))
 
 from vehicle_manager import VehicleManager
+from world_travel_store import WorldTravelStore
 
 
 @pytest.fixture
@@ -47,17 +47,26 @@ def campaign_dir(tmp_path):
         }
     }
 
-    (d / "locations.json").write_text(json.dumps(locations), encoding="utf-8")
-    (d / "campaign-overview.json").write_text(json.dumps(overview), encoding="utf-8")
+    store = WorldTravelStore(d)
+    store.save_locations(locations)
+    store.save_overview(overview)
     return d
 
 
 def _load_locations(campaign_dir):
-    return json.loads((campaign_dir / "locations.json").read_text(encoding="utf-8"))
+    return WorldTravelStore(campaign_dir).load_locations()
+
+
+def _save_locations(campaign_dir, locations):
+    return WorldTravelStore(campaign_dir).save_locations(locations)
 
 
 def _load_overview(campaign_dir):
-    return json.loads((campaign_dir / "campaign-overview.json").read_text(encoding="utf-8"))
+    return WorldTravelStore(campaign_dir).load_overview()
+
+
+def _save_overview(campaign_dir, overview):
+    return WorldTravelStore(campaign_dir).save_overview(overview)
 
 
 def _setup_vehicle(campaign_dir):
@@ -327,9 +336,7 @@ class TestEdgeCases:
     def test_backward_compat_no_map_context_field(self, campaign_dir):
         overview = _load_overview(campaign_dir)
         del overview["player_position"]["current_location"]
-        (campaign_dir / "campaign-overview.json").write_text(
-            json.dumps(overview), encoding="utf-8"
-        )
+        _save_overview(campaign_dir, overview)
         vm = VehicleManager(str(campaign_dir))
         status = vm._get_player_vehicle_status()
         assert status["map_context"] == "global"
@@ -345,7 +352,7 @@ class TestEdgeCases:
         vm = _setup_vehicle(campaign_dir)
         locs = _load_locations(campaign_dir)
         locs["Sigma Spaceport"]["_vehicle"]["stationary"] = True
-        (campaign_dir / "locations.json").write_text(json.dumps(locs), encoding="utf-8")
+        _save_locations(campaign_dir, locs)
         result = vm.move_vehicle("ship-01", "Mantisk-7 Station")
         assert result["success"] is False
         assert "stationary" in result["error"]

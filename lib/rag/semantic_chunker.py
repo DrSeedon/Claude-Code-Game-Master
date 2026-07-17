@@ -178,7 +178,9 @@ class SemanticChunker:
         categorized["general"] = []
 
         # Score and categorize each chunk
-        for idx, (chunk_text, chunk_emb) in enumerate(zip(chunks, chunk_embeddings)):
+        for idx, (chunk_text, chunk_emb) in enumerate(
+            zip(chunks, chunk_embeddings, strict=False)
+        ):
             # Score against all categories
             scores = {}
             for content_type, category_embedding in self._category_embeddings.items():

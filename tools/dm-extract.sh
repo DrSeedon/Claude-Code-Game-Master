@@ -177,7 +177,7 @@ save_to_world() {
 
     echo
     echo "Content saved to world state."
-    echo "Check the active campaign's npcs.json and locations.json files"
+    echo "Check the active campaign's world.json"
 }
 
 review_content() {
@@ -247,7 +247,7 @@ archive_extracted() {
 
     if [ -z "$campaign_name" ]; then
         # Try to get active campaign
-        campaign_name=$(cat "$WORLD_STATE_BASE/active-campaign.txt" 2>/dev/null)
+        campaign_name=$(get_active_campaign)
         if [ -z "$campaign_name" ]; then
             echo "Error: No campaign specified and no active campaign found."
             echo "Usage: dm-extract.sh archive <campaign-name>"
@@ -320,7 +320,7 @@ validate_extraction() {
 
     if [ -z "$campaign_name" ]; then
         # Try to get active campaign
-        campaign_name=$(cat "$WORLD_STATE_BASE/active-campaign.txt" 2>/dev/null)
+        campaign_name=$(get_active_campaign)
         if [ -z "$campaign_name" ]; then
             echo "Error: No campaign specified and no active campaign found."
             echo "Usage: dm-extract.sh validate <campaign-name>"

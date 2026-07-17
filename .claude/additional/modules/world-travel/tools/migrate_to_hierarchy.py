@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Migration: convert _vehicle fields to hierarchy fields in locations.json."""
+"""Convert legacy vehicle metadata on WorldGraph locations to hierarchy fields."""
 
 import sys
-import json
-import shutil
 from pathlib import Path
 
 
@@ -15,16 +13,17 @@ def _find_project_root() -> Path:
 
 
 PROJECT_ROOT = _find_project_root()
+MODULE_LIB = PROJECT_ROOT / ".claude" / "additional" / "modules" / "world-travel" / "lib"
+sys.path.insert(0, str(MODULE_LIB))
+
+from world_travel_store import WorldTravelStore
 
 
 def migrate_campaign(campaign_dir: Path, dry_run: bool = False) -> dict:
-    locations_file = campaign_dir / "locations.json"
-
-    if not locations_file.exists():
-        return {"skipped": True, "reason": "no locations.json"}
-
-    with open(locations_file, encoding="utf-8") as f:
-        locations = json.load(f)
+    store = WorldTravelStore(campaign_dir)
+    locations = store.load_locations()
+    if not locations:
+        return {"skipped": True, "reason": "no WorldGraph locations"}
 
     changed = 0
     type_set = 0
@@ -93,11 +92,7 @@ def migrate_campaign(campaign_dir: Path, dry_run: bool = False) -> dict:
         return {"skipped": True, "reason": "nothing to migrate"}
 
     if not dry_run:
-        backup = locations_file.with_suffix(".json.bak")
-        shutil.copy2(locations_file, backup)
-
-        with open(locations_file, "w", encoding="utf-8") as f:
-            json.dump(locations, f, ensure_ascii=False, indent=2)
+        store.save_locations(locations)
 
     return {
         "migrated": changed,
@@ -120,14 +115,27 @@ def main():
     if args.all:
         targets = [d for d in campaigns_dir.iterdir() if d.is_dir()]
     elif args.campaign:
-        targets = [campaigns_dir / args.campaign]
+        from lib.campaign_context import resolve_campaign_dir
+
+        try:
+            targets = [
+                resolve_campaign_dir(
+                    campaigns_dir, args.campaign, must_exist=True
+                )
+            ]
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"[ERROR] {exc}")
+            sys.exit(1)
     else:
-        active_file = PROJECT_ROOT / "world-state" / "active-campaign.txt"
-        if not active_file.exists():
+        from lib.campaign_context import scoped_campaign_name
+
+        name = scoped_campaign_name(PROJECT_ROOT / "world-state")
+        if not name:
             print("[ERROR] No active campaign and --campaign not specified")
             sys.exit(1)
-        name = active_file.read_text().strip()
-        targets = [campaigns_dir / name]
+        from lib.campaign_context import resolve_campaign_dir
+
+        targets = [resolve_campaign_dir(campaigns_dir, name, must_exist=True)]
 
     for campaign_dir in targets:
         if not campaign_dir.exists():

@@ -11,6 +11,7 @@ D&D 5e rules give the story stakes and consequences. You don't need to know D&D.
 ## Getting Started
 
 **Prerequisites:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+or Codex with repository skill support.
 
 ```bash
 git clone https://github.com/Sstobo/Claude-Code-Game-Master.git
@@ -21,8 +22,9 @@ cd Claude-Code-Game-Master
 Once installed:
 
 1: Optional: drop a PDF or text file into `source-material/`
-2. Run `claude` to launch Claude Code
-3. Type `/new-game` — choose **Classic** for the classic experience, or if youre feeling brave, **Advanced** to configure modules 
+2. Launch Claude Code or Codex in the repository.
+3. Ask for `/new-game`. In Codex, slash commands are intent aliases handled by
+   `codex-skills/dm/`; they do not need native command registration.
 
 ---
 
@@ -52,10 +54,9 @@ At campaign creation you get a module selection menu, narrator style picker, and
 
 | Module | What it does | Good for |
 |--------|-------------|----------|
-| 🌍 **world-travel** | Spatial world simulation: real XY coordinates, A\* pathfinding, travel time by distance + speed. Auto-runs encounter checks on move. ASCII map, minimap, GUI. | Any campaign with a real map |
-| 🎭 **custom-stats** | Any custom stat — mana, sanity, hunger, radiation, reputation. Per-hour decay/gain, conditional effects, per-tick simulation. Zero hardcoded names. | STALKER, Fallout, survival horror |
+| 🧭 **world-travel** | Coordinate navigation, route finding, travel time, random encounters, hierarchical interiors, vehicles, and ASCII/GUI maps. | Open worlds, wilderness travel, ships, and settlements |
 | ⚔️ **firearms-combat** | Automated combat resolver. RPM → shots per round, fire modes (single/burst/full\_auto), PEN vs PROT damage scaling, subclass bonuses. | Modern or military campaigns |
-| 📦 **inventory-system** | Atomic multi-change transactions (`--gold --hp --xp --add --remove` in one command). Stackable items with quantities. Unique items with automatic validation. | All campaigns |
+| 🛡️ **mass-combat** | Individual unit tracking, group attacks, AOE damage, cover, and battle XP for large encounters. | Squad and army-scale battles |
 
 Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module.json`. Drop a folder into `.claude/additional/modules/` to install community modules.
 
@@ -99,7 +100,12 @@ When you import a document, the system vectorizes it with ChromaDB and spawns ex
 
 Everything persists. NPCs remember what you said last session. Consequences fire days later in-game time. Locations change as events unfold. Save and restore at any point.
 
-Specialist agents spin up on the fly — monster stats, spell mechanics, loot tables, equipment databases. The player sees only the story. It uses the [D&D 5e API](https://www.dnd5eapi.co/) for official rules, spellbooks, monsters, and equipment.
+Specialist playbooks load on demand for monster stats, spell mechanics, loot
+tables, and equipment. They can be delegated to subagents for independent
+work, but normal gameplay does not require a permanent worker process. The
+player sees only the story. The system uses the
+[D&D 5e API](https://www.dnd5eapi.co/) for official rules, spellbooks,
+monsters, and equipment.
 
 ---
 
@@ -125,6 +131,8 @@ Specialist agents spin up on the fly — monster stats, spell mechanics, loot ta
 |------|---------|
 | `dm-campaign.sh` | Create, list, switch campaigns |
 | `dm-session.sh` | Session lifecycle, movement, save/restore |
+| `dm-scene.sh` | Apply a complete movement/time/quest/consequence scene transition |
+| `dm-world.sh` | Unified low-level WorldGraph CLI |
 | `dm-player.sh` | HP, XP, gold, inventory, conditions |
 | `dm-npc.sh` | NPC creation, updates, party management |
 | `dm-location.sh` | Locations and connections |
@@ -137,7 +145,7 @@ Specialist agents spin up on the fly — monster stats, spell mechanics, loot ta
 | `dm-note.sh` | Record world facts |
 | `dm-overview.sh` | World state summary |
 
-Advanced module tools (`dm-inventory.sh`, `dm-combat.sh`, `dm-map.sh`, `dm-encounter.sh`, `dm-navigation.sh`, `dm-vehicle.sh`, `dm-survival.sh`) are available when the relevant module is enabled for a campaign.
+Advanced module tools (`dm-combat.sh`, `dm-mass-combat.sh`) are available when the relevant module is enabled for a campaign.
 
 ---
 
@@ -164,16 +172,23 @@ CORE (vanilla)                   ADVANCED (opt-in, per campaign)
 ──────────────                   ───────────────────────────────
 lib/                             .claude/additional/
 tools/                             ├── modules/          ← gameplay modules
-.claude/commands/                  │   ├── custom-stats/
-                                   │   ├── world-travel/
-                                   │   ├── inventory-system/
-                                   │   └── firearms-combat/
+.claude/commands/                  │   ├── firearms-combat/
+                                   │   ├── mass-combat/
+                                   │   └── world-travel/
                                    ├── infrastructure/   ← dispatch, narrator, rules
                                    ├── dm-slots/         ← vanilla DM rules
                                    └── narrator-styles/  ← narrator presets
 ```
 
-The vanilla core (`lib/`, `tools/`) is never modified by modules. Advanced features hook in via middleware — enabled per campaign, invisible when not active. A campaign's `advanced_mode` flag in `campaign-overview.json` determines which path `/dm` takes.
+The vanilla core (`lib/`, `tools/`) is never modified by modules. Advanced features are enabled through the campaign's `modules` list in `campaign-overview.json`; middleware is optional and declared by each module.
+
+Claude command files and the Codex DM skill are thin client adapters. Both use
+the same tools, compiled rules, modules, and campaign data under
+`.claude/additional/`.
+
+See [docs/architecture.ru.md](docs/architecture.ru.md) for the current business
+logic, storage boundaries, migration model, and guidance on where changes
+belong.
 
 ---
 

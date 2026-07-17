@@ -23,7 +23,8 @@ print('1' if loader.is_module_enabled('$module_id') else '0')
 
 # Dispatch to module middleware
 # Usage: dispatch_middleware <tool-name> [args...]
-# Returns 0 if a middleware handled the call, 1 if CORE should handle
+# Returns 0 for handled success, 64 when no middleware applies, or the
+# middleware's non-zero status for a handled failure.
 dispatch_middleware() {
     local tool="$1"
     shift
@@ -36,11 +37,11 @@ dispatch_middleware() {
         fi
         bash "$mw" "$@"
         local rc=$?
-        if [ $rc -eq 0 ]; then
-            return 0
+        if [ $rc -ne 64 ]; then
+            return $rc
         fi
     done
-    return 1
+    return 64
 }
 
 # Post-hook: called AFTER CORE runs. All enabled middlewares get a chance.
@@ -55,7 +56,9 @@ dispatch_middleware_post() {
         if ! _module_enabled "$module_id"; then
             continue
         fi
-        bash "$mw" "$@" || true
+        if ! bash "$mw" "$@"; then
+            echo "[WARNING] Module post-hook failed: $mw" >&2
+        fi
     done
 }
 

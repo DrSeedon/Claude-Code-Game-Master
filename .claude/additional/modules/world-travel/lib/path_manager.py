@@ -7,12 +7,11 @@ Caches DM decisions about routes between locations
 import sys
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from pathlib import Path
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.json_ops import JsonOperations
 from lib.module_data import ModuleDataManager
 from connection_utils import get_connection_between
 
@@ -20,13 +19,14 @@ MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from pathfinding import PathFinder
+from world_travel_store import WorldTravelStore
 
 
 class PathManager:
     """Manages path preferences and intelligent navigation decisions"""
 
     def __init__(self, campaign_dir: str):
-        self.json_ops = JsonOperations(campaign_dir)
+        self.store = WorldTravelStore(campaign_dir)
         self.module_data_mgr = ModuleDataManager(Path(campaign_dir))
         self.pf = PathFinder()
 
@@ -35,9 +35,8 @@ class PathManager:
         return config.get("path_preferences", {})
 
     def _save_path_preferences(self, preferences: Dict):
-        config = self.module_data_mgr.load("world-travel")
-        config["path_preferences"] = preferences
-        self.module_data_mgr.save("world-travel", config)
+        with self.module_data_mgr.transaction("world-travel") as config:
+            config["path_preferences"] = preferences
 
     def _get_preference_key(self, from_loc: str, to_loc: str) -> str:
         """Generate canonical key for location pair (alphabetically sorted)"""
@@ -73,20 +72,19 @@ class PathManager:
             route: Path to use if decision is "use_route"
             reason: Optional explanation for the decision
         """
-        preferences = self._load_path_preferences()
         key = self._get_preference_key(from_loc, to_loc)
-
-        preferences[key] = {
+        entry = {
             "decision": decision,
             "decided_at": datetime.utcnow().isoformat() + "Z",
         }
 
         if route is not None:
-            preferences[key]["route"] = route
+            entry["route"] = route
         if reason is not None:
-            preferences[key]["reason"] = reason
+            entry["reason"] = reason
 
-        self._save_path_preferences(preferences)
+        with self.module_data_mgr.transaction("world-travel") as config:
+            config.setdefault("path_preferences", {})[key] = entry
 
     def analyze_route_options(self, from_loc: str, to_loc: str) -> Dict:
         """
@@ -108,7 +106,7 @@ class PathManager:
                 ]
             }
         """
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if from_loc not in locations or to_loc not in locations:
             return {"error": "Location not found"}
@@ -191,7 +189,7 @@ class PathManager:
                 "message": analysis["error"]
             }
 
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
         conn = get_connection_between(from_loc, to_loc, locations)
         if conn and conn.get('distance_meters'):
             return {

@@ -9,9 +9,17 @@ Provides load/save + auto-migration from campaign-overview.json for modules
 that previously stored config there.
 """
 
-import json
+import re
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Optional
+
+from lib.campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    scoped_campaign_name,
+)
+from lib.json_ops import JsonOperations
 
 
 class ModuleDataManager:
@@ -25,28 +33,31 @@ class ModuleDataManager:
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, module_id: str) -> Path:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", module_id):
+            raise ValueError(f"Invalid module id: {module_id!r}")
         return self.data_dir / f"{module_id}.json"
 
     def load(self, module_id: str) -> Dict:
-        p = self.path_for(module_id)
-        if not p.exists():
-            return {}
-        try:
-            with open(p, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return {}
+        self.path_for(module_id)
+        return JsonOperations(str(self.data_dir)).load_json(
+            f"{module_id}.json", {}
+        )
 
     def save(self, module_id: str, data: Dict) -> bool:
         self._ensure_dir()
-        p = self.path_for(module_id)
-        try:
-            with open(p, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to save module data '{module_id}': {e}")
-            return False
+        self.path_for(module_id)
+        return JsonOperations(str(self.data_dir)).save_json(
+            f"{module_id}.json", data
+        )
+
+    @contextmanager
+    def transaction(self, module_id: str):
+        self._ensure_dir()
+        self.path_for(module_id)
+        with JsonOperations(str(self.data_dir)).transaction(
+            f"{module_id}.json"
+        ) as data:
+            yield data
 
     def exists(self, module_id: str) -> bool:
         return self.path_for(module_id).exists()
@@ -66,15 +77,13 @@ class ModuleDataManager:
     @classmethod
     def from_world_state(cls, world_state_dir: str = "world-state") -> Optional["ModuleDataManager"]:
         ws = Path(world_state_dir)
-        active_file = ws / "active-campaign.txt"
-        if not active_file.exists():
-            return None
-        name = active_file.read_text().strip()
-        if not name:
-            return None
-        campaign_dir = ws / "campaigns" / name
-        if not campaign_dir.exists():
+        try:
+            name = scoped_campaign_name(ws)
+            if not name:
+                return None
+            campaign_dir = resolve_campaign_dir(
+                ws / "campaigns", name, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
             return None
         return cls(campaign_dir)
-
-

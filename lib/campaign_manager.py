@@ -9,12 +9,18 @@ import json
 import shutil
 from typing import Dict, List, Optional, Any
 from pathlib import Path
-from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from colors import tag_success, tag_error, tag_warning
 from world_graph import WorldGraph
+from campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    scoped_campaign_name,
+    validate_campaign_name,
+)
+from campaign_schema import build_campaign_overview, build_player_data
 
 
 def _get_player_node(campaign_dir: Path) -> Optional[Dict[str, Any]]:
@@ -92,17 +98,17 @@ class CampaignManager:
         Get the currently active campaign name
         Returns None if no active campaign is set
         """
-        if not self.active_file.exists():
-            return None
-
         try:
-            campaign_name = self.active_file.read_text().strip()
-            # Verify the campaign actually exists
-            campaign_path = self.campaigns_dir / campaign_name
+            campaign_name = scoped_campaign_name(self.world_state_dir)
+            if not campaign_name:
+                return None
+            campaign_path = resolve_campaign_dir(
+                self.campaigns_dir, campaign_name, must_exist=True
+            )
             if campaign_path.is_dir():
                 return campaign_name
             return None
-        except IOError:
+        except (IOError, InvalidCampaignName, FileNotFoundError):
             return None
 
     def set_active(self, name: str) -> bool:
@@ -110,29 +116,42 @@ class CampaignManager:
         Set the active campaign by name
         Returns True on success, False if campaign doesn't exist
         """
-        campaign_path = self.campaigns_dir / name
-        if not campaign_path.is_dir():
+        try:
+            safe_name = validate_campaign_name(name)
+            resolve_campaign_dir(self.campaigns_dir, safe_name, must_exist=True)
+        except (InvalidCampaignName, FileNotFoundError):
             print(tag_error(f"Campaign '{name}' does not exist"))
             return False
 
         try:
-            self.active_file.write_text(name)
-            print(tag_success(f"Active campaign set to: {name}"))
+            self.active_file.write_text(safe_name, encoding="utf-8")
+            print(tag_success(f"Active campaign set to: {safe_name}"))
             return True
         except IOError as e:
             print(tag_error(f"Failed to set active campaign: {e}"))
             return False
 
-    def create(self, name: str, campaign_name: str = None) -> Optional[Path]:
+    def create(
+        self,
+        name: str,
+        campaign_name: str = None,
+        *,
+        overview_updates: Optional[Dict[str, Any]] = None,
+        character: Optional[Dict[str, Any]] = None,
+        rules: str = "",
+    ) -> Optional[Path]:
         """
         Create a new campaign with empty state files
         name: folder name (typically character name, lowercase with hyphens)
         campaign_name: display name for the campaign
         Returns the campaign path on success, None on failure
         """
-        # Normalize name for folder
-        safe_name = name.lower().replace(' ', '-')
-        campaign_path = self.campaigns_dir / safe_name
+        try:
+            safe_name = validate_campaign_name(name.lower().replace(' ', '-'))
+            campaign_path = resolve_campaign_dir(self.campaigns_dir, safe_name)
+        except InvalidCampaignName as exc:
+            print(tag_error(str(exc)))
+            return None
 
         if campaign_path.exists():
             print(tag_error(f"Campaign '{safe_name}' already exists"))
@@ -145,7 +164,13 @@ class CampaignManager:
             (campaign_path / "extracted").mkdir()
 
             # Initialize empty state files
-            self._init_empty_files(campaign_path, campaign_name or f"{name}'s Adventure")
+            self._init_empty_files(
+                campaign_path,
+                campaign_name or f"{name}'s Adventure",
+                overview_updates=overview_updates,
+                character=character,
+                rules=rules,
+            )
 
             print(tag_success(f"Created campaign: {safe_name}"))
             return campaign_path
@@ -162,28 +187,58 @@ class CampaignManager:
         Requires confirm=True to actually delete
         Returns True on success
         """
-        campaign_path = self.campaigns_dir / name
-
-        if not campaign_path.is_dir():
+        try:
+            safe_name = validate_campaign_name(name)
+            campaign_path = resolve_campaign_dir(
+                self.campaigns_dir, safe_name, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
             print(tag_error(f"Campaign '{name}' does not exist"))
             return False
 
         if not confirm:
-            print(tag_warning(f"This will permanently delete campaign '{name}'"))
+            print(tag_warning(f"This will permanently delete campaign '{safe_name}'"))
             print(f"  Path: {campaign_path}")
             print("  Use confirm=True to proceed")
             return False
 
         try:
             # If this is the active campaign, clear active file
-            if self.get_active() == name:
+            if self.get_active() == safe_name:
                 self.active_file.unlink(missing_ok=True)
 
             shutil.rmtree(campaign_path)
-            print(tag_success(f"Deleted campaign: {name}"))
+            print(tag_success(f"Deleted campaign: {safe_name}"))
             return True
         except IOError as e:
             print(tag_error(f"Failed to delete campaign: {e}"))
+            return False
+
+    def reset(self, name: str = None) -> bool:
+        """Replace one campaign directory with a freshly initialized campaign."""
+        target_name = name or self.get_active()
+        if not target_name:
+            print(tag_error("No active campaign"))
+            return False
+        try:
+            safe_name = validate_campaign_name(target_name)
+            campaign_path = resolve_campaign_dir(
+                self.campaigns_dir, safe_name, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
+            print(tag_error(f"Campaign '{target_name}' does not exist"))
+            return False
+
+        try:
+            shutil.rmtree(campaign_path)
+            campaign_path.mkdir(parents=True)
+            (campaign_path / "saves").mkdir()
+            (campaign_path / "extracted").mkdir()
+            self._init_empty_files(campaign_path, "New Campaign")
+            print(tag_success(f"Reset campaign: {safe_name}"))
+            return True
+        except OSError as exc:
+            print(tag_error(f"Failed to reset campaign: {exc}"))
             return False
 
     def get_campaign_path(self, name: str = None) -> Optional[Path]:
@@ -197,20 +252,17 @@ class CampaignManager:
             if name is None:
                 return None
 
-        campaign_path = self.campaigns_dir / name
-        if campaign_path.is_dir():
-            return campaign_path
-        return None
+        try:
+            return resolve_campaign_dir(self.campaigns_dir, name, must_exist=True)
+        except (InvalidCampaignName, FileNotFoundError):
+            return None
 
     def get_active_campaign_dir(self) -> Optional[Path]:
         """
         Get the directory for the active campaign.
         Returns None if no active campaign is set.
         """
-        active = self.get_active()
-        if active:
-            return self.campaigns_dir / active
-        return None
+        return self.get_campaign_path()
 
     def get_info(self, name: str = None) -> Optional[Dict[str, Any]]:
         """
@@ -223,8 +275,11 @@ class CampaignManager:
                 print(tag_error("No active campaign set"))
                 return None
 
-        campaign_path = self.campaigns_dir / name
-        if not campaign_path.is_dir():
+        try:
+            campaign_path = resolve_campaign_dir(
+                self.campaigns_dir, name, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
             print(tag_error(f"Campaign '{name}' does not exist"))
             return None
 
@@ -267,7 +322,16 @@ class CampaignManager:
 
         return info
 
-    def init_campaign_files(self, campaign_path: Path, campaign_name: str, preserve_existing: bool = False):
+    def init_campaign_files(
+        self,
+        campaign_path: Path,
+        campaign_name: str,
+        preserve_existing: bool = False,
+        *,
+        overview_updates: Optional[Dict[str, Any]] = None,
+        character: Optional[Dict[str, Any]] = None,
+        rules: str = "",
+    ):
         """
         Initialize campaign files in an existing directory.
         Public wrapper for _init_empty_files for use by other modules.
@@ -277,9 +341,25 @@ class CampaignManager:
             campaign_name: Display name for the campaign
             preserve_existing: If True, don't overwrite files that already exist
         """
-        self._init_empty_files(campaign_path, campaign_name, preserve_existing)
+        self._init_empty_files(
+            campaign_path,
+            campaign_name,
+            preserve_existing,
+            overview_updates=overview_updates,
+            character=character,
+            rules=rules,
+        )
 
-    def _init_empty_files(self, campaign_path: Path, campaign_name: str, preserve_existing: bool = False):
+    def _init_empty_files(
+        self,
+        campaign_path: Path,
+        campaign_name: str,
+        preserve_existing: bool = False,
+        *,
+        overview_updates: Optional[Dict[str, Any]] = None,
+        character: Optional[Dict[str, Any]] = None,
+        rules: str = "",
+    ):
         """Initialize empty state files for a new campaign
 
         Args:
@@ -291,44 +371,43 @@ class CampaignManager:
         # campaign-overview.json
         overview_path = campaign_path / "campaign-overview.json"
         if not preserve_existing or not overview_path.exists():
-            overview = {
-                "campaign_name": campaign_name,
-                "genre": "Fantasy",
-                "tone": {
-                    "horror": 30,
-                    "comedy": 30,
-                    "drama": 40
-                },
-                "current_date": "1st of the First Month, Year 1",
-                "time_of_day": "Morning",
-                "player_position": {
-                    "current_location": None,
-                    "previous_location": None
-                },
-                "current_character": None,
-                "session_count": 0
-            }
+            overview = build_campaign_overview(
+                campaign_path.name,
+                campaign_name,
+                overview_updates,
+            )
             with open(overview_path, 'w', encoding='utf-8') as f:
                 json.dump(overview, f, indent=2, ensure_ascii=False)
 
         # world.json (WorldGraph — unified entity store)
         world_path = campaign_path / "world.json"
         if not preserve_existing or not world_path.exists():
-            with open(world_path, 'w', encoding='utf-8') as f:
-                json.dump({"nodes": {}, "edges": []}, f, indent=2, ensure_ascii=False)
+            world_graph = WorldGraph(campaign_path)
+            if preserve_existing:
+                world_graph.ensure_initialized()
+            else:
+                world_graph.reset()
+            if character:
+                player_name, player_data = build_player_data(character)
+                world_graph.add_node(
+                    "player:active", "player", player_name, player_data
+                )
 
         # campaign-rules.md - campaign-specific DM rules (ability costs, setting mechanics, etc.)
         rules_path = campaign_path / "campaign-rules.md"
         if not preserve_existing or not rules_path.exists():
             if not rules_path.exists():
                 with open(rules_path, 'w', encoding='utf-8') as f:
-                    f.write(f"# Campaign Rules — {campaign_name}\n\n")
-                    f.write("Campaign-specific rules for the DM. Add setting mechanics, ability costs, faction rules, etc.\n\n")
-                    f.write("---\n\n")
-                    f.write("## Ability Costs\n\n")
-                    f.write("<!-- List custom stat costs per ability here -->\n\n")
-                    f.write("## Setting Rules\n\n")
-                    f.write("<!-- Campaign-specific mechanics -->\n\n")
+                    f.write(f"# Campaign Rules - {campaign_name}\n\n")
+                    if rules.strip():
+                        f.write(rules.strip() + "\n")
+                    else:
+                        f.write("Campaign-specific rules for the DM. Add setting mechanics, ability costs, faction rules, etc.\n\n")
+                        f.write("---\n\n")
+                        f.write("## Ability Costs\n\n")
+                        f.write("<!-- List custom stat costs per ability here -->\n\n")
+                        f.write("## Setting Rules\n\n")
+                        f.write("<!-- Campaign-specific mechanics -->\n\n")
 
         # session-log.md - ALWAYS preserve if exists (append only)
         session_log_path = campaign_path / "session-log.md"
@@ -365,6 +444,9 @@ def main():
     delete_parser = subparsers.add_parser('delete', help='Delete a campaign')
     delete_parser.add_argument('name', help='Campaign name to delete')
     delete_parser.add_argument('--confirm', action='store_true', help='Confirm deletion')
+
+    reset_parser = subparsers.add_parser('reset', help='Reset a campaign to empty state')
+    reset_parser.add_argument('name', nargs='?', help='Campaign name (defaults to active)')
 
     # Get campaign info
     info_parser = subparsers.add_parser('info', help='Get campaign info')
@@ -424,6 +506,10 @@ def main():
 
     elif args.action == 'delete':
         if not manager.delete(args.name, confirm=args.confirm):
+            sys.exit(1)
+
+    elif args.action == 'reset':
+        if not manager.reset(args.name):
             sys.exit(1)
 
     elif args.action == 'info':

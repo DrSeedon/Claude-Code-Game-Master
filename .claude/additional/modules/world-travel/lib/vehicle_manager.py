@@ -14,9 +14,7 @@ def _find_project_root() -> Path:
     raise RuntimeError("pyproject.toml not found")
 
 PROJECT_ROOT = _find_project_root()
-sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-
-from json_ops import JsonOperations
+sys.path.insert(0, str(PROJECT_ROOT))
 from connection_utils import add_canonical_connection, remove_canonical_connection, get_connections
 from pathfinding import PathFinder
 
@@ -25,6 +23,7 @@ if str(MODULE_LIB) not in sys.path:
     sys.path.insert(0, str(MODULE_LIB))
 
 from hierarchy_manager import HierarchyManager
+from world_travel_store import WorldTravelStore, active_campaign_dir
 
 
 class VehicleManager:
@@ -32,13 +31,13 @@ class VehicleManager:
 
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
-        self.ops = JsonOperations(str(campaign_dir))
+        self.store = WorldTravelStore(campaign_dir)
         self.hierarchy = HierarchyManager(str(campaign_dir))
 
     def register_vehicle(self, anchor_name: str, vehicle_id: str, vehicle_type: str,
                          dock_room: str, proximity_radius: int = 5000,
                          max_dock_connections: int = 3) -> bool:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         if anchor_name not in locations:
             return False
 
@@ -58,12 +57,12 @@ class VehicleManager:
             locations[anchor_name]["entry_points"].append(dock_room)
         locations[anchor_name]["mobile"] = True
 
-        self.ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
         return True
 
     def add_room(self, vehicle_id: str, room_name: str, description: Optional[str],
                  from_room: str, bearing: float, distance: float) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if from_room not in locations:
             return {"success": False, "error": f"Room '{from_room}' not found"}
@@ -94,11 +93,11 @@ class VehicleManager:
 
         add_canonical_connection(from_room, room_name, locations,
                                 distance_meters=distance, bearing=bearing, terrain="internal")
-        self.ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
         return {"success": True, "room": room_name, "coordinates": coords}
 
     def board_vehicle(self, vehicle_id: str, room: Optional[str] = None) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         anchor_name = self._get_anchor(vehicle_id, locations)
         if not anchor_name:
             return {"success": False, "error": f"Vehicle '{vehicle_id}' not found"}
@@ -118,7 +117,7 @@ class VehicleManager:
         if status["map_context"] != "local":
             return {"success": False, "error": "Not inside vehicle"}
 
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         anchor_name = self._get_anchor(status["vehicle_id"], locations)
         if not anchor_name:
             return {"success": False, "error": "Vehicle anchor not found"}
@@ -132,7 +131,7 @@ class VehicleManager:
         if status["map_context"] != "local":
             return {"success": False, "error": "Not inside vehicle"}
 
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         rooms = self._get_rooms(status["vehicle_id"], locations)
         anchor_name = self._get_anchor(status["vehicle_id"], locations)
 
@@ -147,7 +146,7 @@ class VehicleManager:
 
     def move_vehicle(self, vehicle_id: str, destination: Optional[str] = None,
                      x: Optional[float] = None, y: Optional[float] = None) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         anchor_name = self._get_anchor(vehicle_id, locations)
         if not anchor_name:
             return {"success": False, "error": f"Vehicle '{vehicle_id}' not found"}
@@ -204,7 +203,7 @@ class VehicleManager:
         if ps["map_context"] == "local" and ps["vehicle_id"] == vehicle_id:
             player_status = "inside"
 
-        self.ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
         result = {
             "success": True,
             "vehicle_id": vehicle_id,
@@ -219,7 +218,7 @@ class VehicleManager:
         return result
 
     def _sync_hierarchy_enter(self, anchor_name: str, target_room: str) -> None:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         anchor_data = locations.get(anchor_name, {})
         eps = anchor_data.get("entry_points", [])
         if target_room in eps:
@@ -229,10 +228,7 @@ class VehicleManager:
             self._sync_hierarchy_position(target_room, stack)
 
     def _sync_hierarchy_position(self, location: str, stack: List[str]) -> None:
-        overview = self.ops.load_json("campaign-overview.json")
-        pp = overview.setdefault("player_position", {})
-        pp["location_stack"] = stack
-        self.ops.save_json("campaign-overview.json", overview)
+        self.store.update_player_position({"location_stack": stack})
 
     def _rebuild_external_connections(self, anchor_name: str, locations: Dict) -> List[str]:
         vehicle_data = locations[anchor_name].get("_vehicle", {})
@@ -294,18 +290,14 @@ class VehicleManager:
 
     def _update_player_position(self, current_location: str, map_context: str,
                                 vehicle_id: Optional[str]) -> None:
-        overview = self.ops.load_json("campaign-overview.json")
-        pp = overview.setdefault("player_position", {})
-        pp["current_location"] = current_location
-        pp["map_context"] = map_context
-        if vehicle_id is not None:
-            pp["vehicle_id"] = vehicle_id
-        else:
-            pp.pop("vehicle_id", None)
-        self.ops.save_json("campaign-overview.json", overview)
+        self.store.update_player_position({
+            "current_location": current_location,
+            "map_context": map_context,
+            "vehicle_id": vehicle_id,
+        })
 
     def _get_player_vehicle_status(self) -> Dict[str, Any]:
-        overview = self.ops.load_json("campaign-overview.json")
+        overview = self.store.load_overview()
         pp = overview.get("player_position", {})
         return {
             "current_location": pp.get("current_location"),
@@ -314,7 +306,7 @@ class VehicleManager:
         }
 
     def get_status(self, vehicle_id: Optional[str] = None) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         player = self._get_player_vehicle_status()
 
         if vehicle_id:
@@ -342,7 +334,7 @@ class VehicleManager:
         return {"vehicles": vehicles, "player_position": player}
 
     def list_vehicles(self) -> List[Dict[str, Any]]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         result = []
         for name, data in locations.items():
             v = data.get("_vehicle", {})
@@ -357,7 +349,7 @@ class VehicleManager:
         return result
 
     def get_internal_map_data(self, vehicle_id: str) -> Dict[str, Any]:
-        locations = self.ops.load_json("locations.json")
+        locations = self.store.load_locations()
         result = {}
         for name, data in locations.items():
             v = data.get("_vehicle", {})
@@ -368,14 +360,8 @@ class VehicleManager:
 
 if __name__ == "__main__":
     def get_campaign_dir():
-        project_root = _find_project_root()
-        active_file = project_root / "world-state" / "active-campaign.txt"
-        if active_file.exists():
-            name = active_file.read_text().strip()
-            d = project_root / "world-state" / "campaigns" / name
-            if d.exists():
-                return str(d)
-        return None
+        campaign = active_campaign_dir()
+        return str(campaign) if campaign else None
 
     campaign_dir = get_campaign_dir()
     if not campaign_dir:
@@ -487,7 +473,7 @@ if __name__ == "__main__":
         print(json.dumps(result, ensure_ascii=False))
 
     elif args.cmd == "is-room":
-        locations = vm.ops.load_json("locations.json")
+        locations = vm.store.load_locations()
         rooms = vm._get_rooms(args.vehicle_id, locations)
         print("true" if args.room_name in rooms else "false")
 

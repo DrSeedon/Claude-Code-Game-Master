@@ -64,7 +64,8 @@ bash .claude/additional/infrastructure/tools/dm-module.sh list-verbose
   💡 RECOMMENDED FOR THIS CAMPAIGN:
   Based on campaign name and tone, suggest which modules make
   sense. E.g. for survival/STALKER → firearms-combat + world-travel.
-  For classic D&D → no extras. For open world → world-travel + mass-combat.
+  For open-world exploration → world-travel. For classic D&D → no extras.
+  For large battles → mass-combat.
   Write 1-2 sentences why each suggested module fits the vibe.
 
   ℹ️  Custom stats (hunger, mana, sanity, reputation etc.) are CORE
@@ -99,9 +100,9 @@ bash .claude/additional/infrastructure/dm-active-modules-creation-rules.sh
 ```
 
 These rules tell you HOW to handle world-building for each active module:
-- **world-travel**: How to generate locations with coordinates and encounters
 - **firearms-combat**: Weapon presets and firearms system configuration
 - **mass-combat**: Unit templates and battle setup
+- **world-travel**: World scale, coordinates, travel speed, terrain, encounters, compounds, and vehicles
 
 **Note:** Custom stats (hunger, mana, sanity, reputation etc.) are CORE features — no module needed. Define them via `dm-world.sh custom-stat-define` or in campaign-rules.md.
 
@@ -275,7 +276,7 @@ Ask the user what currency system fits the setting:
 ================================================================
   CURRENCY SYSTEM
   ────────────────────────────────────────────────────────────
-  Default: D&D standard (медяк/серебряк/золотой, 1:10:100)
+  Default: D&D standard (copper/silver/gold, 1:10:100)
 
   Options:
   [1] D&D standard (cp/sp/gp)
@@ -409,6 +410,54 @@ Store as `SETTING_TYPE`.
 
 ---
 
+## PHASE 4.5: WEIGHTED SCENARIO SECRETS
+
+Use this phase when the player wants a surprise, mystery, procedural uncertainty, or a campaign whose hidden truth should emerge through play.
+
+### 1. Establish the fixed premise
+
+Write a short player-facing premise containing only facts that are true in every possible scenario: starting place, visible faction, immediate role, and ordinary situation. The premise must remain valid regardless of the hidden result.
+
+### 2. Propose the primary-secret table
+
+- Create 3-8 mutually exclusive hidden explanations tailored to the premise, tone, genre, and selected modules.
+- Give each explanation an integer probability. The primary probabilities MUST total exactly 100%.
+- Each result must materially change factions, motives, threats, or future revelations rather than merely changing cosmetic details.
+- Show the table and its probabilities to the player before rolling. Let the player adjust or approve it unless they already delegated the distribution.
+
+### 3. Propose independent complications
+
+- Create 3-8 complications, each with its own percentage chance.
+- Complications are independent boolean rolls and may occur together or not at all. They do NOT need to total 100%.
+- State clearly which facts are guaranteed by the fixed premise and which are only possible complications.
+- Prefer complications that create new decisions: intervention by another faction, quarantine, betrayal, awakening technology, a deadline, or an uneasy alliance.
+
+### 4. Roll and persist without spoilers
+
+After approval, make one hidden `1d100` roll for the primary table and one hidden `1d100` roll per complication:
+
+```bash
+bash tools/dm-roll.sh 1d100 --label "Hidden primary scenario"
+bash tools/dm-roll.sh 1d100 --label "Hidden complication: <name>"
+```
+
+Map the primary roll to contiguous non-overlapping ranges covering 1-100. A complication occurs when its roll is less than or equal to its configured chance.
+
+Persist the complete result before generating the world:
+
+```bash
+bash tools/dm-note.sh "dm_secret" "Primary scenario: <result>; roll=<N>; table=<ranges>"
+bash tools/dm-note.sh "dm_secret" "Complication <name>: active|inactive; roll=<N>; chance=<P>%"
+```
+
+Never reveal a hidden roll, selected explanation, or inactive complication in player-facing narration. Reveal the truth only through earned clues, discoveries, faction actions, and consequences. If the player explicitly requests an open roll, show the roll and treat the result as player knowledge.
+
+### 5. Generate from the hidden truth
+
+Use the selected primary scenario and active complications to shape secret facts, NPC motives, plot hooks, consequences, and distant entities. Keep the opening scene consistent with the fixed premise and avoid immediately confirming the hidden explanation.
+
+---
+
 ## PHASE 5: WORLD GENERATION
 
 Display progress:
@@ -514,7 +563,7 @@ bash tools/dm-world.sh add-node "player:active" --name "Player" --type player --
 Create economy node for recurring mechanics (expenses, income, production, random events):
 
 ```bash
-bash tools/dm-world.sh add-node "campaign:economy" --name "Economy & Events" --type campaign --data '{"expenses": [], "income": [], "production": [], "random_events": {"enabled": false}}'
+bash tools/dm-world.sh add-node "misc:economy" --name "Economy & Events" --type misc --data '{"expenses": [], "income": [], "production": [], "random_events": {"enabled": false}}'
 ```
 
 ### Setup Custom Stats (if campaign template defines them)
@@ -666,7 +715,7 @@ Before transitioning to character creation, verify:
 
 - [ ] world.json exists with player node, locations, NPCs, quests
 - [ ] Player node in world.json (player:active)
-- [ ] Economy node in world.json (campaign:economy)
+- [ ] Economy node in world.json (`misc:economy`)
 - [ ] Starting location + 3-4 connected locations
 - [ ] All locations connected via paths
 - [ ] 6 NPCs with descriptions and locations

@@ -17,6 +17,35 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from pathfinding import PathFinder
 from path_intersect import check_path_intersection, find_route_with_waypoints
+from world_travel_store import WorldTravelStore
+
+
+def make_campaign(tmp_path):
+    campaign_dir = tmp_path / "test_campaign"
+    campaign_dir.mkdir()
+    store = WorldTravelStore(campaign_dir)
+    store.save_locations({
+        "Origin": {
+            "position": "Starting point",
+            "coordinates": {"x": 0, "y": 0},
+            "connections": [],
+            "blocked_ranges": [],
+        }
+    })
+    store.save_overview({
+        "campaign_name": "Test Campaign",
+        "player_position": {"current_location": "Origin"},
+    })
+    store.graph.add_node("player:active", "player", "Hero", {
+        "current_location": "Origin",
+        "speed_kmh": 4.0,
+    })
+    module_data_dir = campaign_dir / "module-data"
+    module_data_dir.mkdir()
+    (module_data_dir / "world-travel.json").write_text(json.dumps({
+        "path_preferences": {}
+    }))
+    return campaign_dir, store
 
 
 class TestPathFinder:
@@ -165,61 +194,18 @@ class TestNavigationIntegration:
         """Test NavigationManager initialization"""
         from navigation_manager import NavigationManager
 
-        campaign_dir = tmp_path / "test_campaign"
-        campaign_dir.mkdir()
-
-        # Create minimal campaign files
-        locations_file = campaign_dir / "locations.json"
-        overview_file = campaign_dir / "campaign-overview.json"
-
-        locations_file.write_text(json.dumps({
-            "Origin": {
-                "position": "Starting point",
-                "coordinates": {"x": 0, "y": 0},
-                "connections": []
-            }
-        }))
-
-        overview_file.write_text(json.dumps({
-            "campaign_name": "Test Campaign"
-        }))
-
-        module_data_dir = campaign_dir / "module-data"
-        module_data_dir.mkdir()
-        (module_data_dir / "world-travel.json").write_text(json.dumps({
-            "path_preferences": {}
-        }))
+        campaign_dir, _store = make_campaign(tmp_path)
 
         manager = NavigationManager(str(campaign_dir))
         assert manager is not None
+        assert not (campaign_dir / "locations.json").exists()
+        assert not (campaign_dir / "character.json").exists()
 
     def test_add_location_with_coordinates(self, tmp_path):
         """Test adding location with auto-calculated coordinates"""
         from navigation_manager import NavigationManager
 
-        campaign_dir = tmp_path / "test_campaign"
-        campaign_dir.mkdir()
-
-        locations_file = campaign_dir / "locations.json"
-        overview_file = campaign_dir / "campaign-overview.json"
-
-        locations_file.write_text(json.dumps({
-            "Origin": {
-                "position": "Starting point",
-                "coordinates": {"x": 0, "y": 0},
-                "connections": []
-            }
-        }))
-
-        overview_file.write_text(json.dumps({
-            "campaign_name": "Test Campaign"
-        }))
-
-        module_data_dir = campaign_dir / "module-data"
-        module_data_dir.mkdir()
-        (module_data_dir / "world-travel.json").write_text(json.dumps({
-            "path_preferences": {}
-        }))
+        campaign_dir, _store = make_campaign(tmp_path)
 
         manager = NavigationManager(str(campaign_dir))
 
@@ -242,24 +228,7 @@ class TestNavigationIntegration:
         """Test blocking and unblocking directions"""
         from navigation_manager import NavigationManager
 
-        campaign_dir = tmp_path / "test_campaign"
-        campaign_dir.mkdir()
-
-        locations_file = campaign_dir / "locations.json"
-        overview_file = campaign_dir / "campaign-overview.json"
-
-        locations_file.write_text(json.dumps({
-            "Origin": {
-                "position": "Starting point",
-                "coordinates": {"x": 0, "y": 0},
-                "connections": [],
-                "blocked_ranges": []
-            }
-        }))
-
-        overview_file.write_text(json.dumps({
-            "campaign_name": "Test Campaign"
-        }))
+        campaign_dir, store = make_campaign(tmp_path)
 
         manager = NavigationManager(str(campaign_dir))
 
@@ -268,7 +237,7 @@ class TestNavigationIntegration:
         assert success is True
 
         # Verify block was added
-        locations = json.loads(locations_file.read_text())
+        locations = store.load_locations()
         assert len(locations["Origin"]["blocked_ranges"]) == 1
         assert locations["Origin"]["blocked_ranges"][0]["from"] == 160
         assert locations["Origin"]["blocked_ranges"][0]["to"] == 200
@@ -279,8 +248,62 @@ class TestNavigationIntegration:
         assert success is True
 
         # Verify block was removed
-        locations = json.loads(locations_file.read_text())
+        locations = store.load_locations()
         assert len(locations["Origin"]["blocked_ranges"]) == 0
+
+    def test_connect_and_move_use_world_graph(self, tmp_path, monkeypatch):
+        from navigation_manager import NavigationManager
+
+        campaign_dir, store = make_campaign(tmp_path)
+        locations = store.load_locations()
+        locations["Destination"] = {
+            "position": "Road end",
+            "coordinates": {"x": 1000, "y": 0},
+            "connections": [],
+            "blocked_ranges": [],
+        }
+        store.save_locations(locations)
+        store.graph.add_node("npc:companion", "npc", "Companion", {
+            "party_member": True,
+        })
+
+        manager = NavigationManager(str(campaign_dir))
+        assert manager.connect_with_metadata(
+            "Origin", "Destination", "road", terrain="road", distance=1000
+        )
+        monkeypatch.setattr(manager, "_tick_survival_stats", lambda _elapsed: None)
+        monkeypatch.setattr(
+            manager, "_run_encounter_check", lambda *_args, **_kwargs: None
+        )
+
+        result = manager.move_with_navigation("Destination")
+
+        assert result["success"] is True
+        assert result["distance_meters"] == 1000
+        world = store.graph.repository.load()
+        assert world["nodes"]["player:active"]["data"]["current_location"] == "Destination"
+        assert {
+            (edge["from"], edge["to"])
+            for edge in world["edges"]
+            if edge["type"] == "at"
+        } == {("npc:companion", "location:destination")}
+        assert store.load_overview()["player_position"]["current_location"] == "Destination"
+        assert not (campaign_dir / "locations.json").exists()
+        assert not (campaign_dir / "character.json").exists()
+
+    def test_travel_advances_core_clock_and_world_ticks(self, tmp_path):
+        from navigation_manager import NavigationManager
+
+        campaign_dir, store = make_campaign(tmp_path)
+        store.graph.custom_stat_define("hunger", value=10, rate=2)
+        manager = NavigationManager(str(campaign_dir))
+
+        manager._tick_survival_stats(0.25)
+
+        overview = store.load_overview()
+        player = store.graph.get_node("player:active")
+        assert overview["precise_time"] == "08:15"
+        assert player["data"]["custom_stats"]["hunger"]["value"] == 10.5
 
 
 if __name__ == "__main__":

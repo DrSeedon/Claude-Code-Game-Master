@@ -5,15 +5,14 @@ Renders campaign maps with locations, connections, and current position
 """
 
 import sys
-import math
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple
 from pathlib import Path
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from lib.json_ops import JsonOperations
 from connection_utils import get_unique_edges
+from world_travel_store import WorldTravelStore, active_campaign_dir
 
 
 class MapRenderer:
@@ -74,7 +73,7 @@ class MapRenderer:
     }
 
     def __init__(self, campaign_dir: str):
-        self.json_ops = JsonOperations(campaign_dir)
+        self.store = WorldTravelStore(campaign_dir)
 
     def colorize(self, text: str, color_name: str, use_colors: bool = True) -> str:
         """Apply ANSI color to text"""
@@ -143,8 +142,8 @@ class MapRenderer:
             ASCII art string of the map
         """
         # Load data
-        locations = self.json_ops.load_json("locations.json") or {}
-        overview = self.json_ops.load_json("campaign-overview.json") or {}
+        locations = self.store.load_locations()
+        overview = self.store.load_overview()
 
         if not locations:
             return "[ERROR] No locations found"
@@ -277,7 +276,7 @@ class MapRenderer:
         if show_labels:
             lines.append("")
             lines.append("Locations:")
-            for loc_name, (gx, gy) in sorted(location_positions.items()):
+            for loc_name, (_gx, _gy) in sorted(location_positions.items()):
                 if loc_name == current_loc:
                     symbol = self.SYMBOLS['player']
                     if use_colors:
@@ -357,8 +356,8 @@ class MapRenderer:
             radius = MAX_RADIUS
 
         # Load data
-        locations = self.json_ops.load_json("locations.json") or {}
-        overview = self.json_ops.load_json("campaign-overview.json") or {}
+        locations = self.store.load_locations()
+        overview = self.store.load_overview()
         current_loc = overview.get('player_position', {}).get('current_location')
 
         if not current_loc or current_loc not in locations:
@@ -388,8 +387,6 @@ class MapRenderer:
             # Calculate relative position
             dx = coords['x'] - current_coords['x']
             dy = coords['y'] - current_coords['y']
-            distance = math.sqrt(dx**2 + dy**2)
-
             # Scale to minimap (1000m per cell)
             scale = 1000
             gx = center + int(round(dx / scale))
@@ -407,7 +404,7 @@ class MapRenderer:
         lines.append("╚" + "═" * size + "╝")
         lines.append(f"  {self.SYMBOLS['player']} = You ({current_loc})")
         lines.append(f"  {self.SYMBOLS['location']} = Location")
-        lines.append(f"  Scale: ~1km per cell")
+        lines.append("  Scale: ~1km per cell")
 
         return '\n'.join(lines)
 
@@ -427,15 +424,10 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine campaign directory
-    import os
-    active_campaign_file = Path("world-state/active-campaign.txt")
-    if not active_campaign_file.exists():
+    campaign_dir = active_campaign_dir()
+    if campaign_dir is None:
         print("[ERROR] No active campaign")
         sys.exit(1)
-
-    active_campaign = active_campaign_file.read_text().strip()
-    campaign_dir = Path(f"world-state/campaigns/{active_campaign}")
 
     renderer = MapRenderer(str(campaign_dir))
 

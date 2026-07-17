@@ -19,6 +19,7 @@ show_usage() {
     echo "  switch <name>         - Switch to a different campaign"
     echo "  create <name>         - Create a new campaign"
     echo "  delete <name>         - Delete a campaign (requires confirmation)"
+    echo "  reset                 - Back up and reset the active campaign"
     echo "  info [name]           - Show campaign details (defaults to active)"
     echo "  active                - Show active campaign name"
     echo "  path [name]           - Show campaign directory path"
@@ -101,7 +102,11 @@ case "$ACTION" in
         fi
         ;;
 
-    "")
+    "reset")
+        bash "$TOOLS_DIR/dm-reset.sh" archive
+        ;;
+
+    ""|"-h"|"--help"|"help")
         show_usage
         ;;
 

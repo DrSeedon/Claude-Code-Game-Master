@@ -7,6 +7,7 @@ Uses tmp_path for isolated campaign directories.
 import pytest
 import json
 import sys
+import importlib.util
 from pathlib import Path
 
 # Add PROJECT_ROOT to path
@@ -16,7 +17,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 MODULE_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(MODULE_ROOT / "lib"))
 
-from encounter_engine import EncounterEngine
+ENCOUNTER_MODULE_PATH = MODULE_ROOT / "lib" / "encounter_engine.py"
+MODULE_SPEC = importlib.util.spec_from_file_location(
+    "world_travel_encounter_engine",
+    ENCOUNTER_MODULE_PATH,
+)
+encounter_module = importlib.util.module_from_spec(MODULE_SPEC)
+sys.modules[MODULE_SPEC.name] = encounter_module
+MODULE_SPEC.loader.exec_module(encounter_module)
+EncounterEngine = encounter_module.EncounterEngine
 
 
 @pytest.fixture
@@ -53,31 +62,35 @@ def campaign_dir(tmp_path):
     with open(module_data_dir / "world-travel.json", "w") as f:
         json.dump(wt_config, f)
 
-    # Create character.json
-    character = {
-        "name": "Test Hero",
-        "abilities": {"dex": 14},
-        "skills": {"stealth": 5},
-        "custom_stats": {
-            "awareness": {"current": 70, "min": 0, "max": 100}
-        }
-    }
-    with open(campaign / "character.json", "w") as f:
-        json.dump(character, f)
-
-    # Create locations.json
-    locations = {
-        "Village": {
-            "coordinates": {"x": 0, "y": 0},
-            "connections": []
+    world = {
+        "meta": {"version": 2, "schema": "graph", "revision": 0},
+        "nodes": {
+            "player:active": {
+                "type": "player",
+                "name": "Test Hero",
+                "data": {
+                    "abilities": {"dex": 14, "luck": 14},
+                    "skills": {"stealth": 5},
+                    "custom_stats": {
+                        "awareness": {"value": 70, "min": 0, "max": 100}
+                    },
+                },
+            },
+            "location:village": {
+                "type": "location",
+                "name": "Village",
+                "data": {"coordinates": {"x": 0, "y": 0}},
+            },
+            "location:ruins": {
+                "type": "location",
+                "name": "Ruins",
+                "data": {"coordinates": {"x": 2000, "y": 0}},
+            },
         },
-        "Ruins": {
-            "coordinates": {"x": 2000, "y": 0},
-            "connections": []
-        }
+        "edges": [],
     }
-    with open(campaign / "locations.json", "w") as f:
-        json.dump(locations, f)
+    with open(campaign / "world.json", "w") as f:
+        json.dump(world, f)
 
     return campaign
 
@@ -188,6 +201,22 @@ def test_roll_encounter_nature(campaign_dir):
             assert nature['category'] == "Special"
 
 
+def test_roll_encounter_nature_uses_world_graph_luck(campaign_dir, monkeypatch):
+    wt_path = campaign_dir / "module-data" / "world-travel.json"
+    with open(wt_path, "r") as f:
+        config = json.load(f)
+    config['encounter_system']['use_luck'] = True
+    with open(wt_path, "w") as f:
+        json.dump(config, f)
+
+    monkeypatch.setattr(encounter_module, "dice_roll", lambda _expression: 10)
+    engine = EncounterEngine(str(campaign_dir))
+
+    nature = engine.roll_encounter_nature()
+
+    assert nature == {"roll": 12, "category": "Beneficial"}
+
+
 def test_check_journey_skipped_too_short(campaign_dir):
     """Test journey skip for distances below minimum"""
     engine = EncounterEngine(str(campaign_dir))
@@ -236,16 +265,24 @@ def test_waypoint_creation(campaign_dir):
         "Village", "Ruins", waypoint_data, journey
     )
 
-    # Check waypoint was created in locations.json
-    locations_path = campaign_dir / "locations.json"
-    with open(locations_path, "r") as f:
-        locations = json.load(f)
+    with open(campaign_dir / "world.json", "r") as f:
+        world = json.load(f)
+    waypoint_id, waypoint = next(
+        (node_id, node) for node_id, node in world["nodes"].items()
+        if node.get("name") == waypoint_name
+    )
+    waypoint_edges = [
+        edge for edge in world["edges"]
+        if waypoint_id in (edge.get("from"), edge.get("to"))
+    ]
 
-    assert waypoint_name in locations
-    waypoint = locations[waypoint_name]
-    assert waypoint['is_waypoint'] is True
-    assert waypoint['original_journey']['from'] == "Village"
-    assert waypoint['original_journey']['to'] == "Ruins"
+    assert waypoint['type'] == "location"
+    assert waypoint['data']['is_waypoint'] is True
+    assert waypoint['data']['original_journey']['from'] == "Village"
+    assert waypoint['data']['original_journey']['to'] == "Ruins"
+    assert len(waypoint_edges) == 4
+    assert all(edge["type"] == "connected" for edge in waypoint_edges)
+    assert not (campaign_dir / "locations.json").exists()
 
 
 def test_waypoint_cleanup(campaign_dir):
@@ -258,6 +295,10 @@ def test_waypoint_cleanup(campaign_dir):
     waypoint_name = engine.create_waypoint_location(
         "Village", "Ruins", waypoint_data, journey
     )
+    waypoint_id = next(
+        node["id"] for node in engine.store.graph.list_nodes("location")
+        if node.get("name") == waypoint_name
+    )
 
     # Verify it exists
     assert engine.is_waypoint(waypoint_name) is True
@@ -267,6 +308,18 @@ def test_waypoint_cleanup(campaign_dir):
 
     # Verify it's gone
     assert engine.is_waypoint(waypoint_name) is False
+    with open(campaign_dir / "world.json", "r") as f:
+        world = json.load(f)
+    assert all(
+        node.get("name") != waypoint_name
+        for node in world["nodes"].values()
+    )
+    assert all(
+        waypoint_id not in (edge.get("from"), edge.get("to"))
+        for edge in world["edges"]
+    )
+    assert "location:village" in world["nodes"]
+    assert "location:ruins" in world["nodes"]
 
 
 def test_is_waypoint(campaign_dir):

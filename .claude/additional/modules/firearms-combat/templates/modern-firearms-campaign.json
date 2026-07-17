@@ -78,21 +78,25 @@
           "penalty": 0
         },
         "burst": {
-          "description": "3-round burst",
-          "attacks": 3,
-          "ammo": 3,
-          "penalty_per_shot": -3,
-          "penalty_per_shot_sharpshooter": -2,
-          "comment": "2nd shot: -3, 3rd shot: -6 (or -2/-4 for Sharpshooter subclass)"
+          "description": "One-second controlled automatic fire",
+          "duration_seconds": 1,
+          "max_salvos_per_target": 3,
+          "max_salvos_total": 3,
+          "penalty_per_salvo": -2,
+          "penalty_per_salvo_sharpshooter": -1,
+          "max_hits_per_salvo": 3,
+          "hit_margin_per_extra_bullet": 5
         },
         "full_auto": {
-          "description": "Full automatic fire (empty magazine in 6 seconds)",
-          "attacks": "based_on_rpm",
-          "ammo": "full_magazine",
-          "penalty_per_shot": -3,
-          "penalty_per_shot_sharpshooter": -2,
-          "max_shots_per_target": 10,
-          "comment": "Progressive penalty per shot. Max 10 shots per target. Use dm-combat.sh resolve for auto-calculation."
+          "description": "Three-second sustained automatic fire",
+          "duration_seconds": 3,
+          "max_salvos_per_target": 6,
+          "max_salvos_total": 12,
+          "penalty_per_salvo": -2,
+          "penalty_per_salvo_sharpshooter": -1,
+          "max_hits_per_salvo": 3,
+          "hit_margin_per_extra_bullet": 5,
+          "comment": "Physical ammo spend is RPM-based; attack rolls are bounded salvos."
         }
       },
       "penetration_vs_armor": {
@@ -104,7 +108,7 @@
         }
       },
       "usage": {
-        "manual_combat": "Use standard D&D rolls with fire mode penalties from above",
+        "manual_combat": "Use one roll per salvo, margin-based bullet hits, and physical RPM ammo spend",
         "automated_combat": "bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve --weapon AKM --fire-mode full_auto --ammo 30 --targets Enemy:AC:HP:PROT"
       }
     },
@@ -370,7 +374,7 @@
       "features": [
         "Precise Shot: +2 to ranged attacks with firearms",
         "Quick Reload: Reload as bonus action",
-        "Controlled Bursts: -2 penalty instead of -3 per shot in burst/auto fire"
+        "Controlled Bursts: -1 recoil per salvo instead of -2 in automatic fire"
       ]
     },
     "Sniper": {

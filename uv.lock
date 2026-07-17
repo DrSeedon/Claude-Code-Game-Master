@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-07-04T15:56:46.542436832Z"
+exclude-newer = "2026-07-10T05:08:50.361431126Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -802,7 +802,11 @@ voice = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "black" },
+    { name = "mypy" },
+    { name = "pre-commit" },
     { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -829,7 +833,13 @@ requires-dist = [
 provides-extras = ["voice", "rag", "full", "dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest-cov", specifier = ">=7.0.0" }]
+dev = [
+    { name = "black", specifier = ">=23.0.0" },
+    { name = "mypy", specifier = ">=1.5.0" },
+    { name = "pre-commit", specifier = ">=3.4.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "ruff", specifier = ">=0.1.0" },
+]
 
 [[package]]
 name = "dnspython"

@@ -4,25 +4,26 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../infrastructure/common-module.sh"
 PROJECT_ROOT="$(find_project_root "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
 
-ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
+ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")}"
 [ -z "$ACTIVE" ] && exit 0
 
 CAMPAIGN_DIR="$PROJECT_ROOT/world-state/campaigns/$ACTIVE"
-LOCATIONS="$CAMPAIGN_DIR/locations.json"
 OVERVIEW="$CAMPAIGN_DIR/campaign-overview.json"
 TRAVEL_DATA="$CAMPAIGN_DIR/module-data/world-travel.json"
 
-[ -f "$LOCATIONS" ] || exit 0
+[ -f "$CAMPAIGN_DIR/world.json" ] || exit 0
 
-uv run python - "$LOCATIONS" "$OVERVIEW" "$TRAVEL_DATA" << 'PYEOF'
+uv run python - "$PROJECT_ROOT" "$CAMPAIGN_DIR" "$TRAVEL_DATA" << 'PYEOF'
 import json, sys, os
 
-loc_path, ov_path, travel_path = sys.argv[1], sys.argv[2], sys.argv[3]
+project_root, campaign_dir, travel_path = sys.argv[1], sys.argv[2], sys.argv[3]
+module_lib = os.path.join(project_root, ".claude", "additional", "modules", "world-travel", "lib")
+sys.path.insert(0, module_lib)
+from world_travel_store import WorldTravelStore
 
-with open(loc_path) as f:
-    locs = json.load(f)
-with open(ov_path) as f:
-    ov = json.load(f)
+store = WorldTravelStore(campaign_dir)
+locs = store.load_locations()
+ov = store.load_overview()
 
 if not isinstance(locs, dict):
     sys.exit(0)

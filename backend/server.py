@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -13,8 +14,12 @@ from typing import List, Optional
 from fastapi import Request, Form
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend.config import get_config
+from backend.config import get_config, validate_server_security
 from backend.game_state import get_character_status
+from lib.campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+)
 from backend.claude_dm import load_system_prompt
 from backend.auth import is_authenticated, login_page, handle_login
 from backend.campaign_api import (
@@ -30,11 +35,27 @@ from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.wizard_prompt import load_wizard_system_prompt
 from backend.wizard_mcp import WizardEvents, build_wizard_mcp
 
-# Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Validate exposure and report the effective runtime configuration."""
+    config = get_config()
+    validate_server_security(config)
+    print("DM Game Master backend starting...")
+    print(f"Server: {config.backend_host}:{config.backend_port}")
+    print(f"Model: {config.model_name}")
+    print("Claude SDK: working via subscription")
+    if config.campaign_name:
+        print(f"Active campaign: {config.campaign_name}")
+    else:
+        print("No active campaign loaded")
+    yield
+
+
 app = FastAPI(
     title="DM Game Master API",
     description="Backend server for AI Dungeon Master web interface",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Vanilla frontend lives in <project>/frontend — same origin, no CORS needed.
@@ -101,22 +122,6 @@ def _model_options() -> tuple[list[str], str]:
     return models, configured
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup."""
-    print(f"🚀 DM Game Master backend starting...")
-
-    config = get_config()
-    print(f"📍 Server: {config.backend_host}:{config.backend_port}")
-    print(f"🤖 Model: {config.model_name}")
-    print(f"🎫 Claude SDK: working via subscription")
-
-    if config.campaign_name:
-        print(f"🎲 Active campaign: {config.campaign_name}")
-    else:
-        print(f"⚠️  No active campaign loaded")
-
-
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint.
@@ -153,7 +158,12 @@ async def get_status(campaign: Optional[str] = None):
     campaign_dir = None
     if campaign:
         config = get_config()
-        campaign_dir = config.campaigns_dir / campaign
+        try:
+            campaign_dir = resolve_campaign_dir(
+                config.campaigns_dir, campaign, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
+            return {"error": "Campaign not found"}
     status = get_character_status(campaign_dir=campaign_dir)
     return status
 
@@ -518,7 +528,7 @@ async def wizard_websocket(websocket: WebSocket):
             await send({"type": "done"})
 
     except WebSocketDisconnect:
-        print(f"🧙 Wizard disconnected")
+        print("Wizard disconnected")
 
 
 @app.get("/ws/game")

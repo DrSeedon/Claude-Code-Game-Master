@@ -90,37 +90,41 @@ def sim_single(weapon, atk, target):
     return 1, dmg, 1 if hit else 0
 
 
+def distribute(total, buckets):
+    base, remainder = divmod(total, buckets)
+    return [base + (1 if i < remainder else 0) for i in range(buckets)]
+
+
+def sim_auto(weapon, atk, target, duration, max_salvos, is_sharp=False):
+    step = -1 if is_sharp else -2
+    rounds = min(weapon["mag"], max(1, int((weapon["rpm"] / 60) * duration)))
+    salvos = min(rounds, max_salvos)
+    total_dmg, total_hits = 0, 0
+    for i, rounds_in_salvo in enumerate(distribute(rounds, salvos)):
+        mod = atk + i * step
+        roll = random.randint(1, 20)
+        total = roll + mod
+        hit = roll == 20 or (roll != 1 and total >= target["ac"])
+        if hit:
+            if roll == 20:
+                bullets_hit = min(rounds_in_salvo, 2)
+            else:
+                bullets_hit = min(rounds_in_salvo, 3, 1 + max(0, total - target["ac"]) // 5)
+            total_hits += bullets_hit
+            for bullet in range(bullets_hit):
+                critical = roll == 20 and bullet == 0
+                dd = double_dice(weapon["damage"]) if critical else weapon["damage"]
+                total_dmg += pen_vs_prot(roll_damage(dd), weapon["pen"], target["prot"])
+    return rounds, total_dmg, total_hits
+
+
 def sim_burst(weapon, atk, target, is_sharp=False):
-    step = -2 if is_sharp else -3
-    shots = min(3, weapon["mag"])
-    total_dmg, total_hits = 0, 0
-    for i in range(shots):
-        mod = atk + i * step
-        roll = random.randint(1, 20)
-        crit = roll == 20
-        hit = crit or (roll != 1 and roll + mod >= target["ac"])
-        if hit:
-            total_hits += 1
-            dd = double_dice(weapon["damage"]) if crit else weapon["damage"]
-            total_dmg += pen_vs_prot(roll_damage(dd), weapon["pen"], target["prot"])
-    return shots, total_dmg, total_hits
+    return sim_auto(weapon, atk, target, duration=1, max_salvos=3, is_sharp=is_sharp)
 
 
-def sim_full_auto(weapon, atk, target, ammo, is_sharp=False, max_per_target=10):
-    step = -2 if is_sharp else -3
-    max_shots = int((weapon["rpm"] / 60) * 6)
-    shots = min(ammo, max_shots, max_per_target)
-    total_dmg, total_hits = 0, 0
-    for i in range(shots):
-        mod = atk + i * step
-        roll = random.randint(1, 20)
-        crit = roll == 20
-        hit = crit or (roll != 1 and roll + mod >= target["ac"])
-        if hit:
-            total_hits += 1
-            dd = double_dice(weapon["damage"]) if crit else weapon["damage"]
-            total_dmg += pen_vs_prot(roll_damage(dd), weapon["pen"], target["prot"])
-    return shots, total_dmg, total_hits
+def sim_full_auto(weapon, atk, target, ammo, is_sharp=False):
+    limited_weapon = dict(weapon, mag=min(weapon["mag"], ammo))
+    return sim_auto(limited_weapon, atk, target, duration=3, max_salvos=6, is_sharp=is_sharp)
 
 
 def run_sims(weapon, target, atk=ATTACK_BONUS, is_sharp=IS_SHARP):
@@ -418,7 +422,7 @@ def main():
 
     lines.append(("", ""))
     lines.append(("CURRENT CONFIG:", "header"))
-    lines.append(("  Penalty: -3/shot (sharp: -2)  |  Cap: 10 shots/target", "ok"))
+    lines.append(("  Burst: 1s/3 salvos | Auto: 3s/6 salvos | Recoil: -2 (-1 sharp)", "ok"))
     lines.append(("", ""))
     lines.append(("SUGGESTIONS:", "header"))
     if fa_kb > 90:

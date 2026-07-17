@@ -5,9 +5,12 @@ Provides safe JSON read/write/update operations with proper error handling
 """
 
 import json
+import fcntl
 import os
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any
 from datetime import datetime, timezone
 
 
@@ -31,8 +34,9 @@ class JsonOperations:
             return default
 
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with self._lock(filepath, exclusive=False):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    return json.load(f)
         except json.JSONDecodeError as e:
             print(f"[ERROR] Invalid JSON in {filename}: {e}")
             return default if default is not None else {}
@@ -48,82 +52,76 @@ class JsonOperations:
         filepath = self._resolve_path(filename)
 
         try:
-            # Write to temp file first for atomic operation
-            temp_path = filepath.with_suffix('.tmp')
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=indent, ensure_ascii=False)
-
-            # Atomic rename
-            temp_path.replace(filepath)
+            with self._lock(filepath, exclusive=True):
+                self._write_unlocked(filepath, data, indent)
             return True
         except Exception as e:
             print(f"[ERROR] Failed to save {filename}: {e}")
-            # Clean up temp file if it exists
-            temp_path = filepath.with_suffix('.tmp')
-            if temp_path.exists():
-                temp_path.unlink()
             return False
+
+    @contextmanager
+    def transaction(self, filename: str, default: Any = None, indent: int = 2):
+        """Lock, load, mutate, and atomically commit one JSON document."""
+        filepath = self._resolve_path(filename)
+        with self._lock(filepath, exclusive=True):
+            if filepath.exists():
+                with filepath.open("r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            else:
+                data = {} if default is None else default
+            original = json.dumps(data, sort_keys=True, ensure_ascii=False)
+            yield data
+            if json.dumps(data, sort_keys=True, ensure_ascii=False) != original:
+                self._write_unlocked(filepath, data, indent)
 
     def update_json(self, filename: str, updates: Dict, path: List[str] = None) -> bool:
         """
         Update JSON file with partial data
         If path is provided, updates nested structure at that path
         """
-        data = self.load_json(filename)
+        try:
+            with self.transaction(filename) as data:
+                if path:
+                    current = data
+                    for key in path[:-1]:
+                        if key not in current:
+                            current[key] = {}
+                        current = current[key]
 
-        if path:
-            # Navigate to nested path
-            current = data
-            for key in path[:-1]:
-                if key not in current:
-                    current[key] = {}
-                current = current[key]
-
-            # Update at the target path
-            if isinstance(updates, dict) and isinstance(current.get(path[-1]), dict):
-                current[path[-1]].update(updates)
-            else:
-                current[path[-1]] = updates
-        else:
-            # Update root level
-            if isinstance(data, dict) and isinstance(updates, dict):
-                data.update(updates)
-            else:
-                data = updates
-
-        return self.save_json(filename, data)
+                    if isinstance(updates, dict) and isinstance(current.get(path[-1]), dict):
+                        current[path[-1]].update(updates)
+                    else:
+                        current[path[-1]] = updates
+                elif isinstance(data, dict) and isinstance(updates, dict):
+                    data.update(updates)
+                else:
+                    raise TypeError("Root JSON update requires object values")
+            return True
+        except Exception as exc:
+            print(f"[ERROR] Failed to update {filename}: {exc}")
+            return False
 
     def append_to_list(self, filename: str, item: Any, path: List[str] = None) -> bool:
         """
         Append item to a list in JSON file
         If path is provided, appends to list at that path
         """
-        data = self.load_json(filename)
-
-        if path:
-            # Navigate to nested path
-            current = data
-            for key in path[:-1]:
-                if key not in current:
-                    current[key] = {}
-                current = current[key]
-
-            # Ensure target is a list
-            if path[-1] not in current:
-                current[path[-1]] = []
-            if not isinstance(current[path[-1]], list):
-                print(f"[ERROR] Target at {'.'.join(path)} is not a list")
-                return False
-
-            current[path[-1]].append(item)
-        else:
-            # Root must be a list
-            if not isinstance(data, list):
-                print(f"[ERROR] Root of {filename} is not a list")
-                return False
-            data.append(item)
-
-        return self.save_json(filename, data)
+        try:
+            with self.transaction(filename, default=[] if not path else {}) as data:
+                if path:
+                    current = data
+                    for key in path[:-1]:
+                        current = current.setdefault(key, {})
+                    target = current.setdefault(path[-1], [])
+                else:
+                    target = data
+                if not isinstance(target, list):
+                    raise TypeError("Target is not a list")
+                target.append(item)
+            return True
+        except Exception as exc:
+            print(f"[ERROR] Failed to append to {filename}: {exc}")
+            return False
 
     def check_exists(self, filename: str, key: str, path: List[str] = None) -> bool:
         """
@@ -173,27 +171,60 @@ class JsonOperations:
         Delete a key from JSON file
         If path is provided, deletes from that nested path
         """
-        data = self.load_json(filename)
-
-        if path:
-            # Navigate to nested path
-            current = data
-            for p in path[:-1]:
-                if not isinstance(current, dict) or p not in current:
+        try:
+            with self.transaction(filename) as data:
+                current = data
+                if path:
+                    for part in path:
+                        if not isinstance(current, dict) or part not in current:
+                            return False
+                        current = current[part]
+                if not isinstance(current, dict) or key not in current:
                     return False
-                current = current[p]
+                del current[key]
+            return True
+        except Exception as exc:
+            print(f"[ERROR] Failed to delete from {filename}: {exc}")
+            return False
 
-            if isinstance(current.get(path[-1]), dict) and key in current[path[-1]]:
-                del current[path[-1]][key]
-            else:
-                return False
-        else:
-            if isinstance(data, dict) and key in data:
-                del data[key]
-            else:
-                return False
+    @contextmanager
+    def _lock(self, filepath: Path, exclusive: bool):
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = filepath.with_name(f".{filepath.name}.lock")
+        with lock_path.open("a", encoding="utf-8") as handle:
+            fcntl.flock(
+                handle.fileno(),
+                fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
+            )
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
-        return self.save_json(filename, data)
+    @staticmethod
+    def _write_unlocked(filepath: Path, data: Any, indent: int) -> None:
+        fd, temporary = tempfile.mkstemp(
+            prefix=f".{filepath.name}.",
+            suffix=".tmp",
+            dir=filepath.parent,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=indent, ensure_ascii=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, filepath)
+            directory_fd = os.open(filepath.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
 
     def _resolve_path(self, filename: str) -> Path:
         """Resolve file path relative to world state directory"""

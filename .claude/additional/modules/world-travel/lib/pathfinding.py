@@ -138,7 +138,7 @@ class PathFinder:
         Args:
             from_loc: Starting location name
             to_loc: Destination location name
-            locations: Full locations dict from locations.json
+            locations: Full location projection from WorldGraph
 
         Returns:
             {

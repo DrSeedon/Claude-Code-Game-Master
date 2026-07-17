@@ -7,9 +7,15 @@ require_active_campaign
 ACTION="$1"
 shift
 
-dispatch_middleware "dm-inventory.sh" "$ACTION" "$@" && exit $?
+dispatch_middleware "dm-inventory.sh" "$ACTION" "$@"
+MW_RC=$?
+[ $MW_RC -ne 64 ] && exit $MW_RC
 
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
+
+run_wg() {
+    $PYTHON_CMD "$LIB_DIR/world_graph.py" "$@"
+}
 
 case "$ACTION" in
     show)
@@ -33,19 +39,24 @@ case "$ACTION" in
             esac
         done
 
+        LOOT_ARGS=(inventory-loot "$OWNER")
         if [ -n "$ITEMS" ]; then
+            ITEM_ARGS=()
             IFS=',' read -ra ITEM_LIST <<< "$ITEMS"
             for ENTRY in "${ITEM_LIST[@]}"; do
                 IFS=':' read -ra PARTS <<< "$ENTRY"
                 INAME="${PARTS[0]}"
                 IQTY="${PARTS[1]:-1}"
                 IWT="${PARTS[2]:-0.5}"
-                [ -n "$INAME" ] && $WG inventory-add "$OWNER" "$INAME" --qty "$IQTY" --weight "$IWT"
+                [ -n "$INAME" ] && ITEM_ARGS+=("$INAME:$IQTY:$IWT")
             done
+            if [ ${#ITEM_ARGS[@]} -gt 0 ]; then
+                LOOT_ARGS+=(--items "${ITEM_ARGS[@]}")
+            fi
         fi
-        [ -n "$GOLD" ] && $WG player-gold "$GOLD"
-        [ -n "$XP"   ] && $WG player-xp   "$XP"
-        true
+        [ -n "$GOLD" ] && LOOT_ARGS+=(--gold "$GOLD")
+        [ -n "$XP" ] && LOOT_ARGS+=(--xp "$XP")
+        run_wg "${LOOT_ARGS[@]}"
         ;;
 
     remove)
@@ -66,26 +77,39 @@ case "$ACTION" in
         # update <char> [--add "item" qty weight] [--gold N] [--hp N]
         OWNER="$1"
         shift
+        UPDATE_ITEMS=()
+        UPDATE_GOLD=""
+        UPDATE_HP=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --add)
                     INAME="$2"; IQTY="${3:-1}"; IWT="${4:-0.5}"
-                    $WG inventory-add "$OWNER" "$INAME" --qty "$IQTY" --weight "$IWT"
+                    UPDATE_ITEMS+=("$INAME:$IQTY:$IWT")
                     shift 4
                     ;;
                 --gold)
-                    $WG player-gold "$2"
+                    UPDATE_GOLD="$2"
                     shift 2
                     ;;
                 --hp)
-                    $WG player-hp "$2"
+                    UPDATE_HP="$2"
                     shift 2
                     ;;
                 *)
-                    shift
+                    echo "Unknown update option: $1" >&2
+                    exit 1
                     ;;
             esac
         done
+        if [ ${#UPDATE_ITEMS[@]} -gt 0 ] || [ -n "$UPDATE_GOLD" ]; then
+            UPDATE_ARGS=(inventory-loot "$OWNER")
+            [ ${#UPDATE_ITEMS[@]} -gt 0 ] && UPDATE_ARGS+=(--items "${UPDATE_ITEMS[@]}")
+            [ -n "$UPDATE_GOLD" ] && UPDATE_ARGS+=(--gold "$UPDATE_GOLD")
+            run_wg "${UPDATE_ARGS[@]}" || exit $?
+        fi
+        if [ -n "$UPDATE_HP" ]; then
+            run_wg player-hp "$UPDATE_HP" || exit $?
+        fi
         ;;
 
     transfer)

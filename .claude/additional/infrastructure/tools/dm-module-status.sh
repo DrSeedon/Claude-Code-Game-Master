@@ -5,7 +5,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../common-module.sh"
 PROJECT_ROOT="$(find_project_root "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
 
-ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
+ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")}"
 [ -z "$ACTIVE" ] && exit 0
 
 OVERVIEW="$PROJECT_ROOT/world-state/campaigns/$ACTIVE/campaign-overview.json"
@@ -17,9 +17,11 @@ ENABLED=$(uv run python -c "
 import json, sys
 with open('$OVERVIEW') as f:
     d = json.load(f)
-for k, v in d.get('modules', {}).items():
-    if v:
-        print(k)
+modules = d.get('modules', [])
+if isinstance(modules, dict):
+    print(*[k for k, enabled in modules.items() if enabled], sep='\n')
+elif isinstance(modules, list):
+    print(*modules, sep='\n')
 " 2>/dev/null)
 
 [ -z "$ENABLED" ] && exit 0

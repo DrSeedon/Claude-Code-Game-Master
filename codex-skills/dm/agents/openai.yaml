@@ -1,0 +1,4 @@
+interface:
+  display_name: "DM Game Master"
+  short_description: "D&D-кампании через локальный DM-движок"
+  default_prompt: "Используй $dm и запусти меню /dm для локальной кампании."

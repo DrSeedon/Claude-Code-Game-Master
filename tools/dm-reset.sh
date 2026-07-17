@@ -27,7 +27,7 @@ show_usage() {
     echo ""
     echo "Actions:"
     echo "  preview     - Show what would be reset (safe)"
-    echo "  archive     - Archive current world to git branch, then reset"
+    echo "  archive     - Create a verified tar.gz backup, then reset"
     echo "  hard        - Delete everything and start fresh (destructive!)"
     echo ""
     echo "Examples:"
@@ -47,18 +47,8 @@ preview_world() {
     echo ""
     echo "📁 Files that would be reset:"
     echo "  • $WORLD_STATE_DIR/world.json"
-    echo "  • $WORLD_STATE_DIR/npcs.json (legacy)"
-    echo "  • $WORLD_STATE_DIR/locations.json (legacy)"
-    echo "  • $WORLD_STATE_DIR/facts.json (legacy)"
-    echo "  • $WORLD_STATE_DIR/consequences.json (legacy)"
     echo "  • $WORLD_STATE_DIR/campaign-overview.json"
     echo "  • $WORLD_STATE_DIR/session-log.md"
-    # Check for new format (character.json) vs legacy (characters/)
-    if [ -f "$WORLD_STATE_DIR/character.json" ]; then
-        echo "  • $WORLD_STATE_DIR/character.json"
-    elif [ -d "$WORLD_STATE_DIR/characters" ]; then
-        echo "  • $WORLD_STATE_DIR/characters/*.json"
-    fi
 }
 
 reset_world() {
@@ -66,60 +56,29 @@ reset_world() {
     echo "🧹 Resetting world state..."
     echo ""
 
-    # Reset WorldGraph (primary)
-    echo '{"nodes":{},"edges":[]}' > "$WORLD_STATE_DIR/world.json"
-    echo "  ✓ WorldGraph cleared"
-
-    # Reset legacy flat files (backward compat for old campaigns)
-    [ -f "$NPCS_FILE" ] && echo '{}' > "$NPCS_FILE" && echo "  ✓ NPCs (legacy) cleared"
-    [ -f "$LOCATIONS_FILE" ] && echo '{}' > "$LOCATIONS_FILE" && echo "  ✓ Locations (legacy) cleared"
-    [ -f "$FACTS_FILE" ] && echo '{}' > "$FACTS_FILE" && echo "  ✓ Facts (legacy) cleared"
-    [ -f "$CONSEQUENCES_FILE" ] && echo '{"active": [], "resolved": []}' > "$CONSEQUENCES_FILE" && echo "  ✓ Consequences (legacy) cleared"
-
-    # Reset Campaign Overview
-    cat > "$CAMPAIGN_OVERVIEW" << 'EOF'
-{
-  "campaign_name": "New Campaign",
-  "genre": "Fantasy",
-  "tone": {
-    "horror": 30,
-    "comedy": 30,
-    "drama": 40
-  },
-  "current_date": "1st of the First Month, Year 1",
-  "time_of_day": "Morning",
-  "player_position": {
-    "current_location": null,
-    "previous_location": null
-  },
-  "current_character": null,
-  "session_count": 0
-}
-EOF
-    echo "  ✓ Campaign overview reset"
-
-    # Reset Session Log
-    cat > "$SESSION_LOG" << 'EOF'
-# Campaign Session Log
-
-*A new adventure begins...*
-
----
-
-EOF
-    echo "  ✓ Session log cleared"
-
-    # Remove character file (new format) or characters directory (legacy)
-    if [ -f "$CHARACTER_FILE" ]; then
-        rm -f "$CHARACTER_FILE"
-        echo "  ✓ Character removed"
-    elif [ -d "$CHARACTERS_DIR" ]; then
-        rm -f "$CHARACTERS_DIR"/*.json 2>/dev/null
-        echo "  ✓ Characters removed"
-    fi
+    $PYTHON_CMD "$LIB_DIR/campaign_manager.py" reset "$ACTIVE_CAMPAIGN" || return 1
 
     echo ""
     echo "✅ World state reset to blank slate"
+}
+
+archive_world() {
+    require_active_campaign
+    local backup_dir="${DM_BACKUP_DIR:-$PROJECT_ROOT/campaign-backups}"
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local archive="$backup_dir/${ACTIVE_CAMPAIGN}-${timestamp}.tar.gz"
+    local temporary="${archive}.tmp"
+
+    mkdir -p "$backup_dir"
+    tar -czf "$temporary" -C "$CAMPAIGNS_DIR" "$ACTIVE_CAMPAIGN" || return 1
+    tar -tzf "$temporary" >/dev/null || {
+        rm -f "$temporary"
+        echo "❌ Backup verification failed"
+        return 1
+    }
+    mv "$temporary" "$archive"
+    echo "$archive"
 }
 
 case "$ACTION" in
@@ -132,47 +91,24 @@ case "$ACTION" in
     archive)
         echo "📦 Archiving current campaign..."
         echo ""
-
-        if ! git rev-parse --git-dir > /dev/null 2>&1; then
-            echo "❌ Not a git repository - cannot archive"
-            echo "   Use 'dm-reset.sh hard' for destructive reset"
+        ARCHIVE_PATH=$(archive_world) || {
+            echo "❌ Campaign archive failed; reset aborted"
             exit 1
-        fi
-
-        # Get campaign name for branch
-        CAMPAIGN_NAME=$($PYTHON_CMD "$LIB_DIR/json_ops.py" get "$CAMPAIGN_OVERVIEW" --key campaign_name 2>/dev/null | tr -d '"' | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-        [ -z "$CAMPAIGN_NAME" ] && CAMPAIGN_NAME="unknown"
-
-        ARCHIVE_BRANCH="archive/${CAMPAIGN_NAME}-$(date +%Y%m%d-%H%M%S)"
-
-        # Commit any pending changes
-        cd "$PROJECT_ROOT"
-        git add world-state/
-        git commit -m "Final state before reset: $CAMPAIGN_NAME" --quiet 2>/dev/null || true
-
-        # Create archive branch
-        CURRENT_BRANCH=$(git branch --show-current)
-        git branch "$ARCHIVE_BRANCH"
-
-        echo "  ✓ Archived to branch: $ARCHIVE_BRANCH"
+        }
+        echo "  ✓ Verified archive: $ARCHIVE_PATH"
         echo ""
 
         preview_world
         echo ""
 
-        read -p "⚠️  Reset this world? Archive saved to '$ARCHIVE_BRANCH' (y/N) " -n 1 -r
+        read -p "⚠️  Reset this world? Archive saved to '$ARCHIVE_PATH' (y/N) " -n 1 -r
         echo
 
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             reset_world
-
-            # Commit the reset
-            git add world-state/
-            git commit -m "Fresh start: World reset for new campaign" --quiet
-
             echo ""
             echo "📜 To restore archived campaign:"
-            echo "   git checkout $ARCHIVE_BRANCH -- world-state/"
+            echo "   tar -xzf \"$ARCHIVE_PATH\" -C \"$CAMPAIGNS_DIR\""
         else
             echo "Reset cancelled. World unchanged."
         fi

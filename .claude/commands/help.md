@@ -17,6 +17,8 @@ Display all available commands and tools.
   /dm save         Save current session state
   /dm character    Show character sheet & inventory
   /dm overview     View campaign state summary
+  /dm mode         Switch narrative/interactive control
+  /dm-mode         Get or set player-agency mode
 
   CAMPAIGN SETUP
   --------------------------------------------------------
@@ -46,6 +48,7 @@ Display all available commands and tools.
   dm-enhance.sh     Enrich entities with RAG
   dm-overview.sh    Quick world summary
   dm-campaign.sh    Switch between campaigns
+  dm-mode.sh        Switch player-agency mode
 
 ================================================================
 

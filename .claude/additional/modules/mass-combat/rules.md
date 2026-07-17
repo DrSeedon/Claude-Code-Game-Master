@@ -72,7 +72,7 @@ bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh templates
 # 1. Initialize battle
 bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh init "Battle Name"
 
-# 2. Add units from template (preferred — stats from module-data/mass-combat.json)
+# 2. Add units from template (preferred — stats from creature nodes in world.json)
 bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh add \
   --faction enemies --group Bandits-North --template BanditRaider --count 6
 
@@ -201,7 +201,7 @@ Run `status` regularly so player sees the battlefield clearly.
 Groups in cover get +2 AC. Always declare cover BEFORE attacks resolve.
 
 ### 8. Templates Are Truth
-Unit stats come from `module-data/mass-combat.json` templates. Use `--template`. Only use manual stats for unique units not in templates.
+Unit stats come from mass-combat creature templates in `world.json`. Use `--template`. Only use manual stats for unique units not in templates.
 
 ### 9. Zone Grouping [MANDATORY]
 Units that physically occupy the same area MUST be in the same group. Random targeting distributes shots across ALL units in the zone. AC determines if the attack hits.

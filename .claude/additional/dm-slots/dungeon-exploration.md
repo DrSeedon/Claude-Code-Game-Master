@@ -63,14 +63,13 @@ Separate location per room with `dungeon` field:
 ```
 1. VALIDATE EXIT - Does it exist? Blocked/locked? Secret unfound?
 2. HANDLE OBSTACLES - Locked: pick/force/key. Secret: find first (Perception)
-3. CREATE LOCATION - If new room, create it first:
-   bash tools/dm-location.sh add "[Dungeon Room Name]" "[description]"
-   bash tools/dm-location.sh connect "[current]" "[new_room]" --terrain [type] --distance [meters]
-4. PERSIST - bash tools/dm-session.sh move "[Dungeon Room Name]"
+3. PERSIST THE TRANSITION - Create/connect/move in one call:
+   bash tools/dm-scene.sh "[Dungeon Room Name]" --description "[description]" --path "[terrain and distance]" --elapsed 0.05
+4. APPLY OTHER SCENE STATE - Add repeated `--with`, `--resolve`, or `--objective` flags to that same call when needed
 5. SHOW ROOM - Describe (2-4 sentences), list exits with types, note creatures
 ```
 
-**IMPORTANT:** For dungeon rooms, ALWAYS create location + connection manually BEFORE moving. `dm-session.sh move` does NOT auto-create dungeons.
+**IMPORTANT:** For dungeon rooms, use `dm-scene.sh` so creation, connection, party movement, time, consequences, and quest progress remain one coherent transition.
 
 **Use Structured when:** Revisited 3+ times, complex puzzle states, player wants tactical grid play
 

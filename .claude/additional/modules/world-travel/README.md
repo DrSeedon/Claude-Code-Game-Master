@@ -80,7 +80,7 @@ bash tools/dm-navigation.sh routes "Village" "Ruins"
 ### Direction blocking
 
 Block a bearing arc at a location to represent terrain obstacles. The block is stored
-in `locations.json` under `blocked_ranges` and checked by pathfinding when evaluating
+on location nodes under `data.blocked_ranges` and checked by pathfinding when evaluating
 direct paths:
 
 ```bash
@@ -96,10 +96,10 @@ Blocked arcs handle wrap-around correctly (e.g., 350° to 10° blocks through No
 
 ### Move with time calculation
 
-`dm-navigation.sh move` reads `speed_kmh` from `character.json` (default 4.0 km/h),
-calculates elapsed hours from the connection's `distance_meters`, and advances the
-campaign clock. If the `custom-stats` module is present, it delegates clock
-advancement there; otherwise it prints elapsed time directly.
+`dm-navigation.sh move` reads `speed_kmh` from the player node (default 4.0 km/h),
+calculates elapsed hours from the connection's `distance_meters`, advances the CORE
+campaign clock, and ticks WorldGraph custom stats, production, economy, consequences,
+and random events.
 
 ```bash
 bash tools/dm-navigation.sh move "Old Mill"
@@ -129,7 +129,7 @@ bash tools/dm-navigation.sh path check "Village" "Ruins"
 # Suggested: Village → Old Mill → Forest Path → Ruins
 
 bash tools/dm-navigation.sh path analyze
-# Scans all connections in locations.json for intersections
+# Scans all connected edges in world.json for intersections
 ```
 
 ---
@@ -173,7 +173,7 @@ Internally, the module categorizes encounters as Combat, Social, or Hazard (wayp
 created, party stops mid-journey) versus Loot or Flavor (auto-resolved, party
 continues). The DM's rules file maps encounter categories to specific types.
 
-**Waypoints** are temporary `locations.json` entries placed at the segment midpoint
+**Waypoints** are temporary WorldGraph location nodes placed at the segment midpoint
 between origin and destination. They have two connections: forward (continue) and
 back (return to origin). Once the party leaves, the waypoint is cleaned up.
 
@@ -221,13 +221,12 @@ bash tools/dm-map.sh --gui
 
 ## Configuration reference
 
-All encounter settings live in `campaign-overview.json` under
-`campaign_rules.encounter_system`:
+All encounter settings live in `module-data/world-travel.json` under
+`encounter_system`:
 
 ```json
 {
-  "campaign_rules": {
-    "encounter_system": {
+  "encounter_system": {
       "enabled": true,
       "min_distance_meters": 300,
       "base_dc": 16,
@@ -241,8 +240,6 @@ All encounter settings live in `campaign-overview.json` under
         "Night": 4
       }
     }
-  },
-  "path_preferences": {}
 }
 ```
 
@@ -253,9 +250,9 @@ All encounter settings live in `campaign-overview.json` under
 - skill: `skill:perception`
 - custom stat: `custom:awareness` (value range 0–100, mapped to modifier via `(value - 50) // 10`)
 
-`path_preferences` is populated automatically by `decide` — do not edit manually.
+`path_preferences` remains display and decision metadata in `campaign-overview.json`; it is populated automatically by `decide`.
 
-Location data shape:
+The store projects WorldGraph location nodes and `connected` edges into this algorithm-facing shape:
 
 ```json
 {

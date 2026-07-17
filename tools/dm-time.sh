@@ -49,7 +49,9 @@ elif [ -n "$ELAPSED" ]; then
 
 else
     # Legacy: just set time strings
-    dispatch_middleware "dm-time.sh" "$TIME_OF_DAY" "$DATE" "$TIME_OF_DAY" "$DATE" && exit $?
+    dispatch_middleware "dm-time.sh" "$TIME_OF_DAY" "$DATE" "$TIME_OF_DAY" "$DATE"
+    MW_RC=$?
+    [ $MW_RC -ne 64 ] && exit $MW_RC
     $PYTHON_CMD -m lib.time_manager update "$TIME_OF_DAY" "$DATE"
     CORE_RC=$?
     dispatch_middleware_post "dm-time.sh" "$TIME_OF_DAY" "$DATE" "$TIME_OF_DAY" "$DATE"

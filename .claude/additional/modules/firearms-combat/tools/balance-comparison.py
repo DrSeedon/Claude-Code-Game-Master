@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Balance Comparison Dashboard — Current vs 3 proposed fixes.
-Side-by-side Monte Carlo comparison.
-"""
+"""Compare duration and salvo limits for the v2 automatic-fire model."""
 
 import random
 from pathlib import Path
@@ -63,74 +60,65 @@ def double_dice(ds):
     return f"{int(p[0])*2}d{p[1]}"
 
 
-def sim_full_auto(weapon, atk, target, ammo, penalty_step=-1,
-                  max_per_target=None, jam_chance=0.0, jam_after=999):
-    max_shots = int((weapon["rpm"] / 60) * 6)
-    shots = min(ammo, max_shots)
-    if max_per_target:
-        shots = min(shots, max_per_target)
+def distribute(total, buckets):
+    base, remainder = divmod(total, buckets)
+    return [base + (1 if i < remainder else 0) for i in range(buckets)]
 
-    total_dmg, total_hits, actual_shots = 0, 0, 0
-    jammed = False
 
-    for i in range(shots):
-        if jam_chance > 0 and i >= jam_after:
-            if random.random() < jam_chance:
-                jammed = True
-                actual_shots = i
-                break
+def sim_full_auto(weapon, atk, target, ammo, penalty_step=-2,
+                  duration=3, max_salvos=6):
+    rounds = min(ammo, weapon["mag"], max(1, int((weapon["rpm"] / 60) * duration)))
+    salvos = min(rounds, max_salvos)
+    total_dmg, total_hits = 0, 0
 
+    for i, rounds_in_salvo in enumerate(distribute(rounds, salvos)):
         mod = atk + i * penalty_step
         roll = random.randint(1, 20)
-        crit = roll == 20
-        hit = crit or (roll != 1 and roll + mod >= target["ac"])
+        total = roll + mod
+        hit = roll == 20 or (roll != 1 and total >= target["ac"])
         if hit:
-            total_hits += 1
-            dd = double_dice(weapon["damage"]) if crit else weapon["damage"]
-            total_dmg += pen_vs_prot(roll_damage(dd), weapon["pen"], target["prot"])
-    else:
-        actual_shots = shots
+            if roll == 20:
+                bullets_hit = min(rounds_in_salvo, 2)
+            else:
+                bullets_hit = min(rounds_in_salvo, 3, 1 + max(0, total - target["ac"]) // 5)
+            total_hits += bullets_hit
+            for bullet in range(bullets_hit):
+                critical = roll == 20 and bullet == 0
+                dd = double_dice(weapon["damage"]) if critical else weapon["damage"]
+                total_dmg += pen_vs_prot(roll_damage(dd), weapon["pen"], target["prot"])
 
-    if jammed and actual_shots == 0:
-        actual_shots = shots
-
-    return actual_shots, total_dmg, total_hits, jammed
+    return rounds, total_dmg, total_hits, False
 
 
 CONFIGS = {
-    "OLD\n(penalty -1/shot, no cap)": {
-        "penalty_step": -1,
-        "max_per_target": None,
-        "jam_chance": 0.0,
-        "jam_after": 999,
+    "SHORT\n(1s / 3 salvos)": {
+        "penalty_step": -2,
+        "duration": 1,
+        "max_salvos": 3,
         "color": "#e74c3c",
     },
-    "PENALTY ONLY\n(-2/shot, no cap)": {
+    "TWO SEC\n(2s / 5 salvos)": {
         "penalty_step": -2,
-        "max_per_target": None,
-        "jam_chance": 0.0,
-        "jam_after": 999,
+        "duration": 2,
+        "max_salvos": 5,
         "color": "#f39c12",
     },
-    "CAP ONLY\n(-1/shot + cap 10)": {
-        "penalty_step": -1,
-        "max_per_target": 10,
-        "jam_chance": 0.0,
-        "jam_after": 999,
+    "CURRENT\n(3s / 6 salvos)": {
+        "penalty_step": -2,
+        "duration": 3,
+        "max_salvos": 6,
         "color": "#9b59b6",
     },
-    "CURRENT\n(-2/shot + cap 10)": {
+    "LONG\n(4s / 8 salvos)": {
         "penalty_step": -2,
-        "max_per_target": 10,
-        "jam_chance": 0.0,
-        "jam_after": 999,
+        "duration": 4,
+        "max_salvos": 8,
         "color": "#00d4ff",
     },
-    "AGGRESSIVE\n(-3/shot + cap 10)": {
-        "penalty_step": -3,
-        "max_per_target": 10,
-        "jam_chance": 0.0,
-        "jam_after": 999,
+    "SHARPSHOOTER\n(3s / 6 salvos)": {
+        "penalty_step": -1,
+        "duration": 3,
+        "max_salvos": 6,
         "color": "#2ecc71",
     },
 }
@@ -143,9 +131,8 @@ def run_config_sims(config, weapon, target):
         _, d, h, j = sim_full_auto(
             weapon, ATK, t, weapon["mag"],
             penalty_step=config["penalty_step"],
-            max_per_target=config.get("max_per_target"),
-            jam_chance=config.get("jam_chance", 0),
-            jam_after=config.get("jam_after", 999),
+            duration=config["duration"],
+            max_salvos=config["max_salvos"],
         )
         dmgs.append(d)
         hits_l.append(h)
@@ -367,24 +354,24 @@ def main():
     ax7.set_title("ANALYSIS", color="#00d4ff", fontsize=12, fontweight='bold', pad=10)
 
     analysis = [
-        ("CURRENT (-1/shot):", "#e74c3c", True),
-        ("  30 effective shots, ~15 hit. Bandit dies 100%.", "#e74c3c", False),
-        ("  Problem: zero risk on weak enemies.", "#e74c3c", False),
+        ("SHORT AUTO (1 second):", "#e74c3c", True),
+        ("  Low ammo cost and three salvos.", "#e74c3c", False),
+        ("  Best for controlled fire and weak targets.", "#e74c3c", False),
         ("", "", False),
-        ("FIX 1: Recoil (-2/shot):", "#f39c12", True),
-        ("  Effective shots drop to ~8. Major nerf.", "#f39c12", False),
-        ("  Pro: simple, no new mechanics.", "#f39c12", False),
-        ("  Con: also nerfs vs groups (full_auto purpose).", "#f39c12", False),
+        ("SUSTAINED AUTO (3 seconds):", "#f39c12", True),
+        ("  High physical ammo cost and six salvos.", "#f39c12", False),
+        ("  More damage potential without per-bullet d20 spam.", "#f39c12", False),
+        ("  Recoil still degrades later salvos.", "#f39c12", False),
         ("", "", False),
-        ("FIX 2: Cap (10/target):", "#2ecc71", True),
-        ("  Only 10 shots hit one target, rest wasted.", "#2ecc71", False),
-        ("  Pro: vs groups still strong. 1v1 = fair.", "#2ecc71", False),
-        ("  Con: arbitrary limit, less realistic.", "#2ecc71", False),
+        ("MARGIN-BASED HITS:", "#2ecc71", True),
+        ("  AC, recoil, and roll margin control landed bullets.", "#2ecc71", False),
+        ("  One salvo can land at most three bullets.", "#2ecc71", False),
+        ("  Physical misses still consume ammunition.", "#2ecc71", False),
         ("", "", False),
-        ("FIX 3: Jam (15% after shot 8):", "#9b59b6", True),
-        ("  Random interruption adds tension.", "#9b59b6", False),
-        ("  Pro: exciting, realistic, risk/reward.", "#9b59b6", False),
-        ("  Con: RNG can feel unfair, complex.", "#9b59b6", False),
+        ("MAGAZINE CAP:", "#9b59b6", True),
+        ("  A fire action cannot exceed loaded capacity.", "#9b59b6", False),
+        ("  Empty magazines require a reload before firing again.", "#9b59b6", False),
+        ("  High-RPM weapons trade ammunition for pressure.", "#9b59b6", False),
     ]
 
     y = 0.96
@@ -401,26 +388,26 @@ def main():
     ax8.set_title("RECOMMENDATION", color="#00d4ff", fontsize=12, fontweight='bold', pad=10)
 
     reco = [
-        ("BEST FIX: Combo (FIX 1+2)", "#00d4ff", True),
-        ("  -2 penalty/shot + cap 10 shots/target", "#00d4ff", False),
+        ("CURRENT MODEL: 3 seconds / 6 salvos", "#00d4ff", True),
+        ("  -2 recoil per salvo (-1 for Sharpshooter)", "#00d4ff", False),
         ("", "", False),
         ("Why this combo works:", TEXT_COLOR, True),
         ("", "", False),
-        ("  1. Penalty -2 makes accuracy drop fast.", "#2ecc71", False),
-        ("     Shot 5: 50% hit. Shot 8: 35%.", "#2ecc71", False),
-        ("     After shot 10: nat-20 only.", "#2ecc71", False),
+        ("  1. Recoil makes later salvos less accurate.", "#2ecc71", False),
+        ("     Physical rounds and attack rolls stay separate.", "#2ecc71", False),
+        ("     Natural 20 only crits the first bullet.", "#2ecc71", False),
         ("", "", False),
-        ("  2. Cap 10 prevents mag-dumping on 1 target.", "#2ecc71", False),
-        ("     vs GROUPS: still fires 30 rounds spread.", "#2ecc71", False),
-        ("     vs SOLO: 10 shots, ~5 hit, ~35 dmg.", "#2ecc71", False),
+        ("  2. Six salvos bound resolution cost.", "#2ecc71", False),
+        ("     RPM still determines physical ammo expenditure.", "#2ecc71", False),
+        ("     Margin above AC determines landed bullets.", "#2ecc71", False),
         ("", "", False),
         ("  3. Ammo cost stays high = real tradeoff.", "#2ecc71", False),
         ("     Single: 3 DPA. Auto: 1 DPA.", "#2ecc71", False),
         ("", "", False),
         ("Config change:", "#f39c12", True),
-        ('  penalty_per_shot: -3', "#f39c12", False),
-        ('  penalty_per_shot_sharpshooter: -2', "#f39c12", False),
-        ('  max_shots_per_target: 10', "#f39c12", False),
+        ('  duration_seconds: 3', "#f39c12", False),
+        ('  penalty_per_salvo: -2', "#f39c12", False),
+        ('  max_salvos_per_target: 6', "#f39c12", False),
     ]
 
     y = 0.96

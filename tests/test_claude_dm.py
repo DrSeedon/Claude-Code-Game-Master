@@ -21,20 +21,18 @@ def test_prompt_without_campaign_still_has_core_rules():
 
 
 def test_wizard_shaped_campaign_does_not_crash(tmp_path, monkeypatch):
-    """Codex P1: wizard/API campaigns store narrator_style as a STRING id and modules
-    as a LIST. The prompt builder + compiler must handle both without crashing and
-    still emit the DnD rules (was AttributeError → narrator-only)."""
+    """Wizard/API campaigns use the canonical module map and a narrator id."""
     from backend.campaign_api import create_campaign
     monkeypatch.setattr("backend.campaign_api.get_project_root", lambda: tmp_path)
     (tmp_path / "world-state" / "campaigns").mkdir(parents=True)
     # Point claude_dm at the same tmp root by symlinking .claude (rules) is overkill;
     # instead just assert the API writes the shapes and the builder tolerates them.
-    res = create_campaign(name="wiz-shape", narrator_style="epic-heroic", modules=["world-travel"])
+    res = create_campaign(name="wiz-shape", narrator_style="epic-heroic", modules=["mass-combat"])
     assert res["success"]
     import json
     d = json.loads((tmp_path / "world-state" / "campaigns" / "wiz-shape" / "campaign-overview.json").read_text())
     assert isinstance(d["narrator_style"], str)   # string id, not object
-    assert isinstance(d["modules"], list)          # list, not dict
+    assert d["modules"] == {"mass-combat": True}
 
 
 def test_prompt_has_current_campaign_context(tmp_path):

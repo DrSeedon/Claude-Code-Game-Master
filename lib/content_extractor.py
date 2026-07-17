@@ -7,7 +7,6 @@ Extract plain text from PDFs, Word documents, Markdown, and text files.
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 
 class PDFExtractor:
@@ -198,7 +197,9 @@ class DocxExtractor:
                 text = re.sub(r'[^\x20-\x7E\n\r\t]', '', text)
                 return text
         except Exception as e:
-            raise RuntimeError(f"Cannot extract text from Word document: {e}")
+            raise RuntimeError(
+                f"Cannot extract text from Word document: {e}"
+            ) from e
 
 
 class TextExtractor:

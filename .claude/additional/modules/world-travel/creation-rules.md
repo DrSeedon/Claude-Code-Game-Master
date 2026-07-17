@@ -25,7 +25,11 @@ LOCAL–CONTINENTAL → use `--from/--bearing/--distance` for ALL locations.
 | Sci-fi starship | Per-vehicle |
 | Mounted | 12–16 km/h |
 
-Set `speed_kmh` in character.json.
+Set `speed_kmh` on the player node:
+
+```bash
+bash tools/dm-world.sh update-node player:active --data '{"data":{"speed_kmh":4}}'
+```
 
 ## 3. Starting Location
 
@@ -35,18 +39,10 @@ First location = origin `(0, 0)`:
 bash tools/dm-location.sh add "Starting Location" "description"
 ```
 
-Then set coordinates:
+Then set coordinates on the location node:
 ```bash
-uv run python -c "
-import json
-CAMPAIGN_DIR = '$(bash tools/dm-campaign.sh path)'
-with open(f'{CAMPAIGN_DIR}/locations.json') as f:
-    locs = json.load(f)
-locs['Starting Location']['coordinates'] = {'x': 0, 'y': 0}
-locs['Starting Location']['diameter_meters'] = 50
-with open(f'{CAMPAIGN_DIR}/locations.json', 'w') as f:
-    json.dump(locs, f, indent=2, ensure_ascii=False)
-"
+bash tools/dm-world.sh update-node location:starting-location \
+  --data '{"data":{"coordinates":{"x":0,"y":0},"diameter_meters":50}}'
 ```
 
 ## 4. Add Locations
@@ -107,15 +103,8 @@ Every location must have `diameter_meters` — controls circle size on GUI map (
 Set sizes relative to each other — the GUI auto-normalizes, so ratios matter more than absolute values.
 
 ```bash
-uv run python -c "
-import json
-CAMPAIGN_DIR = '$(bash tools/dm-campaign.sh path)'
-with open(f'{CAMPAIGN_DIR}/locations.json') as f:
-    locs = json.load(f)
-locs['Location Name']['diameter_meters'] = 500
-with open(f'{CAMPAIGN_DIR}/locations.json', 'w') as f:
-    json.dump(locs, f, indent=2, ensure_ascii=False)
-"
+bash tools/dm-world.sh update-node location:location-name \
+  --data '{"data":{"diameter_meters":500}}'
 ```
 
 ### Distances
@@ -196,14 +185,7 @@ bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Bar
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh add-room "Barracks" --parent "Outpost" --connections '[{"to": "Yard"}]'
 ```
 
-Then set terrain on each room:
-```python
-# Gate, Yard → outdoor; Bar, Barracks → indoor
-for name in ["Gate", "Yard"]:
-    locs[name]["terrain"] = "outdoor"
-for name in ["Bar", "Barracks"]:
-    locs[name]["terrain"] = "indoor"
-```
+Then set terrain on each room with `dm-world.sh update-node`; use `outdoor` for Gate and Yard, and `indoor` for Bar and Barracks.
 
 ### Mobile compounds (ships/vehicles)
 

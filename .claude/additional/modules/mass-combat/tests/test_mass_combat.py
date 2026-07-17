@@ -75,6 +75,20 @@ class TestAddUnits:
         assert len(engine.state["groups"]["bridge"]["unit_ids"]) == 3
         assert len(engine.state["groups"]["patrol"]["unit_ids"]) == 2
 
+    def test_template_preserves_melee_range(self, engine):
+        engine.templates["zergling"] = {
+            "ac": 13,
+            "hp": 10,
+            "atk": 4,
+            "dmg": "1d6+2",
+            "range": "melee",
+        }
+        engine.init_battle("Test")
+
+        engine.add_from_template("enemies", "swarm", "zergling")
+
+        assert engine.state["units"]["zergling-01"]["range"] == "melee"
+
 
 class TestRoundAttack:
     def test_round_rolls_for_each(self, engine):

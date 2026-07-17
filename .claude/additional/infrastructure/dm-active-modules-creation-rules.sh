@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common-module.sh"
 PROJECT_ROOT="$(find_project_root "$SCRIPT_DIR")"
 
-ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
+ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")}"
 [ -z "$ACTIVE" ] && exit 0
 
 OVERVIEW="$PROJECT_ROOT/world-state/campaigns/$ACTIVE/campaign-overview.json"

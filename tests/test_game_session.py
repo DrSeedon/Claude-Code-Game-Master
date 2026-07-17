@@ -42,6 +42,18 @@ def test_get_or_create_session_different_campaigns_are_isolated(tmp_path):
     b = get_or_create_session("camp-b", tmp_path, "claude-sonnet-4-6")
 
     assert a is not b
+    assert a.provider.campaign_name == "camp-a"
+    assert b.provider.campaign_name == "camp-b"
+
+
+def test_provider_process_environment_is_campaign_scoped(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+
+    options = session.provider._make_options(
+        "claude-sonnet-4-6", "system", None
+    )
+
+    assert options.env["DM_ACTIVE_CAMPAIGN"] == "camp-a"
 
 
 def test_send_starts_turn_and_marks_running(tmp_path):

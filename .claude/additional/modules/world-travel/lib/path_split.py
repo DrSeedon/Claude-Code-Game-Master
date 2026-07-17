@@ -4,10 +4,9 @@ Automatic path splitting through intersecting locations
 Splits long paths into multiple segments when they pass through intermediate locations
 """
 
-import json
 import math
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict
 from pathlib import Path
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
@@ -19,6 +18,7 @@ MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from path_intersect import check_path_intersection
+from world_travel_store import WorldTravelStore
 
 
 def calculate_bearing(x1: float, y1: float, x2: float, y2: float) -> float:
@@ -151,20 +151,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Split intersecting paths')
     parser.add_argument('campaign_dir', help='Path to campaign directory')
     parser.add_argument('--dry-run', action='store_true', help='Show changes without applying')
-    parser.add_argument('--apply', action='store_true', help='Apply changes to locations.json')
+    parser.add_argument('--apply', action='store_true', help='Apply changes to WorldGraph')
 
     args = parser.parse_args()
 
     campaign_path = Path(args.campaign_dir)
-    locations_file = campaign_path / 'locations.json'
-
-    if not locations_file.exists():
-        print(f"Error: {locations_file} not found")
+    store = WorldTravelStore(campaign_path)
+    locations = store.load_locations()
+    if not locations:
+        print("Error: no locations found in WorldGraph")
         exit(1)
-
-    # Load locations
-    with open(locations_file) as f:
-        locations = json.load(f)
 
     print(f"📂 Campaign: {campaign_path.name}")
     print(f"📍 Loaded {len(locations)} locations")
@@ -175,8 +171,7 @@ if __name__ == "__main__":
 
     # Save if --apply
     if args.apply:
-        with open(locations_file, 'w') as f:
-            json.dump(modified_locations, f, indent=2, ensure_ascii=False)
-        print(f"\n✓ Changes saved to {locations_file}")
+        store.save_locations(modified_locations)
+        print("\n✓ Changes saved to WorldGraph")
     elif not args.dry_run:
         print("\n⚠️  Use --apply to save changes or --dry-run to preview")

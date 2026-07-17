@@ -57,22 +57,23 @@ class TestAddNode:
         assert graph.add_node("npc:", "npc", "Empty name part") is False
         assert graph.add_node(":name", "npc", "Empty type part") is False
 
+    def test_add_node_rejects_type_mismatch(self, graph):
+        assert graph.add_node("npc:guide", "item", "Guide") is False
+
     def test_add_node_with_data(self, graph):
         graph.add_node("npc:troll", "npc", "Troll", data={"hp": 84, "ac": 15})
         node = graph.get_node("npc:troll")
         assert node["data"]["hp"] == 84
         assert node["data"]["ac"] == 15
 
-    def test_add_node_with_extra_kwargs(self, graph):
-        graph.add_node(
-            "location:castle", "location", "Castle",
-            inventory=["torch", "barrel"],
-            events=["siege"]
-        )
-        node = graph.get_node("location:castle")
-        assert node is not None
-        assert node.get("inventory") == ["torch", "barrel"]
-        assert node.get("events") == ["siege"]
+    def test_add_node_rejects_top_level_gameplay_fields(self, graph):
+        with pytest.raises(TypeError):
+            graph.add_node(
+                "location:castle",
+                "location",
+                "Castle",
+                inventory=["torch", "barrel"],
+            )
 
 
 class TestGetNode:
@@ -96,6 +97,20 @@ class TestUpdateNode:
     def test_update_node_returns_false_for_missing(self, graph):
         result = graph.update_node("npc:ghost", {"mood": "sad"})
         assert result is False
+
+    def test_update_node_does_not_mutate_input(self, populated_graph):
+        updates = {"data": {"attitude": "hostile"}}
+
+        assert populated_graph.update_node("npc:merchant", updates)
+        assert updates == {"data": {"attitude": "hostile"}}
+
+    def test_npc_event_uses_data_and_is_displayed(self, populated_graph):
+        assert populated_graph.npc_event("npc:merchant", "Closed the shop")
+
+        node = populated_graph.get_node("npc:merchant")
+        assert node["data"]["events"][-1]["event"] == "Closed the shop"
+        assert "events" not in {key for key in node if key != "data"}
+        assert "Closed the shop" in populated_graph.format_node("npc:merchant")
 
 
 class TestRemoveNode:
@@ -299,6 +314,67 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestIntegration:
+    def test_inventory_loot_commits_once(self, graph):
+        graph.add_node(
+            "player:active",
+            "player",
+            "Hero",
+            data={"money": 10, "xp": 0},
+        )
+        before = graph.repository.revision(graph.repository.load())
+
+        assert graph.inventory_loot(
+            "player:active",
+            [("Ammo", 5, 0.02), ("Medkit", 1, 0.5)],
+            gold=20,
+            xp=30,
+        )
+
+        saved = graph.repository.load()
+        player = saved["nodes"]["player:active"]
+        assert saved["meta"]["revision"] == before + 1
+        assert player["inventory"]["stackable"]["Ammo"] == {
+            "qty": 5,
+            "weight": 0.02,
+        }
+        assert player["data"]["money"] == 30
+        assert player["data"]["xp"] == 30
+
+    def test_inventory_transfer_is_atomic_and_preserves_weight(self, graph):
+        graph.add_node("player:active", "player", "Hero")
+        graph.add_node("npc:ally", "npc", "Ally")
+        graph.inventory_add("player:active", "Ammo", 10, 0.02)
+        before = graph.repository.revision(graph.repository.load())
+
+        assert graph.inventory_transfer("player:active", "npc:ally", "Ammo", 4)
+
+        saved = graph.repository.load()
+        assert saved["meta"]["revision"] == before + 1
+        assert saved["nodes"]["player:active"]["inventory"]["stackable"]["Ammo"]["qty"] == 6
+        assert saved["nodes"]["npc:ally"]["inventory"]["stackable"]["Ammo"] == {
+            "qty": 4,
+            "weight": 0.02,
+        }
+
+    def test_player_show_formats_structured_hp_and_xp(self, graph):
+        graph.add_node(
+            "player:active",
+            "player",
+            "Steve",
+            data={
+                "hp": {"current": 12, "max": 12},
+                "xp": {"current": 0, "next_level": 300},
+                "money": 20,
+            },
+        )
+
+        output = graph.player_show()
+
+        assert "HP" in output
+        assert "12/12" in output
+        assert "XP" in output
+        assert "{'current'" not in output
+
     def test_recipe_traversal(self, graph):
         graph.add_node("item:health-potion", "item", "Health Potion")
         graph.add_node("item:red-herb", "item", "Red Herb")

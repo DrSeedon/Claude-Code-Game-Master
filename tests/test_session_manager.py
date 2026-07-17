@@ -63,6 +63,30 @@ class TestMoveParty:
         result = mgr.move_party("Castle")
         assert result["previous_location"] == "Forest"
 
+    def test_move_prefers_world_graph_location_over_stale_metadata(self, tmp_path):
+        ws, camp = make_world_state(tmp_path, overview_extra={
+            "player_position": {"current_location": "Stale Camp"}
+        })
+        world = json.loads((camp / "world.json").read_text())
+        world["nodes"]["player:active"]["data"]["current_location"] = "Graph Camp"
+        world["nodes"]["location:graph-camp"] = {
+            "type": "location",
+            "name": "Graph Camp",
+            "data": {"description": ""},
+        }
+        (camp / "world.json").write_text(json.dumps(world))
+
+        result = SessionManager(ws).move_party("Forward Base")
+
+        assert result["previous_location"] == "Graph Camp"
+        saved = json.loads((camp / "world.json").read_text())
+        connections = {
+            (edge["from"], edge["to"])
+            for edge in saved["edges"]
+            if edge["type"] == "connected"
+        }
+        assert ("location:graph-camp", "location:forward-base") in connections
+
     def test_move_persists_to_campaign_file(self, tmp_path):
         ws, camp = make_world_state(tmp_path)
         mgr = SessionManager(ws)
@@ -106,6 +130,48 @@ class TestMoveParty:
         assert ("location:town", "location:forest") in connected_pairs
         assert ("location:forest", "location:town") in connected_pairs
 
+    def test_move_relocates_party_member_npcs_only(self, tmp_path):
+        ws, camp = make_world_state(tmp_path)
+        world = json.loads((camp / "world.json").read_text())
+        world["nodes"].update({
+            "npc:companion": {
+                "type": "npc", "name": "Companion",
+                "data": {"party_member": True},
+            },
+            "npc:legacy-companion": {
+                "type": "npc", "name": "Legacy Companion",
+                "data": {"is_party_member": True},
+            },
+            "npc:shopkeeper": {
+                "type": "npc", "name": "Shopkeeper",
+                "data": {"party_member": False},
+            },
+            "location:old-camp": {
+                "type": "location", "name": "Old Camp", "data": {},
+            },
+        })
+        world["edges"] = [
+            {"from": "npc:companion", "to": "location:old-camp", "type": "at"},
+            {"from": "npc:legacy-companion", "to": "location:old-camp", "type": "at"},
+            {"from": "npc:shopkeeper", "to": "location:old-camp", "type": "at"},
+        ]
+        (camp / "world.json").write_text(json.dumps(world))
+
+        result = SessionManager(ws).move_party("New Camp")
+
+        moved_world = json.loads((camp / "world.json").read_text())
+        at_edges = {
+            (edge["from"], edge["to"])
+            for edge in moved_world["edges"]
+            if edge["type"] == "at"
+        }
+        assert ("npc:companion", "location:new-camp") in at_edges
+        assert ("npc:legacy-companion", "location:new-camp") in at_edges
+        assert ("npc:shopkeeper", "location:old-camp") in at_edges
+        assert set(result["moved_party_members"]) == {
+            "npc:companion", "npc:legacy-companion"
+        }
+
 
 class TestGetContext:
     def test_get_full_context_returns_string(self, tmp_path):
@@ -126,6 +192,22 @@ class TestGetContext:
         mgr = SessionManager(ws)
         ctx = mgr.get_full_context()
         assert "Hero" in ctx
+
+    def test_get_full_context_contains_play_mode_and_visuals(self, tmp_path):
+        ws, camp = make_world_state(tmp_path, overview_extra={
+            "play_mode": "narrative",
+            "cinematic_visuals": {
+                "enabled": True,
+                "frequency": "occasional",
+                "aspect_ratio": "16:9",
+            },
+        })
+        mgr = SessionManager(ws)
+
+        ctx = mgr.get_full_context()
+
+        assert "Play mode: narrative" in ctx
+        assert "Cinematic visuals: enabled (occasional, 16:9)" in ctx
 
     def test_get_status_returns_dict(self, tmp_path):
         ws, camp = make_world_state(tmp_path)
@@ -190,6 +272,22 @@ class TestSaveRestore:
         assert "world" in save_data["snapshot"]
         assert save_data["snapshot"]["world"] is not None
 
+    def test_save_restore_includes_module_data(self, tmp_path):
+        ws, camp = make_world_state(tmp_path)
+        module_data = camp / "module-data"
+        module_data.mkdir()
+        state_file = module_data / "combat-state.json"
+        state_file.write_text(json.dumps({"round": 4, "active": True}))
+        mgr = SessionManager(ws)
+        filename = mgr.create_save("with-modules")
+
+        state_file.write_text(json.dumps({"round": 9, "active": True}))
+        (module_data / "stale.json").write_text(json.dumps({"stale": True}))
+
+        assert mgr.restore_save(filename) is True
+        assert json.loads(state_file.read_text()) == {"round": 4, "active": True}
+        assert not (module_data / "stale.json").exists()
+
     def test_restore_save_restores_world(self, tmp_path):
         ws, camp = make_world_state(tmp_path)
         mgr = SessionManager(ws)
@@ -203,9 +301,11 @@ class TestSaveRestore:
         restored = json.loads((camp / "world.json").read_text())
         assert "location:test" not in restored["nodes"]
 
-    def test_restore_backward_compat_flat_files(self, tmp_path):
+    def test_restore_rejects_legacy_flat_files_without_writing(self, tmp_path):
         ws, camp = make_world_state(tmp_path)
         mgr = SessionManager(ws)
+        before_world = (camp / "world.json").read_text()
+        before_overview = (camp / "campaign-overview.json").read_text()
 
         save_data = {
             "name": "legacy",
@@ -224,4 +324,6 @@ class TestSaveRestore:
         save_path.write_text(json.dumps(save_data))
 
         result = mgr.restore_save("legacy")
-        assert result is True
+        assert result is False
+        assert (camp / "world.json").read_text() == before_world
+        assert (camp / "campaign-overview.json").read_text() == before_overview

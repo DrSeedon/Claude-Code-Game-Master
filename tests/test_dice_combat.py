@@ -3,7 +3,7 @@ import sys
 import json
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 from dice import DiceRoller, _resolve_attack, _resolve_spell_attack, _load_creature, _load_spell

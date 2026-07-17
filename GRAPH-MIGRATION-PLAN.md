@@ -2,7 +2,7 @@
 
 ## What We Built
 
-Single `lib/world_graph.py` (2500+ lines) replaces 7 separate JSON files and 6 Python managers with one unified entity graph.
+One authoritative entity graph replaces the former flat gameplay files. `WorldGraph` remains the compatibility facade, while `WorldRepository` owns locking, revisions, atomic writes, and transactions.
 
 ### Before (old architecture)
 ```
@@ -16,7 +16,7 @@ consequences.json + plots.json + module-data/custom-stats.json
 ```
 world.json (one file, 218+ nodes, typed edges)
 campaign-overview.json (metadata only: time, calendar, narrator)
-= 2 files, 1 manager, ID-based references, full integrity
+= 2 authoritative files, ID-based references, atomic graph commits
 ```
 
 ## Campaign Structure
@@ -90,12 +90,24 @@ at, owns, connected, requires, involves, trained, sells, spawns_at, known_by, re
   - Consequences (advance timers)
   - Threshold warnings
 
-### Economy (campaign:economy node)
+### Economy (`misc:economy` node)
 - Recurring expenses, income, production, random events
 - All configurable per campaign
 
 ## CLI
 `tools/dm-world.sh` — 55+ subcommands. All old tools (dm-npc.sh, dm-location.sh, etc.) rewired as thin wrappers.
+
+`tools/dm-scene.sh` batches a full scene transition — location creation,
+connection, party movement, time tick, consequence resolution, and quest updates
+— through one external command and one WorldGraph transaction.
+
+## Persistence
+
+- `lib/world_repository.py` coordinates every graph writer with `flock`.
+- Commits use a temporary file, `fsync`, and atomic `os.replace`.
+- `meta.revision` rejects stale snapshots instead of silently overwriting them.
+- `with graph.transaction():` loads once, commits once, and rolls back on error.
+- Campaign bootstrap, save restore, and reset use the same repository path.
 
 ## Auto-Combat (in dice.py)
 - `--target "creature"` — reads creature AC from world.json, auto-damage on hit
@@ -109,19 +121,17 @@ at, owns, connected, requires, involves, trained, sells, spawns_at, known_by, re
 
 ## What Was Deleted
 - lib/npc_manager.py, location_manager.py, note_manager.py, plot_manager.py (~2300 lines)
+- lib/player_manager.py and inventory_manager.py after their callers migrated
 - lib/survival_engine.py (~1350 lines), action_tracker.py (~130 lines)
 - custom-stats module entirely (~1300 lines)
 - Old test files
-- **Total deleted: ~5000+ lines**
+- The world-travel module was retained and migrated to a WorldGraph projection layer.
 
-## What Remains (deprecated, for inactive modules)
-- lib/player_manager.py — used by world-travel, firearms-combat modules
-- lib/inventory_manager.py — used by world-travel module
-- lib/consequence_manager.py — used by old middleware
-- lib/wiki_manager.py — imported by inventory_manager
-- lib/entity_manager.py + json_ops.py — base classes for above
+## Remaining compatibility boundary
 
-These will be removed when deprecated modules (world-travel, firearms-combat) are migrated or deleted.
+- `lib/json_ops.py` remains for non-graph metadata such as campaign overview and session snapshots.
+- `campaign-overview.json` still carries display-oriented position metadata for existing clients; gameplay entities remain authoritative in `world.json`.
+- The WorldGraph facade is intentionally preserved so existing shell tools keep one stable API while domain services are extracted incrementally.
 
 ## Tests
-153 passing: 42 WorldGraph core + 21 tick engine + 90 other CORE tests
+Run `uv run pytest` for the complete CORE and active-module suite.

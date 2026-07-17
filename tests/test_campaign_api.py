@@ -2,7 +2,6 @@
 
 import pytest
 import json
-from pathlib import Path
 from backend.campaign_api import (
     list_campaigns,
     create_campaign,
@@ -134,6 +133,13 @@ def test_create_campaign_invalid_name(temp_project_root):
 
     assert result["success"] == False
     assert "invalid characters" in result["error"]
+
+
+@pytest.mark.parametrize("name", ["..", ".hidden", "../outside", "/tmp/outside"])
+def test_campaign_api_rejects_path_traversal(temp_project_root, name):
+    result = create_campaign(name=name)
+
+    assert result["success"] is False
 
 
 def test_activate_campaign_success(temp_project_root):

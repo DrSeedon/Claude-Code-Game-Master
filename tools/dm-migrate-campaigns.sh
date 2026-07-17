@@ -6,6 +6,8 @@ set -e
 
 # Get project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_CMD="uv run python"
+LIB_DIR="$PROJECT_ROOT/lib"
 WORLD_STATE="$PROJECT_ROOT/world-state"
 CAMPAIGNS_DIR="$WORLD_STATE/campaigns"
 ACTIVE_FILE="$WORLD_STATE/active-campaign.txt"
@@ -77,6 +79,11 @@ fi
 CAMPAIGN_NAME=$(echo "$CAMPAIGN_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 TARGET_DIR="$CAMPAIGNS_DIR/$CAMPAIGN_NAME"
 
+if [ -e "$TARGET_DIR" ]; then
+    echo -e "${RED}Campaign already exists: $CAMPAIGN_NAME${NC}"
+    exit 1
+fi
+
 echo ""
 echo -e "${BLUE}Migration Plan:${NC}"
 echo "==============="
@@ -103,9 +110,9 @@ fi
 echo ""
 echo -e "${BLUE}Migrating...${NC}"
 
-# Create target directory structure
-mkdir -p "$TARGET_DIR/saves"
-mkdir -p "$TARGET_DIR/extracted"
+# Create and validate the canonical campaign structure.
+$PYTHON_CMD "$LIB_DIR/campaign_manager.py" create "$CAMPAIGN_NAME" \
+    --campaign-name "$CAMPAIGN_NAME"
 
 # Move core files
 for FILE in campaign-overview.json npcs.json locations.json facts.json consequences.json session-log.md; do
@@ -138,6 +145,10 @@ fi
 echo "$CAMPAIGN_NAME" > "$ACTIVE_FILE"
 echo "  Created: active-campaign.txt"
 
+# Convert the copied flat files to the canonical graph and remove only the
+# campaign-local staging copies. Root legacy files remain untouched.
+$PYTHON_CMD "$LIB_DIR/legacy_migration.py" "$TARGET_DIR" --remove-legacy
+
 echo ""
 echo -e "${GREEN}Migration complete!${NC}"
 echo ""
@@ -147,9 +158,6 @@ echo ""
 echo "Next steps:"
 echo "  1. Verify the migration: dm-campaign.sh info"
 echo "  2. Test the tools: dm-overview.sh"
-echo "  3. Optionally clean up legacy files from world-state root"
+echo "  3. Archive root legacy files before removing them manually"
 echo ""
-echo -e "${YELLOW}Note: Original files were COPIED, not moved.${NC}"
-echo "After verifying migration, you can clean up with:"
-echo "  rm world-state/*.json world-state/session-log.md"
-echo "  rm -rf world-state/characters world-state/saves"
+echo -e "${YELLOW}Original root files were copied and remain unchanged.${NC}"

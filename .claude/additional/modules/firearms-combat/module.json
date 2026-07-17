@@ -1,7 +1,7 @@
 {
   "id": "firearms-combat",
   "name": "Firearms Combat System",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "DM System Core",
   "description": "Automated firearms combat resolver with penetration mechanics, RPM simulation, and fire mode support for modern/STALKER campaigns",
   "category": "combat",
@@ -24,13 +24,15 @@
   "incompatible_with": [],
   "middleware": [],
   "features": [
-    "Single, burst, and full-auto fire modes",
+    "Duration-based single, burst, and full-auto fire modes",
+    "Separate physical ammo expenditure and bounded salvo resolution",
+    "Magazine capacity and reload signaling",
     "Penetration vs Protection damage scaling",
     "Subclass bonuses (sharpshooter)",
-    "Critical hit mechanics (2× dice on nat 20)",
+    "Margin-based multi-bullet hits with bounded critical damage",
     "Multi-target distribution (full-auto)",
     "Auto XP tracking",
-    "Auto ammo deduction via CORE inventory",
+    "Auto ammo deduction via WorldGraph inventory",
     "Test mode for dry runs"
   ],
   "adds_to_core": {
@@ -52,9 +54,15 @@
             }
           },
           "fire_modes": {
+            "burst": {
+              "duration_seconds": 1,
+              "max_salvos_per_target": 3,
+              "penalty_per_salvo": -2
+            },
             "full_auto": {
-              "penalty_per_shot": -2,
-              "penalty_per_shot_sharpshooter": -1
+              "duration_seconds": 3,
+              "max_salvos_per_target": 6,
+              "penalty_per_salvo": -2
             }
           }
         }
@@ -62,7 +70,7 @@
     }
   },
   "use_cases": [
-    "STALKER campaigns with Svoboda/Долговцы firefights",
+    "STALKER campaigns with Freedom/Duty firefights",
     "Fallout-style wasteland combat",
     "Modern military operations",
     "Cyberpunk gunfights",

@@ -37,7 +37,8 @@ tools/dm-mass-combat.sh              <-- bash wrapper (thin)
 - Battle state stored in `combat-state.json` inside campaign directory
 - Temporary file — deleted when battle ends
 - No middleware — standalone tool, does not intercept CORE
-- No module-data — no persistent config needed
+- Unit templates are creature nodes in the campaign's `world.json`
+- Optional campaign combat rules live in `module-data/mass-combat.json`
 
 ---
 
@@ -49,9 +50,9 @@ MC="bash .claude/additional/modules/mass-combat/tools/dm-mass-combat.sh"
 # 1. Start battle
 $MC init "Assault on Nabat"
 
-# 2. Add enemies by template (24 droids in one command)
-$MC add --faction enemies --group B1-bridge --type B1 --count 6 --ac 13 --hp 7 --atk 3 --dmg "1d6"
-$MC add --faction enemies --group B1-patrol --type B1 --count 6 --ac 13 --hp 7 --atk 3 --dmg "1d6"
+# 2. Add enemies by creature template
+$MC add --faction enemies --group raiders-north --template bandit-raider --count 6
+$MC add --faction enemies --group raiders-south --template bandit-raider --count 6
 
 # 3. Add named heroes
 $MC add --faction allies --group alpha --type X --count 1 --ac 14 --hp 17 --atk 6 --dmg "2d6" --names "Hunter"
@@ -76,7 +77,7 @@ $MC end                                          # XP calculation, cleanup
 | Command | Purpose | Example |
 |---------|---------|---------|
 | `init "name"` | Start a battle | `init "Siege of Helm's Deep"` |
-| `add` | Add units by template | `add --faction enemies --group orcs --type Orc --count 20 --ac 13 --hp 15 --atk 5 --dmg "1d12+3"` |
+| `add` | Add units by template | `add --faction enemies --group orcs --template orc-warrior --count 20` |
 | `round <group>` | Group fires (each unit rolls individually) | `round B1-bridge` |
 | `attack <name> --targets` | Named unit attacks specific targets | `attack Legolas --targets Orc-01 Orc-02` |
 | `aoe <source> --targets --damage` | Area damage with optional saves | `aoe "Fireball" --targets Orc-01 Orc-02 Orc-03 --damage "8d6" --save-type DEX --save-dc 15` |

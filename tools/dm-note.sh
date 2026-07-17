@@ -17,7 +17,9 @@ fi
 
 require_active_campaign
 
-dispatch_middleware "dm-note.sh" "$@" && exit $?
+dispatch_middleware "dm-note.sh" "$@"
+MW_RC=$?
+[ $MW_RC -ne 64 ] && exit $MW_RC
 
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 

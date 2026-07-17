@@ -38,15 +38,35 @@ import sys, json, os, glob
 
 root = sys.argv[1]
 modules_dir = os.path.join(root, ".claude", "additional", "modules")
+active_file = os.path.join(root, "world-state", "active-campaign.txt")
+campaign_modules = None
+try:
+    campaign_name = os.environ.get("DM_ACTIVE_CAMPAIGN", "").strip()
+    if not campaign_name:
+        with open(active_file) as f:
+            campaign_name = f.read().strip()
+    overview_path = os.path.join(
+        root, "world-state", "campaigns", campaign_name, "campaign-overview.json"
+    )
+    with open(overview_path) as f:
+        configured = json.load(f).get("modules", [])
+    if isinstance(configured, list):
+        campaign_modules = {module_id: True for module_id in configured}
+    elif isinstance(configured, dict):
+        campaign_modules = configured
+except (OSError, json.JSONDecodeError):
+    pass
 
 paths = sorted(glob.glob(os.path.join(modules_dir, "*/module.json")))
 for i, path in enumerate(paths, 1):
     with open(path) as f:
         d = json.load(f)
 
-    module_json_path = path
-    active_path = os.path.join(os.path.dirname(path), ".active")
-    is_active = os.path.exists(active_path) or d.get("enabled_by_default", False)
+    is_active = (
+        bool(campaign_modules.get(d["id"], False))
+        if campaign_modules is not None
+        else bool(d.get("enabled_by_default", False))
+    )
 
     status = "✅ Active" if is_active else "❌ Inactive"
     default_note = "  ← on by default" if d.get("enabled_by_default") else ""

@@ -68,14 +68,23 @@ class ClaudeSDKProvider(BaseProvider):
     # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
     CONTEXT_WINDOW = 200_000
 
-    def __init__(self, project_root: Path, model_name: str = "claude-sonnet-4-6"):
+    def __init__(
+        self,
+        project_root: Path,
+        model_name: str = "claude-sonnet-4-6",
+        campaign_name: str | None = None,
+    ):
         self.project_root = project_root
         self.model_name = model_name
+        self.campaign_name = campaign_name
         self._client: Optional[ClaudeSDKClient] = None
         self._session_id: Optional[str] = None
         self._last_usage: Optional[dict] = None  # token counts from the latest ResultMessage
 
     def _make_options(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeAgentOptions:
+        process_env = _proxy_env()
+        if self.campaign_name:
+            process_env["DM_ACTIVE_CAMPAIGN"] = self.campaign_name
         options = ClaudeAgentOptions(
             model=model_name or self.model_name,
             cwd=str(self.project_root.resolve()),
@@ -83,7 +92,7 @@ class ClaudeSDKProvider(BaseProvider):
             permission_mode="bypassPermissions",
             max_buffer_size=50 * 1024 * 1024,
             include_partial_messages=True,
-            env=_proxy_env(),
+            env=process_env,
         )
         if self._session_id:
             options.resume = self._session_id

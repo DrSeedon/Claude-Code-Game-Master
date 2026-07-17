@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cinematic Scene"
+  short_description: "Широкоформатные игровые кадры для кампаний"
+  default_prompt: "Используй $cinematic-scene и создай кинематографичный кадр текущей сцены кампании."

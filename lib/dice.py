@@ -6,7 +6,7 @@ Supports standard notation: 1d20, 3d6+2, 2d20kh1 (advantage), etc.
 
 import random
 import re
-from typing import List, Tuple, Dict
+from typing import Dict
 
 # Import colors for formatted output
 try:
@@ -273,12 +273,22 @@ def roll_formatted(notation: str) -> str:
 def _get_campaign_path():
     """Get active campaign directory path."""
     from pathlib import Path
+    from campaign_context import (
+        InvalidCampaignName,
+        resolve_campaign_dir,
+        scoped_campaign_name,
+    )
     root = next(p for p in Path(__file__).parents if (p / ".git").exists())
-    active_file = root / "world-state" / "active-campaign.txt"
-    if not active_file.exists():
+    world_state = root / "world-state"
+    try:
+        campaign = scoped_campaign_name(world_state)
+        if not campaign:
+            return None
+        return resolve_campaign_dir(
+            world_state / "campaigns", campaign, must_exist=True
+        )
+    except (InvalidCampaignName, FileNotFoundError):
         return None
-    campaign = active_file.read_text().strip()
-    return root / "world-state" / "campaigns" / campaign
 
 
 def _load_character():
@@ -354,7 +364,7 @@ def _resolve_skill(char, skill_name):
 
 
 def _resolve_save(char, save_name):
-    """Auto-calculate save modifier from stats + proficiency. No saves field needed in character.json."""
+    """Calculate a save modifier from the active WorldGraph player data."""
     stats = char.get('stats', {})
     level = char.get('level', 1)
     proficiency = 2 if level < 5 else 3 if level < 9 else 4 if level < 13 else 5 if level < 17 else 6
@@ -435,8 +445,6 @@ def _load_spell(name):
     if not campaign_dir:
         return None
     name_lower = name.lower()
-    spell_types = {"spell", "ability", "technique", "cantrip"}
-
     world_file = campaign_dir / "world.json"
     if world_file.exists():
         with open(world_file) as f:
@@ -484,7 +492,7 @@ def main():
     parser.add_argument("--label", "-l", help="Roll description (e.g. 'Perception (Рекс)')")
     parser.add_argument("--dc", type=int, help="Difficulty Class to check against")
     parser.add_argument("--ac", type=int, help="Armor Class to check against")
-    parser.add_argument("--skill", "-s", help="Skill name (auto-lookup modifier from character.json)")
+    parser.add_argument("--skill", "-s", help="Skill name (auto-lookup from active player)")
     parser.add_argument("--save", help="Save name: str/dex/con/int/wis/cha or Russian abbrev")
     parser.add_argument("--attack", nargs="?", const="", help="Attack roll (optional: weapon/skill name)")
     parser.add_argument("--spell", help="Spell/ability name (auto-lookup from wiki: attack or save-based)")

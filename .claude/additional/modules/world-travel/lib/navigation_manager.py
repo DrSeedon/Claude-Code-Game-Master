@@ -5,7 +5,7 @@ Navigation Manager — standalone module for coordinate-based navigation.
 Handles coordinate calculations, bearing-based location creation, route analysis,
 blocked directions. CORE location_manager.py handles basic location CRUD.
 
-This module imports CORE's JsonOperations, connection_utils. CORE has zero knowledge of this module.
+This module projects location data from WorldGraph through WorldTravelStore.
 """
 
 import sys
@@ -15,28 +15,24 @@ from typing import Dict, List, Optional, Tuple
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from lib.json_ops import JsonOperations
 from connection_utils import (
-    get_connections as cu_get_connections,
     get_connection_between,
     add_canonical_connection,
-    remove_canonical_connection
 )
-from lib.session_manager import SessionManager
-from lib.campaign_manager import CampaignManager
-
 MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from pathfinding import PathFinder
 from path_manager import PathManager
+from world_travel_store import WorldTravelStore
 
 
 class NavigationManager:
     """Coordinate-based navigation operations."""
 
     def __init__(self, campaign_dir: str):
-        self.json_ops = JsonOperations(campaign_dir)
+        self.campaign_dir = Path(campaign_dir)
+        self.store = WorldTravelStore(campaign_dir)
         self.pf = PathFinder()
         self.path_manager = PathManager(campaign_dir)
 
@@ -54,7 +50,7 @@ class NavigationManager:
 
         Returns: (success, location_data or None)
         """
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if from_location not in locations:
             return False, None
@@ -101,7 +97,7 @@ class NavigationManager:
         reason: str
     ) -> bool:
         """Add blocked direction range to a location."""
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if location not in locations:
             print(f"[ERROR] Location '{location}' not found")
@@ -120,7 +116,7 @@ class NavigationManager:
             'reason': reason
         })
 
-        if self.json_ops.save_json("locations.json", locations):
+        if self.store.save_locations(locations):
             print(f"[SUCCESS] Blocked {from_deg}° - {to_deg}° at {location}: {reason}")
             return True
         return False
@@ -132,7 +128,7 @@ class NavigationManager:
         to_deg: float
     ) -> bool:
         """Remove blocked direction range from a location."""
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if location not in locations:
             print(f"[ERROR] Location '{location}' not found")
@@ -153,7 +149,7 @@ class NavigationManager:
             print(f"[ERROR] No matching blocked range found: {from_deg}° - {to_deg}°")
             return False
 
-        if self.json_ops.save_json("locations.json", locations):
+        if self.store.save_locations(locations):
             print(f"[SUCCESS] Unblocked {from_deg}° - {to_deg}° at {location}")
             return True
         return False
@@ -188,7 +184,7 @@ class NavigationManager:
         if "direct" in options:
             opt = options["direct"]
             option_keys.append("direct")
-            print(f"[1] DIRECT PATH")
+            print("[1] DIRECT PATH")
             print(f"    Distance: {opt['distance']}m")
             print(f"    Direction: {opt['direction']}")
             print(f"    Bearing: {opt['bearing']}°")
@@ -197,7 +193,7 @@ class NavigationManager:
         if "use_route" in options:
             opt = options["use_route"]
             option_keys.append("use_route")
-            print(f"[2] USE EXISTING ROUTE")
+            print("[2] USE EXISTING ROUTE")
             print(f"    Path: {' → '.join(opt['route'])}")
             print(f"    Distance: {opt['distance']}m")
             print(f"    Hops: {opt['hops']}")
@@ -206,7 +202,7 @@ class NavigationManager:
         if "blocked_reason" in options:
             print(f"[!] DIRECT PATH BLOCKED: {options['blocked_reason']}\n")
 
-        print(f"[3] BLOCK THIS ROUTE (permanently)")
+        print("[3] BLOCK THIS ROUTE (permanently)")
         option_keys.append("blocked")
         print()
 
@@ -232,7 +228,7 @@ class NavigationManager:
 
             if decision == "direct":
                 self.path_manager.cache_decision(from_loc, to_loc, "direct")
-                print(f"[SUCCESS] Cached decision: use direct path")
+                print("[SUCCESS] Cached decision: use direct path")
 
             elif decision == "use_route":
                 route = options["use_route"]["route"]
@@ -247,8 +243,6 @@ class NavigationManager:
 
     def show_routes(self, from_loc: str, to_loc: str) -> bool:
         """Show all possible routes between two locations."""
-        import json
-
         analysis = self.path_manager.analyze_route_options(from_loc, to_loc)
 
         if analysis.get("error"):
@@ -270,7 +264,7 @@ class NavigationManager:
             print()
 
         if analysis.get("direct_distance"):
-            print(f"DIRECT PATH:")
+            print("DIRECT PATH:")
             print(f"  Distance: {analysis['direct_distance']}m")
             print(f"  Bearing: {analysis['direct_bearing']}°")
 
@@ -300,32 +294,23 @@ class NavigationManager:
         return True
 
     def _tick_survival_stats(self, elapsed_hours: float):
-        import subprocess
-        survival_script = PROJECT_ROOT / ".claude" / "additional" / "modules" / "custom-stats" / "tools" / "dm-survival.sh"
-        stats_data = self.json_ops.world_state_dir / "module-data" / "custom-stats.json"
-        if elapsed_hours > 0 and survival_script.exists() and stats_data and stats_data.exists():
-            try:
-                result = subprocess.run(
-                    ["bash", str(survival_script), "tick", "--elapsed", str(elapsed_hours)],
-                    capture_output=True, text=True, check=False
-                )
-                if result.returncode == 0:
-                    print(result.stdout.strip())
-                else:
-                    print(f"[WARNING] custom-stats tick failed: {result.stderr.strip()}")
-            except Exception as e:
-                print(f"[WARNING] Could not call custom-stats: {e}")
-        elif elapsed_hours > 0:
-            print(f"[INFO] Travel time: {elapsed_hours:.2f} hours")
+        """Advance the CORE clock and all WorldGraph time-driven systems."""
+        if elapsed_hours <= 0:
+            return {}
+
+        from lib.time_manager import TimeManager
+
+        TimeManager(campaign_dir=self.campaign_dir).advance(elapsed_hours)
+        return self.store.graph.tick(elapsed_hours)
 
     def _run_encounter_check(self, from_loc: str, to_loc: str,
                              distance_meters: float, terrain: str) -> Optional[Dict]:
         try:
             from encounter_engine import EncounterEngine
-            engine = EncounterEngine(str(self.json_ops.world_state_dir))
+            engine = EncounterEngine(str(self.campaign_dir))
             if not engine.is_enabled():
                 return None
-            speed_kmh = (self.json_ops.load_json("character.json") or {}).get("speed_kmh", 4.0)
+            speed_kmh = self.store.get_player_data().get("speed_kmh", 4.0)
             journey = engine.check_journey(from_loc, to_loc, distance_meters, terrain, speed_kmh)
             print(engine.format_journey_output(journey))
             return journey
@@ -362,20 +347,65 @@ class NavigationManager:
             })
         return hops
 
-    def move_with_navigation(self, location: str, speed_multiplier: float = 1.0) -> Dict:
+    def _move_party_to(self, location: str, move_party: bool = True) -> Dict:
+        graph = self.store.graph
+        location_id = graph._resolve_id(location, "location")
+        if not location_id:
+            return {"success": False, "error": f"Location '{location}' not found"}
+
+        moved_party_members = []
+        with graph.transaction():
+            player_id = graph._player_id()
+            if player_id and not graph.update_node(
+                player_id, {"data": {"current_location": location}}
+            ):
+                raise RuntimeError("Failed to move player")
+
+            if move_party:
+                for node in graph.list_nodes("npc"):
+                    data = node.get("data", {})
+                    if not (data.get("party_member") or data.get("is_party_member")):
+                        continue
+                    if not graph.npc_locate(node["id"], location_id):
+                        raise RuntimeError(f"Failed to move party member: {node['id']}")
+                    moved_party_members.append(node["id"])
+
+        previous_position = self.store.update_player_position({
+            "current_location": location,
+        })
+        previous_location = previous_position.get("current_location") or "Unknown"
+        self.store.update_player_position({"previous_location": previous_location})
+
+        return {
+            "success": True,
+            "previous_location": previous_location,
+            "current_location": location,
+            "moved_party_members": moved_party_members,
+        }
+
+    def move_with_navigation(
+        self,
+        location: str,
+        speed_multiplier: float = 1.0,
+        move_party: bool = True,
+    ) -> Dict:
         """
         Multi-hop move with encounter checks at each segment.
         If no direct connection, finds route via BFS and walks each hop.
         Each hop: time tick → encounter check → move to next location.
         """
-        campaign_overview = self.json_ops.load_json("campaign-overview.json")
-        character_data = self.json_ops.load_json("character.json") or {}
-        locations = self.json_ops.load_json("locations.json")
+        campaign_overview = self.store.load_overview()
+        character_data = self.store.get_player_data()
+        locations = self.store.load_locations()
 
         if not campaign_overview:
             return {"success": False, "error": "No campaign overview found"}
 
-        current_location = campaign_overview.get("current_location") or campaign_overview.get("player_position", {}).get("current_location")
+        current_location = (
+            campaign_overview.get("player_position", {}).get("current_location")
+            or campaign_overview.get("current_location")
+            or character_data.get("current_location")
+        )
         if not current_location:
             return {"success": False, "error": "No current location set"}
 
@@ -400,8 +430,8 @@ class NavigationManager:
         speed_kmh = character_data.get("speed_kmh", 4.0)
         total_distance = 0
         total_elapsed = 0.0
-        session_mgr = SessionManager()
         encounters_triggered = []
+        consequences_triggered = []
 
         for i, hop in enumerate(route):
             hop_num = i + 1
@@ -412,7 +442,11 @@ class NavigationManager:
             if is_multihop:
                 print(f"--- HOP {hop_num}/{len(route)}: {hop['from']} → {hop['to']} ({distance}m, {terrain}) ---")
 
-            self._tick_survival_stats(elapsed)
+            tick_result = self._tick_survival_stats(elapsed) or {}
+            consequences_triggered.extend(
+                consequence["id"]
+                for consequence in tick_result.get("consequences", [])
+            )
 
             journey = self._run_encounter_check(hop["from"], hop["to"], distance, terrain)
             if journey and journey.get("total_encounters", 0) > 0:
@@ -423,7 +457,7 @@ class NavigationManager:
                     "journey": journey
                 })
 
-            move_result = session_mgr.move_party(hop["to"])
+            move_result = self._move_party_to(hop["to"], move_party=move_party)
             if "current_location" not in move_result:
                 return {
                     "success": False,
@@ -446,7 +480,8 @@ class NavigationManager:
             "elapsed_hours": total_elapsed,
             "route": [route[0]["from"]] + [h["to"] for h in route],
             "hops": len(route),
-            "encounters_triggered": len(encounters_triggered)
+            "encounters_triggered": len(encounters_triggered),
+            "triggered_consequences": consequences_triggered,
         }
 
     def connect_with_metadata(
@@ -461,7 +496,7 @@ class NavigationManager:
         Create canonical bidirectional connection with terrain/distance/bearing.
         Uses add_canonical_connection from connection_utils.
         """
-        locations = self.json_ops.load_json("locations.json")
+        locations = self.store.load_locations()
 
         if from_loc not in locations:
             print(f"[ERROR] Location '{from_loc}' not found")
@@ -489,7 +524,7 @@ class NavigationManager:
         if not add_canonical_connection(from_loc, to_loc, locations, **kwargs):
             return False
 
-        if self.json_ops.save_json("locations.json", locations):
+        if self.store.save_locations(locations):
             print(f"[SUCCESS] Connected '{from_loc}' ↔ '{to_loc}'")
             print(f"  Terrain: {kwargs['terrain']}")
             if distance:
@@ -560,7 +595,7 @@ if __name__ == "__main__":
     manager = NavigationManager(args.campaign_dir)
 
     if args.action == 'add':
-        locations = manager.json_ops.load_json("locations.json") or {}
+        locations = manager.store.load_locations()
         if args.name in locations:
             print(f"[ERROR] Location '{args.name}' already exists")
             sys.exit(1)
@@ -575,11 +610,11 @@ if __name__ == "__main__":
 
         updated_locations = result['updated_locations']
         updated_locations[args.name] = result['location_data']
-        manager.json_ops.save_json("locations.json", updated_locations)
+        manager.store.save_locations(updated_locations)
 
         print(f"[INFO] Calculated coordinates: {result['coordinates']}")
         print(f"[INFO] Direction from {args.from_location}: {result['direction']} ({result['direction_abbr']})")
-        print(f"[INFO] Auto-created connection")
+        print("[INFO] Auto-created connection")
         print(f"[SUCCESS] Added location: {args.name} ({args.position})")
 
     elif args.action == 'decide':

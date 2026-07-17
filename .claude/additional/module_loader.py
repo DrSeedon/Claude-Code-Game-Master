@@ -11,6 +11,13 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from lib.campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    scoped_campaign_name,
+)
+from lib.json_ops import JsonOperations
+
 
 class ModuleLoader:
     """Load and manage DM System modules."""
@@ -76,13 +83,17 @@ class ModuleLoader:
     # ------------------------------------------------------------------ #
 
     def _active_campaign_overview(self) -> Optional[Path]:
-        active_file = self.project_root / "world-state" / "active-campaign.txt"
-        if not active_file.exists():
+        world_state = self.project_root / "world-state"
+        try:
+            name = scoped_campaign_name(world_state)
+            if not name:
+                return None
+            campaign_dir = resolve_campaign_dir(
+                world_state / "campaigns", name, must_exist=True
+            )
+        except (InvalidCampaignName, FileNotFoundError):
             return None
-        name = active_file.read_text().strip()
-        if not name:
-            return None
-        return self.project_root / "world-state" / "campaigns" / name / "campaign-overview.json"
+        return campaign_dir / "campaign-overview.json"
 
     def _load_overview(self, overview_path: Path) -> Dict:
         try:
@@ -92,13 +103,9 @@ class ModuleLoader:
             return {}
 
     def _save_overview(self, overview_path: Path, data: Dict) -> bool:
-        try:
-            with open(overview_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to save overview: {e}")
-            return False
+        return JsonOperations(str(overview_path.parent)).save_json(
+            overview_path.name, data
+        )
 
     def get_default_modules(self) -> Dict[str, bool]:
         """Build default modules map from enabled_by_default in each module.json."""
@@ -111,10 +118,11 @@ class ModuleLoader:
         Write 'modules' key into campaign-overview.json using defaults.
         Called when creating a new campaign.
         """
-        data = self._load_overview(overview_path)
-        if "modules" not in data:
-            data["modules"] = self.get_default_modules()
-            return self._save_overview(overview_path, data)
+        with JsonOperations(str(overview_path.parent)).transaction(
+            overview_path.name
+        ) as data:
+            if "modules" not in data:
+                data["modules"] = self.get_default_modules()
         return True
 
     def get_campaign_modules(self, overview_path: Optional[Path] = None) -> Dict[str, bool]:
@@ -128,10 +136,16 @@ class ModuleLoader:
         data = self._load_overview(path)
         if "modules" not in data:
             defaults = self.get_default_modules()
-            data["modules"] = defaults
-            self._save_overview(path, data)
+            JsonOperations(str(path.parent)).update_json(
+                path.name, {"modules": defaults}
+            )
             return defaults
-        return data["modules"]
+        modules = data["modules"]
+        if isinstance(modules, list):
+            return {module_id: True for module_id in modules}
+        if isinstance(modules, dict):
+            return {module_id: bool(enabled) for module_id, enabled in modules.items()}
+        return self.get_default_modules()
 
     def check_dependencies_for_campaign(self, module_id: str,
                                          overview_path: Optional[Path] = None) -> Tuple[bool, List[str]]:
@@ -196,14 +210,19 @@ class ModuleLoader:
                     dependents.append(mid)
             if dependents:
                 print(f"[ERROR] Cannot deactivate '{module_id}' — required by: {', '.join(dependents)}")
-                print(f"        Deactivate them first.")
+                print("        Deactivate them first.")
                 return False
 
-        data = self._load_overview(path)
-        if "modules" not in data:
-            data["modules"] = self.get_default_modules()
-        data["modules"][module_id] = enabled
-        return self._save_overview(path, data)
+        with JsonOperations(str(path.parent)).transaction(path.name) as data:
+            modules = data.get("modules")
+            if isinstance(modules, list):
+                modules = {item: True for item in modules}
+                data["modules"] = modules
+            elif not isinstance(modules, dict):
+                modules = self.get_default_modules()
+                data["modules"] = modules
+            modules[module_id] = enabled
+        return True
 
     def is_module_enabled(self, module_id: str,
                           overview_path: Optional[Path] = None) -> bool:
@@ -296,7 +315,6 @@ def main():
         else:
             print(f"Available modules ({len(modules)}):\n")
             for m in modules:
-                status = m.get("_status", "Unknown")
                 enabled = m.get("_enabled", False)
                 missing_deps = m.get("_missing_deps", [])
                 # Warn if enabled but deps missing

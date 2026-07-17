@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""
-Save D&D character to world-state JSON files
-Handles complete character creation with proper calculations
-Supports multi-campaign system (saves to active campaign's character.json)
-"""
+"""Build a D&D character sheet and persist it as the active WorldGraph player."""
 
 import json
 import sys
-import os
 from pathlib import Path
 
 # Add lib directory to path for imports
@@ -15,6 +10,8 @@ lib_path = Path(__file__).parent.parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
 from campaign_manager import CampaignManager
+from json_ops import JsonOperations
+from world_graph import WorldGraph
 
 def calculate_modifier(score):
     """Calculate ability modifier from ability score"""
@@ -90,7 +87,7 @@ def normalize_stats(stats: dict) -> dict:
 
 
 def save_character(character_data):
-    """Save character to campaign's character.json file"""
+    """Save or replace the active campaign's canonical player node."""
 
     # Validate required fields
     required_fields = ['name', 'race', 'class', 'level', 'stats']
@@ -134,30 +131,36 @@ def save_character(character_data):
         "xp": character_data.get('xp', {"current": 0, "next_level": 300})
     }
 
-    # Get the active campaign directory
     campaign_mgr = CampaignManager()
     campaign_dir = campaign_mgr.get_active_campaign_dir()
-
-    # Determine save path based on campaign system
-    if campaign_mgr.get_active():
-        # New format: save to character.json in campaign folder
-        file_path = campaign_dir / "character.json"
-    else:
-        # Legacy format: save to characters/<name>.json
-        characters_dir = Path("world-state/characters")
-        characters_dir.mkdir(parents=True, exist_ok=True)
-        file_path = characters_dir / f"{char_id}.json"
+    if campaign_dir is None:
+        return {"error": "No active campaign"}
 
     try:
-        with open(file_path, 'w') as f:
-            json.dump(character, f, indent=2, ensure_ascii=False)
+        player_name = character.pop("name")
+        graph = WorldGraph(campaign_dir)
+        with graph.transaction() as world:
+            existing = world["nodes"].get("player:active")
+            inventory = existing.get("inventory") if existing else None
+            world["nodes"]["player:active"] = {
+                "type": "player",
+                "name": player_name,
+                "data": character,
+            }
+            if inventory is not None:
+                world["nodes"]["player:active"]["inventory"] = inventory
+
+        JsonOperations(str(campaign_dir)).update_json(
+            "campaign-overview.json",
+            {"current_character": player_name},
+        )
 
         return {
             "success": True,
             "character_id": char_id,
-            "file_path": str(file_path),
-            "campaign": campaign_mgr.get_active() or "legacy",
-            "character": character
+            "file_path": str(campaign_dir / "world.json"),
+            "campaign": campaign_mgr.get_active(),
+            "character": {"name": player_name, **character},
         }
 
     except Exception as e:

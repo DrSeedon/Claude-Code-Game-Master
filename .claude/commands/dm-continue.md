@@ -11,6 +11,7 @@
 | character | Jump to CHARACTER DISPLAY |
 | overview | Jump to CAMPAIGN OVERVIEW |
 | status | Run `bash tools/dm-overview.sh` and display |
+| mode [status\|narrative\|interactive] | Run the matching `dm-mode.sh` command without starting a session |
 | end | Run `/dm-save` skill |
 
 ---
@@ -61,6 +62,7 @@ Compare the location from `dm-session.sh start` output with the session handoff 
 - [ ] WHO is present?
 - [ ] WHAT consequences are pending?
 - [ ] WHY are they here?
+- [ ] WHICH player-agency mode is active?
 
 **Only after ALL steps → present the scene.**
 

@@ -6,11 +6,16 @@ All data is stored in world-state/campaigns/ on disk.
 
 import json
 import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from backend.config import get_project_root
+from lib.campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    validate_campaign_name,
+)
+from lib.campaign_manager import CampaignManager
 
 
 # ─────────────────────────── Helper Functions ──────────────────────────────────
@@ -100,9 +105,12 @@ def _get_active_campaign_name() -> Optional[str]:
     active_file = _get_active_campaign_file()
     if active_file.exists():
         name = active_file.read_text(encoding="utf-8").strip()
-        campaign_dir = _get_campaigns_dir() / name
-        if name and campaign_dir.exists():
-            return name
+        try:
+            if name:
+                resolve_campaign_dir(_get_campaigns_dir(), name, must_exist=True)
+                return name
+        except (InvalidCampaignName, FileNotFoundError):
+            pass
     return None
 
 
@@ -143,71 +151,31 @@ def create_campaign(
     if not name or not name.strip():
         return {"success": False, "error": "Campaign name cannot be empty"}
 
-    # Allow only safe characters for directory name
-    safe_name = name.strip()
-    forbidden = set('/\\:*?"<>|')
-    if any(c in forbidden for c in safe_name):
+    try:
+        safe_name = validate_campaign_name(name)
+    except InvalidCampaignName:
         return {
             "success": False,
-            "error": f"Campaign name contains invalid characters: {forbidden & set(safe_name)}",
+            "error": f"Campaign name contains invalid characters: {name!r}",
         }
 
-    campaigns_dir = _get_campaigns_dir()
-    campaigns_dir.mkdir(parents=True, exist_ok=True)
-
-    campaign_dir = campaigns_dir / safe_name
-    if campaign_dir.exists():
+    manager = CampaignManager(str(get_project_root() / "world-state"))
+    campaign_dir = manager.create(
+        safe_name,
+        safe_name,
+        overview_updates={
+            "genre": genre,
+            "tone": tone,
+            "description": description,
+            "modules": modules or [],
+            "narrator_style": narrator_style,
+        },
+        character=character,
+        rules=rules,
+    )
+    if campaign_dir is None:
         return {"success": False, "error": f"Campaign '{safe_name}' already exists"}
-
-    # Create directory structure
-    campaign_dir.mkdir(parents=True)
-
-    # Build campaign-overview.json
-    overview = {
-        "name": safe_name,
-        "genre": genre,
-        "tone": tone,
-        "description": description,
-        "modules": modules or [],
-        "narrator_style": narrator_style,
-        "created_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "calendar": {},
-        "currency": {},
-    }
-
-    overview_file = campaign_dir / "campaign-overview.json"
-    overview_file.write_text(
-        json.dumps(overview, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-    # Create empty world.json
-    world_file = campaign_dir / "world.json"
-    world_file.write_text(
-        json.dumps({"nodes": {}, "edges": []}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    # Create empty session-log.md
-    session_log = campaign_dir / "session-log.md"
-    session_log.write_text(f"# Session Log: {safe_name}\n", encoding="utf-8")
-
-    # Create player node if character data provided
-    if character:
-        from lib.world_graph import WorldGraph
-
-        wg = WorldGraph(campaign_dir)
-
-        wg.add_node(
-            "player:active",
-            "player",
-            character.get("name", "Hero"),
-            race=character.get("race", ""),
-            level=character.get("level", 1),
-            hp={"current": 10, "max": 10},
-            xp=0,
-            money=0,
-        )
-        # add_node auto-saves
+    overview = _read_campaign_overview(campaign_dir)
 
     return {
         "success": True,
@@ -233,14 +201,17 @@ def delete_campaign(name: str) -> Dict:
             - error (str): Error message (on failure)
     """
     campaigns_dir = _get_campaigns_dir()
-    campaign_dir = campaigns_dir / name
-
-    if not campaign_dir.exists():
+    try:
+        safe_name = validate_campaign_name(name)
+        campaign_dir = resolve_campaign_dir(
+            campaigns_dir, safe_name, must_exist=True
+        )
+    except (InvalidCampaignName, FileNotFoundError):
         return {"success": False, "error": f"Campaign '{name}' not found"}
 
     # Prevent deleting active campaign
     active_name = _get_active_campaign_name()
-    if active_name == name:
+    if active_name == safe_name:
         return {
             "success": False,
             "error": f"Cannot delete active campaign '{name}'. Activate another first.",
@@ -269,20 +240,21 @@ def activate_campaign(name: str) -> Dict:
             - error (str): Error message (on failure)
     """
     campaigns_dir = _get_campaigns_dir()
-    campaign_dir = campaigns_dir / name
-
-    if not campaign_dir.exists():
+    try:
+        safe_name = validate_campaign_name(name)
+        resolve_campaign_dir(campaigns_dir, safe_name, must_exist=True)
+    except (InvalidCampaignName, FileNotFoundError):
         return {"success": False, "error": f"Campaign '{name}' not found"}
 
     active_file = _get_active_campaign_file()
     active_file.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        active_file.write_text(name, encoding="utf-8")
+        active_file.write_text(safe_name, encoding="utf-8")
     except OSError as e:
         return {"success": False, "error": f"Error writing active campaign: {str(e)}"}
 
-    return {"success": True, "name": name}
+    return {"success": True, "name": safe_name}
 
 
 def get_campaign(name: str) -> Dict:
@@ -295,10 +267,11 @@ def get_campaign(name: str) -> Dict:
         Dict with campaign info or error
     """
     campaigns_dir = _get_campaigns_dir()
-    campaign_dir = campaigns_dir / name
-
-    if not campaign_dir.exists():
+    try:
+        safe_name = validate_campaign_name(name)
+        resolve_campaign_dir(campaigns_dir, safe_name, must_exist=True)
+    except (InvalidCampaignName, FileNotFoundError):
         return {"error": f"Campaign '{name}' not found"}
 
     active_name = _get_active_campaign_name()
-    return _campaign_to_info(name, campaigns_dir, active_name)
+    return _campaign_to_info(safe_name, campaigns_dir, active_name)

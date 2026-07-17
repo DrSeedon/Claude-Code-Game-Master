@@ -15,6 +15,7 @@ When user invokes `/dm <subcommand>`, route to the appropriate section:
 | character | Jump to CHARACTER DISPLAY section |
 | overview | Jump to CAMPAIGN OVERVIEW section |
 | status | Run `bash tools/dm-overview.sh` and display results |
+| mode [status\|narrative\|interactive] | Run the matching `dm-mode.sh` command |
 | end | Jump to ENDING SESSION section |
 
 ---

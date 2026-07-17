@@ -1,14 +1,14 @@
 # firearms-combat
 
-Automated firearms combat resolver for the DM System. Replaces vanilla D&D 5e attack mechanics when your campaign involves guns, armor vests, and people who fire 30 rounds in 6 seconds.
+Automated firearms combat resolver for the DM System. Replaces vanilla D&D 5e attack mechanics when a campaign needs physical ammunition expenditure, automatic-fire salvos, and armor penetration.
 
 ---
 
 ## What Is This
 
-A standalone module that handles modern/sci-fi combat resolution: RPM-based shot count, penetration vs protection damage scaling, progressive full-auto penalties, and automatic XP tracking. The DM calls `dm-combat.sh` directly when firearms combat occurs — there is no middleware, the module does not intercept CORE tools.
+A standalone module that handles modern/sci-fi combat resolution: duration-based RPM expenditure, bounded salvo rolls, penetration vs protection damage scaling, progressive recoil, magazine limits, and automatic XP tracking. The DM calls `dm-combat.sh` directly when firearms combat occurs — there is no middleware, the module does not intercept CORE tools.
 
-**Supported genres:** STALKER, Fallout wasteland, modern military, cyberpunk, zombie survival.
+**Supported genres:** STALKER, Fallout wasteland, modern military, cyberpunk, zombie survival, military sci-fi.
 
 ---
 
@@ -16,20 +16,20 @@ A standalone module that handles modern/sci-fi combat resolution: RPM-based shot
 
 ```
 world-state/campaigns/<campaign>/
+  world.json                       <-- weapon, armor, creature, and player nodes
   module-data/
-    firearms-combat.json     <-- weapons, fire_modes, armor, enemies
-  character.json             <-- subclass, XP (written by resolver)
-  campaign-overview.json     <-- no firearms data (migrated out)
+    firearms-combat.json           <-- fire mode and combat config
+  campaign-overview.json           <-- no firearms reference data
 ```
 
 | Data | Location | Who writes |
 |------|----------|------------|
-| Weapon definitions | `module-data/firearms-combat.json` -> `weapons` | DM during /new-game |
+| Weapon definitions | `world.json` -> `weapon:*` nodes | DM during /new-game |
 | Fire mode config | `module-data/firearms-combat.json` -> `fire_modes` | DM during /new-game |
-| Armor/enemy presets | `module-data/firearms-combat.json` -> `armor_system`, `enemies_modern` | DM during /new-game |
-| Character subclass | `character.json` -> `subclass` | DM during /new-game |
-| Character XP | `character.json` -> `xp.current` | Resolver after combat |
-| Ammo inventory | `character.json` (via inventory-system) | Resolver after combat |
+| Armor and creatures | `world.json` -> `armor:*`, `creature:*` nodes | DM during /new-game |
+| Character subclass | `world.json` -> `player:active` | DM during /new-game |
+| Character XP | `world.json` -> player XP | Resolver after combat |
+| Ammo inventory | `world.json` via CORE inventory | Resolver after combat |
 
 The template at `templates/modern-firearms-campaign.json` contains a full STALKER preset with all weapons, armor, enemies, subclasses, and survival stats.
 
@@ -40,30 +40,30 @@ The template at `templates/modern-firearms-campaign.json` contains a full STALKE
 | Feature | Vanilla CORE (D&D 5e) | firearms-combat |
 |---|---|---|
 | Attack roll | 1d20 + bonus | 1d20 + DEX mod + proficiency + subclass |
-| Damage per round | One dice roll | One dice roll **per shot** |
-| Shots per round | 1 (or Extra Attack) | Derived from weapon RPM over 6 seconds |
+| Damage per round | One dice roll | One roll per bounded salvo; damage per bullet hit |
+| Shots per action | 1 (or Extra Attack) | Derived from RPM and trigger duration |
 | Armor | AC threshold | AC threshold + PROT rating that scales damage |
-| Ammunition | Not tracked | Deducted automatically (if inventory-system active) |
+| Ammunition | Not tracked | Deducted from the active player's WorldGraph inventory |
 | Fire modes | None | `single` / `burst` / `full_auto` |
-| Crit mechanics | 2x dice on nat 20 | 2x dice on nat 20, applied per-shot |
-| XP tracking | Manual | Auto-written to character file |
+| Crit mechanics | 2x dice on nat 20 | Automatic fire crits only the first bullet in a natural-20 salvo |
+| XP tracking | Manual | Auto-written to the active WorldGraph player node |
 | Test mode | None | `--test` flag: show result, write nothing |
 
 ---
 
 ## How It Works
 
-### RPM -> Shots Per Round
+### RPM -> Physical Rounds Fired
 
-A D&D combat round is 6 seconds. The resolver converts weapon RPM into a realistic shot count:
+A D&D combat round is 6 seconds, but an attack does not hold the trigger for the entire round. Each fire mode defines a trigger duration:
 
 ```
-shots_per_round = int((rpm / 60) * 6)
+rounds_fired = floor((rpm / 60) * duration_seconds)
 ```
 
-Available ammo caps the total. In full_auto, shots per target are capped at `max_shots_per_target` (default 10).
+Loaded ammo and magazine capacity cap the result. A burst holds the trigger for 1 second; full auto holds it for 3 seconds by default.
 
-Example: AK-74 at 650 RPM -> 65 shots/round theoretical. With 30 rounds and 3 targets, each target gets 10 shots (capped).
+Example: an AK-74 at 650 RPM fires 10 rounds in a one-second burst and empties its 30-round magazine during three-second full auto. A 1,800 RPM weapon fires 30 and 90 rounds respectively.
 
 ### Penetration vs Protection
 
@@ -82,33 +82,29 @@ Example: PM Pistol (`pen 1`) vs Heavy Armor (`prot 5`) -> quarter damage.
 
 **`single`** — One attack roll, one damage roll. No penalty. Consumes 1 round.
 
-**`burst`** — 3 shots (or less if low ammo), progressive penalty:
-- Shot 1: no penalty
-- Shot 2: -3 to attack (Sharpshooter: -2)
-- Shot 3: -6 to attack (Sharpshooter: -4)
+**`burst`** — One second of automatic fire, grouped into at most 3 salvos.
 
-**`full_auto`** — RPM-based shot count, max 10 per target. Progressive penalty:
+**`full_auto`** — Three seconds of automatic fire, grouped into at most 6 salvos per target and 12 total.
 
 ```
-attack_modifier = base_attack + (shot_index * penalty_per_shot)
+attack_modifier = base_attack + (salvo_index * penalty_per_salvo)
 ```
 
-Default penalty: **-3 per shot**. With Sharpshooter subclass: **-2 per shot**.
+Default recoil: **-2 per salvo**. With Sharpshooter subclass: **-1 per salvo**.
 
-A Sharpshooter with +8 to attack firing 5 shots: +8, +6, +4, +2, +0.
-A normal shooter with +5 firing 5 shots: +5, +2, -1, -4, -7.
+A Sharpshooter with +8 resolving 5 salvos attacks at +8, +7, +6, +5, +4. A normal shooter with +5 attacks at +5, +3, +1, -1, -3.
 
 ### Balance Design
 
-Full auto is deliberately **not** a guaranteed kill:
-- Cap at 10 shots/target prevents mag-dumping 30 rounds into one enemy
-- Steep penalty means only first 3-5 shots reliably hit
-- Single fire is ammo-efficient; full auto is high-risk burst damage
-- Monte Carlo sims show AK-74 full_auto kills a Bandit ~59% of the time (was 100% before balance patch)
+Automatic fire separates physical ammunition from attack rolls:
+- Every physical round is consumed, including misses.
+- Salvo caps prevent one d20 roll per bullet.
+- A hit lands 1 bullet, plus 1 per 5 points above AC, capped at 3 and by rounds in the salvo.
+- Single fire is ammo-efficient; automatic fire buys damage potential and suppression with high ammo cost.
 
 ### Critical Hits
 
-Natural 20 on any shot: double the number of damage dice. The flat bonus is not doubled.
+Natural 20 on a single shot doubles its damage dice. A natural-20 automatic salvo lands up to 2 bullets and doubles only the first bullet's damage dice.
 
 ```
 Normal:   2d8+2  ->  roll 2d8, add 2
@@ -121,7 +117,7 @@ Crit:     4d8+2  ->  roll 4d8, add 2
 total_attack = DEX_modifier + proficiency_bonus + subclass_bonus
 ```
 
-Subclass Sharpshooter adds +2 to attack and reduces burst/full-auto penalty from -3 to -2 per shot.
+Subclass Sharpshooter adds +2 to attack and reduces automatic-fire recoil from -2 to -1 per salvo.
 
 ---
 
@@ -155,7 +151,7 @@ bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
 | Argument | Required | Description |
 |---|---|---|
 | `--attacker` | yes | Character name (must match active character) |
-| `--weapon` | yes | Weapon key from `campaign_rules.firearms_system.weapons` |
+| `--weapon` | yes | Weapon node name or ID from `world.json` |
 | `--fire-mode` | yes | `single`, `burst`, or `full_auto` |
 | `--ammo` | yes | Rounds available before this combat action |
 | `--targets` | yes | One or more targets in `Name:AC:HP:PROT` format |
@@ -173,7 +169,7 @@ Example: `"Bandit:13:20:2"` — enemy named Bandit, AC 13, 20 HP, protection rat
 
 ## Weapon Configuration
 
-Weapons are defined in `campaign-overview.json` under `campaign_rules.firearms_system.weapons`. The module ships with a ready-to-use template at `templates/modern-firearms-campaign.json`.
+Weapons are `weapon:*` nodes in `world.json`. The module ships with a ready-to-use reference template at `templates/modern-firearms-campaign.json`.
 
 ### Weapon Fields
 
@@ -181,8 +177,8 @@ Weapons are defined in `campaign-overview.json` under `campaign_rules.firearms_s
 |---|---|---|
 | `damage` | string | Dice notation: `"2d8+3"` |
 | `pen` | int | Penetration rating (compared against target `prot`) |
-| `rpm` | int | Rounds per minute (determines full-auto shot count) |
-| `magazine` | int | Magazine capacity (reference only, not enforced by resolver) |
+| `rpm` | int | Rounds per minute used with fire-mode duration |
+| `magazine` | int | Loaded magazine capacity enforced per fire action |
 | `type` | string | `assault_rifle`, `pistol`, `sniper_rifle`, `shotgun` |
 
 ### Included Weapon Presets (from template)
@@ -199,46 +195,44 @@ Weapons are defined in `campaign-overview.json` under `campaign_rules.firearms_s
 
 ### Adding a Custom Weapon
 
-Add a new entry to `campaign-overview.json`:
+Add a weapon node through `dm-world.sh`:
 
-```json
-"campaign_rules": {
-  "firearms_system": {
-    "weapons": {
-      "G36C": {
-        "damage": "2d6+2",
-        "pen": 3,
-        "rpm": 750,
-        "magazine": 30,
-        "type": "assault_rifle"
-      }
-    }
-  }
-}
+```bash
+bash tools/dm-world.sh add-node "weapon:g36c" --name "G36C" --type weapon \
+  --data '{"damage":"2d6+2","pen":3,"rpm":750,"magazine":30,"weapon_type":"assault_rifle","source_module":"firearms-combat"}'
 ```
 
 ---
 
 ## Fire Mode Configuration
 
-Fire modes are configurable per-campaign in `campaign-overview.json`:
+Fire modes are configurable per campaign in `module-data/firearms-combat.json`:
 
 ```json
 "fire_modes": {
   "single": {"attacks": 1, "ammo": 1, "penalty": 0},
   "burst": {
-    "penalty_per_shot": -3,
-    "penalty_per_shot_sharpshooter": -2
+    "duration_seconds": 1,
+    "max_salvos_per_target": 3,
+    "max_salvos_total": 3,
+    "penalty_per_salvo": -2,
+    "penalty_per_salvo_sharpshooter": -1,
+    "max_hits_per_salvo": 3,
+    "hit_margin_per_extra_bullet": 5
   },
   "full_auto": {
-    "penalty_per_shot": -3,
-    "penalty_per_shot_sharpshooter": -2,
-    "max_shots_per_target": 10
+    "duration_seconds": 3,
+    "max_salvos_per_target": 6,
+    "max_salvos_total": 12,
+    "penalty_per_salvo": -2,
+    "penalty_per_salvo_sharpshooter": -1,
+    "max_hits_per_salvo": 3,
+    "hit_margin_per_extra_bullet": 5
   }
 }
 ```
 
-If `fire_modes` is missing, the resolver uses defaults: -3/-2 penalty, 10 max shots/target.
+Legacy `penalty_per_shot*` keys are read as a compatibility fallback. New campaigns must use the salvo keys above.
 
 ---
 
@@ -276,7 +270,7 @@ Pass any enemy as a CLI target directly:
 
 **Sharpshooter (Fighter subclass)**
 - +2 to attack bonus on all ranged attacks
-- Full-auto/burst penalty: -2 per shot instead of -3
+- Automatic-fire recoil: -1 per salvo instead of -2
 - Quick Reload as bonus action (roleplay rule)
 
 **Sniper (Rogue subclass)**
@@ -286,9 +280,9 @@ Pass any enemy as a CLI target directly:
 
 ---
 
-## Optional Dependencies
+## State Dependencies
 
-- **inventory-system** — if active, resolver auto-deducts ammo via `dm-inventory.sh`. If not active, prints manual deduction note. This is a soft dependency — the module works fine without it.
+- `world.json` must contain `player:active`, the selected `weapon:*` node, and the ammunition stack in the player's inventory. These are canonical CORE WorldGraph records, not a separate module dependency.
 
 ---
 
@@ -305,6 +299,6 @@ Run: `uv run python .claude/additional/modules/firearms-combat/tools/balance-das
 
 ## Architecture Notes
 
-The module imports CORE's `PlayerManager`, `CampaignManager`, and `JsonOperations` directly. CORE has zero knowledge of this module. No middleware is registered — the module does not intercept any CORE tool. The DM (Claude) decides when to call `dm-combat.sh` based on campaign context.
+The module uses CORE's `CampaignManager` only to locate the active campaign. Character, weapon, XP, and ammunition state are read and written through `WorldGraph`; module-specific progression logic preserves the existing D&D level thresholds. CORE has zero knowledge of this module. No middleware is registered — the module does not intercept any CORE tool. The DM decides when to call `dm-combat.sh` based on campaign context.
 
-Post-combat: XP is written to character file automatically. Ammo is deducted via inventory-system if available, otherwise printed as manual note.
+Post-combat, XP and physical rounds fired are persisted to `player:active` in `world.json`. A missing or insufficient ammunition stack is reported as a failed WorldGraph deduction and is never redirected to a legacy file.

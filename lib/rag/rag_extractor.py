@@ -264,7 +264,7 @@ def main():
     print()
 
     extractor = RAGExtractor(campaign_dir)
-    metadata = extractor.extract_from_document(filepath, clear_existing=True)
+    extractor.extract_from_document(filepath, clear_existing=True)
 
     print("\n" + "=" * 50)
     print("Stats:")

@@ -18,37 +18,37 @@
 | Check conditions | `bash tools/dm-condition.sh check "[name]"` |
 | NPC updated | `bash tools/dm-npc.sh update "[name]" "[event]"` |
 | Location moved | `bash tools/dm-session.sh move "[location]" --elapsed N` |
+| Complete scene transition | `bash tools/dm-scene.sh "[location]" --elapsed N --with "[NPC]" --objective "[quest]" "[new objective]"` |
 | Future event | `bash tools/dm-consequence.sh add "[event]" "[trigger text]" --hours N` |
 | Important fact | `bash tools/dm-note.sh "[category]" "[fact]"` |
 | Party NPC HP | `bash tools/dm-npc.sh hp "[name]" [+/-amount]` |
-| Party NPC condition | `bash tools/dm-npc.sh condition "[name]" add "[cond]"` |
-| Party NPC equipped | `bash tools/dm-npc.sh equip "[name]" "[item]"` |
 | NPC joins party | `bash tools/dm-npc.sh promote "[name]"` |
-| Tag NPC to location | `bash tools/dm-npc.sh tag-location "[name]" "[location]"` |
-| Tag NPC to quest | `bash tools/dm-npc.sh tag-quest "[name]" "[quest]"` |
-| **Quest created** | `bash tools/dm-plot.sh add "[name]" --type [type] --description "[desc]" --objectives "[o1],[o2]"` |
-| **Quest progress** | `bash tools/dm-plot.sh update "[name]" "[event]"` |
-| **Quest objective done** | `bash tools/dm-plot.sh objective "[name]" "[objective]" complete` |
-| **Quest completed** | `bash tools/dm-plot.sh complete "[name]" "[outcome]"` |
+| NPC moved | `bash tools/dm-npc.sh locate "[name]" "[location]"` |
+| **Quest created** | `bash tools/dm-plot.sh add "[name]" --type [type] --desc "[description]"` |
+| **Quest goal added** | `bash tools/dm-plot.sh objective "[name]" add "[objective]"` |
+| **Quest objective done** | `bash tools/dm-plot.sh objective "[name]" complete [index]` |
+| **Quest completed** | `bash tools/dm-plot.sh complete "[name]"` |
+
+Use `dm-scene.sh` when one narrative beat changes two or more of location, party position, time, consequences, or quest objectives. It validates all referenced entities before writing and moves party-member NPCs by default. Use `--player-only` only when the player intentionally leaves the party behind.
 
 ### Consequence Rules (MANDATORY — NO EXCEPTIONS)
 
 - **Consequences are DM-ONLY knowledge.** NEVER reveal consequence text, timers, or remaining hours to the player. Consequences are hidden plot triggers — the player experiences them as surprise events when they fire. No "ticking clocks" in narration, no countdowns, no hints about remaining time.
-- **EVERY consequence MUST have `--hours N`.** No exceptions. A consequence without `--hours` is BROKEN — it will never tick, never trigger, and silently rot in the JSON. If you catch yourself typing `dm-consequence.sh add` without `--hours` — STOP and add it. NOTE: `--hours` is implemented by the custom-stats module middleware. If custom-stats is disabled, timed consequences will not tick.
-- `dm-time.sh "_" "<date>" --elapsed N` and `dm-time.sh "_" "<date>" --to HH:MM` automatically tick consequences and custom stats via post-hook.
+- **EVERY consequence MUST have `--hours N`.** No exceptions. A consequence without `--hours` is BROKEN — it will never tick, never trigger, and silently rot in the graph. Consequence timers are a CORE WorldGraph feature and do not depend on an optional module.
+- `dm-time.sh "_" "<date>" --elapsed N` and `dm-time.sh "_" "<date>" --to HH:MM` advance the CORE clock and tick consequences, custom stats, effects, production, and economy.
 - Conversion: "30 min" = `--hours 0.5`, "2 hours" = `--hours 2`, "1 day" = `--hours 24`, "3 days" = `--hours 72`, "1 week" = `--hours 168`, "next session" = `--hours 8`
 - `immediate` = `--hours 0` (triggers on next tick)
 - **ALWAYS use `--elapsed` or `--to` when advancing time.** Setting time without elapsed means consequences DON'T tick.
 
 ### Quest Rules (MANDATORY)
 
-- **New storyline emerges** (NPC gives task, player discovers mystery, threat appears) → `dm-plot.sh add` with type, description, objectives, linked NPCs/locations.
-- **Player makes progress** (finds clue, reaches location, talks to NPC about quest) → `dm-plot.sh update` to log the event.
-- **Objective fulfilled** (specific goal achieved) → `dm-plot.sh objective "Quest" "Objective" complete`.
-- **New goal discovered mid-quest** → `dm-plot.sh objective "Quest" "New goal" add`.
-- **Quest resolved** → `dm-plot.sh complete` or `dm-plot.sh fail` with outcome description.
+- **New storyline emerges** (NPC gives task, player discovers mystery, threat appears) → `dm-plot.sh add` with type and description, then add at least one objective.
+- **Player makes progress** (finds clue, reaches location, talks to NPC about quest) → complete the relevant objective or add the newly discovered goal.
+- **Objective fulfilled** (specific goal achieved) → `dm-plot.sh objective "Quest" complete N`.
+- **New goal discovered mid-quest** → `dm-plot.sh objective "Quest" add "New goal"`.
+- **Quest resolved** → `dm-plot.sh complete "Quest"` or `dm-plot.sh fail "Quest"`.
 - **Every quest MUST have at least one objective.** A quest without objectives has no trackable progress.
-- **Use `dm-plot.sh threads`** at session start to review active storylines and catch stale quests.
+- **Use `dm-plot.sh list --status active`** at session start to review active storylines and catch stale quests.
 - Quests live in `world.json (quest nodes)`. Do NOT store quest/plot data in fact nodes via `dm-note.sh`.
 
 ### Note Categories (ALLOWED)
@@ -69,7 +69,7 @@ Facts = **permanent truths about the world**. NOT a session diary.
 **DO NOT write to facts:**
 - Session events ("Wilhelm defeated the strig") → goes in `session-log.md` via `dm-session.sh end`
 - Combat logs ("Combat: X vs Y") → goes in `session-log.md`
-- Quest progress → goes in `world.json (quest nodes)` via `dm-plot.sh update`
+- Quest progress → goes in `world.json (quest nodes)` via objective add/complete commands
 - NPC events → goes in `world.json (npc nodes)` via `dm-npc.sh update`
 
 **Plot/quest data belongs in `world.json (quest nodes)` via `dm-plot.sh`, NOT in notes.**
@@ -88,7 +88,7 @@ An inventory change without `--reason` is like a dice roll without `--label` —
 
 Game clock (`precise_time`, `game_date`) lives in `campaign-overview.json` (CORE). Config in `campaign-overview.json` → `"calendar"` section.
 
-- `dm-time.sh --elapsed N` advances clock and ticks custom stats via post-hook
+- `dm-time.sh --elapsed N` advances the clock and the complete CORE tick engine
 - `dm-time.sh --to HH:MM` sets exact time, auto-calculates elapsed
 - `dm-time.sh --sleeping` uses sleep_rate for custom stat decay
 - `dm-session.sh move --elapsed N` combines move + time advance (preferred for travel)

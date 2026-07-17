@@ -68,7 +68,7 @@
     "world-travel": {
       "id": "world-travel",
       "name": "World Travel (Navigation + Encounters)",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "author": "DM System Core",
       "description": "Unified travel system: coordinate navigation, pathfinding, maps, and automatic random encounter checks during overland travel",
       "category": "travel-mechanics",
@@ -132,50 +132,27 @@
           "dm-encounter.sh status": "Show encounter config"
         },
         "data_fields": {
-          "locations.json": {
-            "LocationName": {
-              "coordinates": {
-                "x": 0,
-                "y": 0
-              },
-              "connections": [
-                {
-                  "to": "Other",
-                  "distance_meters": 1000,
-                  "bearing": 90,
-                  "terrain": "open"
-                }
-              ],
-              "blocked_ranges": [
-                {
-                  "from_bearing": 160,
-                  "to_bearing": 200,
-                  "reason": "cliff"
-                }
-              ]
-            }
+          "world.json.location_nodes": {
+            "data.coordinates": "World-space x/y coordinates in meters",
+            "data.blocked_ranges": "Blocked bearing ranges and reasons",
+            "data.type": "world, compound, or interior",
+            "data.parent": "Parent compound name for interiors",
+            "data.children": "Child location names for compounds",
+            "data.vehicle": "Vehicle anchor or room metadata"
           },
-          "campaign-overview.json": {
-            "path_preferences": {},
-            "campaign_rules": {
-              "encounter_system": {
-                "enabled": true,
-                "min_distance_meters": 300,
-                "base_dc": 16,
-                "distance_modifier": 2,
-                "stat_to_use": "stealth",
-                "time_dc_modifiers": {
-                  "Morning": 0,
-                  "Day": 0,
-                  "Evening": 2,
-                  "Night": 4
-                }
-              }
-            }
+          "world.json.connected_edges": {
+            "data.distance_meters": "Physical route distance",
+            "data.bearing": "Bearing from edge source to target",
+            "data.terrain": "Traversed terrain type",
+            "data.path": "Narrative route description"
           },
-          "locations.json._vehicle": "vehicle metadata (vehicle_id, is_vehicle_anchor, vehicle_type, dock_room, proximity_radius_meters)",
+          "world.json.player_node": {
+            "data.speed_kmh": "Default overland movement speed"
+          },
+          "campaign-overview.json.path_preferences": "Cached route decisions and display-only map context",
           "campaign-overview.json.player_position.map_context": "global|local — absent = global (backward compat)",
-          "campaign-overview.json.player_position.vehicle_id": "string|null — active vehicle if inside"
+          "campaign-overview.json.player_position.vehicle_id": "string|null — active vehicle if inside",
+          "module-data/world-travel.json": "Encounter settings and map terrain colors"
         }
       },
       "use_cases": [
@@ -185,7 +162,7 @@
         "Realistic travel time + encounter simulation",
         "Visual map for DM and players"
       ],
-      "architecture": "Middleware intercepts dm-session.sh move: runs navigation (distance/time), then auto-triggers encounter check. dm-location.sh middleware handles coordinate-based location creation. All travel logic in one module.",
+      "architecture": "Middleware intercepts movement and coordinate-aware location creation. WorldTravelStore projects WorldGraph location nodes and connected edges into the module algorithms; no parallel gameplay store is used.",
       "replaces": [
         "movement"
       ]
@@ -193,7 +170,7 @@
     "firearms-combat": {
       "id": "firearms-combat",
       "name": "Firearms Combat System",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "author": "DM System Core",
       "description": "Automated firearms combat resolver with penetration mechanics, RPM simulation, and fire mode support for modern/STALKER campaigns",
       "category": "combat",
@@ -216,13 +193,15 @@
       "incompatible_with": [],
       "middleware": [],
       "features": [
-        "Single, burst, and full-auto fire modes",
+        "Duration-based single, burst, and full-auto fire modes",
+        "Separate physical ammo expenditure and bounded salvo resolution",
+        "Magazine capacity and reload signaling",
         "Penetration vs Protection damage scaling",
         "Subclass bonuses (sharpshooter)",
-        "Critical hit mechanics (2× dice on nat 20)",
+        "Margin-based multi-bullet hits with bounded critical damage",
         "Multi-target distribution (full-auto)",
         "Auto XP tracking",
-        "Auto ammo deduction via CORE inventory",
+        "Auto ammo deduction via WorldGraph inventory",
         "Test mode for dry runs"
       ],
       "adds_to_core": {
@@ -244,9 +223,15 @@
                 }
               },
               "fire_modes": {
+                "burst": {
+                  "duration_seconds": 1,
+                  "max_salvos_per_target": 3,
+                  "penalty_per_salvo": -2
+                },
                 "full_auto": {
-                  "penalty_per_shot": -2,
-                  "penalty_per_shot_sharpshooter": -1
+                  "duration_seconds": 3,
+                  "max_salvos_per_target": 6,
+                  "penalty_per_salvo": -2
                 }
               }
             }
@@ -254,7 +239,7 @@
         }
       },
       "use_cases": [
-        "STALKER campaigns with Svoboda/Долговцы firefights",
+        "STALKER campaigns with Freedom/Duty firefights",
         "Fallout-style wasteland combat",
         "Modern military operations",
         "Cyberpunk gunfights",

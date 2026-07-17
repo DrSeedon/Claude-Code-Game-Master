@@ -5,7 +5,7 @@ Checks if a path between two locations intersects any intermediate locations
 """
 
 import math
-from typing import List, Tuple, Dict, Optional
+from typing import List, Dict
 
 
 def point_to_segment_distance(px: float, py: float,

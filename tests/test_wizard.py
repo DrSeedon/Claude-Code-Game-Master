@@ -2,13 +2,10 @@
 
 import json
 import pytest
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from backend.wizard_prompt import load_wizard_system_prompt, get_wizard_tool_schemas
 from backend.campaign_api import create_campaign, list_campaigns, delete_campaign, activate_campaign
-from backend.config import get_project_root
 
 
 class TestWizardPrompt:
@@ -19,7 +16,7 @@ class TestWizardPrompt:
 
     def test_prompt_contains_modules(self):
         prompt = load_wizard_system_prompt()
-        assert "firearms-combat" in prompt or "mass-combat" in prompt or "world-travel" in prompt
+        assert "firearms-combat" in prompt or "mass-combat" in prompt
 
     def test_prompt_contains_narrators(self):
         prompt = load_wizard_system_prompt()

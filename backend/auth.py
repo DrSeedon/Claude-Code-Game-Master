@@ -5,6 +5,7 @@ Cookie: dnd_session=<sha256(password+salt)>, httponly, 30 days.
 """
 
 import hashlib
+import hmac
 import os
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -27,7 +28,7 @@ def is_authenticated(request: Request) -> bool:
     if not password:
         return True
     cookie = request.cookies.get(AUTH_COOKIE, "")
-    return cookie == _token(password)
+    return hmac.compare_digest(cookie, _token(password))
 
 
 def login_page(error: str = "") -> HTMLResponse:
@@ -76,8 +77,16 @@ def handle_login(password: str) -> Response:
     expected = _get_password()
     if not expected:
         return RedirectResponse("/", status_code=302)
-    if password == expected:
+    if hmac.compare_digest(password, expected):
         resp = RedirectResponse("/", status_code=302)
-        resp.set_cookie(AUTH_COOKIE, _token(password), max_age=AUTH_MAX_AGE, httponly=True, samesite="lax")
+        resp.set_cookie(
+            AUTH_COOKIE,
+            _token(password),
+            max_age=AUTH_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=os.environ.get("DND_AUTH_SECURE_COOKIE", "").lower()
+            in {"1", "true", "yes"},
+        )
         return resp
     return login_page(error="Неверный пароль")

@@ -16,8 +16,8 @@ Options:
   --rag-only         Search RAG vectors only, skip world state
   --full             Show full text for world and RAG results
   -n <count>         Number of RAG results (default: 4)
-  --tag-location <t> Search NPCs by location tag
-  --tag-quest <t>    Search NPCs by quest tag
+  --tag-location <t> Search entities linked to a location
+  --tag-quest <t>    Search entities linked to a quest
 
 Examples:
   dm-search.sh "dragon"                   # Search both world + RAG
@@ -37,7 +37,9 @@ WORLD_ONLY=false
 RAG_COUNT=4
 FULL_OUTPUT=false
 TAG_SEARCH=false
-TAG_TYPE=""
+TAG_NODE_TYPE=""
+TAG_EDGE_TYPE=""
+TAG_DIRECTION=""
 TAG_VALUE=""
 
 while [[ $# -gt 0 ]]; do
@@ -63,13 +65,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         --tag-location)
             TAG_SEARCH=true
-            TAG_TYPE="--tag-location"
+            TAG_NODE_TYPE="location"
+            TAG_EDGE_TYPE="at"
+            TAG_DIRECTION="in"
             TAG_VALUE="$2"
             shift 2
             ;;
         --tag-quest)
             TAG_SEARCH=true
-            TAG_TYPE="--tag-quest"
+            TAG_NODE_TYPE="quest"
+            TAG_EDGE_TYPE="involves"
+            TAG_DIRECTION="both"
             TAG_VALUE="$2"
             shift 2
             ;;
@@ -98,7 +104,20 @@ fi
 if [ "$TAG_SEARCH" = true ]; then
     echo "Searching World State"
     echo "====================="
-    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/world_graph.py" search "$TAG_VALUE" --node-type npc)
+    TAG_MATCHES=$($PYTHON_CMD "$LIB_DIR/world_graph.py" search "$TAG_VALUE" --type "$TAG_NODE_TYPE")
+    TAG_STATUS=$?
+    if [ $TAG_STATUS -ne 0 ]; then
+        echo "$TAG_MATCHES"
+        exit $TAG_STATUS
+    fi
+    TAG_NODE_ID=$(printf '%s\n' "$TAG_MATCHES" \
+        | sed -n "s/.*\(${TAG_NODE_TYPE}:[a-z0-9-]*\).*/\1/p" \
+        | head -n 1)
+    if [ -z "$TAG_NODE_ID" ]; then
+        echo "  No matching $TAG_NODE_TYPE found for '$TAG_VALUE'"
+        exit 1
+    fi
+    WORLD_OUTPUT=$($PYTHON_CMD "$LIB_DIR/world_graph.py" neighbors "$TAG_NODE_ID" --type "$TAG_EDGE_TYPE" --direction "$TAG_DIRECTION")
     WORLD_STATUS=$?
     echo "$WORLD_OUTPUT"
     WORLD_CHARS=${#WORLD_OUTPUT}

@@ -104,8 +104,8 @@ def render_inner_html() -> str:
     character = player_node.get("data", {})
     inventory_data = player_node.get("inventory", {})
 
-    # Economy data from campaign:economy node in world.json
-    economy_node = world.get("nodes", {}).get("campaign:economy", {})
+    # Economy data from the schema-valid misc:economy node in world.json.
+    economy_node = world.get("nodes", {}).get("misc:economy", {})
     economy_data = economy_node.get("data", {}) if economy_node else {}
     # Build custom_stats_data compat layer from world.json
     custom_stats_data = {

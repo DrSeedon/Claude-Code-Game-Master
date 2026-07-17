@@ -6,10 +6,11 @@ Semantic extraction of relevant passages from vectorized document chunks.
 Runs as Pass 2 during extraction workflow to enrich NPCs with context.
 """
 
-import json
 import re
 from pathlib import Path
 from typing import Dict, List, Any
+
+from lib.world_graph import WorldGraph
 
 
 class QuoteExtractor:  # Keep class name for backwards compatibility
@@ -25,10 +26,10 @@ class QuoteExtractor:  # Keep class name for backwards compatibility
         Initialize the quote extractor for a campaign.
 
         Args:
-            campaign_dir: Path to the campaign folder containing vectors and npcs.json
+            campaign_dir: Path to the campaign folder containing vectors and world.json
         """
         self.campaign_dir = Path(campaign_dir)
-        self.npcs_path = self.campaign_dir / "npcs.json"
+        self.world_graph = WorldGraph(self.campaign_dir)
 
         # Lazy-load RAG components
         self._vector_store = None
@@ -75,7 +76,9 @@ class QuoteExtractor:  # Keep class name for backwards compatibility
                 n_results=n_results
             )
 
-            for doc, distance in zip(results['documents'], results['distances']):
+            for doc, distance in zip(
+                results['documents'], results['distances'], strict=False
+            ):
                 # Skip if already seen
                 doc_key = doc[:200].lower()  # Use first 200 chars as key
                 if doc_key in seen_passages:
@@ -100,7 +103,6 @@ class QuoteExtractor:  # Keep class name for backwards compatibility
 
     def _clean_passage(self, text: str, max_length: int = 500) -> str:
         """Remove page markers and other noise from passages, cap length."""
-        import re
         # Remove page markers like "--- Page 142 ---"
         text = re.sub(r'---\s*Page\s*\d+\s*---\n?', '', text)
         # Remove OceanofPDF watermarks
@@ -134,15 +136,11 @@ class QuoteExtractor:  # Keep class name for backwards compatibility
 
     def enrich_all_npcs(self) -> int:
         """
-        Load npcs.json, enrich each NPC with voice data, save back.
+        Enrich WorldGraph NPC nodes with voice context.
 
         Returns:
             Count of NPCs enriched with at least one quote or passage
         """
-        if not self.npcs_path.exists():
-            print(f"  No npcs.json found at {self.npcs_path}")
-            return 0
-
         # Check if vector store has any data
         self._ensure_rag()
         chunk_count = self._vector_store.count()
@@ -150,45 +148,40 @@ class QuoteExtractor:  # Keep class name for backwards compatibility
             print("  No vectors in store - skipping quote extraction")
             return 0
 
-        # Load NPCs
-        npcs = json.loads(self.npcs_path.read_text())
+        npcs = self.world_graph.list_nodes("npc")
         if not npcs:
             print("  No NPCs to enrich")
             return 0
 
         enriched_count = 0
 
-        for npc_name in npcs.keys():
-            # Get semantic context passages
-            new_passages = self.extract_context_for_npc(npc_name)
+        with self.world_graph.transaction():
+            for npc in npcs:
+                npc_name = npc["name"]
+                new_passages = self.extract_context_for_npc(npc_name)
+                existing_context = npc.get("data", {}).get("context", [])
+                all_context = existing_context.copy()
 
-            # Merge with existing context from agent extraction
-            existing_context = npcs[npc_name].get('context', [])
+                seen_keys = {passage[:100].lower() for passage in all_context}
+                for passage in new_passages:
+                    passage_key = passage[:100].lower()
+                    if passage_key not in seen_keys:
+                        seen_keys.add(passage_key)
+                        all_context.append(passage)
 
-            # Combine: existing first (usually dialogue from agent), then semantic passages
-            all_context = existing_context.copy()
-
-            # Add new passages, deduplicating
-            seen_keys = set(p[:100].lower() for p in all_context)
-            for passage in new_passages:
-                p_key = passage[:100].lower()
-                if p_key not in seen_keys:
-                    seen_keys.add(p_key)
-                    all_context.append(passage)
-
-            # Limit total context
-            all_context = all_context[:15]
-
-            # Update if we have context
-            if all_context:
-                npcs[npc_name]['context'] = all_context
+                all_context = all_context[:15]
                 added = len(all_context) - len(existing_context)
-                if added > 0:
-                    enriched_count += 1
-                    print(f"    {npc_name}: {len(all_context)} context passages (+{added} new)")
-
-        # Save enriched NPCs
-        self.npcs_path.write_text(json.dumps(npcs, indent=2, ensure_ascii=False))
+                if added <= 0:
+                    continue
+                if not self.world_graph.update_node(
+                    npc["id"], {"data": {"context": all_context}}
+                ):
+                    raise RuntimeError(f"Failed to enrich NPC: {npc_name}")
+                enriched_count += 1
+                print(
+                    f"    {npc_name}: {len(all_context)} context passages "
+                    f"(+{added} new)"
+                )
 
         return enriched_count
 
@@ -199,7 +192,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: quote_extractor.py <campaign_dir> [npc_name]")
-        print("  <campaign_dir>: Path to campaign folder with vectors and npcs.json")
+        print("  <campaign_dir>: Path to campaign folder with vectors and world.json")
         print("  [npc_name]: Optional - extract for specific NPC only")
         sys.exit(1)
 

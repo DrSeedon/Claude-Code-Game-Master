@@ -5,7 +5,7 @@ Provides consistent validation across all tools
 """
 
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
 
 class Validators:

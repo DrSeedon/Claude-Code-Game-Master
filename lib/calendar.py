@@ -208,13 +208,10 @@ def save_config(campaign_path: Union[str, Path], config: Dict):
     if not overview_file.exists():
         return
 
-    with open(overview_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    data["calendar"] = config
-
-    with open(overview_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    from lib.json_ops import JsonOperations
+    JsonOperations(str(campaign_path)).update_json(
+        "campaign-overview.json", {"calendar": config}
+    )
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ For each weapon the user wants to add or modify, gather:
 | `damage` | Dice notation? (e.g. `2d8+2`) |
 | `pen` | Armor penetration rating? (1-10 scale) |
 | `rpm` | Rounds per minute? (pistol ~30, rifle ~600, SMG ~800) |
-| `magazine` | Magazine size? (reference only) |
+| `magazine` | Loaded magazine capacity? |
 | `type` | assault_rifle / pistol / sniper_rifle / shotgun / smg |
 
 Show a preview table before writing:
@@ -76,13 +76,22 @@ mkdir -p "$CAMPAIGN_DIR/module-data"
       "penalty": 0
     },
     "burst": {
-      "penalty_per_shot": -3,
-      "penalty_per_shot_sharpshooter": -2
+      "duration_seconds": 1,
+      "max_salvos_per_target": 3,
+      "max_salvos_total": 3,
+      "penalty_per_salvo": -2,
+      "penalty_per_salvo_sharpshooter": -1,
+      "max_hits_per_salvo": 3,
+      "hit_margin_per_extra_bullet": 5
     },
     "full_auto": {
-      "penalty_per_shot": -3,
-      "penalty_per_shot_sharpshooter": -2,
-      "max_shots_per_target": 10
+      "duration_seconds": 3,
+      "max_salvos_per_target": 6,
+      "max_salvos_total": 12,
+      "penalty_per_salvo": -2,
+      "penalty_per_salvo_sharpshooter": -1,
+      "max_hits_per_salvo": 3,
+      "hit_margin_per_extra_bullet": 5
     }
   },
   "penetration_vs_armor": {
@@ -115,7 +124,7 @@ Combat subclass?
 
   [1] Sharpshooter (Fighter)
       +2 attack bonus on ranged
-      Full-auto/burst penalty: -2/shot instead of -3
+      Automatic-fire recoil: -1/salvo instead of -2
 
   [2] Sniper (Rogue)
       Crit on 19-20 (roleplay rule)
@@ -125,9 +134,9 @@ Combat subclass?
 
 ```
 
-Write to character.json if subclass selected:
-```python
-char['subclass'] = 'Стрелок'  # or 'Sniper'
+Write the selected subclass to the active player node:
+```bash
+bash tools/dm-world.sh update-node "player:active" --data '{"data":{"subclass":"Sharpshooter"}}'
 ```
 
 ---
@@ -154,7 +163,7 @@ Ask: "Does this fit your setting, or adjust armor ratings?"
 
 Ask the player what weapon(s) they start with. Confirm ammo count.
 
-If `inventory-system` module is also active — ammo will be tracked there. If not, ammo is passed as `--ammo` argument each combat and tracked narratively.
+Add the confirmed ammunition count to the `player:active` WorldGraph inventory. The resolver uses `--ammo` to cap the current action, then deducts the physical rounds fired from that canonical inventory.
 
 ---
 
@@ -208,7 +217,7 @@ Adapt bestiary and combat rules to fit the campaign genre.
 After creation, the module's data lives in:
 - `module-data/firearms-combat.json` — **config only**: fire_modes, penetration_vs_armor, range_rules, combat_style, combat_rules
 - `world.json` — **reference data**: weapon nodes (`weapon:*`), armor nodes (`armor:*`), creature/bestiary nodes (`creature:*`)
-- `character.json` -> `subclass` field (if Sharpshooter/Sniper selected)
+- `world.json` -> `player:active.data.subclass` and the player's ammunition inventory
 
 Config MUST be in `module-data/firearms-combat.json` — the resolver will error if missing.
 Weapons, armor, bestiary MUST be in world.json as nodes — the resolver reads ONLY from there.
@@ -219,5 +228,8 @@ Weapons, armor, bestiary MUST be in world.json as nodes — the resolver reads O
 
 - If user picks CUSTOM weapons: ask for each weapon one by one, keep the table running
 - Firearms system is ONLY active when `module-data/firearms-combat.json` exists in the campaign directory
-- Ammo for starting loadout is handled by inventory-system creation-rules — coordinate if both modules active
-- Fire mode penalties are configurable per-campaign via `fire_modes` in `module-data/firearms-combat.json`
+- Starting ammunition must exist in the `player:active` WorldGraph inventory before live combat
+- Automatic fire spends `floor(RPM / 60 * duration_seconds)` rounds, capped by loaded ammo and magazine capacity.
+- A burst resolves at most 3 salvos; full auto resolves at most 6 salvos per target and 12 total by default.
+- One successful salvo lands 1 bullet, plus 1 per 5 points above AC, capped at 3 bullets and the physical rounds in that salvo.
+- Fire mode duration, salvo limits, recoil, and hit margin are configurable per campaign via `fire_modes` in `module-data/firearms-combat.json`.

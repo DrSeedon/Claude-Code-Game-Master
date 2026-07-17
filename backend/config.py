@@ -1,10 +1,16 @@
 """Configuration module for DM Game Master backend."""
 
 import os
+import ipaddress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+from lib.campaign_context import (
+    InvalidCampaignName,
+    resolve_campaign_dir,
+    scoped_campaign_name,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -42,15 +48,17 @@ def get_project_root() -> Path:
 def get_active_campaign() -> Optional[str]:
     """Get active campaign name from world-state/active-campaign.txt."""
     project_root = get_project_root()
-    active_file = project_root / "world-state" / "active-campaign.txt"
-
-    if active_file.exists():
-        campaign_name = active_file.read_text().strip()
-        campaign_dir = project_root / "world-state" / "campaigns" / campaign_name
-        if campaign_name and campaign_dir.exists():
-            return campaign_name
-
-    return None
+    world_state = project_root / "world-state"
+    try:
+        campaign_name = scoped_campaign_name(world_state)
+        if not campaign_name:
+            return None
+        resolve_campaign_dir(
+            world_state / "campaigns", campaign_name, must_exist=True
+        )
+        return campaign_name
+    except (InvalidCampaignName, FileNotFoundError):
+        return None
 
 
 def get_config() -> Config:
@@ -90,3 +98,17 @@ def get_config() -> Config:
         config.campaign_overview = config.campaign_dir / "campaign-overview.json"
 
     return config
+
+
+def validate_server_security(config: Config, password: str | None = None) -> None:
+    """Refuse unauthenticated exposure beyond the local machine."""
+    host = config.backend_host.strip().lower()
+    try:
+        is_loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        is_loopback = host == "localhost"
+    password = password if password is not None else os.environ.get("DND_AUTH_PASSWORD")
+    if not is_loopback and not password:
+        raise RuntimeError(
+            "DND_AUTH_PASSWORD is required when BACKEND_HOST is not loopback"
+        )

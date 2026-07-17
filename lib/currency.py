@@ -187,14 +187,10 @@ def save_config(campaign_path: Union[str, Path], config: Dict):
     overview_file = campaign_path / "campaign-overview.json"
     if not overview_file.exists():
         return
-
-    with open(overview_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    data["currency"] = config
-
-    with open(overview_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    from lib.json_ops import JsonOperations
+    JsonOperations(str(campaign_path)).update_json(
+        "campaign-overview.json", {"currency": config}
+    )
 
 
 if __name__ == "__main__":
@@ -209,7 +205,7 @@ if __name__ == "__main__":
     action = sys.argv[2] if len(sys.argv) > 2 else "info"
 
     if action == "info":
-        print(f"Currency config:")
+        print("Currency config:")
         print(f"  Base unit: {config['base']}")
         for d in config["denominations"]:
             print(f"  {d['id']} ({d['name']}): 1 = {d['rate']} {config['base']}, symbol: {d['symbol']}")

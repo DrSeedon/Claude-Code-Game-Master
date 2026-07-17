@@ -26,7 +26,7 @@ if [ "$#" -lt 1 ]; then
     echo "  path check <from> <to>                    - Check if path intersects other locations"
     echo "  path route <from> <to>                    - Find route with waypoints"
     echo "  path analyze                              - Analyze all connections for intersections"
-    echo "  migrate [--apply] [--campaign NAME]       - Migrate connections to canonical storage"
+    echo "  migrate [--apply] [--campaign NAME]       - Import legacy locations.json into WorldGraph"
     echo ""
     echo "Examples:"
     echo "  dm-navigation.sh add \"Temple\" \"1km north\" --from \"Village\" --bearing 0 --distance 1000"
@@ -115,8 +115,8 @@ case "$ACTION" in
 import json, sys
 sys.path.insert(0, '$MODULE_DIR/lib')
 from path_intersect import check_path_intersection
-with open('$CAMPAIGN_DIR/locations.json') as f:
-    locs = json.load(f)
+from world_travel_store import WorldTravelStore
+locs = WorldTravelStore('$CAMPAIGN_DIR').load_locations()
 hits = check_path_intersection('$1', '$2', locs)
 if hits:
     print('Path intersects:')
@@ -137,8 +137,8 @@ else:
 import json, sys
 sys.path.insert(0, '$MODULE_DIR/lib')
 from path_intersect import find_route_with_waypoints
-with open('$CAMPAIGN_DIR/locations.json') as f:
-    locs = json.load(f)
+from world_travel_store import WorldTravelStore
+locs = WorldTravelStore('$CAMPAIGN_DIR').load_locations()
 route = find_route_with_waypoints('$1', '$2', locs)
 print('Route: ' + ' → '.join(route))
 if len(route) > 2:
@@ -152,8 +152,8 @@ if len(route) > 2:
 import json, sys
 sys.path.insert(0, '$MODULE_DIR/lib')
 from path_intersect import check_path_intersection
-with open('$CAMPAIGN_DIR/locations.json') as f:
-    locs = json.load(f)
+from world_travel_store import WorldTravelStore
+locs = WorldTravelStore('$CAMPAIGN_DIR').load_locations()
 found = False
 for loc_name, loc_data in locs.items():
     for conn in loc_data.get('connections', []):

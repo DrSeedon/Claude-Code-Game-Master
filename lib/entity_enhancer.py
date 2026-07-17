@@ -10,7 +10,7 @@ context that can be used to enrich the entity with additional details.
 import sys
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -195,7 +195,8 @@ class EntityEnhancer:
         for doc, distance, metadata in zip(
             results['documents'],
             results['distances'],
-            results['metadatas']
+            results['metadatas'],
+            strict=False,
         ):
             # Skip duplicates only
             doc_key = doc[:200].lower()
@@ -257,7 +258,8 @@ class EntityEnhancer:
             for doc, distance, metadata in zip(
                 results['documents'],
                 results['distances'],
-                results['metadatas']
+                results['metadatas'],
+                strict=False,
             ):
                 # Skip duplicates (use first 200 chars as key)
                 doc_key = doc[:200].lower()
@@ -497,14 +499,11 @@ class EntityEnhancer:
         wg = WorldGraph(str(self.campaign_dir))
         location_data = None
         location_key = None
-        location_node_id = None
-
         name_lower = location_name.lower()
         for node in wg.list_nodes(node_type="location"):
             if node["name"].lower() == name_lower:
                 location_key = node["name"]
                 location_data = node.get("data", {})
-                location_node_id = node["id"]
                 break
 
         if not location_key:
@@ -512,7 +511,6 @@ class EntityEnhancer:
                 if name_lower in node["name"].lower():
                     location_key = node["name"]
                     location_data = node.get("data", {})
-                    location_node_id = node["id"]
                     break
 
         # If enhanced, return stored context

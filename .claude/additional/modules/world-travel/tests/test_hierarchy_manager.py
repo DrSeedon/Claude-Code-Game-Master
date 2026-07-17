@@ -3,7 +3,6 @@
 
 import pytest
 import sys
-import json
 from pathlib import Path
 
 
@@ -19,6 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "lib"))
 sys.path.insert(0, str(PROJECT_ROOT / ".claude/additional/modules/world-travel/lib"))
 
 from hierarchy_manager import HierarchyManager
+from world_travel_store import WorldTravelStore
 
 
 @pytest.fixture
@@ -43,17 +43,41 @@ def campaign_dir(tmp_path):
         }
     }
 
-    (d / "locations.json").write_text(json.dumps(locations), encoding="utf-8")
-    (d / "campaign-overview.json").write_text(json.dumps(overview), encoding="utf-8")
+    store = WorldTravelStore(d)
+    store.save_locations(locations)
+    store.save_overview(overview)
     return d
 
 
 def _load_locations(campaign_dir):
-    return json.loads((campaign_dir / "locations.json").read_text(encoding="utf-8"))
+    return WorldTravelStore(campaign_dir).load_locations()
+
+
+def _save_locations(campaign_dir, locations):
+    return WorldTravelStore(campaign_dir).save_locations(locations)
+
+
+def _clear_locations(campaign_dir):
+    store = WorldTravelStore(campaign_dir)
+    with store.graph.transaction() as world:
+        location_ids = {
+            node_id for node_id, node in world["nodes"].items()
+            if node.get("type") == "location"
+        }
+        for node_id in location_ids:
+            del world["nodes"][node_id]
+        world["edges"] = [
+            edge for edge in world["edges"]
+            if edge.get("from") not in location_ids and edge.get("to") not in location_ids
+        ]
 
 
 def _load_overview(campaign_dir):
-    return json.loads((campaign_dir / "campaign-overview.json").read_text(encoding="utf-8"))
+    return WorldTravelStore(campaign_dir).load_overview()
+
+
+def _save_overview(campaign_dir, overview):
+    return WorldTravelStore(campaign_dir).save_overview(overview)
 
 
 def _setup_tavern(campaign_dir):
@@ -278,9 +302,7 @@ class TestExitCompound:
         hm = HierarchyManager(str(campaign_dir))
         overview = _load_overview(campaign_dir)
         del overview["player_position"]["current_location"]
-        (campaign_dir / "campaign-overview.json").write_text(
-            json.dumps(overview), encoding="utf-8"
-        )
+        _save_overview(campaign_dir, overview)
         result = hm.exit_compound()
         assert result["success"] is False
 
@@ -330,9 +352,7 @@ class TestMoveInterior:
         hm = HierarchyManager(str(campaign_dir))
         overview = _load_overview(campaign_dir)
         del overview["player_position"]["current_location"]
-        (campaign_dir / "campaign-overview.json").write_text(
-            json.dumps(overview), encoding="utf-8"
-        )
+        _save_overview(campaign_dir, overview)
         result = hm.move_interior("Kitchen")
         assert result["success"] is False
 
@@ -456,9 +476,7 @@ class TestValidateHierarchy:
         hm = _setup_tavern(campaign_dir)
         locs = _load_locations(campaign_dir)
         locs["Orphan"] = {"type": "interior", "parent": "Deleted Building"}
-        (campaign_dir / "locations.json").write_text(
-            json.dumps(locs), encoding="utf-8"
-        )
+        _save_locations(campaign_dir, locs)
         result = hm.validate_hierarchy()
         assert result["valid"] is False
         assert any("missing parent" in e for e in result["errors"])
@@ -467,9 +485,7 @@ class TestValidateHierarchy:
         hm = _setup_tavern(campaign_dir)
         locs = _load_locations(campaign_dir)
         locs["Tavern"]["children"].append("Ghost Room")
-        (campaign_dir / "locations.json").write_text(
-            json.dumps(locs), encoding="utf-8"
-        )
+        _save_locations(campaign_dir, locs)
         result = hm.validate_hierarchy()
         assert result["valid"] is False
         assert any("missing child" in e for e in result["errors"])
@@ -478,9 +494,7 @@ class TestValidateHierarchy:
         hm = _setup_tavern(campaign_dir)
         locs = _load_locations(campaign_dir)
         locs["Kitchen"]["parent"] = "City Center"
-        (campaign_dir / "locations.json").write_text(
-            json.dumps(locs), encoding="utf-8"
-        )
+        _save_locations(campaign_dir, locs)
         result = hm.validate_hierarchy()
         assert result["valid"] is False
 
@@ -489,9 +503,7 @@ class TestValidateHierarchy:
         locs = _load_locations(campaign_dir)
         locs["A"] = {"type": "compound", "parent": "B", "children": ["B"]}
         locs["B"] = {"type": "compound", "parent": "A", "children": ["A"]}
-        (campaign_dir / "locations.json").write_text(
-            json.dumps(locs), encoding="utf-8"
-        )
+        _save_locations(campaign_dir, locs)
         result = hm.validate_hierarchy()
         assert result["valid"] is False
         assert any("Cycle" in e or "cycle" in e.lower() for e in result["errors"])
@@ -517,7 +529,7 @@ class TestNestedCompounds:
 
 class TestEdgeCases:
     def test_empty_locations_file(self, campaign_dir):
-        (campaign_dir / "locations.json").write_text("{}", encoding="utf-8")
+        _clear_locations(campaign_dir)
         hm = HierarchyManager(str(campaign_dir))
         result = hm.create_compound("First")
         assert result["success"] is True

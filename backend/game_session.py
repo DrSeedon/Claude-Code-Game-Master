@@ -51,7 +51,11 @@ class GameSession:
         self.campaign = campaign
         self.project_root = project_root
         self.model_name = model_name
-        self.provider = ClaudeSDKProvider(project_root=project_root, model_name=model_name)
+        self.provider = ClaudeSDKProvider(
+            project_root=project_root,
+            model_name=model_name,
+            campaign_name=campaign,
+        )
         self.campaign_dir = project_root / "world-state" / "campaigns" / campaign
         self.running = False
         self._turn_task: Optional[asyncio.Task] = None

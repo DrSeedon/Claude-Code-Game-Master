@@ -2,48 +2,30 @@
 """
 Encounter Engine — standalone module for random encounters with waypoints.
 
-Imports CORE's JsonOperations, dice, TimeManager, PlayerManager.
+Reads player and location state through WorldGraph and WorldTravelStore.
 CORE has zero knowledge of this module.
 DM (Claude) calls this via dm-encounter.sh during/after travel.
 """
 
 import sys
-import json
-import math
 from pathlib import Path
 from datetime import datetime, timedelta
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.json_ops import JsonOperations
 from lib.dice import roll as dice_roll
-from lib.time_manager import TimeManager
-from lib.player_manager import PlayerManager
 from lib.module_data import ModuleDataManager
 MODULE_LIB = Path(__file__).parent
 sys.path.insert(0, str(MODULE_LIB))
 from connection_utils import add_canonical_connection
+from world_travel_store import WorldTravelStore, active_campaign_dir
 
 
 class EncounterEngine:
     def __init__(self, campaign_dir: str):
         self.campaign_dir = Path(campaign_dir)
-        self.json_ops = JsonOperations(str(self.campaign_dir))
+        self.store = WorldTravelStore(self.campaign_dir)
         self.module_data_mgr = ModuleDataManager(self.campaign_dir)
-        self._time_mgr = None
-        self._player_mgr = None
-
-    @property
-    def time_mgr(self):
-        if self._time_mgr is None:
-            self._time_mgr = TimeManager(str(self.campaign_dir))
-        return self._time_mgr
-
-    @property
-    def player_mgr(self):
-        if self._player_mgr is None:
-            self._player_mgr = PlayerManager(str(self.campaign_dir))
-        return self._player_mgr
 
     def is_enabled(self) -> bool:
         config = self.module_data_mgr.load("world-travel")
@@ -90,21 +72,16 @@ class EncounterEngine:
         rules = self.get_rules()
         stat_name = rules.get('stat_to_use', 'stealth')
 
-        # Read character directly via json_ops (without player_mgr)
-        character = self.json_ops.load_json('character.json')
+        character = self.store.get_player_data()
         if not character:
             return 0
-
-        # Inject custom_stats from module-data
-        cs_data = self.module_data_mgr.load("custom-stats")
-        if cs_data:
-            character['custom_stats'] = cs_data.get('character_stats', {})
 
         # If custom stat
         if stat_name.startswith('custom:'):
             custom_stat = stat_name.replace('custom:', '')
             custom_stats = character.get('custom_stats', {})
-            stat_value = custom_stats.get(custom_stat, {}).get('current', 10)
+            stat = custom_stats.get(custom_stat, {})
+            stat_value = stat.get('value', stat.get('current', 10))
             # Assume custom stats work like abilities (0-100 → -5 to +5)
             return (stat_value - 50) // 10
 
@@ -148,7 +125,7 @@ class EncounterEngine:
 
         # Optional: add luck modifier
         if rules.get('use_luck', False):
-            character = self.player_mgr.get_player()
+            character = self.store.get_player_data()
             if character:
                 luck = character.get('abilities', {}).get('luck', 10)
                 luck_mod = (luck - 10) // 2
@@ -219,7 +196,7 @@ class EncounterEngine:
         segment_time_min = (segment_distance_km / speed_kmh) * 60
 
         # Current time
-        overview = self.json_ops.load_json("campaign-overview.json") or {}
+        overview = self.store.load_overview()
         current_time = overview.get('precise_time', '08:00')
         time_of_day = overview.get('time_of_day', 'Day')
 
@@ -288,7 +265,7 @@ class EncounterEngine:
         waypoint_name = f"waypoint_{from_loc.lower().replace(' ', '_')}_{to_loc.lower().replace(' ', '_')}_seg{segment}"
 
         # Coordinates - segment midpoint
-        locations = self.json_ops.load_json("locations.json") or {}
+        locations = self.store.load_locations()
         from_coords = locations.get(from_loc, {}).get('coordinates', {'x': 0, 'y': 0})
         to_coords = locations.get(to_loc, {}).get('coordinates', {'x': 0, 'y': 0})
 
@@ -338,27 +315,32 @@ class EncounterEngine:
             bearing=0,
             terrain=journey['terrain'])
 
-        self.json_ops.save_json("locations.json", locations)
+        self.store.save_locations(locations)
 
         return waypoint_name
 
     def cleanup_waypoint(self, waypoint_name: str):
         """Remove waypoint after leaving"""
-        locations = self.json_ops.load_json("locations.json") or {}
-
-        if waypoint_name in locations and locations[waypoint_name].get('is_waypoint'):
-            del locations[waypoint_name]
-            self.json_ops.save_json("locations.json", locations)
-            print(f"[CLEANUP] Removed waypoint: {waypoint_name}")
+        waypoint = next(
+            (
+                node for node in self.store.graph.list_nodes("location")
+                if node.get("name") == waypoint_name
+            ),
+            None,
+        )
+        waypoint_id = waypoint.get("id") if waypoint else None
+        if waypoint and waypoint.get("data", {}).get('is_waypoint'):
+            if self.store.graph.remove_node(waypoint_id):
+                print(f"[CLEANUP] Removed waypoint: {waypoint_name}")
 
     def is_waypoint(self, location_name: str) -> bool:
         """Check if location is a waypoint"""
-        locations = self.json_ops.load_json("locations.json") or {}
+        locations = self.store.load_locations()
         return locations.get(location_name, {}).get('is_waypoint', False)
 
     def get_waypoint_options(self, waypoint_name: str) -> dict:
         """Get waypoint options (forward/back)"""
-        locations = self.json_ops.load_json("locations.json") or {}
+        locations = self.store.load_locations()
         waypoint = locations.get(waypoint_name, {})
 
         if not waypoint.get('is_waypoint'):
@@ -407,7 +389,7 @@ Time: {journey['total_time_min']} minutes
             output.append(f"Progress: {wp['distance_traveled_m']}m / {journey['total_distance_m']}m")
             output.append(f"Time: {wp['current_time']} (+{wp['time_elapsed_min']} min elapsed)")
             output.append("")
-            output.append(f"🎲 Encounter Check:")
+            output.append("🎲 Encounter Check:")
             output.append(f"  Roll: {check['roll']} + {check['modifier']} = {check['total']} vs DC {check['dc']}")
             output.append(f"  Result: {'✗ ENCOUNTER TRIGGERED' if check['triggered'] else '✓ AVOIDED'}")
 
@@ -440,21 +422,17 @@ def main():
         print("Usage: encounter_engine.py <from_loc> <to_loc> <distance_m> [terrain]")
         sys.exit(1)
 
-    # Get active campaign
-    active_campaign_file = Path("world-state/active-campaign.txt")
-    if not active_campaign_file.exists():
+    campaign_dir = active_campaign_dir()
+    if campaign_dir is None:
         print("[ERROR] No active campaign")
         sys.exit(1)
-
-    campaign_name = active_campaign_file.read_text().strip()
-    campaign_dir = f"world-state/campaigns/{campaign_name}"
 
     from_loc = sys.argv[1]
     to_loc = sys.argv[2]
     distance_m = float(sys.argv[3])
     terrain = sys.argv[4] if len(sys.argv) > 4 else "open"
 
-    engine = EncounterEngine(campaign_dir)
+    engine = EncounterEngine(str(campaign_dir))
 
     if not engine.is_enabled():
         print("[INFO] Encounter system is disabled")

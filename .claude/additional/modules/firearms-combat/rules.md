@@ -1,4 +1,4 @@
-# Firearms Combat — DM Rules [DEPRECATED — uses old managers, pending WorldGraph migration]
+# Firearms Combat — DM Rules
 
 ---
 
@@ -29,17 +29,24 @@ Use `--test` to preview without writing changes.
 
 ## Fire Modes
 
-- `single` — one shot, no penalty, 1 ammo
-- `burst` — 3 shots (or less if low ammo), progressive penalty: -3/-6 per shot (Sharpshooter: -2/-4)
-- `full_auto` — RPM-based shot count, max 10 shots per target, progressive -3 per shot (Sharpshooter: -2)
+- `single` — one physical round and one attack roll
+- `burst` — hold the trigger for 1 second; spend `floor(RPM / 60)` rounds and resolve up to 3 salvos
+- `full_auto` — hold the trigger for 3 seconds; spend `floor(RPM / 60 * 3)` rounds and resolve up to 6 salvos per target, 12 total
 
-### Full Auto Balance Rules
+Physical rounds fired are capped by loaded ammo and weapon magazine capacity. Every fired round is deducted even when every salvo misses.
 
-Full auto is capped at **10 shots per target** regardless of RPM or ammo. This prevents spray-and-pray from being an instant kill button. Penalty is steep: by shot 4 a normal shooter is at -9 to attack. Sharpshooter fares better but still degrades fast.
+### Salvo Resolution
 
-Effective shots (where hit chance > 50%) for AK-74 vs AC 13:
-- Normal (+5 base): ~2-3 shots
-- Sharpshooter (+8 base): ~4-5 shots
+- Physical rounds are divided across targets, then grouped into a bounded number of salvos.
+- Each salvo makes one attack roll, not one roll per bullet.
+- Recoil is cumulative per salvo: `0, -2, -4...`; Sharpshooter uses `0, -1, -2...`.
+- A normal hit lands 1 bullet.
+- Beating AC by 5 lands 2 bullets; beating AC by 10 lands 3 bullets.
+- A salvo cannot land more bullets than it physically contains.
+- Natural 20 lands up to 2 bullets, but only the first bullet is critical.
+- Natural 1 misses the entire salvo.
+
+The result reports physical `shots_fired`, resolved `salvos_fired`, actual `bullets_hit`, magazine remainder, and whether a reload is required.
 
 ---
 
@@ -55,32 +62,29 @@ Effective shots (where hit chance > 50%) for AK-74 vs AC 13:
 
 ## Critical Hits
 
-Natural 20 on any shot -> double damage dice (modifiers unchanged). Natural 1 -> auto-miss.
+Single fire doubles the damage dice on a natural 20. Automatic fire doubles only the first bullet in a natural-20 salvo; other bullets use normal damage.
 
 ---
 
 ## After Combat
 
 The resolver automatically:
-1. **Writes XP** to character file (25 XP per kill)
-2. **Deducts ammo** via CORE inventory (dm-inventory.sh)
-3. If inventory is not available, prints manual deduction note
+1. **Writes XP** to `player:active` in WorldGraph (25 XP per kill)
+2. **Deducts ammo** from the `player:active` WorldGraph inventory
+3. Reports a failed deduction when the ammunition stack is missing or insufficient
 
 ---
 
 ## Data Location
 
-ALL firearms config lives in `module-data/firearms-combat.json` inside the campaign directory:
-- `weapons` — weapon stats (damage, pen, rpm, magazine, type)
-- `fire_modes` — penalty values, max_shots_per_target
-- `armor` — armor types with PROT and AC bonus
-- `bestiary` — enemy types with HP, AC, PROT, attack, damage, speed, CR, XP
+Fire mode and combat config lives in `module-data/firearms-combat.json` inside the campaign directory:
+- `fire_modes` — duration, salvo limits, recoil, hit margin, and hit cap
 - `combat_rules` — headshot, cover, suppression, bleed, morale
 - `range_rules` — close/normal/long/beyond_long modifiers
 - `penetration_vs_armor` — damage scaling rules (PEN vs PROT)
 - `combat_style` — hybrid_lethal config
 
-The module writes XP to `character.json` and deducts ammo via CORE inventory.
+Weapons, armor, and creatures live in `world.json` as WorldGraph nodes. The module writes XP to the player node and deducts physical rounds fired from that node's inventory.
 
 **Nothing stored in campaign-overview.json** — all data in module-data/.
 
@@ -91,4 +95,4 @@ The module writes XP to `character.json` and deducts ammo via CORE inventory.
 - Melee/thrown weapons — use standard D&D attack
 - Magic attacks — use standard spell mechanics
 - Narrative combat (chase scenes, intimidation) — no dice needed
-- NPC-vs-NPC combat — resolve narratively, no resolver call
+- Large NPC-vs-NPC combat — use the mass-combat module

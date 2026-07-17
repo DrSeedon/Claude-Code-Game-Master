@@ -50,15 +50,22 @@ def fake_campaign(tmp_path):
                 "penalty": 0
             },
             "burst": {
-                "attacks": 3,
-                "ammo": 3,
-                "penalty_per_shot": -3,
-                "penalty_per_shot_sharpshooter": -2
+                "duration_seconds": 1,
+                "max_salvos_per_target": 3,
+                "max_salvos_total": 3,
+                "penalty_per_salvo": -2,
+                "penalty_per_salvo_sharpshooter": -1,
+                "max_hits_per_salvo": 3,
+                "hit_margin_per_extra_bullet": 5
             },
             "full_auto": {
-                "penalty_per_shot": -3,
-                "penalty_per_shot_sharpshooter": -2,
-                "max_shots_per_target": 10
+                "duration_seconds": 3,
+                "max_salvos_per_target": 6,
+                "max_salvos_total": 12,
+                "penalty_per_salvo": -2,
+                "penalty_per_salvo_sharpshooter": -1,
+                "max_hits_per_salvo": 3,
+                "hit_margin_per_extra_bullet": 5
             }
         }
     }
@@ -69,7 +76,14 @@ def fake_campaign(tmp_path):
             "player:active": {
                 "type": "player",
                 "name": char_name,
-                "data": character_data
+                "data": character_data,
+                "inventory": {
+                    "stackable": {
+                        "5.45x39mm": {"qty": 100, "weight": 0.02},
+                        "8mm spike": {"qty": 500, "weight": 0.02}
+                    },
+                    "unique": []
+                }
             },
             "weapon:ak-74": {
                 "type": "weapon",
@@ -78,14 +92,28 @@ def fake_campaign(tmp_path):
                     "damage": "2d8+2",
                     "pen": 6,
                     "rpm": 650,
+                    "magazine": 30,
+                    "allowed_fire_modes": ["single", "burst", "full_auto"],
                     "ammo_type": "5.45x39mm",
+                    "source_module": "firearms-combat"
+                }
+            },
+            "weapon:c-14-impaler": {
+                "type": "weapon",
+                "name": "C-14 Impaler",
+                "data": {
+                    "damage": "2d8+3",
+                    "pen": 5,
+                    "rpm": 1800,
+                    "magazine": 500,
+                    "allowed_fire_modes": ["single", "burst", "full_auto"],
+                    "ammo_type": "8mm spike",
                     "source_module": "firearms-combat"
                 }
             }
         },
         "edges": []
     }
-    character_data["name"] = char_name
     (campaign_dir / "campaign-overview.json").write_text(json.dumps(campaign_overview, indent=2))
     (campaign_dir / "world.json").write_text(json.dumps(world_json, indent=2))
 
@@ -125,14 +153,13 @@ def test_is_sharpshooter(fake_campaign):
 
 
 def test_rpm_calculation(fake_campaign):
-    """Test rounds-per-D&D-round calculation"""
+    """Test rounds fired for a configured trigger duration."""
     resolver = FirearmsCombatResolver(str(fake_campaign))
 
-    ak74_rpm = 650
-    rounds_per_6_seconds = resolver._calculate_rounds_per_dnd_round(ak74_rpm)
-
-    expected = int((650 / 60) * 6)
-    assert rounds_per_6_seconds == expected
+    assert resolver._calculate_rounds_for_duration(650, 1) == 10
+    assert resolver._calculate_rounds_for_duration(650, 3) == 32
+    assert resolver._calculate_rounds_for_duration(1800, 1) == 30
+    assert resolver._calculate_rounds_for_duration(1800, 3) == 90
 
 
 def test_pen_vs_prot_scaling(fake_campaign):
@@ -157,6 +184,10 @@ def test_full_auto_combat_basic(fake_campaign):
     assert result["weapon"] == "AK-74"
     assert result["shots_fired"] == 10
     assert result["ammo_remaining"] == 0
+    assert result["magazine_remaining"] == 0
+    assert result["reload_required"] is True
+    assert result["duration_seconds"] == 3
+    assert result["salvos_fired"] == 6
     assert result["base_attack"] > 0
     assert result["is_sharpshooter"] is True
     assert len(result["targets"]) == 1
@@ -177,8 +208,9 @@ def test_full_auto_multi_target(fake_campaign):
     assert result["shots_fired"] == 30
     assert len(result["targets"]) == 3
 
-    total_shots = sum(t["shots"] for t in result["targets"])
+    total_shots = sum(t["rounds_allocated"] for t in result["targets"])
     assert total_shots == 30
+    assert result["salvos_fired"] <= 12
 
 
 def test_combat_output_formatting(fake_campaign):
@@ -199,22 +231,95 @@ def test_combat_output_formatting(fake_campaign):
 
 
 def test_character_update_after_combat(fake_campaign):
-    """Test character XP update after combat"""
+    """Combat persistence updates XP and ammunition in WorldGraph."""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    initial_xp = resolver.character["xp"]["current"]
+    resolver.update_character_after_combat({
+        "total_xp": 25,
+        "ammo_type": "5.45x39mm",
+        "shots_fired": 5,
+    })
+
+    player = resolver.world_graph.get_node("player:active")
+    assert player["data"]["xp"]["current"] == initial_xp + 25
+    assert player["inventory"]["stackable"]["5.45x39mm"]["qty"] == 95
+
+
+def test_combat_persistence_rolls_back_xp_when_ammo_fails(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    before = resolver.world_graph.get_node("player:active")
+
+    with pytest.raises(RuntimeError, match="ammunition"):
+        resolver.update_character_after_combat({
+            "total_xp": 25,
+            "ammo_type": "missing-ammo",
+            "shots_fired": 5,
+        })
+
+    after = resolver.world_graph.get_node("player:active")
+    assert after["data"]["xp"] == before["data"]["xp"]
+    assert after["inventory"] == before["inventory"]
+
+
+def test_ammo_deduction_uses_world_graph_inventory(fake_campaign):
     resolver = FirearmsCombatResolver(str(fake_campaign))
 
-    initial_xp = resolver.character["xp"]["current"]
+    assert resolver._deduct_ammo("5.45x39mm", 7) is True
 
-    targets = [
-        {"name": "Snork", "ac": 12, "hp": 1, "prot": 0}
-    ]
+    player = resolver.world_graph.get_node("player:active")
+    assert player["inventory"]["stackable"]["5.45x39mm"]["qty"] == 93
 
-    result = resolver.resolve_full_auto("AK-74", ammo_available=5, targets=targets)
 
-    if result["enemies_killed"] > 0:
-        resolver.update_character_after_combat(result)
+def test_combat_xp_preserves_level_up_behavior(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node("player:active", {
+        "data": {"level": 1, "xp": {"current": 275, "next_level": 300}}
+    })
 
-        updated_char = resolver.player_mgr.get_player("Test Stalker")
-        assert updated_char["xp"]["current"] > initial_xp
+    resolver.update_character_after_combat({"total_xp": 50, "shots_fired": 0})
+
+    player = resolver.world_graph.get_node("player:active")
+    assert player["data"]["level"] == 2
+    assert player["data"]["xp"] == {"current": 325, "next_level": 900}
+
+
+def test_combat_xp_can_cross_multiple_levels(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "player:active", {"data": {"level": 1, "xp": {"current": 0, "next_level": 300}}}
+    )
+
+    result = resolver.progression.award_xp(3000)
+
+    player = resolver.world_graph.get_node("player:active")
+    assert result["new_level"] == 4
+    assert player["data"]["xp"] == {"current": 3000, "next_level": 6500}
+
+
+def test_combat_xp_normalizes_integer_storage(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "player:active", {"data": {"level": 2, "xp": 500}}
+    )
+
+    resolver.progression.award_xp(50)
+
+    player = resolver.world_graph.get_node("player:active")
+    assert player["data"]["xp"] == {"current": 550, "next_level": 900}
+
+
+def test_combat_xp_keeps_level_twenty_capped(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "player:active", {"data": {"level": 20, "xp": 355000}}
+    )
+
+    result = resolver.progression.award_xp(25)
+
+    player = resolver.world_graph.get_node("player:active")
+    assert result["next_level_xp"] == "MAX"
+    assert player["data"]["level"] == 20
+    assert player["data"]["xp"] == {"current": 355025, "next_level": 355025}
 
 
 def test_single_fire_basic(fake_campaign):
@@ -245,17 +350,19 @@ def test_single_fire_no_ammo(fake_campaign):
 
 
 def test_burst_fire_basic(fake_campaign):
-    """Test burst fire — 3 shots, progressive penalty"""
+    """A one-second burst spends RPM-based ammo but uses three salvos."""
     resolver = FirearmsCombatResolver(str(fake_campaign))
 
     targets = [{"name": "Bandit", "ac": 12, "hp": 30, "prot": 2}]
     result = resolver.resolve_burst("AK-74", ammo_available=30, targets=targets)
 
     assert result["fire_mode"] == "burst"
-    assert result["shots_fired"] == 3
-    assert result["ammo_remaining"] == 27
+    assert result["shots_fired"] == 10
+    assert result["ammo_remaining"] == 20
     assert result["ammo_type"] == "5.45x39mm"
     assert len(result["targets"][0]["hits"]) == 3
+    assert result["targets"][0]["rounds_allocated"] == 10
+    assert sum(hit["rounds_in_salvo"] for hit in result["targets"][0]["hits"]) == 10
 
     hits = result["targets"][0]["hits"]
     assert hits[0]["modifier"] >= hits[1]["modifier"]
@@ -263,7 +370,7 @@ def test_burst_fire_basic(fake_campaign):
 
 
 def test_burst_fire_limited_ammo(fake_campaign):
-    """Test burst fire with less than 3 ammo"""
+    """Burst consumes only the rounds currently available."""
     resolver = FirearmsCombatResolver(str(fake_campaign))
 
     targets = [{"name": "Bandit", "ac": 12, "hp": 20, "prot": 2}]
@@ -271,6 +378,78 @@ def test_burst_fire_limited_ammo(fake_campaign):
 
     assert result["shots_fired"] == 2
     assert result["ammo_remaining"] == 0
+    assert result["salvos_fired"] == 2
+
+
+def test_starcraft_rpm_consumption(fake_campaign):
+    """High-RPM weapons spend physical rounds without creating one roll per bullet."""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    target = [{"name": "Hydralisk", "ac": 14, "hp": 200, "prot": 4}]
+
+    burst = resolver.resolve_burst("C-14 Impaler", ammo_available=500, targets=target)
+    assert burst["shots_fired"] == 30
+    assert burst["ammo_remaining"] == 470
+    assert burst["salvos_fired"] == 3
+
+    target[0]["hp"] = 200
+    full_auto = resolver.resolve_full_auto("C-14 Impaler", ammo_available=500, targets=target)
+    assert full_auto["shots_fired"] == 90
+    assert full_auto["ammo_remaining"] == 410
+    assert full_auto["salvos_fired"] == 6
+
+
+def test_magazine_caps_rounds_fired(fake_campaign):
+    """A fire action cannot consume more than the weapon's loaded magazine."""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.firearms_config["fire_modes"]["full_auto"]["duration_seconds"] = 6
+    target = [{"name": "Target", "ac": 30, "hp": 200, "prot": 0}]
+
+    result = resolver.resolve_full_auto("AK-74", ammo_available=100, targets=target)
+
+    assert result["shots_fired"] == 30
+    assert result["ammo_remaining"] == 70
+    assert result["magazine_remaining"] == 0
+    assert result["reload_required"] is True
+
+
+def test_margin_controls_bullets_hit(fake_campaign, monkeypatch):
+    """A successful salvo lands more bullets only when it beats AC by 5 or 10."""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    rolls = iter([15, 10, 1])
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: next(rolls))
+    monkeypatch.setattr(resolver, "_roll_damage", lambda _: 10)
+    target = [{"name": "Target", "ac": 13, "hp": 100, "prot": 2}]
+
+    result = resolver.resolve_burst("AK-74", ammo_available=30, targets=target)
+
+    salvos = result["targets"][0]["hits"]
+    assert [salvo["bullets_hit"] for salvo in salvos] == [3, 1, 0]
+    assert result["bullets_hit"] == 4
+    assert result["total_damage"] == 40
+
+
+def test_automatic_nat20_crits_only_first_bullet(fake_campaign, monkeypatch):
+    """A natural 20 does not turn every bullet in the salvo into a critical hit."""
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    mode = resolver.firearms_config["fire_modes"]["burst"]
+    mode["max_salvos_per_target"] = 1
+    mode["max_salvos_total"] = 1
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: 20)
+    monkeypatch.setattr(
+        resolver,
+        "_roll_damage",
+        lambda dice: 20 if dice.startswith("4d") else 10,
+    )
+    target = [{"name": "Target", "ac": 30, "hp": 100, "prot": 2}]
+
+    result = resolver.resolve_burst("AK-74", ammo_available=30, targets=target)
+
+    salvo = result["targets"][0]["hits"][0]
+    assert salvo["bullets_hit"] == 2
+    assert salvo["crit_bullets"] == 1
+    assert salvo["bullet_damage"][0]["critical"] is True
+    assert salvo["bullet_damage"][1]["critical"] is False
+    assert result["total_damage"] == 30
 
 
 def test_full_auto_has_ammo_type(fake_campaign):
@@ -284,6 +463,18 @@ def test_full_auto_has_ammo_type(fake_campaign):
     assert result["fire_mode"] == "full_auto"
 
 
+def test_weapon_rejects_unsupported_fire_mode(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "weapon:c-14-impaler",
+        {"data": {"allowed_fire_modes": ["single"]}},
+    )
+    target = [{"name": "Target", "ac": 10, "hp": 10, "prot": 0}]
+
+    with pytest.raises(ValueError, match="not available"):
+        resolver.resolve_full_auto("C-14 Impaler", 500, target)
+
+
 def test_missing_module_data_raises(tmp_path):
     """Test that missing module-data/firearms-combat.json raises RuntimeError"""
     world_state = tmp_path / "world-state"
@@ -291,20 +482,18 @@ def test_missing_module_data_raises(tmp_path):
     campaign_dir.mkdir(parents=True)
     (world_state / "active-campaign.txt").write_text("no-config")
 
-    character_data = {
-        "name": "NoConfig",
-        "class": "Воин",
-        "level": 1,
-        "hp": {"current": 10, "max": 10},
-        "abilities": {"str": 10, "dex": 14, "con": 10, "int": 10, "wis": 10, "cha": 10},
-        "proficiency_bonus": 2,
-        "xp": {"current": 0, "next_level": 300}
-    }
-
     overview = {"name": "No Config Test", "current_character": "NoConfig"}
-
-    (campaign_dir / "character.json").write_text(json.dumps(character_data, indent=2))
     (campaign_dir / "campaign-overview.json").write_text(json.dumps(overview, indent=2))
+    (campaign_dir / "world.json").write_text(json.dumps({
+        "nodes": {
+            "player:active": {
+                "type": "player",
+                "name": "NoConfig",
+                "data": {"level": 1, "xp": {"current": 0, "next_level": 300}}
+            }
+        },
+        "edges": []
+    }, indent=2))
 
     with pytest.raises(RuntimeError, match="No firearms config found"):
         FirearmsCombatResolver(str(world_state))

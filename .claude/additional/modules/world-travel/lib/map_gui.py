@@ -17,7 +17,6 @@ except ImportError:
 
 PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.json_ops import JsonOperations
 from lib.module_data import ModuleDataManager
 from connection_utils import get_unique_edges, get_connections, _segment_intersects_circle
 
@@ -25,6 +24,7 @@ MODULE_DIR = Path(__file__).parent
 sys.path.insert(0, str(MODULE_DIR))
 
 from force_layout import compute_layout, _cache as _layout_cache
+from world_travel_store import WorldTravelStore, active_campaign_dir
 
 DEFAULT_TERRAIN_COLORS = {
     'default': [100, 150, 255]
@@ -55,7 +55,7 @@ class MapGUI:
     COLOR_BREADCRUMB_SEP = (100, 100, 120)
 
     def __init__(self, campaign_dir: str, width: int = 1200, height: int = 800):
-        self.json_ops = JsonOperations(campaign_dir)
+        self.store = WorldTravelStore(campaign_dir)
         self.module_data_mgr = ModuleDataManager(Path(campaign_dir))
         self.width = width
         self.height = height
@@ -117,8 +117,8 @@ class MapGUI:
     def _load_and_generate_all(self):
         print("[STARTUP] Loading data and pre-generating all surfaces...")
         t_start = time.perf_counter()
-        self.locations = self.json_ops.load_json("locations.json") or {}
-        self.overview = self.json_ops.load_json("campaign-overview.json") or {}
+        self.locations = self.store.load_locations()
+        self.overview = self.store.load_overview()
         self.current_location = self.overview.get('player_position', {}).get('current_location')
         self._load_terrain_colors()
         _layout_cache.clear()
@@ -140,8 +140,8 @@ class MapGUI:
     def reload_data(self):
         print("[REFRESH] Checking for changes...")
         t_start = time.perf_counter()
-        new_locations = self.json_ops.load_json("locations.json") or {}
-        new_overview = self.json_ops.load_json("campaign-overview.json") or {}
+        new_locations = self.store.load_locations()
+        new_overview = self.store.load_overview()
 
         old_terrain_colors = dict(self.terrain_colors)
         self.locations = new_locations
@@ -1210,13 +1210,10 @@ def main():
     parser.add_argument('--height', type=int, default=800, help='Window height')
     args = parser.parse_args()
 
-    active_campaign_file = Path("world-state/active-campaign.txt")
-    if not active_campaign_file.exists():
+    campaign_dir = active_campaign_dir()
+    if campaign_dir is None:
         print("[ERROR] No active campaign")
         sys.exit(1)
-
-    active_campaign = active_campaign_file.read_text().strip()
-    campaign_dir = Path(f"world-state/campaigns/{active_campaign}")
     gui = MapGUI(str(campaign_dir), width=args.width, height=args.height)
     gui.run()
 

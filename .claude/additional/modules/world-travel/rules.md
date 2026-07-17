@@ -1,4 +1,4 @@
-# World Travel — DM Rules [DEPRECATED — uses old managers, pending WorldGraph migration]
+# World Travel — DM Rules
 
 ## Navigation
 
@@ -30,7 +30,7 @@ This calculates coordinates from the origin location + bearing/distance, creates
 
 ### Connections [MANDATORY]
 
-**NEVER** use CORE `dm-location.sh connect` — it writes dict-format connections incompatible with world-travel's list format, resulting in invisible paths on GUI.
+CORE `dm-location.sh connect` is graph-compatible, but it does not include travel distance, bearing, or terrain. Use the navigation manager for traversable world routes:
 
 Use the navigation manager for additional connections between existing locations:
 
@@ -38,13 +38,7 @@ Use the navigation manager for additional connections between existing locations
 bash .claude/additional/modules/world-travel/tools/dm-navigation.sh connect "A" "B" --terrain forest --distance 2000
 ```
 
-If `dm-navigation.sh connect` is unavailable, add connections via `dm-navigation.sh add` (which auto-creates origin→new connection) or manually in `locations.json` using the list format:
-
-```json
-"connections": [
-  {"to": "Target", "path": "2000m at 45°", "distance_meters": 2000, "bearing": 45, "terrain": "forest"}
-]
-```
+Do not edit connections directly in `world.json`. The navigation command writes canonical bidirectional `connected` edges with the required metadata.
 
 **ALWAYS specify `--terrain`**. Default is `open` but DM should pick the correct terrain type for the area.
 
@@ -95,7 +89,7 @@ Skip encounters when: system disabled, distance < 300m, teleportation, movement 
 
 ## Hierarchical Locations
 
-One flat `locations.json`, tree via `parent`/`children` fields.
+All locations are `location:*` nodes in `world.json`. Hierarchy is represented by projected `parent` and `children` metadata on those nodes.
 
 | Type | Coordinates | Children | Examples |
 |------|------------|----------|----------|

@@ -13,17 +13,23 @@ from datetime import datetime, timezone
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from entity_manager import EntityManager
+from campaign_manager import CampaignManager
+from json_ops import JsonOperations
 from world_graph import WorldGraph
 from currency import load_config, format_money, migrate_gold
 from colors import tag_success, tag_error, Colors
 
 
-class SessionManager(EntityManager):
-    """Manage D&D session operations. Inherits from EntityManager for common functionality."""
+class SessionManager:
+    """Manage session lifecycle, movement, and snapshots."""
 
     def __init__(self, world_state_dir: str = None):
-        super().__init__(world_state_dir)
+        self.campaign_mgr = CampaignManager(world_state_dir or "world-state")
+        campaign_dir = self.campaign_mgr.get_active_campaign_dir()
+        if campaign_dir is None:
+            raise RuntimeError("No active campaign. Run /new-game or /import first.")
+        self.campaign_dir = campaign_dir
+        self.json_ops = JsonOperations(str(campaign_dir))
 
         self.world_state_dir = self.campaign_dir
         self.saves_dir = self.campaign_dir / "saves"
@@ -87,8 +93,13 @@ class SessionManager(EntityManager):
 
     # ==================== Party Movement ====================
 
-    def _ensure_location_and_connection(self, old_location: str, new_location: str) -> None:
-        wg = self._wg()
+    def _ensure_location_and_connection(
+        self,
+        old_location: str,
+        new_location: str,
+        wg: WorldGraph | None = None,
+    ) -> str:
+        wg = wg or self._wg()
 
         def _slug(name: str) -> str:
             return wg._slug(name)
@@ -105,30 +116,42 @@ class SessionManager(EntityManager):
             if wg.get_node(old_id) and wg.get_node(new_id):
                 wg.location_connect(old_id, new_id)
 
-    def move_party(self, location: str) -> Dict[str, str]:
-        campaign = self.json_ops.load_json(self.campaign_file)
+        return new_id
 
-        if 'player_position' not in campaign:
-            campaign['player_position'] = {}
+    def _update_position_metadata(self, old_location: str, location: str) -> None:
+        with self.json_ops.transaction(self.campaign_file) as campaign:
+            campaign.setdefault('player_position', {}).update({
+                'previous_location': old_location,
+                'current_location': location,
+                'arrival_time': self.get_timestamp(),
+            })
 
-        old_location = campaign['player_position'].get('current_location', 'Unknown')
-
-        self._ensure_location_and_connection(old_location, location)
-
-        campaign['player_position']['previous_location'] = old_location
-        campaign['player_position']['current_location'] = location
-        campaign['player_position']['arrival_time'] = self.get_timestamp()
-
-        self.json_ops.save_json(self.campaign_file, campaign)
-
+    def move_party(self, location: str) -> Dict[str, Any]:
         wg = self._wg()
-        player_id = wg._player_id()
-        if player_id:
-            wg.update_node(player_id, {"data": {"current_location": location}})
+        old_location = self._get_current_location() or 'Unknown'
+        with wg.transaction():
+            location_id = self._ensure_location_and_connection(old_location, location, wg)
+            player_id = wg._player_id()
+            if player_id and not wg.update_node(
+                player_id, {"data": {"current_location": location}}
+            ):
+                raise RuntimeError("Failed to move player")
+
+            moved_party_members = []
+            for node in wg.list_nodes("npc"):
+                data = node.get("data", {})
+                if not (data.get("party_member") or data.get("is_party_member")):
+                    continue
+                if not wg.npc_locate(node["id"], location_id):
+                    raise RuntimeError(f"Failed to move party member: {node['id']}")
+                moved_party_members.append(node["id"])
+
+            self._update_position_metadata(old_location, location)
 
         result = {
             "previous_location": old_location,
-            "current_location": location
+            "current_location": location,
+            "moved_party_members": moved_party_members,
         }
 
         print(f"📍 {old_location} → {Colors.BC}{location}{Colors.RS}")
@@ -142,14 +165,21 @@ class SessionManager(EntityManager):
         filename = f"{timestamp}-{safe_name}.json"
 
         world_file = self.campaign_dir / "world.json"
-        world_data = None
-        if world_file.exists():
-            with open(world_file, 'r', encoding='utf-8') as f:
-                world_data = json.load(f)
+        world_data = self._wg().repository.load() if world_file.exists() else None
+
+        module_data = {}
+        module_data_dir = self.campaign_dir / "module-data"
+        if module_data_dir.exists():
+            for path in sorted(module_data_dir.glob("*.json")):
+                try:
+                    module_data[path.name] = json.loads(path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError) as exc:
+                    raise RuntimeError(f"Cannot snapshot {path}: {exc}") from exc
 
         snapshot = {
             "campaign_overview": self.json_ops.load_json(self.campaign_file),
             "world": world_data,
+            "module_data": module_data,
         }
 
         save_data = {
@@ -180,29 +210,46 @@ class SessionManager(EntityManager):
             return False
 
         snapshot = save_data.get('snapshot', {})
+        world_snapshot = snapshot.get('world')
+        if (
+            not isinstance(world_snapshot, dict)
+            or not isinstance(world_snapshot.get('nodes'), dict)
+            or not isinstance(world_snapshot.get('edges'), list)
+        ):
+            print(tag_error(
+                "Legacy flat-file saves are unsupported; migrate them to world.json first"
+            ))
+            return False
 
         if 'campaign_overview' in snapshot:
-            self.json_ops.save_json(self.campaign_file, snapshot['campaign_overview'])
+            if not self.json_ops.save_json(
+                self.campaign_file, snapshot['campaign_overview']
+            ):
+                return False
 
-        if 'world' in snapshot and snapshot['world'] is not None:
-            world_file = self.campaign_dir / "world.json"
-            tmp = world_file.with_suffix(".json.tmp")
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(snapshot['world'], f, indent=2, ensure_ascii=False)
-            import os
-            os.replace(tmp, world_file)
-        else:
-            # Backward compat: old saves with flat files
-            for key, filename in [
-                ('npcs', 'npcs.json'),
-                ('locations', 'locations.json'),
-                ('facts', 'facts.json'),
-                ('consequences', 'consequences.json'),
-            ]:
-                if key in snapshot:
-                    self.json_ops.save_json(filename, snapshot[key])
-            if 'characters' in snapshot:
-                self._restore_characters_legacy(snapshot['characters'])
+        wg = self._wg()
+        with wg.transaction() as world:
+            world.clear()
+            world.update(world_snapshot)
+
+        if "module_data" in snapshot:
+            module_data = snapshot["module_data"]
+            if not isinstance(module_data, dict):
+                print(tag_error("Invalid module_data in save"))
+                return False
+            module_data_dir = self.campaign_dir / "module-data"
+            module_data_dir.mkdir(parents=True, exist_ok=True)
+            for current in module_data_dir.glob("*.json"):
+                current.unlink()
+            module_ops = JsonOperations(str(module_data_dir))
+            for filename, data in module_data.items():
+                if (
+                    Path(filename).name != filename
+                    or not filename.endswith(".json")
+                    or not module_ops.save_json(filename, data)
+                ):
+                    print(tag_error(f"Invalid module snapshot entry: {filename}"))
+                    return False
 
         print(tag_success(f"Restored from save: {save_file.name}"))
         return True
@@ -260,14 +307,25 @@ class SessionManager(EntityManager):
         campaign = self.json_ops.load_json(self.campaign_file) or {}
         campaign_name = campaign.get('name', campaign.get('campaign_name', 'Unknown Campaign'))
         session_num = self._get_session_number()
-        location = campaign.get('player_position', {}).get('current_location', 'Unknown')
+        location = self._get_current_location() or 'Unknown'
         time_of_day = campaign.get('time', {}).get('time_of_day', campaign.get('time_of_day', ''))
         current_date = campaign.get('time', {}).get('current_date', campaign.get('current_date', ''))
         time_str = f"{time_of_day}, {current_date}" if time_of_day and current_date else time_of_day or current_date or 'Unknown'
+        play_mode = campaign.get('play_mode', 'interactive')
+        if isinstance(play_mode, dict):
+            play_mode = play_mode.get('id', 'interactive')
+        visuals = campaign.get('cinematic_visuals', {})
+        visuals_enabled = bool(visuals.get('enabled', False))
+        visuals_status = 'enabled' if visuals_enabled else 'disabled'
+        if visuals_enabled:
+            frequency = visuals.get('frequency', 'occasional')
+            aspect_ratio = visuals.get('aspect_ratio', '16:9')
+            visuals_status += f" ({frequency}, {aspect_ratio})"
 
         lines.append("=== SESSION CONTEXT ===")
         lines.append(f"Campaign: {campaign_name} | Session #{session_num}")
         lines.append(f"Location: {location} | Time: {time_str}")
+        lines.append(f"Play mode: {play_mode} | Cinematic visuals: {visuals_status}")
 
         lines.append("")
         lines.append("--- CHARACTER ---")
@@ -396,6 +454,13 @@ class SessionManager(EntityManager):
         return len(wg.list_nodes(node_type=node_type))
 
     def _get_current_location(self) -> Optional[str]:
+        wg = self._wg()
+        player_id = wg._player_id()
+        if player_id:
+            player = wg.get_node(player_id)
+            location = player.get('data', {}).get('current_location') if player else None
+            if location:
+                return location
         campaign = self.json_ops.load_json(self.campaign_file)
         return campaign.get('player_position', {}).get('current_location')
 
@@ -424,16 +489,6 @@ class SessionManager(EntityManager):
                     char["name"] = node.get("name", "Unknown")
                 return char
         return None
-
-    def _restore_characters_legacy(self, characters: Dict[str, Any]) -> None:
-        wg = self._wg()
-        char_data = characters.get('character') or (
-            next(iter(characters.values()), None) if len(characters) == 1 else None
-        )
-        if char_data:
-            player_id = wg._player_id()
-            if player_id:
-                wg.update_node(player_id, {"data": char_data})
 
     def _find_save(self, name: str) -> Optional[Path]:
         exact_match = self.saves_dir / name
