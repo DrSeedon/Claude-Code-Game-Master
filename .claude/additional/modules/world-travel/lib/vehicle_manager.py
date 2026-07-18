@@ -349,11 +349,12 @@ class VehicleManager:
         return result
 
     def get_internal_map_data(self, vehicle_id: str) -> Dict[str, Any]:
+        """Return vehicle-room data for projections without rendering it."""
         locations = self.store.load_locations()
         result = {}
         for name, data in locations.items():
-            v = data.get("_vehicle", {})
-            if v.get("vehicle_id") == vehicle_id:
+            vehicle = data.get("_vehicle", {})
+            if vehicle.get("vehicle_id") == vehicle_id:
                 result[name] = data
         return result
 
@@ -404,9 +405,6 @@ if __name__ == "__main__":
 
     sub.add_parser("list-vehicles")
 
-    p = sub.add_parser("map-internal")
-    p.add_argument("vehicle_id")
-
     p = sub.add_parser("move-internal")
     p.add_argument("room")
 
@@ -452,17 +450,6 @@ if __name__ == "__main__":
     elif args.cmd == "list-vehicles":
         result = vm.list_vehicles()
         print(json.dumps(result, ensure_ascii=False, indent=2))
-
-    elif args.cmd == "map-internal":
-        result = vm.get_internal_map_data(args.vehicle_id)
-        print(f"=== Internal Map: {args.vehicle_id} ===")
-        for loc_name, loc_data in result.items():
-            if loc_data.get("_vehicle", {}).get("is_vehicle_anchor"):
-                print(f"  [+] {loc_name} [ANCHOR]")
-            else:
-                print(f"  [*] {loc_name}")
-            for conn in loc_data.get("connections", []):
-                print(f"      -> {conn['to']} ({conn.get('distance_meters', '?')}m)")
 
     elif args.cmd == "move-internal":
         result = vm.move_internal(args.room)

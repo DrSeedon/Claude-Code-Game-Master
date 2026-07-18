@@ -33,7 +33,7 @@
     "BFS pathfinding between named locations",
     "Path preference caching (DM route decisions)",
     "Direction blocking (cliffs, radiation zones)",
-    "ASCII and GUI map rendering",
+    "Read-only web map projection for global and interior views",
     "Distance-based encounter segmentation (1-3 checks per journey)",
     "DC scaling by distance and time of day",
     "Encounter nature categories (Dangerous, Neutral, Beneficial, Special)",
@@ -46,7 +46,6 @@
   "adds_to_core": {
     "tools": [
       "dm-navigation.sh",
-      "dm-map.sh",
       "dm-encounter.sh",
       "dm-vehicle.sh"
     ],
@@ -57,8 +56,6 @@
       "dm-navigation.sh routes <from> <to>": "Show all possible routes",
       "dm-navigation.sh block <loc> <from_deg> <to_deg> <reason>": "Block direction range",
       "dm-navigation.sh unblock <loc> <from_deg> <to_deg>": "Unblock direction",
-      "dm-map.sh show": "ASCII map of known locations",
-      "dm-map.sh --gui": "Interactive Pygame map",
       "dm-encounter.sh check <from> <to> <dist> [terrain]": "Manual encounter check",
       "dm-encounter.sh toggle": "Enable/disable encounter checks",
       "dm-encounter.sh set-base-dc <dc>": "Set encounter difficulty",

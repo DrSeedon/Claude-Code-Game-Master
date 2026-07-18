@@ -24,17 +24,18 @@ Keep dungeon details in a single master location entry:
 }
 ```
 
-Draw ASCII maps **inline** when tactically useful (not every room).
+Do not render maps in terminal output. Describe lightweight spatial relationships
+in prose; structured location nodes are rendered by the web map.
 
 ### Lightweight Flow
 ```
 1. ENTER - Describe entrance, mention visible exits, no JSON needed
-2. EXPLORE - Narrate each area, draw map only when tactically useful
+2. EXPLORE - Narrate each area and keep exits/spatial relationships explicit
 3. COMBAT - Note which "zone" enemies are in, describe movement narratively
 4. EXIT - Update master location notes if significant, log discoveries
 ```
 
-### When to Draw Maps
+### When to Update Structured Map Data
 - Complex multi-path decisions
 - Combat with positioning across zones
 - Player asks for spatial clarity

@@ -62,7 +62,7 @@ bash tools/dm-location.sh add "Forest" "Dark woods" \
 
 ### Terrain & Colors [MANDATORY]
 
-Set terrain types and RGB colors for the GUI map. Store in `module-data/world-travel.json` under `terrain_colors`.
+Set terrain types and RGB colors for the web map. Store in `module-data/world-travel.json` under `terrain_colors`.
 Name the keys in English — terrain type names are code identifiers used in JSON and CLI flags.
 
 **Palette by genre (world terrain + interior terrain):**
@@ -74,7 +74,7 @@ Name the keys in English — terrain type names are code identifiers used in JSO
 | Horror | forest [30,60,30], swamp [50,70,40], road [100,90,80], ruins [80,70,60], mist [150,150,170] | outdoor [70,80,60], indoor [50,45,40] |
 | Stone Age | cave [80,70,60], river [60,120,200], forest [50,150,50], plains [160,200,100], mountain [120,100,80], beach [220,200,140], tundra [200,210,220] | outdoor [130,150,110], indoor [80,70,60] |
 
-**ALWAYS include `outdoor` and `indoor` interior terrain colors** alongside world terrains. These are used by compound interior views on the GUI map.
+**ALWAYS include `outdoor` and `indoor` interior terrain colors** alongside world terrains. These are used by compound interior views on the web map.
 
 Add only terrains that realistically appear on this map. Write into `terrain_colors` in `module-data/world-travel.json`.
 
@@ -90,7 +90,7 @@ Never use `anomaly`, `ruins`, `radiation`, `cave` on connections — these descr
 
 ### Location Sizes [MANDATORY]
 
-Every location must have `diameter_meters` — controls circle size on GUI map (normalized to 8–40px).
+Every location must have `diameter_meters` — controls relative node size on the web map.
 
 | Type | diameter_meters |
 |------|----------------|
@@ -100,7 +100,7 @@ Every location must have `diameter_meters` — controls circle size on GUI map (
 | City / large forest / mountain range | 3000–8000 |
 | Region / continent zone | 10000+ |
 
-Set sizes relative to each other — the GUI auto-normalizes, so ratios matter more than absolute values.
+Set sizes relative to each other — the web map auto-normalizes, so ratios matter more than absolute values.
 
 ```bash
 bash tools/dm-world.sh update-node location:location-name \
@@ -156,7 +156,7 @@ Every compound needs:
 
 ### Interior terrain colors [MANDATORY]
 
-Add `outdoor` and `indoor` terrain types to `terrain_colors` in `module-data/world-travel.json`. These control node colors on the GUI map.
+Add `outdoor` and `indoor` terrain types to `terrain_colors` in `module-data/world-travel.json`. These control node colors on the web map.
 
 ```json
 {
@@ -213,10 +213,13 @@ bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh tree
 bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
 ```
 
-## 7. Show Map
+## 7. Verify Web Map Data
+
+The campaign dashboard renders the map from WorldGraph through the read-only
+`/api/campaigns/{name}/map` projection. Do not call a terminal map renderer.
+Verify the hierarchy and connections instead:
 
 ```bash
-bash .claude/additional/modules/world-travel/tools/dm-map.sh
+bash .claude/additional/modules/world-travel/tools/dm-hierarchy.sh validate
+bash .claude/additional/modules/world-travel/tools/dm-navigation.sh path analyze
 ```
-
-Always show ASCII map at the end.

@@ -23,7 +23,6 @@ if [ "$#" -lt 1 ]; then
     echo "  board <vehicle_id> [--room <room>]         Board vehicle (enter)"
     echo "  exit                                        Exit vehicle to global map"
     echo "  status [<vehicle_id>]                      Show vehicle status"
-    echo "  map <vehicle_id>                            ASCII map of internal rooms"
     echo "  list                                        List all vehicles"
     exit 1
 fi
@@ -75,14 +74,6 @@ case "$ACTION" in
         ;;
     status)
         $PYTHON_CMD "$VEHICLE_PY" status "$@"
-        ;;
-    map)
-        VEHICLE_ID="$1"
-        if [ -z "$VEHICLE_ID" ]; then
-            echo "Usage: dm-vehicle.sh map <vehicle_id>"
-            exit 1
-        fi
-        $PYTHON_CMD "$VEHICLE_PY" map-internal "$VEHICLE_ID"
         ;;
     list)
         $PYTHON_CMD "$VEHICLE_PY" list-vehicles
