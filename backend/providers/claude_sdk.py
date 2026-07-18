@@ -71,7 +71,7 @@ class ClaudeSDKProvider:
     def __init__(
         self,
         project_root: Path,
-        model_name: str = "claude-sonnet-4-6",
+        model_name: str = "claude-sonnet-5",
         campaign_name: str | None = None,
         resume_session_id: str | None = None,
         environment: dict[str, str] | None = None,

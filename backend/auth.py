@@ -7,8 +7,9 @@ Cookie: dnd_session=<sha256(password+salt)>, httponly, 30 days.
 import hashlib
 import hmac
 import os
-from fastapi import Request, Response
+from fastapi import Response
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.requests import HTTPConnection
 
 AUTH_COOKIE = "dnd_session"
 AUTH_MAX_AGE = 30 * 86400  # 30 days
@@ -23,7 +24,7 @@ def _token(password: str) -> str:
     return hashlib.sha256(f"{_SALT}:{password}".encode()).hexdigest()[:32]
 
 
-def is_authenticated(request: Request) -> bool:
+def is_authenticated(request: HTTPConnection) -> bool:
     password = _get_password()
     if not password:
         return True

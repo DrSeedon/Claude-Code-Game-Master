@@ -153,13 +153,20 @@ class CampaignManager:
             print(tag_error(str(exc)))
             return None
 
-        if campaign_path.exists():
+        try:
+            # Claim the campaign name atomically. A pre-check followed by
+            # mkdir() lets two wizard requests race; the losing request must
+            # never clean up the winner's directory.
+            campaign_path.mkdir()
+        except FileExistsError:
             print(tag_error(f"Campaign '{safe_name}' already exists"))
+            return None
+        except OSError as e:
+            print(tag_error(f"Failed to create campaign: {e}"))
             return None
 
         try:
             # Create campaign directory structure
-            campaign_path.mkdir(parents=True)
             (campaign_path / "saves").mkdir()
             (campaign_path / "extracted").mkdir()
 

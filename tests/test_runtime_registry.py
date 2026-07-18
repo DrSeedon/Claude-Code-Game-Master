@@ -8,6 +8,7 @@ from backend.runtime import (
     RuntimeCapabilities,
     RuntimeDefinition,
     RuntimeRegistry,
+    create_default_registry,
 )
 
 
@@ -97,3 +98,17 @@ def test_event_and_context_usage_serialize():
         "total_tokens": 200,
         "cached_input_tokens": 40,
     }
+
+
+def test_default_registry_exposes_supported_model_catalog():
+    registry = create_default_registry()
+
+    assert [model.id for model in registry.list_models("claude")] == [
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+    ]
+    assert [model.id for model in registry.list_models("codex")] == [
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+    ]

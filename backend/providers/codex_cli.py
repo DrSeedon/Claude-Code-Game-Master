@@ -17,9 +17,9 @@ from backend.runtime.events import AgentEvent, ContextUsage
 logger = logging.getLogger(__name__)
 
 CODEX_CONTEXT_LIMITS = {
-    "gpt-5.6": 258_400,
+    "gpt-5.6-sol": 258_400,
     "gpt-5.6-terra": 258_400,
-    "gpt-5.3-codex-spark": 258_400,
+    "gpt-5.6-luna": 258_400,
 }
 CODEX_REASONING_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 _SAFE_SANDBOXES = {"read-only", "workspace-write"}
@@ -214,7 +214,7 @@ class CodexCLIProvider:
     def __init__(
         self,
         project_root: Path,
-        model_name: str = "gpt-5.6",
+        model_name: str = "gpt-5.6-sol",
         campaign_name: str | None = None,
         *,
         resume_thread_id: str | None = None,

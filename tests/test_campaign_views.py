@@ -86,7 +86,12 @@ def _write_campaign(tmp_path):
                     "party_member": True,
                     "description": "Squad medic",
                     "attitude": "friendly",
-                    "character_sheet": {"hp": 7, "hp_max": 10, "ac": 12},
+                    "character_sheet": {
+                        "hp": 7,
+                        "hp_max": 10,
+                        "ac": 12,
+                        "gm_notes": "Will betray the player",
+                    },
                 },
                 "inventory": {
                     "stackable": {"Medkit": {"qty": 2, "weight": 0.5}},
@@ -113,6 +118,12 @@ def _write_campaign(tmp_path):
                 "name": "Hidden NPC",
                 "data": {"player_visible": True, "hidden": True},
             },
+            "npc:legacy-hidden": {
+                "type": "npc",
+                "name": "Legacy Hidden NPC",
+                "hidden": True,
+                "data": {"player_visible": True},
+            },
             "quest:visible": {
                 "type": "quest",
                 "name": "Visible Quest",
@@ -138,7 +149,17 @@ def _write_campaign(tmp_path):
             "spell:signal": {
                 "type": "spell",
                 "name": "Signal",
-                "data": {"visibility": "public", "mechanics": {"range": 100}},
+                "data": {
+                    "visibility": "public",
+                    "mechanics": {
+                        "range": 100,
+                        "gm_notes": "Secret side effect",
+                        "stages": [
+                            {"name": "Known"},
+                            {"name": "Hidden", "visibility": "dm-only"},
+                        ],
+                    },
+                },
             },
             "creature:surprise": {
                 "type": "creature",
@@ -242,6 +263,31 @@ def test_snapshot_is_structured_json_safe_and_uses_canonical_player_data(tmp_pat
     }
 
 
+def test_snapshot_without_player_returns_empty_player_views(tmp_path):
+    campaign = tmp_path / "empty-character"
+    campaign.mkdir()
+    (campaign / "campaign-overview.json").write_text(
+        json.dumps({"campaign_name": "Character pending"}),
+        encoding="utf-8",
+    )
+    (campaign / "world.json").write_text(
+        json.dumps(
+            {
+                "meta": {"version": 2, "schema": "graph"},
+                "nodes": {},
+                "edges": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = get_campaign_views(campaign)
+
+    assert snapshot["campaign"]["campaign_name"] == "Character pending"
+    assert snapshot["character"]["name"] == "Unknown"
+    assert snapshot["inventory"]["items"] == []
+
+
 def test_player_visibility_filters_npcs_quests_wiki_and_consequences(tmp_path):
     projector = CampaignViewProjector(_write_campaign(tmp_path))
 
@@ -264,6 +310,20 @@ def test_player_visibility_filters_npcs_quests_wiki_and_consequences(tmp_path):
     assert all("trigger" not in item for item in consequences)
     assert "Future" not in {item["name"] for item in consequences}
     assert "Offscreen" not in {item["name"] for item in consequences}
+
+
+def test_nested_and_legacy_gm_only_fields_do_not_leave_projection(tmp_path):
+    snapshot = get_campaign_views(_write_campaign(tmp_path))
+
+    assert "Legacy Hidden NPC" not in {
+        npc["name"] for npc in snapshot["npcs"]["known"]
+    }
+    assert "gm_notes" not in snapshot["npcs"]["party"][0]["character_sheet"]
+    signal = next(entry for entry in snapshot["wiki"] if entry["name"] == "Signal")
+    assert signal["mechanics"] == {
+        "range": 100,
+        "stages": [{"name": "Known"}],
+    }
 
 
 def test_economy_excludes_hidden_schedules_internal_counters_and_random_events(tmp_path):

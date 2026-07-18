@@ -43,26 +43,31 @@ def read_events(campaign_dir: Path, after_id: int = 0) -> List[Dict]:
 
 
 def _last_id_from_tail(file_obj, chunk_size: int = 64 * 1024) -> int:
-    """Find the last valid event id without rereading an unbounded log."""
+    """Find the last valid id, expanding only when one event exceeds the tail window."""
     file_obj.seek(0, os.SEEK_END)
     end = file_obj.tell()
     if end == 0:
         return 0
 
-    start = max(0, end - chunk_size)
-    file_obj.seek(start)
-    tail = file_obj.read()
-    if start:
-        tail = tail.split("\n", 1)[-1]
+    window = chunk_size
+    while True:
+        start = max(0, end - window)
+        file_obj.seek(start)
+        tail = file_obj.read()
+        if start:
+            tail = tail.split("\n", 1)[-1]
 
-    for line in reversed(tail.splitlines()):
-        try:
-            event_id = json.loads(line).get("id")
-        except (json.JSONDecodeError, AttributeError):
-            continue
-        if isinstance(event_id, int):
-            return event_id
-    return 0
+        for line in reversed(tail.splitlines()):
+            try:
+                event_id = json.loads(line).get("id")
+            except (json.JSONDecodeError, AttributeError):
+                continue
+            if isinstance(event_id, int):
+                return event_id
+
+        if start == 0:
+            return 0
+        window *= 2
 
 
 def append_event(

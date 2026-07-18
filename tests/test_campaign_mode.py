@@ -1,4 +1,6 @@
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -76,3 +78,20 @@ def test_campaign_manager_rejects_absolute_delete(tmp_path):
 
     assert manager.delete(str(outside), confirm=True) is False
     assert outside.exists()
+
+
+def test_concurrent_campaign_creation_keeps_the_winning_directory(tmp_path):
+    manager = CampaignManager(str(tmp_path / "world-state"))
+    ready = threading.Barrier(2)
+
+    def create():
+        ready.wait()
+        return manager.create("same-name", "Same Name")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _index: create(), range(2)))
+
+    assert sum(result is not None for result in results) == 1
+    campaign = tmp_path / "world-state" / "campaigns" / "same-name"
+    assert (campaign / "world.json").is_file()
+    assert (campaign / "campaign-overview.json").is_file()

@@ -35,6 +35,34 @@ WIKI_TYPES = {
 
 _HIDDEN_VISIBILITY = {"dm", "dm-only", "hidden", "secret", "unrevealed"}
 _VISIBLE_VISIBILITY = {"known", "player", "player-known", "public", "revealed"}
+_PRIVATE_FIELD_NAMES = {
+    "dm",
+    "dm_only",
+    "dm_notes",
+    "gm",
+    "gm_only",
+    "gm_notes",
+    "hidden",
+    "internal",
+    "secret",
+    "secrets",
+    "unknown",
+    "unrevealed",
+}
+_PARTY_SHEET_FIELDS = {
+    "ac",
+    "abilities",
+    "class",
+    "hp",
+    "hp_max",
+    "level",
+    "prot",
+    "race",
+    "saves",
+    "skills",
+    "speed",
+    "stats",
+}
 
 
 def _node_data(node: dict[str, Any]) -> dict[str, Any]:
@@ -50,34 +78,76 @@ def _field(node: dict[str, Any], key: str, default: Any = None) -> Any:
     return node.get(key, default)
 
 
+def _private_field(key: Any) -> bool:
+    normalized = str(key).strip().casefold().replace("-", "_").replace(" ", "_")
+    return (
+        normalized in _PRIVATE_FIELD_NAMES
+        or normalized.startswith("dm_")
+        or normalized.startswith("gm_")
+    )
+
+
+def _player_safe_copy(value: Any) -> Any:
+    """Copy nested player-facing data while removing explicit GM-only branches."""
+    if isinstance(value, dict):
+        if _explicitly_hidden(value):
+            return None
+        result = {}
+        for key, item in value.items():
+            if _private_field(key):
+                continue
+            cleaned = _player_safe_copy(item)
+            if cleaned is not None:
+                result[key] = cleaned
+        return result
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            cleaned = _player_safe_copy(item)
+            if cleaned is not None:
+                result.append(cleaned)
+        return result
+    return copy.deepcopy(value)
+
+
 def _clean_mapping(value: Any) -> dict[str, Any]:
-    return copy.deepcopy(value) if isinstance(value, dict) else {}
+    cleaned = _player_safe_copy(value)
+    return cleaned if isinstance(cleaned, dict) else {}
 
 
 def _clean_list(value: Any) -> list[Any]:
-    return copy.deepcopy(value) if isinstance(value, list) else []
+    cleaned = _player_safe_copy(value)
+    return cleaned if isinstance(cleaned, list) else []
 
 
 def _explicitly_hidden(value: dict[str, Any]) -> bool:
-    data = _node_data(value) if "data" in value else value
-    visibility = str(data.get("visibility", "")).strip().casefold()
-    return (
-        data.get("hidden") is True
-        or data.get("secret") is True
-        or data.get("player_visible") is False
-        or visibility in _HIDDEN_VISIBILITY
+    containers = [value]
+    data = _node_data(value)
+    if data is not value:
+        containers.append(data)
+    return any(
+        container.get("hidden") is True
+        or container.get("secret") is True
+        or container.get("player_visible") is False
+        or str(container.get("visibility", "")).strip().casefold()
+        in _HIDDEN_VISIBILITY
+        for container in containers
     )
 
 
 def _explicitly_visible(value: dict[str, Any]) -> bool:
-    data = _node_data(value) if "data" in value else value
-    visibility = str(data.get("visibility", "")).strip().casefold()
-    return (
-        data.get("player_visible") is True
-        or data.get("known") is True
-        or data.get("discovered") is True
-        or data.get("revealed") is True
-        or visibility in _VISIBLE_VISIBILITY
+    containers = [value]
+    data = _node_data(value)
+    if data is not value:
+        containers.append(data)
+    return any(
+        container.get("player_visible") is True
+        or container.get("known") is True
+        or container.get("discovered") is True
+        or container.get("revealed") is True
+        or str(container.get("visibility", "")).strip().casefold()
+        in _VISIBLE_VISIBILITY
+        for container in containers
     )
 
 
@@ -228,7 +298,9 @@ class CampaignViewProjector:
             return "player:active", active
         players = self.graph.list_nodes(node_type="player")
         if not players:
-            raise ValueError("No player character found in world.json")
+            # A campaign can exist before the wizard has created its character.
+            # Dashboard endpoints must remain usable for that intermediate state.
+            return "player:active", {}
         player = players[0]
         return player["id"], player
 
@@ -393,10 +465,15 @@ class CampaignViewProjector:
             known.append(common)
             if is_party:
                 sheet = data.get("character_sheet", {})
+                safe_sheet = {
+                    key: sheet[key]
+                    for key in _PARTY_SHEET_FIELDS
+                    if isinstance(sheet, dict) and key in sheet
+                }
                 party.append(
                     {
                         **common,
-                        "character_sheet": _clean_mapping(sheet),
+                        "character_sheet": _clean_mapping(safe_sheet),
                         "conditions": _clean_list(data.get("conditions", [])),
                         "inventory": inventory_items(self.graph, npc["id"], npc),
                     }

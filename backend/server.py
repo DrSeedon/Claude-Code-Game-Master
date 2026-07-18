@@ -520,6 +520,9 @@ async def wizard_websocket(websocket: WebSocket):
     Fresh provider per connection. Claude uses the SDK's in-process MCP;
     Codex uses the equivalent stdio MCP and relays the same wizard events.
     """
+    if not is_authenticated(websocket):
+        await websocket.close(code=1008, reason="Authentication required")
+        return
     await websocket.accept()
 
     provider = None
@@ -655,6 +658,9 @@ async def game_websocket(websocket: WebSocket):
     control message. Replay is driven entirely by the `after_id` query param
     on (re)connect, never by an in-band message.
     """
+    if not is_authenticated(websocket):
+        await websocket.close(code=1008, reason="Authentication required")
+        return
     await websocket.accept()
 
     campaign = websocket.query_params.get("campaign")

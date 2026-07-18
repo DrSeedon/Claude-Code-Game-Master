@@ -104,3 +104,16 @@ def test_append_uses_last_valid_tail_event_after_corrupt_line(campaign_dir):
     event = append_event(campaign_dir, "text", "next")
 
     assert event["id"] == 8
+
+
+def test_append_finds_id_before_event_larger_than_tail_window(campaign_dir):
+    path = campaign_dir / EVENT_LOG_FILENAME
+    path.write_text(
+        json.dumps({"id": 41, "type": "text", "content": "x" * (70 * 1024)})
+        + "\nnot-json\n",
+        encoding="utf-8",
+    )
+
+    event = append_event(campaign_dir, "text", "next")
+
+    assert event["id"] == 42

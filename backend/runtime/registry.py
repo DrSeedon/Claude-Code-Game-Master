@@ -156,7 +156,6 @@ def create_default_registry() -> RuntimeRegistry:
     for model_id, label in (
         ("claude-sonnet-5", "Claude Sonnet 5"),
         ("claude-opus-4-8", "Claude Opus 4.8"),
-        ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
     ):
         registry.register_model(
             ModelDefinition(
@@ -189,9 +188,9 @@ def create_default_registry() -> RuntimeRegistry:
         )
     )
     for model_id, label in (
-        ("gpt-5.6", "GPT-5.6"),
+        ("gpt-5.6-sol", "GPT-5.6 Sol"),
         ("gpt-5.6-terra", "GPT-5.6 Terra"),
-        ("gpt-5.3-codex-spark", "GPT-5.3 Codex Spark"),
+        ("gpt-5.6-luna", "GPT-5.6 Luna"),
     ):
         registry.register_model(
             ModelDefinition(

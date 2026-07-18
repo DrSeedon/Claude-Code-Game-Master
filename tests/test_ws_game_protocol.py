@@ -9,6 +9,7 @@ Covers the AC from frontend-migration-blueprint.md §3.1/§5:
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 import backend.server as server_module
 import backend.game_session as game_session_module
@@ -33,7 +34,7 @@ def client(tmp_path, monkeypatch, sent):
 
     class FakeConfig:
         project_root = tmp_path
-        model_name = "claude-sonnet-4-6"
+        model_name = "claude-sonnet-5"
         campaigns_dir = tmp_path / "world-state" / "campaigns"
         backend_host = "127.0.0.1"
         backend_port = 18083
@@ -64,6 +65,31 @@ def test_missing_campaign_query_param_closes_with_error(client):
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "campaign" in msg["content"].lower()
+
+
+def test_websocket_requires_auth_cookie_when_password_is_enabled(
+    client, tmp_path, monkeypatch
+):
+    _campaign_dir(tmp_path, "blood-arena")
+    monkeypatch.setenv("DND_AUTH_PASSWORD", "secret")
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/game?campaign=blood-arena"):
+            pass
+    assert exc_info.value.code == 1008
+    with pytest.raises(WebSocketDisconnect) as wizard_exc:
+        with client.websocket_connect("/ws/wizard"):
+            pass
+    assert wizard_exc.value.code == 1008
+
+    response = client.post(
+        "/auth/login",
+        data={"password": "secret"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    with client.websocket_connect("/ws/game?campaign=blood-arena"):
+        pass
 
 
 def test_campaign_from_query_not_global_config(client, tmp_path, sent):

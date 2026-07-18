@@ -50,7 +50,7 @@ def collect(provider, **kwargs):
             async for event in provider.process_message(
                 kwargs.get("message", "continue"),
                 kwargs.get("system_prompt", "Run the campaign."),
-                kwargs.get("model", "gpt-5.6"),
+                kwargs.get("model", "gpt-5.6-sol"),
                 kwargs.get("mcp_servers"),
             )
         ]

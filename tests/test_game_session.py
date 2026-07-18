@@ -8,6 +8,7 @@ import asyncio
 import pytest
 
 import backend.game_session as game_session_module
+from backend.event_log import append_event
 from backend.game_session import GameSession, get_or_create_session
 
 
@@ -24,22 +25,22 @@ async def _fake_events(*_a, **_kw):
 
 
 def test_get_or_create_session_creates_new(tmp_path):
-    session = get_or_create_session("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
 
     assert isinstance(session, GameSession)
     assert session.campaign == "camp-a"
 
 
 def test_get_or_create_session_returns_existing(tmp_path):
-    first = get_or_create_session("camp-a", tmp_path, "claude-sonnet-4-6")
-    second = get_or_create_session("camp-a", tmp_path, "claude-sonnet-4-6")
+    first = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
+    second = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
 
     assert first is second
 
 
 def test_get_or_create_session_different_campaigns_are_isolated(tmp_path):
-    a = get_or_create_session("camp-a", tmp_path, "claude-sonnet-4-6")
-    b = get_or_create_session("camp-b", tmp_path, "claude-sonnet-4-6")
+    a = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
+    b = get_or_create_session("camp-b", tmp_path, "claude-sonnet-5")
 
     assert a is not b
     assert a.provider.campaign_name == "camp-a"
@@ -47,17 +48,17 @@ def test_get_or_create_session_different_campaigns_are_isolated(tmp_path):
 
 
 def test_provider_process_environment_is_campaign_scoped(tmp_path):
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
 
     options = session.provider._make_options(
-        "claude-sonnet-4-6", "system", None
+        "claude-sonnet-5", "system", None
     )
 
     assert options.env["DM_ACTIVE_CAMPAIGN"] == "camp-a"
 
 
 def test_send_starts_turn_and_marks_running(tmp_path):
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     session.provider.process_message = _fake_events
 
     async def scenario():
@@ -72,7 +73,7 @@ def test_send_starts_turn_and_marks_running(tmp_path):
 
 
 def test_send_rejects_while_turn_running(tmp_path):
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
 
     async def slow_events(*_a, **_kw):
         await asyncio.sleep(0.05)
@@ -91,7 +92,7 @@ def test_send_rejects_while_turn_running(tmp_path):
 
 
 def test_send_after_turn_completes_is_allowed_again(tmp_path):
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     session.provider.process_message = _fake_events
 
     async def scenario():
@@ -106,7 +107,7 @@ def test_send_after_turn_completes_is_allowed_again(tmp_path):
 
 def test_hibernate_closes_provider_after_idle_threshold(tmp_path, monkeypatch):
     monkeypatch.setattr(game_session_module, "HIBERNATE_IDLE_SECONDS", 0)
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     session.provider.process_message = _fake_events
 
     closed = []
@@ -129,7 +130,7 @@ def test_hibernate_closes_provider_after_idle_threshold(tmp_path, monkeypatch):
 
 
 def test_no_hibernate_when_under_idle_threshold(tmp_path):
-    session = GameSession("camp-a", tmp_path, "claude-sonnet-4-6")
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     session.provider.process_message = _fake_events
 
     closed = []
@@ -148,3 +149,72 @@ def test_no_hibernate_when_under_idle_threshold(tmp_path):
     asyncio.run(scenario())
 
     assert closed == []
+
+
+def test_provider_switch_is_transactional_when_build_fails(tmp_path, monkeypatch):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    old_provider = session.provider
+
+    def fail_build(_model_name=None):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(session, "_build_provider", fail_build)
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        session.configure("codex", "gpt-5.6-sol")
+
+    assert session.runtime_id == "claude"
+    assert session.model_name == "claude-sonnet-5"
+    assert session.provider is old_provider
+
+
+def test_reset_blocks_turn_and_provider_switch(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def slow_reset():
+            started.set()
+            await release.wait()
+
+        session.provider.reset = slow_reset
+        reset_task = asyncio.create_task(session.reset_session())
+        await started.wait()
+
+        assert session.send("hello", "system prompt") is False
+        with pytest.raises(RuntimeError, match="turn is in progress"):
+            session.configure("codex", "gpt-5.6-sol")
+
+        release.set()
+        assert await reset_task is True
+
+    asyncio.run(scenario())
+
+
+def test_provider_switch_hands_recent_transcript_to_first_turn(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    append_event(session.campaign_dir, "user_message", "I open the vault.")
+    append_event(session.campaign_dir, "text", "The alarm starts ringing.")
+    captured = {}
+
+    async def scenario():
+        session.configure("codex", "gpt-5.6-sol")
+
+        async def capture_turn(*_args, **kwargs):
+            captured["system_prompt"] = kwargs["system_prompt"]
+            yield {"type": "text", "content": "Guards arrive."}
+
+        session.provider.process_message = capture_turn
+        assert session.send("I hide.", "SYSTEM RULES") is True
+        await session._turn_task
+
+    asyncio.run(scenario())
+
+    prompt = captured["system_prompt"]
+    assert "SYSTEM RULES" in prompt
+    assert "PLAYER: I open the vault." in prompt
+    assert "GAME MASTER: The alarm starts ringing." in prompt
+    assert "PLAYER: I hide." not in prompt
+    assert session._history_handoff is None
