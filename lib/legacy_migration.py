@@ -283,6 +283,15 @@ class LegacyCampaignMigrator:
             self._migrate_player(world)
             locations = self._migrate_locations(world)
             npcs = self._migrate_npcs(world, locations)
+            if "player:active" in world["nodes"]:
+                for npc_id in npcs.values():
+                    self._add_edge(
+                        world,
+                        "player:active",
+                        npc_id,
+                        "known_by",
+                        {"source": "legacy-migration"},
+                    )
             self._migrate_facts(world)
             self._migrate_consequences(world)
             self._migrate_plots(world, npcs, locations)

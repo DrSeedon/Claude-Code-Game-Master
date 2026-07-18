@@ -49,6 +49,7 @@ EDGE_TYPES = [
 ]
 
 SCHEMA_VERSION = 2
+CARRY_CAPACITY_KG_PER_STRENGTH = 7
 
 TYPE_COLORS = {
     "player":      Colors.BOLD_CYAN,
@@ -62,6 +63,72 @@ TYPE_COLORS = {
     "spell":       Colors.BOLD_CYAN,
     "technique":   Colors.G,
 }
+
+
+def calculate_inventory_load(
+    weight_kg: float,
+    *,
+    strength: int | float | None,
+    capacity_kg: int | float | None = None,
+) -> dict | None:
+    """Return the canonical STR-based carrying tier for a total inventory weight."""
+    explicit_capacity = (
+        float(capacity_kg)
+        if isinstance(capacity_kg, (int, float))
+        and not isinstance(capacity_kg, bool)
+        and capacity_kg > 0
+        else None
+    )
+    if explicit_capacity is not None:
+        capacity = explicit_capacity
+        source = "explicit"
+    elif (
+        isinstance(strength, (int, float))
+        and not isinstance(strength, bool)
+        and strength > 0
+    ):
+        capacity = float(strength) * CARRY_CAPACITY_KG_PER_STRENGTH
+        source = "strength"
+    else:
+        return None
+
+    weight = max(0.0, float(weight_kg))
+    usage = weight / capacity * 100
+    if usage <= 100:
+        tier, speed_penalty, disadvantage, immobile = "normal", 0, False, False
+    elif usage <= 130:
+        tier, speed_penalty, disadvantage, immobile = (
+            "encumbered",
+            -5,
+            False,
+            False,
+        )
+    elif usage <= 160:
+        tier, speed_penalty, disadvantage, immobile = "heavy", -10, False, False
+    elif usage <= 200:
+        tier, speed_penalty, disadvantage, immobile = (
+            "overloaded",
+            -15,
+            True,
+            False,
+        )
+    else:
+        tier, speed_penalty, disadvantage, immobile = (
+            "immobile",
+            None,
+            True,
+            True,
+        )
+    return {
+        "weight_kg": round(weight, 4),
+        "capacity_kg": round(capacity, 4),
+        "usage_percent": round(usage, 1),
+        "tier": tier,
+        "speed_penalty_ft": speed_penalty,
+        "attack_disadvantage": disadvantage,
+        "immobile": immobile,
+        "capacity_source": source,
+    }
 
 
 def _find_campaign_dir() -> Path:

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from lib.currency import format_money, load_config
-from lib.world_graph import WorldGraph
+from lib.world_graph import WorldGraph, calculate_inventory_load
 
 
 WIKI_TYPES = {
@@ -423,11 +423,36 @@ class CampaignViewProjector:
             float(item.get("weight", 0)) * float(item.get("quantity", 1))
             for item in items
         )
+        stats = _field(self.player, "stats", {})
+        abilities = _field(self.player, "abilities", {})
+        strength = None
+        for source in (stats, abilities):
+            if not isinstance(source, dict):
+                continue
+            for key in ("str", "STR", "strength", "Strength"):
+                if isinstance(source.get(key), (int, float)):
+                    strength = source[key]
+                    break
+            if strength is not None:
+                break
+        explicit_capacity = next(
+            (
+                _field(self.player, key)
+                for key in ("inventory_capacity", "carrying_capacity", "max_weight")
+                if isinstance(_field(self.player, key), (int, float))
+            ),
+            None,
+        )
         return {
             "owner_id": self.player_id,
             "items": items,
             "total_quantity": sum(item.get("quantity", 1) for item in items),
             "total_weight": round(total_weight, 4),
+            "capacity": calculate_inventory_load(
+                total_weight,
+                strength=strength,
+                capacity_kg=explicit_capacity,
+            ),
         }
 
     def quests(self) -> list[dict[str, Any]]:

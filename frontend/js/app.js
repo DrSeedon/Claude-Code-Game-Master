@@ -38,15 +38,18 @@ const el = {
   newBtn: document.getElementById('new-campaign-btn'),
   welcomeNewBtn: document.getElementById('welcome-new-btn'),
   welcome: document.getElementById('welcome'),
+  welcomeText: document.querySelector('#welcome p'),
   chatPane: document.getElementById('chat-pane'),
   chat: document.getElementById('chat'),
   titleText: document.getElementById('chat-title-text'),
   connStatus: document.getElementById('conn-status'),
   connLabel: document.querySelector('#conn-status .conn-label'),
   modelPickerBtn: document.getElementById('model-picker-btn'),
+  modelPickerLabel: document.querySelector('#model-picker-btn .model-picker-label'),
   modelMenu: document.getElementById('model-menu'),
   stopBtn: document.getElementById('stop-btn'),
   viewTabs: document.getElementById('view-tabs'),
+  dashboardLocale: document.getElementById('dashboard-locale'),
   chatView: document.getElementById('chat-view'),
   dashboardView: document.getElementById('dashboard-view'),
   dashboardLoading: document.getElementById('dashboard-loading'),
@@ -60,6 +63,7 @@ const el = {
   ctxFill: document.querySelector('#ctx-usage .ctx-fill'),
   ctxLabel: document.querySelector('#ctx-usage .ctx-label'),
   rightPanel: document.getElementById('right-panel'),
+  rightPanelHead: document.querySelector('#right-panel .right-panel-head'),
   choices: document.getElementById('choices'),
   wizardResetBtn: document.getElementById('wizard-reset-btn'),
   newSessionBtn: document.getElementById('new-session-btn'),
@@ -94,9 +98,217 @@ const state = {
   dashboardSnapshots: {},
   dashboardQueries: {},
   wikiType: 'all',
+  wikiSelectedId: null,
+  dashboardLocale: (() => {
+    try { return localStorage.getItem('dm-dashboard-locale') === 'en' ? 'en' : 'ru'; }
+    catch { return 'ru'; }
+  })(),
   mapData: null,
   map: null,
 };
+
+const DASHBOARD_TAB_LABELS = {
+  ru: {
+    chat: 'Игра',
+    character: 'Досье',
+    inventory: 'Снаряжение',
+    quests: 'Задания',
+    party: 'НПС и группа',
+    wiki: 'Энциклопедия',
+    map: 'Карта',
+  },
+  en: {
+    chat: 'Game',
+    character: 'Character',
+    inventory: 'Inventory',
+    quests: 'Quests',
+    party: 'NPCs & Party',
+    wiki: 'Wiki',
+    map: 'Map',
+  },
+};
+
+const DASHBOARD_LABELS = {
+  ru: {
+    class: 'Класс',
+    subclass: 'Подкласс',
+    race: 'Раса',
+    background: 'Предыстория',
+    level: 'Уровень',
+    location: 'Локация',
+    hp: 'Здоровье',
+    hp_max: 'Макс. здоровье',
+    ac: 'КЗ',
+    prot: 'Защита',
+    speed: 'Скорость',
+    armor: 'Броня',
+    weapon: 'Оружие',
+    tool: 'Инструмент',
+    material: 'Материал',
+    potion: 'Зелье',
+    artifact: 'Артефакт',
+    book: 'Книга',
+    chapter: 'Глава',
+    technique: 'Техника',
+    ability: 'Способность',
+    item: 'Предмет',
+    misc: 'Разное',
+    weight: 'Вес',
+    source: 'Источник',
+    effect: 'Эффект',
+    duration: 'Длительность',
+    ingredients: 'Ингредиенты',
+    components: 'Компоненты',
+    damage: 'Урон',
+    range: 'Дистанция',
+    charges: 'Заряды',
+    cost: 'Стоимость',
+    quantity: 'Количество',
+    difficulty: 'Сложность',
+    check: 'Проверка',
+    description: 'Описание',
+    side: 'Побочное',
+    main: 'Основное',
+    active: 'Активно',
+    completed: 'Завершено',
+    failed: 'Провалено',
+    resolved: 'Решено',
+    friendly: 'Дружелюбный',
+    hostile: 'Враждебный',
+    suspicious: 'Подозрительный',
+    neutral: 'Нейтральный',
+    intimate: 'Близкий',
+  },
+  en: {
+    class: 'Class',
+    subclass: 'Subclass',
+    race: 'Race',
+    background: 'Background',
+    level: 'Level',
+    location: 'Location',
+    hp: 'Health',
+    hp_max: 'Max health',
+    ac: 'AC',
+    prot: 'Protection',
+    speed: 'Speed',
+    armor: 'Armor',
+    weapon: 'Weapon',
+    tool: 'Tool',
+    material: 'Material',
+    potion: 'Potion',
+    artifact: 'Artifact',
+    book: 'Book',
+    chapter: 'Chapter',
+    technique: 'Technique',
+    ability: 'Ability',
+    item: 'Item',
+    misc: 'Misc',
+    weight: 'Weight',
+    source: 'Source',
+    effect: 'Effect',
+    duration: 'Duration',
+    ingredients: 'Ingredients',
+    components: 'Components',
+    damage: 'Damage',
+    range: 'Range',
+    charges: 'Charges',
+    cost: 'Cost',
+    quantity: 'Quantity',
+    difficulty: 'Difficulty',
+    check: 'Check',
+    description: 'Description',
+    side: 'Side',
+    main: 'Main',
+    active: 'Active',
+    completed: 'Completed',
+    failed: 'Failed',
+    resolved: 'Resolved',
+    friendly: 'Friendly',
+    hostile: 'Hostile',
+    suspicious: 'Suspicious',
+    neutral: 'Neutral',
+    intimate: 'Intimate',
+  },
+};
+
+function ui(ru, en) {
+  return state.dashboardLocale === 'en' ? en : ru;
+}
+
+function dashboardTerm(value) {
+  const key = String(value || '').trim().toLocaleLowerCase('en');
+  return DASHBOARD_LABELS[state.dashboardLocale][key] || null;
+}
+
+function setDashboardLocale(locale, { persist = true } = {}) {
+  state.dashboardLocale = locale === 'en' ? 'en' : 'ru';
+  if (persist) {
+    try { localStorage.setItem('dm-dashboard-locale', state.dashboardLocale); }
+    catch { /* Browser storage can be disabled without breaking the dashboard. */ }
+  }
+  const labels = DASHBOARD_TAB_LABELS[state.dashboardLocale];
+  el.viewTabs.querySelectorAll('[data-tab-label]').forEach(node => {
+    node.textContent = labels[node.dataset.tabLabel] || node.dataset.tabLabel;
+  });
+  el.viewTabs.setAttribute('aria-label', ui('Разделы кампании', 'Campaign sections'));
+  el.dashboardLocale?.setAttribute('aria-label', ui('Язык интерфейса', 'Interface language'));
+  el.dashboardLocale?.querySelectorAll('[data-locale]').forEach(button => {
+    const active = button.dataset.locale === state.dashboardLocale;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  el.dashboardView.lang = state.dashboardLocale;
+  document.documentElement.lang = state.dashboardLocale;
+  el.mobileBack.setAttribute('aria-label', ui('Назад', 'Back'));
+  el.mobileModelBtn.setAttribute('aria-label', ui('Выбрать модель', 'Choose model'));
+  el.mobileNew.setAttribute('aria-label', ui('Новая кампания', 'New campaign'));
+  el.modelMenu.setAttribute('aria-label', ui('Выбор AI-модели', 'AI model selection'));
+  el.newBtn.title = ui('Новая кампания', 'New campaign');
+  el.welcomeText.textContent = ui(
+    'Выберите кампанию слева или создайте новую, чтобы начать приключение.',
+    'Choose a campaign on the left or create one to begin.'
+  );
+  el.welcomeNewBtn.textContent = ui('+ Новая кампания', '+ New campaign');
+  el.connStatus.title = ui('Статус соединения', 'Connection status');
+  el.newSessionBtn.title = ui(
+    'Сбросить контекст текущей AI-модели (история сохранится)',
+    'Reset the current AI model context (history is preserved)'
+  );
+  el.newSessionBtn.textContent = ui('🔄 Новая сессия', '🔄 New session');
+  el.wizardResetBtn.title = ui('Начать создание заново', 'Restart campaign creation');
+  el.wizardResetBtn.textContent = ui('🗑️ Сбросить', '🗑️ Reset');
+  el.ctxUsage.title = ui('Использование контекста', 'Context usage');
+  el.stopBtn.title = ui('Остановить ход', 'Stop turn');
+  el.stopBtn.textContent = ui('■ Стоп', '■ Stop');
+  el.sendBtn.textContent = ui('Отправить', 'Send');
+  el.rightPanelHead.textContent = ui('Настройки кампании', 'Campaign setup');
+  const chatStart = el.chat.querySelector('.chat-start');
+  if (chatStart) {
+    chatStart.querySelector('h2').textContent = ui('Готов к приключению?', 'Ready for an adventure?');
+    chatStart.querySelector('button').textContent = ui('▶ Начать игру', '▶ Start game');
+  }
+  el.chat.querySelectorAll('[data-ui-role="player"]').forEach(node => {
+    node.textContent = ui('Игрок', 'Player');
+  });
+  const waitingLabel = el.chat.querySelector('.waiting > span:first-child');
+  if (waitingLabel) waitingLabel.textContent = ui('DM печатает', 'DM is typing');
+  if (state.mode === 'game') {
+    el.input.placeholder = ui('Введите сообщение…', 'Enter a message…');
+  } else if (state.mode === 'wizard') {
+    el.input.placeholder = ui(
+      'Опишите мир или выберите вариант…',
+      'Describe the world or choose an option…'
+    );
+  }
+  el.dashboardLoading.textContent = ui('Загрузка...', 'Loading...');
+  el.mapFitBtn.title = ui('Показать всю карту', 'Fit entire map');
+  el.mapFitBtn.setAttribute('aria-label', el.mapFitBtn.title);
+  setConnStatus(state.connStatus);
+  if (state.availableModels.length) renderRuntimeControls();
+  else el.modelPickerLabel.textContent = ui('Загрузка моделей…', 'Loading models…');
+  if (state.currentView === 'map') renderMap();
+  else if (state.currentView !== 'chat' && state.campaignViews) renderDashboard(state.currentView);
+}
 
 // ─────────────────────────── Streaming buffer (Orchestra port) ────────────
 const stream = {
@@ -218,11 +430,11 @@ function showChatStart() {
   if (el.chat.querySelector('.chat-start')) return;
   const div = document.createElement('div');
   div.className = 'chat-start';
-  div.innerHTML = '<div class="chat-start-mark">⚔️</div><h2>Готов к приключению?</h2>';
+  div.innerHTML = `<div class="chat-start-mark">⚔️</div><h2>${ui('Готов к приключению?', 'Ready for an adventure?')}</h2>`;
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary';
-  btn.textContent = '▶ Начать игру';
-  btn.addEventListener('click', () => sendChat('Начать игру'));
+  btn.textContent = ui('▶ Начать игру', '▶ Start game');
+  btn.addEventListener('click', () => sendChat(ui('Начать игру', 'Start game')));
   div.appendChild(btn);
   el.chat.appendChild(div);
 }
@@ -241,7 +453,7 @@ function addUserMessage(content) {
   removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-user';
-  wrap.innerHTML = '<div class="msg-role">Игрок</div>';
+  wrap.innerHTML = `<div class="msg-role" data-ui-role="player">${ui('Игрок', 'Player')}</div>`;
   const body = document.createElement('div');
   body.className = 'msg-body';
   body.textContent = content;
@@ -275,7 +487,8 @@ function addActivity(content) {
     let expanded = false;
     const render = () => {
       const shown = expanded ? content : content.slice(0, ACTIVITY_COLLAPSE_LEN) + '…';
-      div.innerHTML = `<span>${escapeHtml(shown)}</span><span class="activity-toggle"> ${expanded ? '[свернуть]' : '[показать всё]'}</span>`;
+      const toggle = expanded ? ui('[свернуть]', '[collapse]') : ui('[показать всё]', '[show all]');
+      div.innerHTML = `<span>${escapeHtml(shown)}</span><span class="activity-toggle"> ${toggle}</span>`;
     };
     render();
     div.addEventListener('click', () => { expanded = !expanded; render(); });
@@ -306,7 +519,7 @@ function showWaiting() {
   if (el.chat.querySelector('.waiting')) return;
   const div = document.createElement('div');
   div.className = 'waiting';
-  div.innerHTML = '<span>DM печатает</span><span class="waiting-dots"><span>•</span><span>•</span><span>•</span></span>';
+  div.innerHTML = `<span>${ui('DM печатает', 'DM is typing')}</span><span class="waiting-dots"><span>•</span><span>•</span><span>•</span></span>`;
   el.chat.appendChild(div);
   maybeAutoScroll();
 }
@@ -327,13 +540,19 @@ function setGenerating(on) {
 
 // ─────────────────────────── Connection status ────────────────────────────
 const STATUS_LABEL = {
-  connecting: 'Подключение…', connected: 'Подключено',
-  reconnecting: 'Переподключение…', disconnected: 'Отключено', failed: 'Соединение потеряно',
+  ru: {
+    connecting: 'Подключение…', connected: 'Подключено',
+    reconnecting: 'Переподключение…', disconnected: 'Отключено', failed: 'Соединение потеряно',
+  },
+  en: {
+    connecting: 'Connecting…', connected: 'Connected',
+    reconnecting: 'Reconnecting…', disconnected: 'Disconnected', failed: 'Connection lost',
+  },
 };
 function setConnStatus(s) {
   state.connStatus = s;
   el.connStatus.className = 'conn-status ' + s;
-  el.connLabel.textContent = STATUS_LABEL[s] || s;
+  el.connLabel.textContent = STATUS_LABEL[state.dashboardLocale][s] || s;
   updateInputEnabled();
 }
 function updateInputEnabled() {
@@ -349,7 +568,9 @@ function updateCtxUsage(percent, used, total) {
   el.ctxFill.style.width = pct + '%';
   el.ctxFill.style.background = pct > 80 ? 'var(--danger)' : pct >= 50 ? 'var(--warn)' : 'var(--ok)';
   el.ctxLabel.textContent = pct + '% ctx';
-  el.ctxUsage.title = total ? `${(used || 0).toLocaleString()} / ${total.toLocaleString()} токенов контекста` : 'Использование контекста';
+  el.ctxUsage.title = total
+    ? `${(used || 0).toLocaleString()} / ${total.toLocaleString()} ${ui('токенов контекста', 'context tokens')}`
+    : ui('Использование контекста', 'Context usage');
 }
 function hideCtxUsage() {
   el.ctxUsage.hidden = true;
@@ -375,7 +596,7 @@ async function loadCharPanel(campaign) {
   const hpColor = hpPct > 50 ? 'var(--ok)' : hpPct > 25 ? 'var(--warn)' : 'var(--danger)';
   const items = (s.inventory || []).length;
   el.charPanel.innerHTML =
-    `<span class="cp-name">${escapeHtml(s.name || 'Персонаж')}</span>` +
+    `<span class="cp-name">${escapeHtml(s.name || ui('Персонаж', 'Character'))}</span>` +
     (s.location ? `<span class="cp-stat">📍 ${escapeHtml(s.location)}</span>` : '') +
     `<span class="cp-stat">❤ <b>${s.hp}/${s.max_hp}</b>` +
       `<span class="cp-hpbar"><span class="cp-hpfill" style="width:${hpPct}%;background:${hpColor}"></span></span></span>` +
@@ -389,8 +610,11 @@ function hideCharPanel() { el.charPanel.hidden = true; el.charPanel.innerHTML = 
 // ── Rate / session limit warning ───────────────────────────────────────────
 function showRateLimit(content, retryAfter) {
   const base = typeof retryAfter === 'number'
-    ? `⏳ Лимит: подождите ~${retryAfter}с`
-    : '⏳ Достигнут лимит запросов или сессии AI-провайдера — подождите и попробуйте снова';
+    ? ui(`⏳ Лимит: подождите ~${retryAfter}с`, `⏳ Limit reached: wait about ${retryAfter}s`)
+    : ui(
+      '⏳ Достигнут лимит запросов или сессии AI-провайдера — подождите и попробуйте снова',
+      '⏳ The AI provider request or session limit was reached — wait and try again'
+    );
   el.rateLimitBar.textContent = content ? `${base}` : base;
   el.rateLimitBar.hidden = false;
 }
@@ -399,7 +623,10 @@ function hideRateLimit() { el.rateLimitBar.hidden = true; el.rateLimitBar.textCo
 // ── New session (reset Claude context, keep history) ───────────────────────
 async function newSession() {
   if (state.mode !== 'game' || !state.campaign) return;
-  if (!confirm('Сбросить контекст текущей AI-модели? История чата сохранится.')) return;
+  if (!confirm(ui(
+    'Сбросить контекст текущей AI-модели? История чата сохранится.',
+    'Reset the current AI model context? Chat history will be preserved.'
+  ))) return;
   const name = state.campaign;
   // Close the socket FIRST so no turn can start between the reset check and the
   // provider.reset() on the server (avoids resetting mid-turn).
@@ -585,7 +812,7 @@ function renderCampaignList(list) {
   if (list.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'campaign-list-empty';
-    empty.textContent = 'Нет кампаний. Создайте новую →';
+    empty.textContent = ui('Нет кампаний. Создайте новую →', 'No campaigns. Create one →');
     el.campaignList.appendChild(empty);
     return;
   }
@@ -613,6 +840,7 @@ function showChat() { el.welcome.hidden = true; el.chatPane.hidden = false; }
 function showWelcome() { el.welcome.hidden = false; el.chatPane.hidden = true; }
 
 function switchView(view) {
+  const viewChanged = state.currentView !== view;
   state.currentView = view;
   el.chatView.hidden = view !== 'chat';
   el.dashboardView.hidden = view === 'chat' || view === 'map';
@@ -620,7 +848,7 @@ function switchView(view) {
   el.viewTabs.querySelectorAll('.view-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.view === view);
   });
-  if (view !== 'chat' && view !== 'map') renderDashboard(view);
+  if (view !== 'chat' && view !== 'map') renderDashboard(view, !viewChanged);
   if (view === 'map') renderMap();
 }
 
@@ -632,7 +860,9 @@ async function refreshCampaignData() {
       fetch(`/api/campaigns/${encodeURIComponent(campaign)}/views`),
       fetch(`/api/campaigns/${encodeURIComponent(campaign)}/map`),
     ]);
-    if (!viewsResponse.ok || !mapResponse.ok) throw new Error('Campaign data unavailable');
+    if (!viewsResponse.ok || !mapResponse.ok) {
+      throw new Error(ui('Данные кампании недоступны', 'Campaign data unavailable'));
+    }
     const [views, map] = await Promise.all([viewsResponse.json(), mapResponse.json()]);
     if (campaign !== state.campaign) return;
     state.campaignViews = views;
@@ -661,7 +891,7 @@ function dashboardValue(value, fallback = '—') {
 }
 
 function dashboardLabel(value) {
-  return String(value || '')
+  return dashboardTerm(value) || String(value || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
 }
@@ -669,8 +899,12 @@ function dashboardLabel(value) {
 function dashboardNumber(value, maximumFractionDigits = 2) {
   const number = Number(value);
   return Number.isFinite(number)
-    ? number.toLocaleString('ru-RU', { maximumFractionDigits })
+    ? number.toLocaleString(state.dashboardLocale === 'ru' ? 'ru-RU' : 'en-US', { maximumFractionDigits })
     : '—';
+}
+
+function dashboardWeight(value, maximumFractionDigits = 3) {
+  return `${dashboardNumber(value, maximumFractionDigits)} ${ui('кг', 'kg')}`;
 }
 
 function dashboardPercent(current, total) {
@@ -702,7 +936,7 @@ function summaryRow(tiles) {
   return `<section class="dashboard-summary">${tiles.join('')}</section>`;
 }
 
-function emptyPanel(text = 'Пока пусто') {
+function emptyPanel(text = ui('Пока пусто', 'Nothing here yet')) {
   return `<div class="empty-panel">${escapeHtml(text)}</div>`;
 }
 
@@ -788,7 +1022,8 @@ function savingThrowList(character) {
       `<span class="proficiency-dot${proficient ? ' active' : ''}">${proficient ? '●' : '○'}</span>${definition.label}</span>` +
       `<strong>${signedNumber(modifier)}</strong></div>`;
   }).join('');
-  return `<div class="save-list">${rows}</div><div class="card-footnote">Бонус мастерства +${proficiencyBonus}</div>`;
+  return `<div class="save-list">${rows}</div><div class="card-footnote">` +
+    `${ui('Бонус мастерства', 'Proficiency bonus')} +${proficiencyBonus}</div>`;
 }
 
 function skillList(skills) {
@@ -838,23 +1073,31 @@ function equipmentList(equipment) {
   const weapons = Array.isArray(equipment.weapons) ? equipment.weapons : [];
   const tools = Array.isArray(equipment.tools) ? equipment.tools : [];
   const rows = [
-    ...armor.map(item => ({ ...item, kind: 'Броня' })),
-    ...weapons.map(item => ({ ...item, kind: 'Оружие' })),
-    ...tools.map(item => ({ ...item, kind: 'Инструмент' })),
+    ...armor.map(item => ({ ...item, kind: dashboardLabel('armor') })),
+    ...weapons.map(item => ({ ...item, kind: dashboardLabel('weapon') })),
+    ...tools.map(item => ({ ...item, kind: dashboardLabel('tool') })),
   ];
   if (!rows.length) return kvGrid(equipment);
   return `<div class="equipment-list">${rows.map((item, index) => {
     const detail = [
       item.kind,
       item.damage,
-      item.base_ac != null ? `КЗ ${item.base_ac}` : '',
+      item.base_ac != null ? `${dashboardLabel('ac')} ${item.base_ac}` : '',
       item.properties,
       item.source,
     ].filter(Boolean).join(' · ');
     return `<div class="equipment-row" data-key="${dashboardDataKey('equipment', item.id || item.name || index)}" ` +
-      `data-value="${dashboardDataValue(item)}"><span><strong>${escapeHtml(String(item.name || 'Без названия'))}</strong>` +
-      `<small>${escapeHtml(detail)}</small></span>${item.equipped ? '<span class="equipped-mark">Надето</span>' : ''}</div>`;
+      `data-value="${dashboardDataValue(item)}"><span><strong>${escapeHtml(String(item.name || ui('Без названия', 'Untitled')))}</strong>` +
+      `<small>${escapeHtml(detail)}</small></span>${item.equipped ? `<span class="equipped-mark">${ui('Надето', 'Equipped')}</span>` : ''}</div>`;
   }).join('')}</div>`;
+}
+
+function featureList(features) {
+  if (!features.length) return emptyPanel();
+  return `<ol class="feature-list">${features.map((feature, index) =>
+    `<li data-key="${dashboardDataKey('feature', index)}" data-value="${dashboardDataValue(feature)}">` +
+    `<span>${escapeHtml(dashboardValue(feature))}</span></li>`
+  ).join('')}</ol>`;
 }
 
 function ledgerList(entries, emptyText) {
@@ -872,26 +1115,29 @@ function renderCharacter(data) {
   const classLine = [character.race, character.class, character.subclass].filter(Boolean).join(' · ');
   const conditions = Array.isArray(character.conditions) ? character.conditions : [];
   const features = Array.isArray(character.features) ? character.features : [];
-  const identity = {
-    Класс: character.class,
-    Подкласс: character.subclass,
-    Раса: character.race,
-    Предыстория: character.background,
-    Уровень: character.level,
-    Локация: character.location || campaign.location,
-  };
+  const identity = Object.entries({
+    class: character.class,
+    subclass: character.subclass,
+    race: character.race,
+    background: character.background,
+    level: character.level,
+    location: character.location || campaign.location,
+  }).filter(([, value]) => value != null && value !== '').map(([label, value]) => ({
+    label: dashboardLabel(label),
+    value: dashboardValue(value),
+  }));
   const chips = items => items.length
     ? `<div class="chip-list">${items.map(item => `<span class="data-chip">${escapeHtml(dashboardValue(item))}</span>`).join('')}</div>`
     : emptyPanel();
   const economy = data.economy || {};
   const recurring = [
-    ...(economy.income || []).map(item => ({ label: item.name || 'Доход', value: dashboardValue(item.amount ?? item) })),
-    ...(economy.expenses || []).map(item => ({ label: item.name || 'Расход', value: dashboardValue(item.amount ?? item) })),
-    ...(economy.production || []).map(item => ({ label: item.name || 'Производство', value: dashboardValue(item.status ?? item) })),
+    ...(economy.income || []).map(item => ({ label: item.name || ui('Доход', 'Income'), value: dashboardValue(item.amount ?? item) })),
+    ...(economy.expenses || []).map(item => ({ label: item.name || ui('Расход', 'Expense'), value: dashboardValue(item.amount ?? item) })),
+    ...(economy.production || []).map(item => ({ label: item.name || ui('Производство', 'Production'), value: dashboardValue(item.status ?? item) })),
   ];
   const consequences = Array.isArray(data.consequences) ? data.consequences : [];
   const consequenceRows = consequences.map(item => ({
-    label: String(item.name || item.consequence || 'Событие'),
+    label: String(item.name || item.consequence || ui('Событие', 'Event')),
     value: dashboardValue(item.remaining ?? item.status ?? item.trigger ?? ''),
   }));
   const campaignMeta = [campaign.campaign_name || campaign.name, campaign.genre].filter(Boolean).join(' · ');
@@ -901,34 +1147,34 @@ function renderCharacter(data) {
     campaign.precise_time,
   ].filter(Boolean).join(' · ');
 
-  return `<header class="ledger-head"><div><div class="dashboard-kicker">${escapeHtml(campaignMeta || 'Кампания')}</div>` +
-    `<h2>${escapeHtml(character.name || 'Персонаж')}</h2><div class="dashboard-meta">${escapeHtml(classLine)}</div></div>` +
-    `<div class="ledger-place"><strong>${escapeHtml(character.location || campaign.location || 'Локация неизвестна')}</strong>` +
+  return `<header class="ledger-head"><div><div class="dashboard-kicker">${escapeHtml(campaignMeta || ui('Кампания', 'Campaign'))}</div>` +
+    `<h2>${escapeHtml(character.name || ui('Персонаж', 'Character'))}</h2><div class="dashboard-meta">${escapeHtml(classLine)}</div></div>` +
+    `<div class="ledger-place"><strong>${escapeHtml(character.location || campaign.location || ui('Локация неизвестна', 'Location unknown'))}</strong>` +
     `<span>${escapeHtml(placeAndTime)}</span></div></header>` +
     `<section class="hero-vitals">` +
       `<div class="hero-vital hp-card"><span class="hero-vital-label">HP</span><strong>${escapeHtml(`${hp.current ?? 0} / ${hp.max ?? 0}`)}</strong>` +
         `<div class="vital-track"><div class="vital-fill hp" style="width:${dashboardPercent(hp.current, hp.max)}%"></div></div></div>` +
-      `<div class="hero-vital xp-card"><span class="hero-vital-label">XP · LVL ${escapeHtml(String(character.level ?? 1))}</span>` +
+      `<div class="hero-vital xp-card"><span class="hero-vital-label">XP · ${ui('УР', 'LVL')} ${escapeHtml(String(character.level ?? 1))}</span>` +
         `<strong>${escapeHtml(`${dashboardValue(xp.current, '0')} / ${dashboardValue(xp.next_level)}`)}</strong>` +
         `<div class="vital-track"><div class="vital-fill xp" style="width:${xp.next_level ? dashboardPercent(xp.current, xp.next_level) : 100}%"></div></div></div>` +
-      `<div class="hero-vital hero-vital-compact"><span class="hero-vital-label">КЗ</span><strong>${escapeHtml(dashboardValue(character.ac))}</strong>` +
-        `<small>${character.prot != null ? `Защита ${escapeHtml(String(character.prot))}` : 'Броня'}</small></div>` +
-      `<div class="hero-vital money-card"><span class="hero-vital-label">Средства</span><strong>${escapeHtml(character.money?.formatted || economy.balance?.formatted || '0')}</strong>` +
-        `<small>Доступный баланс</small></div>` +
+      `<div class="hero-vital hero-vital-compact"><span class="hero-vital-label">${dashboardLabel('ac')}</span><strong>${escapeHtml(dashboardValue(character.ac))}</strong>` +
+        `<small>${character.prot != null ? `${dashboardLabel('prot')} ${escapeHtml(String(character.prot))}` : dashboardLabel('armor')}</small></div>` +
+      `<div class="hero-vital money-card"><span class="hero-vital-label">${ui('Средства', 'Funds')}</span><strong>${escapeHtml(character.money?.formatted || economy.balance?.formatted || '0')}</strong>` +
+        `<small>${ui('Доступный баланс', 'Available balance')}</small></div>` +
     `</section>` +
     (Object.keys(character.custom_stats || {}).length
-      ? dashCard('Особые показатели', customStatBars(character.custom_stats), { classes: 'full', delay: 20 })
+      ? dashCard(ui('Особые показатели', 'Special stats'), customStatBars(character.custom_stats), { classes: 'full', delay: 20 })
       : '') +
     `<div class="dash-grid">` +
-      dashCard('Характеристики', abilityGrid(character), { classes: 'third', delay: 45 }) +
-      dashCard('Спасброски', savingThrowList(character), { classes: 'third', delay: 70 }) +
-      dashCard('Навыки', skillList(character.skills), { classes: 'third', delay: 95 }) +
-      dashCard('Личное дело', kvGrid(identity), { delay: 120 }) +
-      dashCard('Состояния', chips(conditions), { count: conditions.length, delay: 145 }) +
-      dashCard('Экипировка', equipmentList(character.equipment), { classes: 'full', delay: 170 }) +
-      dashCard('Особенности', chips(features), { count: features.length, classes: 'full', delay: 195 }) +
-      (recurring.length ? dashCard('Экономика', ledgerList(recurring, 'Нет регулярных операций'), { delay: 220 }) : '') +
-      (consequenceRows.length ? dashCard('Последствия', ledgerList(consequenceRows, 'Нет видимых последствий'), { delay: 245 }) : '') +
+      dashCard(ui('Характеристики', 'Ability scores'), abilityGrid(character), { classes: 'third', delay: 45 }) +
+      dashCard(ui('Спасброски', 'Saving throws'), savingThrowList(character), { classes: 'third', delay: 70 }) +
+      dashCard(ui('Навыки', 'Skills'), skillList(character.skills), { classes: 'third', delay: 95 }) +
+      dashCard(ui('Личное дело', 'Profile'), ledgerList(identity, ui('Нет данных', 'No data')), { delay: 120 }) +
+      dashCard(ui('Состояния', 'Conditions'), chips(conditions), { count: conditions.length, delay: 145 }) +
+      dashCard(ui('Экипировка', 'Equipment'), equipmentList(character.equipment), { delay: 170 }) +
+      dashCard(ui('Особенности', 'Features'), featureList(features), { count: features.length, delay: 195 }) +
+      (recurring.length ? dashCard(ui('Экономика', 'Economy'), ledgerList(recurring, ui('Нет регулярных операций', 'No recurring entries')), { delay: 220 }) : '') +
+      (consequenceRows.length ? dashCard(ui('Последствия', 'Consequences'), ledgerList(consequenceRows, ui('Нет видимых последствий', 'No visible consequences')), { delay: 245 }) : '') +
     `</div>`;
 }
 
@@ -937,6 +1183,23 @@ function renderInventory(data) {
   const items = Array.isArray(inventory.items) ? inventory.items : [];
   const totalStacks = items.length;
   const unique = items.filter(item => item.unique).length;
+  const capacity = inventory.capacity;
+  const tierLabels = {
+    normal: ui('Норма', 'Normal'),
+    encumbered: ui('Нагрузка', 'Encumbered'),
+    heavy: ui('Тяжёлая нагрузка', 'Heavy'),
+    overloaded: ui('Перегруз', 'Overloaded'),
+    immobile: ui('Невозможно двигаться', 'Immobile'),
+  };
+  const capacityPanel = capacity
+    ? `<section class="inventory-load ${escapeHtml(String(capacity.tier || 'normal'))}">` +
+      `<div class="inventory-load-head"><div><span>${ui('Нагрузка', 'Carried load')}</span>` +
+      `<strong>${dashboardWeight(capacity.weight_kg)} / ${dashboardWeight(capacity.capacity_kg)}</strong></div>` +
+      `<span class="load-tier">${escapeHtml(tierLabels[capacity.tier] || capacity.tier)}</span></div>` +
+      `<div class="inventory-load-track"><div class="inventory-load-fill" style="width:${Math.min(100, Math.max(0, Number(capacity.usage_percent) || 0))}%"></div></div>` +
+      `<div class="inventory-load-foot"><span>${dashboardNumber(capacity.usage_percent, 1)}%</span>` +
+      `<span>${ui('Без штрафа до', 'No penalty up to')} ${dashboardWeight(capacity.capacity_kg)}</span></div></section>`
+    : '';
   const rows = items.length ? items.map((item, index) => {
     const quantity = Number(item.quantity ?? 1);
     const weight = Number(item.weight);
@@ -946,29 +1209,35 @@ function renderInventory(data) {
     return `<tr class="dashboard-item" data-search="${escapeHtml(search)}" ` +
       `data-key="${dashboardDataKey('item', item.id || item.name)}" data-value="${dashboardDataValue(item)}" ` +
       `style="animation-delay:${Math.min(index * 18, 250)}ms">` +
-      `<td><span class="table-name">${escapeHtml(String(item.name || 'Без названия'))}${description}</span></td>` +
-      `<td><span class="inventory-kind">${item.unique ? 'Уникальное' : 'Запас'}</span></td>` +
+      `<td><span class="table-name">${escapeHtml(String(item.name || ui('Без названия', 'Untitled')))}${description}</span></td>` +
+      `<td><span class="inventory-kind">${item.unique ? ui('Уникальное', 'Unique') : ui('Запас', 'Stack')}</span></td>` +
       `<td class="table-num">${dashboardNumber(quantity, 3)}</td>` +
-      `<td class="table-num">${Number.isFinite(weight) ? `${dashboardNumber(weight, 3)} кг` : '—'}</td>` +
-      `<td class="table-num">${totalWeight == null ? '—' : `${dashboardNumber(totalWeight, 3)} кг`}</td></tr>`;
-  }).join('') : `<tr><td colspan="5">${emptyPanel('Снаряжение не найдено')}</td></tr>`;
+      `<td class="table-num">${Number.isFinite(weight) ? dashboardWeight(weight) : '—'}</td>` +
+      `<td class="table-num">${totalWeight == null ? '—' : dashboardWeight(totalWeight)}</td></tr>`;
+  }).join('') : `<tr><td colspan="5">${emptyPanel(ui('Снаряжение не найдено', 'No inventory items'))}</td></tr>`;
 
-  return dashboardHeader('Интендантская ведомость', 'Снаряжение', `${totalStacks} позиций · поиск без перезагрузки`, 'Найти предмет…') +
+  return dashboardHeader(
+    ui('Интендантская ведомость', 'Quartermaster ledger'),
+    ui('Снаряжение', 'Inventory'),
+    ui(`${totalStacks} позиций · поиск без перезагрузки`, `${totalStacks} entries · instant search`),
+    ui('Найти предмет…', 'Find an item…')
+  ) +
     summaryRow([
-      summaryTile('Позиций', totalStacks, 'Стопки и уникальные вещи', 'rgba(129,140,248,.18)'),
-      summaryTile('Общее количество', dashboardNumber(inventory.total_quantity || 0, 3), 'Всех единиц', 'rgba(56,189,248,.15)'),
-      summaryTile('Общий вес', `${dashboardNumber(inventory.total_weight || 0, 3)} кг`, 'С учётом количества', 'rgba(234,179,8,.15)'),
-      summaryTile('Уникальных', unique, `${Math.max(0, totalStacks - unique)} запасов`, 'rgba(34,197,94,.13)'),
+      summaryTile(ui('Позиций', 'Entries'), totalStacks, ui('Стопки и уникальные вещи', 'Stacks and unique items'), 'rgba(129,140,248,.18)'),
+      summaryTile(ui('Общее количество', 'Total quantity'), dashboardNumber(inventory.total_quantity || 0, 3), ui('Всех единиц', 'All units'), 'rgba(56,189,248,.15)'),
+      summaryTile(ui('Общий вес', 'Total weight'), dashboardWeight(inventory.total_weight || 0), ui('С учётом количества', 'Quantity included'), 'rgba(234,179,8,.15)'),
+      summaryTile(ui('Уникальных', 'Unique'), unique, ui(`${Math.max(0, totalStacks - unique)} запасов`, `${Math.max(0, totalStacks - unique)} stacks`), 'rgba(34,197,94,.13)'),
     ]) +
-    `<section class="dash-card full"><header class="dash-card-head"><span class="dash-card-title">Опись имущества</span>` +
+    capacityPanel +
+    `<section class="dash-card full"><header class="dash-card-head"><span class="dash-card-title">${ui('Опись имущества', 'Item register')}</span>` +
       `<span class="dash-card-count">${totalStacks}</span></header><div class="table-wrap"><table class="compact-table inventory-table">` +
-      `<thead><tr><th>Предмет</th><th>Категория</th><th class="table-num">Кол.</th><th class="table-num">Вес</th><th class="table-num">Всего</th></tr></thead>` +
+      `<thead><tr><th>${ui('Предмет', 'Item')}</th><th>${ui('Категория', 'Category')}</th><th class="table-num">${ui('Кол.', 'Qty')}</th>` +
+      `<th class="table-num">${ui('Вес', 'Weight')}</th><th class="table-num">${ui('Всего', 'Total')}</th></tr></thead>` +
       `<tbody>${rows}</tbody></table></div></section>`;
 }
 
 function questStatusLabel(status) {
-  const labels = { active: 'Активно', completed: 'Завершено', failed: 'Провалено', resolved: 'Решено' };
-  return labels[String(status || '').toLowerCase()] || dashboardValue(status, 'Активно');
+  return dashboardTerm(status) || dashboardValue(status, ui('Активно', 'Active'));
 }
 
 function renderQuests(data) {
@@ -985,7 +1254,7 @@ function renderQuests(data) {
     return `<article class="quest-card dashboard-item" data-search="${escapeHtml(search)}" ` +
       `data-key="${dashboardDataKey('quest', quest.id || quest.name)}" data-value="${dashboardDataValue(quest)}" ` +
       `style="animation-delay:${Math.min(index * 30, 300)}ms">` +
-      `<div class="quest-title-row"><div><div class="quest-name">${escapeHtml(String(quest.name || 'Без названия'))}</div>` +
+      `<div class="quest-title-row"><div><div class="quest-name">${escapeHtml(String(quest.name || ui('Без названия', 'Untitled')))}</div>` +
       `<div class="person-location">${escapeHtml(dashboardLabel(quest.type || 'side'))}</div></div>` +
       `<span class="status-badge ${escapeHtml(String(quest.status || ''))}">${escapeHtml(questStatusLabel(quest.status))}</span></div>` +
       (quest.description ? `<p class="quest-desc">${escapeHtml(String(quest.description))}</p>` : '') +
@@ -995,13 +1264,18 @@ function renderQuests(data) {
         `<div class="objective${objective.done ? ' done' : ''}"><span class="objective-mark">${objective.done ? '✓' : '○'}</span>` +
         `<span>${escapeHtml(String(objective.text || ''))}</span></div>`).join('')}</div>` : '') +
       `</article>`;
-  }).join('') : emptyPanel('Журнал заданий пока пуст');
+  }).join('') : emptyPanel(ui('Журнал заданий пока пуст', 'The quest log is empty'));
 
-  return dashboardHeader('Журнал кампании', 'Задания', `${active} активных · ${completed} завершённых`, 'Найти задание…') +
+  return dashboardHeader(
+    ui('Журнал кампании', 'Campaign journal'),
+    ui('Задания', 'Quests'),
+    ui(`${active} активных · ${completed} завершённых`, `${active} active · ${completed} completed`),
+    ui('Найти задание…', 'Find a quest…')
+  ) +
     summaryRow([
-      summaryTile('Активных', active, 'Требуют действий', 'rgba(34,197,94,.15)'),
-      summaryTile('Завершено', completed, 'Закрытые истории', 'rgba(56,189,248,.14)'),
-      summaryTile('Целей выполнено', `${objectiveDone} / ${objectiveCount}`, 'По всем заданиям', 'rgba(129,140,248,.16)'),
+      summaryTile(ui('Активных', 'Active'), active, ui('Требуют действий', 'Need attention'), 'rgba(34,197,94,.15)'),
+      summaryTile(ui('Завершено', 'Completed'), completed, ui('Закрытые истории', 'Closed stories'), 'rgba(56,189,248,.14)'),
+      summaryTile(ui('Целей выполнено', 'Objectives complete'), `${objectiveDone} / ${objectiveCount}`, ui('По всем заданиям', 'Across all quests'), 'rgba(129,140,248,.16)'),
     ]) +
     `<div class="quest-stack">${cards}</div>`;
 }
@@ -1026,22 +1300,27 @@ function renderParty(data) {
       `data-key="${dashboardDataKey('npc', npc.id || npc.name)}" data-value="${dashboardDataValue(npc)}" ` +
       `style="animation-delay:${Math.min(index * 28, 280)}ms">` +
       `<div class="person-top"><div class="person-identity"><div class="person-avatar">${escapeHtml(personInitials(npc.name))}</div>` +
-      `<div><div class="person-name">${escapeHtml(String(npc.name || 'Без имени'))}</div>` +
-      `<div class="person-location">${escapeHtml(String(npc.location || 'Местонахождение неизвестно'))}</div></div></div>` +
-      `<span class="status-badge ${escapeHtml(String(npc.attitude || 'neutral'))}">${escapeHtml(isParty ? 'Группа' : dashboardValue(npc.attitude, 'Знакомый'))}</span></div>` +
+      `<div><div class="person-name">${escapeHtml(String(npc.name || ui('Без имени', 'Unnamed')))}</div>` +
+      `<div class="person-location">${escapeHtml(String(npc.location || ui('Местонахождение неизвестно', 'Location unknown')))}</div></div></div>` +
+      `<span class="status-badge ${escapeHtml(String(npc.attitude || 'neutral'))}">${escapeHtml(isParty ? ui('Группа', 'Party') : (dashboardTerm(npc.attitude) || dashboardValue(npc.attitude, ui('Знакомый', 'Known'))))}</span></div>` +
       (npc.description ? `<p class="person-desc">${escapeHtml(String(npc.description))}</p>` : '') +
       (facts ? `<div class="person-sheet">${facts}</div>` : '') +
       (Array.isArray(npc.conditions) && npc.conditions.length
         ? `<div class="chip-list">${npc.conditions.map(condition => `<span class="data-chip warn">${escapeHtml(dashboardValue(condition))}</span>`).join('')}</div>`
         : '') +
       `</article>`;
-  }).join('') : emptyPanel('Никого знакомого пока нет');
+  }).join('') : emptyPanel(ui('Знакомых НПС пока нет', 'No known NPCs yet'));
 
-  return dashboardHeader('Связи и спутники', 'Люди', `${party.length} в группе · ${known.length} знакомых`, 'Найти человека…') +
+  return dashboardHeader(
+    ui('Связи и спутники', 'Contacts and companions'),
+    ui('НПС и группа', 'NPCs & Party'),
+    ui(`${party.length} в группе · ${known.length} знакомых`, `${party.length} in party · ${known.length} known`),
+    ui('Найти НПС…', 'Find an NPC…')
+  ) +
     summaryRow([
-      summaryTile('В группе', party.length, 'Путешествуют с героем', 'rgba(129,140,248,.17)'),
-      summaryTile('Знакомых', known.length, 'Доступные персонажу связи', 'rgba(56,189,248,.14)'),
-      summaryTile('Локаций', locations, 'Где находятся знакомые', 'rgba(34,197,94,.13)'),
+      summaryTile(ui('В группе', 'In party'), party.length, ui('Путешествуют с героем', 'Travel with the character'), 'rgba(129,140,248,.17)'),
+      summaryTile(ui('Знакомых', 'Known NPCs'), known.length, ui('Доступные персонажу связи', 'Character-visible contacts'), 'rgba(56,189,248,.14)'),
+      summaryTile(ui('Локаций', 'Locations'), locations, ui('Где находятся знакомые', 'Known NPC locations'), 'rgba(34,197,94,.13)'),
     ]) +
     `<div class="people-grid">${cards}</div>`;
 }
@@ -1051,28 +1330,50 @@ function renderWiki(data) {
   const types = [...new Set(entries.map(entry => entry.type).filter(Boolean))].sort();
   const typeButtons = ['all', ...types].map(type =>
     `<button class="wiki-type-btn${state.wikiType === type ? ' active' : ''}" type="button" data-wiki-type="${escapeHtml(type)}">` +
-    `${escapeHtml(type === 'all' ? 'Все' : dashboardLabel(type))}</button>`).join('');
-  const cards = entries.length ? entries.map((entry, index) => {
-    const mechanics = entry.mechanics && Object.keys(entry.mechanics).length
-      ? `<div class="wiki-code">${escapeHtml(dashboardValue(entry.mechanics))}</div>` : '';
-    const recipe = entry.recipe && Object.keys(entry.recipe).length
-      ? `<div class="wiki-code"><b>Рецепт:</b> ${escapeHtml(dashboardValue(entry.recipe))}</div>` : '';
+    `${escapeHtml(type === 'all' ? ui('Все', 'All') : dashboardLabel(type))}</button>`).join('');
+  const filteredEntries = state.wikiType === 'all'
+    ? entries
+    : entries.filter(entry => entry.type === state.wikiType);
+  const selected = filteredEntries.find(entry => entry.id === state.wikiSelectedId) || filteredEntries[0] || null;
+  state.wikiSelectedId = selected?.id || null;
+  const index = filteredEntries.length ? filteredEntries.map((entry, itemIndex) => {
     const search = `${entry.name || ''} ${entry.description || ''} ${entry.type || ''}`.toLocaleLowerCase('ru');
-    return `<details class="wiki-entry dashboard-item" data-search="${escapeHtml(search)}" data-type="${escapeHtml(String(entry.type || 'misc'))}" ` +
+    return `<button class="wiki-list-item dashboard-item${selected?.id === entry.id ? ' selected' : ''}" type="button" ` +
+      `data-wiki-entry="${escapeHtml(String(entry.id || ''))}" data-search="${escapeHtml(search)}" data-type="${escapeHtml(String(entry.type || 'misc'))}" ` +
       `data-key="${dashboardDataKey('wiki', entry.id || entry.name)}" data-value="${dashboardDataValue(entry)}" ` +
-      `style="animation-delay:${Math.min(index * 22, 260)}ms">` +
-      `<summary><span class="wiki-entry-name">${escapeHtml(String(entry.name || 'Без названия'))}</span>` +
-      `<span class="wiki-entry-type">${escapeHtml(dashboardLabel(entry.type || 'misc'))}</span></summary>` +
-      `<div class="wiki-entry-body">${entry.description ? `<p class="wiki-desc">${escapeHtml(String(entry.description))}</p>` : ''}${mechanics}${recipe}</div>` +
-      `</details>`;
-  }).join('') : emptyPanel('Энциклопедия пока пуста');
+      `style="animation-delay:${Math.min(itemIndex * 18, 220)}ms">` +
+      `<span class="wiki-list-name">${escapeHtml(String(entry.name || ui('Без названия', 'Untitled')))}</span>` +
+      `<span class="wiki-entry-type">${escapeHtml(dashboardLabel(entry.type || 'misc'))}</span></button>`;
+  }).join('') : emptyPanel(ui('Записей этой категории нет', 'No entries in this category'));
+  const detail = selected
+    ? `<article class="wiki-detail" data-selected-wiki="${escapeHtml(String(selected.id || ''))}">` +
+      `<header class="wiki-detail-head"><div class="dashboard-kicker">${escapeHtml(dashboardLabel(selected.type || 'misc'))}</div>` +
+      `<h3>${escapeHtml(String(selected.name || ui('Без названия', 'Untitled')))}</h3></header>` +
+      (selected.description
+        ? `<p class="wiki-detail-description">${escapeHtml(String(selected.description))}</p>`
+        : `<p class="wiki-detail-description muted">${ui('Описание пока не записано.', 'No description has been recorded.')}</p>`) +
+      (selected.mechanics && Object.keys(selected.mechanics).length
+        ? `<section class="wiki-detail-section"><h4>${ui('Механика', 'Mechanics')}</h4>${kvGrid(selected.mechanics)}</section>`
+        : '') +
+      (selected.recipe && Object.keys(selected.recipe).length
+        ? `<section class="wiki-detail-section"><h4>${ui('Рецепт', 'Recipe')}</h4>${kvGrid(selected.recipe)}</section>`
+        : '') +
+      `</article>`
+    : `<article class="wiki-detail">${emptyPanel(ui('Выберите запись слева', 'Select an entry on the left'))}</article>`;
 
-  return dashboardHeader('Знания персонажа', 'Энциклопедия', `${entries.length} открытых записей`, 'Найти запись…') +
+  return dashboardHeader(
+    ui('Знания персонажа', 'Character knowledge'),
+    ui('Энциклопедия', 'Wiki'),
+    ui(`${entries.length} открытых записей`, `${entries.length} revealed entries`),
+    ui('Найти запись…', 'Find an entry…')
+  ) +
     summaryRow([
-      summaryTile('Записей', entries.length, 'Только раскрытые персонажу', 'rgba(129,140,248,.16)'),
-      summaryTile('Категорий', types.length, types.slice(0, 3).map(dashboardLabel).join(' · '), 'rgba(56,189,248,.14)'),
+      summaryTile(ui('Записей', 'Entries'), entries.length, ui('Только раскрытые персонажу', 'Character-visible only'), 'rgba(129,140,248,.16)'),
+      summaryTile(ui('Категорий', 'Categories'), types.length, types.slice(0, 3).map(dashboardLabel).join(' · '), 'rgba(56,189,248,.14)'),
     ]) +
-    `<div class="wiki-types">${typeButtons}</div><div class="wiki-grid">${cards}</div>`;
+    `<div class="wiki-types">${typeButtons}</div><div class="wiki-workspace">` +
+    `<section class="wiki-index"><div class="wiki-index-head">${ui('Открытые записи', 'Revealed entries')}<span>${filteredEntries.length}</span></div>` +
+    `<div class="wiki-index-list">${index}</div></section>${detail}</div>`;
 }
 
 function applyDashboardFilters(view) {
@@ -1092,8 +1393,14 @@ function bindDashboardInteractions(view) {
   el.dashboardContent.querySelectorAll('.wiki-type-btn').forEach(button => {
     button.addEventListener('click', () => {
       state.wikiType = button.dataset.wikiType || 'all';
-      el.dashboardContent.querySelectorAll('.wiki-type-btn').forEach(item => item.classList.toggle('active', item === button));
-      applyDashboardFilters(view);
+      state.wikiSelectedId = null;
+      renderDashboard('wiki');
+    });
+  });
+  el.dashboardContent.querySelectorAll('.wiki-list-item').forEach(button => {
+    button.addEventListener('click', () => {
+      state.wikiSelectedId = button.dataset.wikiEntry || null;
+      renderDashboard('wiki');
     });
   });
   applyDashboardFilters(view);
@@ -1112,15 +1419,15 @@ function animateDashboardChanges(view) {
   state.dashboardSnapshots[view] = next;
 }
 
-function renderDashboard(view) {
+function renderDashboard(view, preserveScroll = true) {
   const data = state.campaignViews;
   if (!data) {
     el.dashboardLoading.hidden = false;
-    el.dashboardLoading.textContent = 'Загрузка...';
+    el.dashboardLoading.textContent = ui('Загрузка...', 'Loading...');
     return;
   }
   el.dashboardLoading.hidden = true;
-  const scrollTop = el.dashboardView.scrollTop;
+  const scrollTop = preserveScroll ? el.dashboardView.scrollTop : 0;
   const renderers = {
     character: renderCharacter,
     inventory: renderInventory,
@@ -1140,11 +1447,13 @@ function renderMap() {
   if (state.map) { state.map.destroy(); state.map = null; }
   if (!data?.enabled || !data.nodes?.length || typeof cytoscape !== 'function') {
     el.mapEmpty.hidden = false;
-    el.mapEmpty.textContent = data?.enabled === false ? 'Модуль world-travel отключён' : 'Карта пока пуста';
+    el.mapEmpty.textContent = data?.enabled === false
+      ? ui('Модуль world-travel отключён', 'The world-travel module is disabled')
+      : ui('Карта пока пуста', 'The map is empty');
     return;
   }
   el.mapEmpty.hidden = true;
-  el.mapBreadcrumb.textContent = (data.breadcrumb || ['World']).join(' › ');
+  el.mapBreadcrumb.textContent = (data.breadcrumb || [ui('Мир', 'World')]).join(' › ');
   const context = data.current?.context || 'global';
   const compound = data.current?.compound;
   const visible = data.nodes.filter(node => context === 'interior'
@@ -1161,7 +1470,12 @@ function renderMap() {
       position: context === 'interior' ? data.layouts?.[compound]?.[node.name] : node.coordinates,
     })),
     ...(data.connections || []).filter(edge => ids.has(edge.source) && ids.has(edge.target)).map((edge, i) => ({
-      data: { id: `edge-${i}`, source: edge.source, target: edge.target, label: edge.distance_meters ? `${edge.distance_meters} м` : '' },
+      data: {
+        id: `edge-${i}`,
+        source: edge.source,
+        target: edge.target,
+        label: edge.distance_meters ? `${edge.distance_meters} ${ui('м', 'm')}` : '',
+      },
     })),
   ];
   state.map = cytoscape({
@@ -1226,9 +1540,10 @@ function selectCampaign(name) {
   state.dashboardSnapshots = {};
   state.dashboardQueries = {};
   state.wikiType = 'all';
+  state.wikiSelectedId = null;
   state.mapData = null;
   el.titleText.textContent = name;
-  el.input.placeholder = 'Введите сообщение…';
+  el.input.placeholder = ui('Введите сообщение…', 'Enter a message…');
   el.wizardResetBtn.hidden = true;   // game mode: no wizard reset
   el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = false;   // game mode: allow context reset
@@ -1259,8 +1574,12 @@ function startWizard() {
   state.attempt = 0;
   state.generating = false;
   state.localEcho = new Set();
-  el.titleText.textContent = 'Создание кампании';
-  el.input.placeholder = 'Опишите мир или выберите вариант…';
+  const wizardTitle = ui('Создание кампании', 'Campaign creation');
+  el.titleText.textContent = wizardTitle;
+  el.input.placeholder = ui(
+    'Опишите мир или выберите вариант…',
+    'Describe the world or choose an option…'
+  );
   el.wizardResetBtn.hidden = false;
   el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = true;  // wizard has no game session to reset
@@ -1270,7 +1589,7 @@ function startWizard() {
   hideRateLimit();
   showChat();
   markActiveInList();
-  if (isMobile()) showMobileChat('Создание кампании');
+  if (isMobile()) showMobileChat(wizardTitle);
   connect(wizardUrl());
   showInitialWizardGreeting();
   el.input.focus();
@@ -1283,36 +1602,86 @@ function resetWizard() {
 
 // ─────────────────────────── Wizard ───────────────────────────────────────
 // Preset settings shown client-side on wizard open (ported from React Wizard.tsx)
-const WIZARD_PRESETS = {
-  step: 'concept',
-  title: 'Мир кампании',
-  submit_label: 'Выбрать',
-  controls: [
-    {
-      type: 'radio', id: 'preset', label: 'Готовые сеттинги',
-      options: [
-        { id: 'standard-dnd', title: 'Стандартный D&D', description: 'Классическое фэнтези — драконы, подземелья, магия', color: 'green', comment: 'Проверенная классика для любого игрока' },
-        { id: 'zombie-apocalypse', title: 'Зомби-апокалипсис', description: 'Мертвецы, выживание, дефицит ресурсов', color: 'green', comment: 'Напряжение и моральные дилеммы' },
-        { id: 'survival-zone', title: 'Зона выживания (STALKER)', description: 'Аномалии, радиация, артефакты, фракции', color: 'green', comment: 'Атмосфера постапока и исследование' },
-        { id: 'space-travel', title: 'Космос', description: 'Корабль, экипаж, галактика, ресурсы', color: 'green', comment: 'Эпик среди звёзд' },
-        { id: 'horror-investigation', title: 'Хоррор-расследование', description: 'Безумие, культы, запретное знание', color: 'yellow', comment: 'Для любителей Лавкрафта' },
-        { id: 'political-intrigue', title: 'Политические интриги', description: 'Влияние, альянсы, предательства', color: 'yellow', comment: 'Война умов, а не мечей' },
-        { id: 'gladiator-arena', title: 'Гладиаторская арена', description: 'Раб → бог арены, пермасмерть', color: 'yellow', comment: 'Чистый бой и прогрессия' },
-        { id: 'roguelike-missions', title: 'Рогалик: База + Миссии', description: 'XCOM/Darkest Dungeon — хаб + вылазки', color: 'yellow', comment: 'Прогрессия и риск' },
-        { id: 'civilization', title: 'Цивилизация', description: 'От племени до империи', color: 'yellow', comment: 'Управляешь народом, а не персонажем' },
-        { id: 'monster-hunters', title: 'Охотники на монстров', description: 'Ведьмак meets Warhammer — контракты, бой', color: 'yellow', comment: 'Структурированные сессии' },
-      ],
-    },
-    {
-      type: 'text_input', id: 'custom_idea', label: 'Или опиши свой мир',
-      placeholder: 'Киберпанк-детектив, пиратское фэнтези, что угодно…', required: false,
-    },
-  ],
-};
+function wizardPresets() {
+  const option = (id, ru, en, color) => ({
+    id,
+    title: ui(ru[0], en[0]),
+    description: ui(ru[1], en[1]),
+    comment: ui(ru[2], en[2]),
+    color,
+  });
+  return {
+    step: 'concept',
+    title: ui('Мир кампании', 'Campaign world'),
+    submit_label: ui('Выбрать', 'Choose'),
+    controls: [
+      {
+        type: 'radio',
+        id: 'preset',
+        label: ui('Готовые сеттинги', 'Preset settings'),
+        options: [
+          option('standard-dnd',
+            ['Стандартный D&D', 'Классическое фэнтези — драконы, подземелья, магия', 'Проверенная классика для любого игрока'],
+            ['Standard D&D', 'Classic fantasy — dragons, dungeons, and magic', 'A familiar foundation for any player'],
+            'green'),
+          option('zombie-apocalypse',
+            ['Зомби-апокалипсис', 'Мертвецы, выживание, дефицит ресурсов', 'Напряжение и моральные дилеммы'],
+            ['Zombie apocalypse', 'Undead, survival, and scarce resources', 'Tension and moral dilemmas'],
+            'green'),
+          option('survival-zone',
+            ['Зона выживания (STALKER)', 'Аномалии, радиация, артефакты, фракции', 'Атмосфера постапока и исследование'],
+            ['Survival zone (STALKER)', 'Anomalies, radiation, artifacts, and factions', 'Post-apocalyptic exploration'],
+            'green'),
+          option('space-travel',
+            ['Космос', 'Корабль, экипаж, галактика, ресурсы', 'Эпик среди звёзд'],
+            ['Space', 'Ship, crew, galaxy, and resources', 'An epic among the stars'],
+            'green'),
+          option('horror-investigation',
+            ['Хоррор-расследование', 'Безумие, культы, запретное знание', 'Для любителей Лавкрафта'],
+            ['Horror investigation', 'Madness, cults, and forbidden knowledge', 'For Lovecraft fans'],
+            'yellow'),
+          option('political-intrigue',
+            ['Политические интриги', 'Влияние, альянсы, предательства', 'Война умов, а не мечей'],
+            ['Political intrigue', 'Influence, alliances, and betrayal', 'A battle of minds rather than swords'],
+            'yellow'),
+          option('gladiator-arena',
+            ['Гладиаторская арена', 'Раб → бог арены, пермасмерть', 'Чистый бой и прогрессия'],
+            ['Gladiator arena', 'Slave → arena god, permanent death', 'Combat and progression'],
+            'yellow'),
+          option('roguelike-missions',
+            ['Рогалик: База + Миссии', 'XCOM/Darkest Dungeon — хаб + вылазки', 'Прогрессия и риск'],
+            ['Roguelike: Base + Missions', 'XCOM/Darkest Dungeon — hub and expeditions', 'Progression and risk'],
+            'yellow'),
+          option('civilization',
+            ['Цивилизация', 'От племени до империи', 'Управляешь народом, а не персонажем'],
+            ['Civilization', 'From tribe to empire', 'Lead a people rather than one character'],
+            'yellow'),
+          option('monster-hunters',
+            ['Охотники на монстров', 'Ведьмак meets Warhammer — контракты, бой', 'Структурированные сессии'],
+            ['Monster hunters', 'The Witcher meets Warhammer — contracts and combat', 'Structured sessions'],
+            'yellow'),
+        ],
+      },
+      {
+        type: 'text_input',
+        id: 'custom_idea',
+        label: ui('Или опиши свой мир', 'Or describe your world'),
+        placeholder: ui(
+          'Киберпанк-детектив, пиратское фэнтези, что угодно…',
+          'Cyberpunk detective, pirate fantasy, anything…'
+        ),
+        required: false,
+      },
+    ],
+  };
+}
 
 function showInitialWizardGreeting() {
-  addDmMessage('Привет! Давай создадим кампанию.\n\nВыбери готовый сеттинг ниже или опиши свой мир в чате.');
-  renderChoices(WIZARD_PRESETS);
+  addDmMessage(ui(
+    'Привет! Давай создадим кампанию.\n\nВыбери готовый сеттинг ниже или опиши свой мир в чате.',
+    'Hi! Let’s create a campaign.\n\nChoose a preset below or describe your world in chat.'
+  ));
+  renderChoices(wizardPresets());
 }
 
 function sendWizard(text, meta) {
@@ -1349,14 +1718,17 @@ function onWizardComplete(campaignName) {
   // Do NOT auto-switch — let the user keep tweaking with the wizard. Offer a button
   // to jump into the game when they're ready; the campaign also appears in the sidebar.
   clearChoices();
-  addDmMessage('✅ Кампания создана! Можешь продолжить настройку или перейти к игре.');
+  addDmMessage(ui(
+    '✅ Кампания создана! Можешь продолжить настройку или перейти к игре.',
+    '✅ Campaign created! You can keep configuring it or start playing.'
+  ));
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-dm';
   const body = document.createElement('div');
   body.className = 'msg-body';
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary';
-  btn.textContent = '▶ Начать играть';
+  btn.textContent = ui('▶ Начать играть', '▶ Start playing');
   btn.addEventListener('click', () => selectCampaign(campaignName));
   body.appendChild(btn);
   wrap.appendChild(body);
@@ -1390,7 +1762,7 @@ function renderChoices(data) {
 
   const head = document.createElement('div');
   head.className = 'choices-head';
-  head.innerHTML = `<span class="choices-title">${escapeHtml(data.title || 'Выбор')}</span>` +
+  head.innerHTML = `<span class="choices-title">${escapeHtml(data.title || ui('Выбор', 'Choice'))}</span>` +
     (data.step ? `<span class="choices-step">${escapeHtml(data.step)}</span>` : '');
   el.choices.appendChild(head);
 
@@ -1437,14 +1809,14 @@ function renderChoices(data) {
   footer.className = 'choices-footer';
   const skip = document.createElement('button');
   skip.className = 'btn';
-  skip.textContent = 'Пропустить';
+  skip.textContent = ui('Пропустить', 'Skip');
   skip.addEventListener('click', () => {
-    sendWizard('Пропускаю этот шаг', `[Sidebar skip for step "${data.step}"]`);
+    sendWizard(ui('Пропускаю этот шаг', 'Skip this step'), `[Sidebar skip for step "${data.step}"]`);
     clearChoices();
   });
   const submit = document.createElement('button');
   submit.className = 'btn btn-primary submit-btn';
-  submit.textContent = data.submit_label || 'Выбрать';
+  submit.textContent = data.submit_label || ui('Выбрать', 'Choose');
   submit.addEventListener('click', submitChoices);
   footer.appendChild(skip);
   footer.appendChild(submit);
@@ -1497,7 +1869,7 @@ function submitChoices() {
       }
     }
   }
-  if (parts.length === 0) parts.push('Пропускаю этот шаг');
+  if (parts.length === 0) parts.push(ui('Пропускаю этот шаг', 'Skip this step'));
   sendWizard(parts.join('\n'), `[Sidebar selection for step "${data.step}"]`);
   clearChoices();
 }
@@ -1530,6 +1902,10 @@ el.viewTabs.addEventListener('click', event => {
   const tab = event.target.closest('.view-tab');
   if (tab) switchView(tab.dataset.view);
 });
+el.dashboardLocale?.addEventListener('click', event => {
+  const button = event.target.closest('[data-locale]');
+  if (button) setDashboardLocale(button.dataset.locale);
+});
 el.mapFitBtn.addEventListener('click', () => state.map?.fit(undefined, 36));
 
 // Mobile top-bar buttons
@@ -1545,7 +1921,7 @@ window.addEventListener('resize', () => {
   }
   // On mobile, mirror the current mode into the top bar.
   if (state.mode === 'game' || state.mode === 'wizard') {
-    showMobileChat(state.mode === 'wizard' ? 'Создание кампании' : state.campaign);
+    showMobileChat(state.mode === 'wizard' ? ui('Создание кампании', 'Campaign creation') : state.campaign);
   } else {
     showMobileSidebar();
   }
@@ -1559,16 +1935,23 @@ function modelMeta(model) {
   const context = Number(model.context_window);
   const contextLabel = Number.isFinite(context) ? `${Math.round(context / 1000)}k` : '';
   if (model.id === 'gpt-5.3-codex-spark') {
-    return [contextLabel, 'Pro', 'отдельный лимит', 'сверхбыстрый'].filter(Boolean).join(' · ');
+    return [
+      contextLabel,
+      'Pro',
+      ui('отдельный лимит', 'separate limit'),
+      ui('сверхбыстрый', 'ultrafast'),
+    ].filter(Boolean).join(' · ');
   }
-  if (model.runtime === 'codex') return [contextLabel, 'стандартный лимит'].filter(Boolean).join(' · ');
+  if (model.runtime === 'codex') {
+    return [contextLabel, ui('стандартный лимит', 'standard limit')].filter(Boolean).join(' · ');
+  }
   return [contextLabel, 'Claude Agent SDK'].filter(Boolean).join(' · ');
 }
 
 function renderRuntimeControls() {
   const current = state.availableModels.find(model => model.id === state.currentModel);
   const runtime = state.runtimes.find(item => item.id === current?.runtime);
-  const label = current?.display_name || 'Выбрать модель';
+  const label = current?.display_name || ui('Выбрать модель', 'Choose model');
   const provider = runtime?.display_name || '';
   el.modelPickerBtn.querySelector('.model-picker-label').textContent = provider ? `${provider} · ${label}` : label;
   el.modelPickerBtn.title = provider ? `${provider}: ${label}` : label;
@@ -1606,7 +1989,10 @@ function reconnectRuntime() {
     state.attempt = 0;
     connect(wizardUrl());
     const model = state.availableModels.find(item => item.id === state.currentModel);
-    addActivity(`Модель визарда переключена: ${model?.display_name || state.currentModel}`);
+    addActivity(ui(
+      `Модель визарда переключена: ${model?.display_name || state.currentModel}`,
+      `Wizard model switched: ${model?.display_name || state.currentModel}`
+    ));
     return;
   }
   if (state.mode !== 'game' || !state.campaign) return;
@@ -1666,6 +2052,7 @@ document.addEventListener('keydown', event => {
 
 // ─────────────────────────── Boot ─────────────────────────────────────────
 showWelcome();
+setDashboardLocale(state.dashboardLocale, { persist: false });
 loadModels();
 pollCampaigns();
 setInterval(pollCampaigns, CAMPAIGN_POLL_MS);

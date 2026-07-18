@@ -257,6 +257,16 @@ def test_snapshot_is_structured_json_safe_and_uses_canonical_player_data(tmp_pat
         ],
         "total_quantity": 32,
         "total_weight": 4.7,
+        "capacity": {
+            "weight_kg": 4.7,
+            "capacity_kg": 98.0,
+            "usage_percent": 4.8,
+            "tier": "normal",
+            "speed_penalty_ft": 0,
+            "attack_disadvantage": False,
+            "immobile": False,
+            "capacity_source": "strength",
+        },
     }
     assert "Stale edge item" not in {
         item["name"] for item in snapshot["inventory"]["items"]

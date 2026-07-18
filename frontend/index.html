@@ -77,13 +77,17 @@
         <div id="char-panel" class="char-panel" hidden></div>
 
         <nav id="view-tabs" class="view-tabs" aria-label="Разделы кампании" hidden>
-          <button class="view-tab active" data-view="chat"><span>✦</span> Игра</button>
-          <button class="view-tab" data-view="character"><span>◈</span> Досье</button>
-          <button class="view-tab" data-view="inventory"><span>▦</span> Снаряжение</button>
-          <button class="view-tab" data-view="quests"><span>◎</span> Задания</button>
-          <button class="view-tab" data-view="party"><span>♟</span> Люди</button>
-          <button class="view-tab" data-view="wiki"><span>⌘</span> Энциклопедия</button>
-          <button class="view-tab" data-view="map"><span>⌖</span> Карта</button>
+          <button class="view-tab active" data-view="chat"><span>✦</span><span class="view-tab-label" data-tab-label="chat">Игра</span></button>
+          <button class="view-tab" data-view="character"><span>◈</span><span class="view-tab-label" data-tab-label="character">Досье</span></button>
+          <button class="view-tab" data-view="inventory"><span>▦</span><span class="view-tab-label" data-tab-label="inventory">Снаряжение</span></button>
+          <button class="view-tab" data-view="quests"><span>◎</span><span class="view-tab-label" data-tab-label="quests">Задания</span></button>
+          <button class="view-tab" data-view="party"><span>♟</span><span class="view-tab-label" data-tab-label="party">НПС и группа</span></button>
+          <button class="view-tab" data-view="wiki"><span>⌘</span><span class="view-tab-label" data-tab-label="wiki">Энциклопедия</span></button>
+          <button class="view-tab" data-view="map"><span>⌖</span><span class="view-tab-label" data-tab-label="map">Карта</span></button>
+          <div id="dashboard-locale" class="dashboard-locale" role="group" aria-label="Язык интерфейса">
+            <button class="dashboard-locale-btn active" type="button" data-locale="ru" aria-pressed="true">RU</button>
+            <button class="dashboard-locale-btn" type="button" data-locale="en" aria-pressed="false">EN</button>
+          </div>
         </nav>
 
         <!-- Rate / session limit warning -->

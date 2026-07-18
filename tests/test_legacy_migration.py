@@ -65,6 +65,12 @@ def test_legacy_migration_is_complete_and_idempotent(tmp_path):
         edge for edge in world["edges"] if edge["type"] == "connected"
     ]) == 2
     assert any(edge["type"] == "at" for edge in world["edges"])
+    assert {
+        "from": "player:active",
+        "to": "npc:guide",
+        "type": "known_by",
+        "data": {"source": "legacy-migration"},
+    } in world["edges"]
     assert json.loads(
         (tmp_path / "campaign-overview.json").read_text(encoding="utf-8")
     )["modules"] == {"world-travel": True}

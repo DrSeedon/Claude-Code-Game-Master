@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-from world_graph import WorldGraph
+from world_graph import WorldGraph, calculate_inventory_load
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +31,46 @@ def populated_graph(tmp_path):
     g.add_edge("location:tavern", "location:market", "connects")
     g.add_edge("player:hero", "item:sword", "has")
     return g
+
+
+@pytest.mark.parametrize(
+    ("weight", "tier", "speed_penalty_ft", "attack_disadvantage", "immobile"),
+    [
+        (70, "normal", 0, False, False),
+        (71, "encumbered", -5, False, False),
+        (92, "heavy", -10, False, False),
+        (113, "overloaded", -15, True, False),
+        (141, "immobile", None, True, True),
+    ],
+)
+def test_inventory_load_uses_strength_capacity_and_encumbrance_tiers(
+    weight,
+    tier,
+    speed_penalty_ft,
+    attack_disadvantage,
+    immobile,
+):
+    load = calculate_inventory_load(weight, strength=10)
+
+    assert load["capacity_kg"] == 70
+    assert load["tier"] == tier
+    assert load["speed_penalty_ft"] == speed_penalty_ft
+    assert load["attack_disadvantage"] is attack_disadvantage
+    assert load["immobile"] is immobile
+
+
+def test_inventory_load_prefers_explicit_capacity_and_rejects_missing_limit():
+    assert calculate_inventory_load(20, strength=10, capacity_kg=50) == {
+        "weight_kg": 20.0,
+        "capacity_kg": 50.0,
+        "usage_percent": 40.0,
+        "tier": "normal",
+        "speed_penalty_ft": 0,
+        "attack_disadvantage": False,
+        "immobile": False,
+        "capacity_source": "explicit",
+    }
+    assert calculate_inventory_load(20, strength=None) is None
 
 
 # ---------------------------------------------------------------------------
