@@ -117,7 +117,8 @@ connection, party movement, time tick, consequence resolution, and quest updates
 - Ammo auto-deduction from inventory
 
 ## Dashboard
-`tools/dm-dashboard/renderer.py` reads exclusively from world.json + campaign-overview.json.
+The integrated FastAPI web UI reads player-safe projections from `world.json`
+through `backend/campaign_views.py` and `backend/map_view.py`.
 
 ## What Was Deleted
 - lib/npc_manager.py, location_manager.py, note_manager.py, plot_manager.py (~2300 lines)
