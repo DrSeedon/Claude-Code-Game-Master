@@ -23,6 +23,7 @@ const STREAM_PARSE_INTERVAL = 50;  // ms between visible re-parses (Orchestra _S
 const BASE_RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_DELAY_MS = 10000;
 const MODEL_EFFORTS_STORAGE_KEY = 'dm-model-reasoning-efforts';
+const RUNTIME_SELECTION_STORAGE_KEY = 'dm-runtime-selection';
 
 const TOOL_BLOCK_RE = /```tool:\w+\s*\n\{[\s\S]*?\}\s*\n```/g;  // wizard strips inline tool blocks
 
@@ -45,6 +46,8 @@ const el = {
   titleText: document.getElementById('chat-title-text'),
   connStatus: document.getElementById('conn-status'),
   connLabel: document.querySelector('#conn-status .conn-label'),
+  agentStatus: document.getElementById('agent-status'),
+  mobileAgentStatus: document.getElementById('mobile-agent-status'),
   modelPickerBtn: document.getElementById('model-picker-btn'),
   modelPickerLabel: document.querySelector('#model-picker-btn .model-picker-label'),
   modelMenu: document.getElementById('model-menu'),
@@ -92,6 +95,7 @@ const state = {
   reconnectTimer: null,
   connStatus: 'disconnected',
   generating: false,     // a turn is in flight (show waiting indicator)
+  agentStatus: 'idle',
   localEcho: new Set(),  // "role:content" keys to dedup on history replay
   wizardFirstMsgSent: false,   // inject sidebar-preset context on first wizard message
   wizardHandoff: null,   // recent wizard transcript sent once after a model switch
@@ -136,6 +140,29 @@ function persistModelEfforts() {
     localStorage.setItem(MODEL_EFFORTS_STORAGE_KEY, JSON.stringify(state.modelEfforts));
   } catch {
     // Browser storage is optional; the current tab still keeps the selection.
+  }
+}
+
+function readStoredRuntimeSelection() {
+  try {
+    const value = JSON.parse(localStorage.getItem(RUNTIME_SELECTION_STORAGE_KEY) || 'null');
+    return value && typeof value.model === 'string' && typeof value.runtime === 'string'
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistRuntimeSelection() {
+  if (!state.currentModel || !state.currentProvider) return;
+  try {
+    localStorage.setItem(RUNTIME_SELECTION_STORAGE_KEY, JSON.stringify({
+      model: state.currentModel,
+      runtime: state.currentProvider,
+    }));
+  } catch {
+    // The current tab still keeps the selected runtime when storage is disabled.
   }
 }
 
@@ -505,7 +532,35 @@ function sendChat(text) {
   onSend();
 }
 
-function addUserMessage(content) {
+function messageTime(timestamp) {
+  const date = timestamp ? new Date(timestamp) : new Date();
+  const valid = Number.isNaN(date.getTime()) ? new Date() : date;
+  return {
+    iso: valid.toISOString(),
+    short: valid.toLocaleTimeString(
+      state.dashboardLocale === 'en' ? 'en-GB' : 'ru-RU',
+      { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+    ),
+    full: valid.toLocaleString(state.dashboardLocale === 'en' ? 'en-GB' : 'ru-RU'),
+  };
+}
+
+function addBubbleTime(node, timestamp, { replace = false } = {}) {
+  let time = node.querySelector('.chat-time');
+  if (time && !replace) return time;
+  if (!time) {
+    time = document.createElement('time');
+    time.className = 'chat-time';
+    node.appendChild(time);
+  }
+  const value = messageTime(timestamp);
+  time.dateTime = value.iso;
+  time.textContent = value.short;
+  time.title = value.full;
+  return time;
+}
+
+function addUserMessage(content, timestamp = null) {
   removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-user';
@@ -514,11 +569,12 @@ function addUserMessage(content) {
   body.className = 'msg-body';
   body.textContent = content;
   wrap.appendChild(body);
+  addBubbleTime(wrap, timestamp);
   insertBeforeStream(wrap);
   trimMessages(); maybeAutoScroll();
 }
 
-function addDmMessage(content) {
+function addDmMessage(content, timestamp = null) {
   removeChatStart();
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-dm';
@@ -530,35 +586,224 @@ function addDmMessage(content) {
   md.innerHTML = renderMarkdown(cleanWizardText(content));
   body.appendChild(md);
   wrap.appendChild(body);
+  addBubbleTime(wrap, timestamp);
   insertBeforeStream(wrap);
   trimMessages(); maybeAutoScroll();
 }
 
-function addActivity(content) {
-  const div = document.createElement('div');
-  div.className = 'msg-activity';
-  const isLong = content.length > ACTIVITY_COLLAPSE_LEN;
-  if (isLong) {
-    div.classList.add('clickable');
-    let expanded = false;
-    const render = () => {
-      const shown = expanded ? content : content.slice(0, ACTIVITY_COLLAPSE_LEN) + '…';
-      const toggle = expanded ? ui('[свернуть]', '[collapse]') : ui('[показать всё]', '[show all]');
-      div.innerHTML = `<span>${escapeHtml(shown)}</span><span class="activity-toggle"> ${toggle}</span>`;
-    };
-    render();
-    div.addEventListener('click', () => { expanded = !expanded; render(); });
+function toolIcon(name) {
+  const short = String(name || '').split('__').pop();
+  if (/bash|shell|command/i.test(short)) return '›_';
+  if (/read/i.test(short)) return '▤';
+  if (/write|edit|patch|file.?change/i.test(short)) return '✎';
+  if (/grep|glob|search/i.test(short)) return '⌕';
+  if (/web/i.test(short)) return '◎';
+  if (/mcp/i.test(name)) return '⌘';
+  return '⚙';
+}
+
+function stripShellWrapper(command) {
+  let value = String(command || '').trim();
+  const shell = value.match(/^(?:\/usr\/bin\/|\/bin\/)?(?:zsh|bash|sh)\s+-lc\s+([\s\S]+)$/);
+  if (shell) value = shell[1].trim();
+  if (
+    value.length > 1
+    && ((value.startsWith("'") && value.endsWith("'"))
+      || (value.startsWith('"') && value.endsWith('"')))
+  ) {
+    value = value.slice(1, -1);
+  }
+  return value;
+}
+
+function toolPresentation(content, metadata = {}) {
+  const raw = String(content || '').replace(/^🔧\s*/, '').trim();
+  let name = String(metadata.tool_name || metadata.short_name || '').trim();
+  let body = raw;
+  if (!name) {
+    const legacyCall = raw.match(/^([^:(]{1,80})\(([\s\S]*)\)$/);
+    const colon = raw.match(/^([A-Za-z][\w.-]*(?:__[\w.-]+)*):\s*([\s\S]*)$/);
+    if (colon) {
+      name = colon[1];
+      body = colon[2];
+    } else if (legacyCall) {
+      name = legacyCall[1].trim();
+      body = legacyCall[2];
+    }
   } else {
-    div.textContent = content;
+    const prefix = `${name}:`;
+    if (raw.startsWith(prefix)) body = raw.slice(prefix.length).trim();
+  }
+  if (!name) return null;
+
+  let detail = body;
+  try {
+    const parsed = JSON.parse(body);
+    detail = parsed.command
+      || parsed.query
+      || parsed.file_path
+      || parsed.path
+      || parsed.pattern
+      || parsed.message
+      || body;
+  } catch {
+    // Raw shell commands are already the most useful representation.
+  }
+  if (/bash|shell|command/i.test(name)) detail = stripShellWrapper(detail);
+  const shortName = String(metadata.short_name || name.split('__').pop() || name);
+  return { name, shortName, detail: String(detail || ''), raw: body };
+}
+
+function findPendingTool(toolUseId = '') {
+  const cards = [...el.chat.querySelectorAll('.tool-card[data-tool-status="running"]')];
+  if (toolUseId) {
+    const exact = cards.find(card => card.dataset.toolUseId === toolUseId);
+    if (exact) return exact;
+  }
+  return cards.at(-1) || null;
+}
+
+function createToolCard(content, metadata = {}, timestamp = null) {
+  const tool = toolPresentation(content, metadata);
+  if (!tool) return null;
+  const card = document.createElement('details');
+  card.className = 'msg-activity tool-card';
+  card.dataset.toolStatus = 'running';
+  card.dataset.toolUseId = String(metadata.tool_use_id || '');
+  card.dataset.toolName = tool.name;
+
+  const summary = document.createElement('summary');
+  summary.className = 'tool-card-summary';
+  const icon = document.createElement('span');
+  icon.className = 'tool-card-icon';
+  icon.textContent = toolIcon(tool.name);
+  const copy = document.createElement('span');
+  copy.className = 'tool-card-copy';
+  const name = document.createElement('span');
+  name.className = 'tool-card-name';
+  name.textContent = tool.shortName;
+  const preview = document.createElement('span');
+  preview.className = 'tool-card-preview';
+  preview.textContent = tool.detail || ui('Вызов инструмента', 'Tool call');
+  const resultSummary = document.createElement('span');
+  resultSummary.className = 'tool-card-result-summary';
+  copy.append(name, preview, resultSummary);
+  const status = document.createElement('span');
+  status.className = 'tool-card-status';
+  status.innerHTML = `<span class="tool-status-dot"></span><span>${ui('выполняется', 'running')}</span>`;
+  const chevron = document.createElement('span');
+  chevron.className = 'tool-card-chevron';
+  chevron.textContent = '⌄';
+  summary.append(icon, copy, status);
+  const time = addBubbleTime(summary, timestamp);
+  time.classList.add('tool-card-time');
+  summary.appendChild(chevron);
+
+  const details = document.createElement('div');
+  details.className = 'tool-card-details';
+  const commandLabel = document.createElement('div');
+  commandLabel.className = 'tool-detail-label';
+  commandLabel.textContent = ui('Вызов', 'Call');
+  const command = document.createElement('pre');
+  command.className = 'tool-command';
+  command.textContent = tool.detail || tool.raw;
+  const result = document.createElement('div');
+  result.className = 'tool-result';
+  result.hidden = true;
+  details.append(commandLabel, command, result);
+  card.append(summary, details);
+  insertBeforeStream(card);
+  return card;
+}
+
+function attachToolResult(card, content, metadata = {}, timestamp = null) {
+  if (!card) return false;
+  const resultText = String(content || '').replace(/^[✅❌]\s*/, '');
+  const exitCode = metadata.exit_code;
+  const failed = Boolean(metadata.is_error)
+    || (exitCode != null && Number(exitCode) !== 0)
+    || String(content || '').trim().startsWith('❌');
+  card.dataset.toolStatus = failed ? 'error' : 'success';
+  const status = card.querySelector('.tool-card-status');
+  status.innerHTML = `<span class="tool-status-dot"></span><span>${failed
+    ? ui('ошибка', 'failed')
+    : ui('готово', 'done')}</span>`;
+
+  const lines = resultText ? resultText.split(/\r?\n/).length : 0;
+  const summary = card.querySelector('.tool-card-result-summary');
+  summary.textContent = resultText
+    ? ui(
+      `${lines} ${lines === 1 ? 'строка' : lines < 5 ? 'строки' : 'строк'} вывода`,
+      `${lines} output line${lines === 1 ? '' : 's'}`
+    )
+    : ui('Без вывода', 'No output');
+
+  const result = card.querySelector('.tool-result');
+  result.hidden = false;
+  result.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'tool-detail-label';
+  label.textContent = failed ? ui('Ошибка', 'Error') : ui('Результат', 'Result');
+  const pre = document.createElement('pre');
+  pre.className = 'tool-output';
+  pre.textContent = resultText || ui('Команда завершилась без вывода.', 'Command completed without output.');
+  result.append(label, pre);
+  addBubbleTime(card.querySelector('.tool-card-summary'), timestamp, { replace: true });
+  return true;
+}
+
+function addActivityNote(content, activityType = 'activity', timestamp = null) {
+  const div = document.createElement('div');
+  div.className = `msg-activity activity-note activity-${activityType}`;
+  const icon = document.createElement('span');
+  icon.className = 'activity-note-icon';
+  icon.textContent = activityType === 'thinking' ? '◇'
+    : activityType === 'file_change' ? '✎'
+      : '◆';
+  const text = document.createElement('span');
+  text.className = 'activity-note-text';
+  text.textContent = String(content || '');
+  div.append(icon, text);
+  addBubbleTime(div, timestamp);
+  if (String(content || '').length > ACTIVITY_COLLAPSE_LEN) {
+    div.classList.add('clickable', 'collapsed');
+    div.addEventListener('click', () => div.classList.toggle('collapsed'));
   }
   insertBeforeStream(div);
+}
+
+function addActivity(content, metadata = {}, timestamp = null) {
+  let activityType = String(metadata.activity_type || '');
+  const tool = toolPresentation(content, metadata);
+  if (!activityType && tool) activityType = 'tool_use';
+  if (!activityType && /^[✅❌]\s*/.test(String(content || ''))) activityType = 'tool_result';
+  if (!activityType && findPendingTool()) activityType = 'tool_result';
+
+  if (activityType === 'tool_use') {
+    createToolCard(content, metadata, timestamp);
+  } else if (activityType === 'tool_result') {
+    const card = findPendingTool(String(metadata.tool_use_id || ''));
+    if (!attachToolResult(card, content, metadata, timestamp)) {
+      const fallback = createToolCard(
+        `${ui('Инструмент', 'Tool')}: ${ui('Результат без исходного вызова', 'Result without original call')}`,
+        metadata,
+        timestamp
+      );
+      attachToolResult(fallback, content, metadata, timestamp);
+    }
+  } else {
+    addActivityNote(content, activityType || 'activity', timestamp);
+  }
   trimMessages(); maybeAutoScroll();
 }
 
-function addError(content) {
+function addError(content, timestamp = null) {
   const div = document.createElement('div');
   div.className = 'msg-error';
-  div.textContent = '⚠ ' + content;
+  const text = document.createElement('span');
+  text.textContent = '⚠ ' + content;
+  div.appendChild(text);
+  addBubbleTime(div, timestamp);
   insertBeforeStream(div);
   trimMessages(); maybeAutoScroll();
 }
@@ -586,6 +831,7 @@ function hideWaiting() {
 
 function setGenerating(on) {
   state.generating = on;
+  setAgentStatus(on ? 'running' : 'idle');
   el.stopBtn.hidden = !on || state.mode !== 'game';
   el.modelPickerBtn.disabled = on;
   el.mobileModelBtn.disabled = on;
@@ -617,6 +863,41 @@ function setConnStatus(s) {
   el.connLabel.textContent = STATUS_LABEL[state.dashboardLocale][s] || s;
   updateInputEnabled();
 }
+
+function setAgentStatus(status, payload = {}) {
+  const next = ['running', 'idle', 'waiting', 'error'].includes(status) ? status : 'idle';
+  state.agentStatus = next;
+  for (const node of [el.agentStatus, el.mobileAgentStatus]) {
+    node.className = `agent-status${node === el.mobileAgentStatus ? ' mobile-agent-status' : ''} ${next}`;
+    node.querySelector('.agent-status-icon').textContent = {
+      running: '⚡', idle: '☕', waiting: '⏳', error: '!',
+    }[next];
+    node.querySelector('.agent-status-label').textContent = next;
+  }
+
+  const model = state.availableModels.find(item => item.id === payload.model);
+  if (model && model.runtime === payload.runtime) {
+    const selectionChanged = (
+      state.currentModel !== model.id || state.currentProvider !== model.runtime
+    );
+    state.currentModel = model.id;
+    state.currentProvider = model.runtime;
+    persistRuntimeSelection();
+    if (selectionChanged) renderRuntimeControls();
+  }
+  const activeModel = model?.display_name
+    || state.availableModels.find(item => item.id === state.currentModel)?.display_name
+    || payload.model
+    || state.currentModel
+    || '';
+  const title = activeModel
+    ? `${next} · ${activeModel}`
+    : ui(`Статус AI-агента: ${next}`, `AI agent status: ${next}`);
+  el.agentStatus.title = title;
+  el.mobileAgentStatus.title = title;
+  if (activeModel) el.mobileModelBtn.textContent = `${next} · ${activeModel}`;
+}
+
 function updateInputEnabled() {
   const connected = state.connStatus === 'connected';
   el.input.disabled = !connected;
@@ -626,16 +907,23 @@ function updateInputEnabled() {
 // Context usage indicator ---------------------------------------------------
 function updateCtxUsage(percent, used, total) {
   const pct = Math.max(0, Math.min(100, percent || 0));
+  const level = pct > 80 ? 'critical' : pct > 50 ? 'warning' : 'safe';
   el.ctxUsage.hidden = false;
+  el.ctxUsage.dataset.level = level;
   el.ctxFill.style.width = pct + '%';
-  el.ctxFill.style.background = pct > 80 ? 'var(--danger)' : pct >= 50 ? 'var(--warn)' : 'var(--ok)';
   el.ctxLabel.textContent = pct + '% ctx';
+  const range = level === 'critical'
+    ? ui('критично: 81–100%', 'critical: 81–100%')
+    : level === 'warning'
+      ? ui('внимание: 51–80%', 'warning: 51–80%')
+      : ui('норма: 0–50%', 'normal: 0–50%');
   el.ctxUsage.title = total
-    ? `${(used || 0).toLocaleString()} / ${total.toLocaleString()} ${ui('токенов контекста', 'context tokens')}`
-    : ui('Использование контекста', 'Context usage');
+    ? `${(used || 0).toLocaleString()} / ${total.toLocaleString()} ${ui('токенов контекста', 'context tokens')} · ${range}`
+    : `${ui('Использование контекста', 'Context usage')} · ${range}`;
 }
 function hideCtxUsage() {
   el.ctxUsage.hidden = true;
+  el.ctxUsage.dataset.level = 'safe';
   el.ctxFill.style.width = '0';
   el.ctxLabel.textContent = '0%';
 }
@@ -813,20 +1101,20 @@ function handleEvent(data) {
 
     case 'text': {
       const text = stream.active ? finalizeStream(data.content) : data.content;
-      addDmMessage(text);
+      addDmMessage(text, data.timestamp);
       break;
     }
 
     case 'activity':
       // finalize any in-flight stream first, then the tool line (correct order)
       if (stream.active) { const t = finalizeStream(); if (t.trim()) addDmMessage(t); }
-      addActivity(data.content);
+      addActivity(data.content, data.metadata || {}, data.timestamp);
       break;
 
     case 'error':
       resetStream();
       setGenerating(false);
-      addError(data.content);
+      addError(data.content, data.timestamp);
       break;
 
     case 'history':
@@ -839,6 +1127,11 @@ function handleEvent(data) {
 
     case 'usage':
       updateCtxUsage(data.percent, data.used, data.total);
+      break;
+
+    case 'agent_status':
+      setGenerating(data.status === 'running');
+      setAgentStatus(data.status, data);
       break;
 
     case 'rate_limit':
@@ -880,10 +1173,10 @@ function renderHistory(messages) {
     if (typeof m.id === 'number' && m.id > state.afterId) state.afterId = m.id;
     const role = m.type === 'user_message' ? 'user' : 'assistant';
     if (state.localEcho.has(`${role}:${m.content}`)) continue;
-    if (m.type === 'user_message') addUserMessage(m.content);
-    else if (m.type === 'activity') addActivity(m.content);
-    else if (m.type === 'error') addError(m.content);
-    else addDmMessage(m.content);  // 'text'
+    if (m.type === 'user_message') addUserMessage(m.content, m.timestamp);
+    else if (m.type === 'activity') addActivity(m.content, m.metadata || {}, m.timestamp);
+    else if (m.type === 'error') addError(m.content, m.timestamp);
+    else addDmMessage(m.content, m.timestamp);  // 'text'
   }
   maybeAutoScroll();
 }
@@ -1838,6 +2131,7 @@ function onWizardComplete(campaignName) {
   btn.addEventListener('click', () => selectCampaign(campaignName));
   body.appendChild(btn);
   wrap.appendChild(body);
+  addBubbleTime(wrap, null);
   insertBeforeStream(wrap);
   maybeAutoScroll();
   pollCampaigns();  // campaign shows up in the sidebar
@@ -2109,7 +2403,7 @@ function renderRuntimeControls() {
   const provider = runtime?.display_name || '';
   el.modelPickerBtn.querySelector('.model-picker-label').textContent = provider ? `${provider} · ${label}` : label;
   el.modelPickerBtn.title = provider ? `${provider}: ${label}` : label;
-  el.mobileModelBtn.textContent = label;
+  el.mobileModelBtn.textContent = `${state.agentStatus} · ${label}`;
   el.mobileModelBtn.title = provider ? `${provider}: ${label}` : label;
   el.modelMenu.innerHTML = state.runtimes.map(runtimeItem => {
     const models = modelsForRuntime(runtimeItem.id);
@@ -2198,8 +2492,13 @@ async function loadModels() {
   try { data = await (await fetch('/api/models')).json(); } catch { return; }
   state.runtimes = Array.isArray(data.runtimes) ? data.runtimes : [];
   state.availableModels = Array.isArray(data.models) ? data.models : [];
-  state.currentProvider = data.default?.runtime || state.runtimes[0]?.id || null;
-  state.currentModel = data.default?.model || modelsForRuntime(state.currentProvider)[0]?.id || null;
+  const saved = readStoredRuntimeSelection();
+  const savedModel = state.availableModels.find(
+    model => model.id === saved?.model && model.runtime === saved?.runtime
+  );
+  state.currentProvider = savedModel?.runtime || data.default?.runtime || state.runtimes[0]?.id || null;
+  state.currentModel = savedModel?.id || data.default?.model || modelsForRuntime(state.currentProvider)[0]?.id || null;
+  persistRuntimeSelection();
   renderRuntimeControls();
   renderEffortSettings();
 }
@@ -2213,6 +2512,7 @@ el.modelMenu.addEventListener('click', event => {
   if (!model || model.id === state.currentModel) { closeModelMenu(); return; }
   state.currentModel = model.id;
   state.currentProvider = model.runtime;
+  persistRuntimeSelection();
   closeModelMenu();
   renderRuntimeControls();
   reconnectRuntime();

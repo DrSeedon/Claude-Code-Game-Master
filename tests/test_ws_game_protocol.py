@@ -181,6 +181,14 @@ def test_no_history_message_when_log_empty(client, tmp_path, sent):
     _campaign_dir(tmp_path, "fresh-campaign")
 
     with client.websocket_connect("/ws/game?campaign=fresh-campaign") as ws:
+        status = ws.receive_json()
+        assert status == {
+            "type": "agent_status",
+            "status": "idle",
+            "runtime": "claude",
+            "model": "claude-sonnet-5",
+            "started_at": None,
+        }
         ws.send_text("hello")
         # No history frame should have been queued before our own message round-trips —
         # nothing to assert-receive here since no history was sent; absence of a crash

@@ -103,6 +103,26 @@ def test_event_schema_has_type_content_timestamp(campaign_dir):
     assert stored == event
 
 
+def test_event_metadata_is_preserved_when_provided(campaign_dir):
+    event = append_event(
+        campaign_dir,
+        "activity",
+        "Bash: pwd",
+        metadata={
+            "activity_type": "tool_use",
+            "tool_name": "Bash",
+            "tool_use_id": "tool-1",
+        },
+    )
+
+    assert event["metadata"] == {
+        "activity_type": "tool_use",
+        "tool_name": "Bash",
+        "tool_use_id": "tool-1",
+    }
+    assert read_events(campaign_dir)[0] == event
+
+
 def test_concurrent_appends_get_unique_monotonic_ids(campaign_dir):
     with ThreadPoolExecutor(max_workers=8) as pool:
         events = list(
@@ -139,3 +159,20 @@ def test_append_finds_id_before_event_larger_than_tail_window(campaign_dir):
     event = append_event(campaign_dir, "text", "next")
 
     assert event["id"] == 42
+
+
+def test_append_tail_scan_handles_utf8_boundary_inside_multibyte_text(campaign_dir):
+    path = campaign_dir / EVENT_LOG_FILENAME
+    prefix = json.dumps(
+        {"id": 52, "type": "text", "content": ""},
+        ensure_ascii=False,
+    ).encode("utf-8")[:-2]
+    payload = prefix + ("я" * (40 * 1024)).encode("utf-8") + b'"}\nnot-json'
+    start = len(payload) - (64 * 1024)
+    if (start - len(prefix)) % 2 == 0:
+        payload += b"x"
+    path.write_bytes(payload + b"\n")
+
+    event = append_event(campaign_dir, "text", "next")
+
+    assert event["id"] == 53

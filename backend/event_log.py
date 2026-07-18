@@ -7,9 +7,10 @@ Monotonic ids let clients request replay via `after_id` on reconnect.
 import fcntl
 import json
 import os
-from pathlib import Path
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, List, Optional
 
 EVENT_LOG_FILENAME = "events.jsonl"
 
@@ -69,8 +70,8 @@ def read_current_session_events(
     ]
 
 
-def _last_id_from_tail(file_obj, chunk_size: int = 64 * 1024) -> int:
-    """Find the last valid id, expanding only when one event exceeds the tail window."""
+def _last_id_from_tail(file_obj: BinaryIO, chunk_size: int = 64 * 1024) -> int:
+    """Find the last valid id without decoding from an arbitrary UTF-8 offset."""
     file_obj.seek(0, os.SEEK_END)
     end = file_obj.tell()
     if end == 0:
@@ -82,12 +83,12 @@ def _last_id_from_tail(file_obj, chunk_size: int = 64 * 1024) -> int:
         file_obj.seek(start)
         tail = file_obj.read()
         if start:
-            tail = tail.split("\n", 1)[-1]
+            tail = tail.split(b"\n", 1)[-1]
 
         for line in reversed(tail.splitlines()):
             try:
                 event_id = json.loads(line).get("id")
-            except (json.JSONDecodeError, AttributeError):
+            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
                 continue
             if isinstance(event_id, int):
                 return event_id
@@ -102,11 +103,12 @@ def append_event(
     event_type: str,
     content: str,
     timestamp: Optional[str] = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> Dict:
     """Append a single event to the log. Returns the stored event (with id)."""
     campaign_dir.mkdir(parents=True, exist_ok=True)
     path = _log_path(campaign_dir)
-    with open(path, "a+", encoding="utf-8") as f:
+    with open(path, "a+b") as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         event = {
             "id": _last_id_from_tail(f) + 1,
@@ -114,8 +116,10 @@ def append_event(
             "content": content,
             "timestamp": timestamp or _now_iso(),
         }
+        if metadata:
+            event["metadata"] = dict(metadata)
         f.seek(0, os.SEEK_END)
-        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        f.write((json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
         f.flush()
         os.fsync(f.fileno())
         fcntl.flock(f.fileno(), fcntl.LOCK_UN)

@@ -8,8 +8,9 @@ import asyncio
 import pytest
 
 import backend.game_session as game_session_module
-from backend.event_log import append_event
+from backend.event_log import append_event, read_events
 from backend.game_session import GameSession, get_or_create_session
+from backend.runtime import AgentEvent
 
 
 @pytest.fixture(autouse=True)
@@ -100,6 +101,34 @@ def test_send_starts_turn_and_marks_running(tmp_path):
     assert session.running is False
 
 
+def test_send_publishes_running_then_idle_agent_status(tmp_path, monkeypatch):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    session.provider.process_message = _fake_events
+    published = []
+    monkeypatch.setattr(
+        game_session_module.broker,
+        "publish",
+        lambda campaign, payload: published.append((campaign, payload)),
+    )
+
+    async def scenario():
+        assert session.send("hello", "system prompt") is True
+        await session._turn_task
+
+    asyncio.run(scenario())
+
+    statuses = [
+        payload
+        for campaign, payload in published
+        if campaign == "camp-a" and payload["type"] == "agent_status"
+    ]
+    assert [event["status"] for event in statuses] == ["running", "idle"]
+    assert statuses[0]["model"] == "claude-sonnet-5"
+    assert statuses[0]["runtime"] == "claude"
+    assert statuses[0]["started_at"]
+    assert statuses[1]["started_at"] is None
+
+
 def test_send_rejects_while_turn_running(tmp_path):
     session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
 
@@ -131,6 +160,46 @@ def test_send_after_turn_completes_is_allowed_again(tmp_path):
     second_ok = asyncio.run(scenario())
 
     assert second_ok is True
+
+
+def test_tool_activity_metadata_survives_event_log_round_trip(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+
+    async def tool_events(*_args, **_kwargs):
+        yield AgentEvent(
+            "tool_use",
+            "Bash: pwd",
+            {"tool_name": "Bash", "tool_use_id": "tool-1"},
+        )
+        yield AgentEvent(
+            "tool_result",
+            "/project",
+            {"tool_use_id": "tool-1", "exit_code": 0},
+        )
+
+    session.provider.process_message = tool_events
+
+    async def scenario():
+        assert session.send("inspect", "system prompt") is True
+        await session._turn_task
+
+    asyncio.run(scenario())
+
+    activities = [
+        event
+        for event in read_events(session.campaign_dir)
+        if event["type"] == "activity"
+    ]
+    assert [event["metadata"]["activity_type"] for event in activities] == [
+        "tool_use",
+        "tool_result",
+    ]
+    assert activities[0]["metadata"]["tool_name"] == "Bash"
+    assert activities[1]["metadata"]["exit_code"] == 0
+    assert {
+        event["metadata"]["tool_use_id"]
+        for event in activities
+    } == {"tool-1"}
 
 
 def test_hibernate_closes_provider_after_idle_threshold(tmp_path, monkeypatch):

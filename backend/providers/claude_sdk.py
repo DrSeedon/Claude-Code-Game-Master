@@ -187,12 +187,24 @@ class ClaudeSDKProvider:
                             inp = str(block.input)
                         yield AgentEvent(
                             "tool_use",
-                            f"🔧 {block.name}({inp})",
-                            {"tool_name": block.name},
+                            f"{block.name}: {inp}",
+                            {
+                                "tool_name": block.name,
+                                "short_name": block.name.rsplit("__", 1)[-1],
+                                "tool_use_id": str(getattr(block, "id", "") or ""),
+                            },
                         )
                     elif isinstance(block, ToolResultBlock):
-                        prefix = "❌" if block.is_error else "✅"
-                        yield AgentEvent("tool_result", f"{prefix} {_extract_tool_result(block)}")
+                        yield AgentEvent(
+                            "tool_result",
+                            _extract_tool_result(block),
+                            {
+                                "tool_use_id": str(
+                                    getattr(block, "tool_use_id", "") or ""
+                                ),
+                                "is_error": bool(block.is_error),
+                            },
+                        )
             elif isinstance(msg, ResultMessage):
                 if msg.session_id:
                     self._session_id = msg.session_id

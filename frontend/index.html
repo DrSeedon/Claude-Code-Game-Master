@@ -19,6 +19,9 @@
     <header class="mobile-header">
       <button class="mobile-back-btn" id="mobile-back" aria-label="Назад" hidden>←</button>
       <span class="mobile-title" id="mobile-title">🎲 DM Game Master</span>
+      <span id="mobile-agent-status" class="agent-status mobile-agent-status idle" title="Статус AI-агента">
+        <span class="agent-status-icon">☕</span><span class="agent-status-label">idle</span>
+      </span>
       <button class="mobile-model-btn model-picker-trigger" id="mobile-model-btn" aria-label="Выбрать модель" hidden></button>
       <button class="mobile-settings-btn" id="mobile-settings-btn" aria-label="Глобальные настройки">⚙</button>
       <button class="mobile-new-btn" id="mobile-new-btn" aria-label="Новая кампания">+</button>
@@ -59,6 +62,9 @@
             <span id="chat-title-text">Кампания</span>
             <span id="conn-status" class="conn-status" title="Статус соединения">
               <span class="conn-dot"></span><span class="conn-label"></span>
+            </span>
+            <span id="agent-status" class="agent-status idle" title="Статус AI-агента">
+              <span class="agent-status-icon">☕</span><span class="agent-status-label">idle</span>
             </span>
           </div>
           <div class="chat-controls">

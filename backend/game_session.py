@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,7 @@ class GameSession:
         self.provider = self._build_provider()
         self.campaign_dir = self.project_root / "world-state" / "campaigns" / campaign
         self.running = False
+        self._turn_started_at: str | None = None
         self._turn_task: asyncio.Task[None] | None = None
         self._last_turn_end_at = 0.0
         self._mutation_lock = asyncio.Lock()
@@ -188,6 +190,15 @@ class GameSession:
         model = self.registry.get_model(model_name)
         self.configure(model.runtime_id, model_name)
 
+    def status_event(self) -> dict[str, Any]:
+        return {
+            "type": "agent_status",
+            "status": "running" if self.running else "idle",
+            "runtime": self.runtime_id,
+            "model": self.model_name,
+            "started_at": self._turn_started_at,
+        }
+
     async def reset_session(self) -> dict[str, Any] | None:
         if self.running:
             return None
@@ -214,6 +225,8 @@ class GameSession:
         idle_for = time.monotonic() - self._last_turn_end_at if self._last_turn_end_at else 0.0
         append_event(self.campaign_dir, "user_message", user_message)
         self.running = True
+        self._turn_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        broker.publish(self.campaign, self.status_event())
         self._turn_task = asyncio.create_task(
             self._run_turn(user_message, system_prompt, mcp_servers, idle_for)
         )
@@ -259,7 +272,14 @@ class GameSession:
                         stored = append_event(self.campaign_dir, event.type, event.content)
                         broker.publish(self.campaign, stored)
                     elif event.type in {"tool_use", "tool_result", "thinking", "file_change", "activity"}:
-                        stored = append_event(self.campaign_dir, "activity", event.content)
+                        metadata = dict(event.metadata)
+                        metadata["activity_type"] = event.type
+                        stored = append_event(
+                            self.campaign_dir,
+                            "activity",
+                            event.content,
+                            metadata=metadata,
+                        )
                         broker.publish(self.campaign, stored)
                     elif event.type == "rate_limit":
                         payload = event.to_dict()
@@ -275,6 +295,7 @@ class GameSession:
             broker.publish(self.campaign, stored)
         finally:
             self.running = False
+            self._turn_started_at = None
             self._last_turn_end_at = time.monotonic()
             usage = self.provider.get_context_usage()
             if usage:
@@ -287,6 +308,7 @@ class GameSession:
                         "total": usage.total_tokens,
                     },
                 )
+            broker.publish(self.campaign, self.status_event())
             broker.publish(self.campaign, {"type": "done"})
 
     def _on_turn_done(self, task: asyncio.Task[None]) -> None:

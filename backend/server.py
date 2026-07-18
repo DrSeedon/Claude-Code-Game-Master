@@ -5,6 +5,7 @@ import json
 import re
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -578,6 +579,14 @@ async def wizard_websocket(websocket: WebSocket):
     async def send(event: dict) -> None:
         await websocket.send_text(json.dumps(event, ensure_ascii=False))
 
+    await send({
+        "type": "agent_status",
+        "status": "idle",
+        "runtime": runtime_id,
+        "model": model_name,
+        "started_at": None,
+    })
+
     async def emit_wizard_events(pending: list[dict]) -> None:
         for event in pending:
             if event["type"] == "show_choices":
@@ -601,6 +610,13 @@ async def wizard_websocket(websocket: WebSocket):
             user_message = await websocket.receive_text()
             print(f"🧙 Wizard message: {user_message[:50]}...")
             events.drain()  # clear any leftovers from a previous turn
+            await send({
+                "type": "agent_status",
+                "status": "running",
+                "runtime": runtime_id,
+                "model": model_name,
+                "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
 
             try:
                 async for event in provider.process_message(
@@ -619,8 +635,13 @@ async def wizard_websocket(websocket: WebSocket):
                         relayed = decode_wizard_events(payload["content"])
                         if relayed:
                             await emit_wizard_events(relayed)
-                        elif et != "tool_result":
-                            await send({"type": "activity", "content": payload["content"]})
+                        metadata = dict(payload.get("metadata") or {})
+                        metadata["activity_type"] = et
+                        await send({
+                            "type": "activity",
+                            "content": payload["content"],
+                            "metadata": metadata,
+                        })
                     elif et == "rate_limit":
                         await send({"type": "rate_limit", **payload})
                     await emit_wizard_events(events.drain())
@@ -629,6 +650,13 @@ async def wizard_websocket(websocket: WebSocket):
                 print(f"❌ Wizard error: {e}")
                 await send({"type": "error", "content": str(e)})
 
+            await send({
+                "type": "agent_status",
+                "status": "idle",
+                "runtime": runtime_id,
+                "model": model_name,
+                "started_at": None,
+            })
             await send({"type": "done"})
 
     except WebSocketDisconnect:
@@ -720,6 +748,7 @@ async def game_websocket(websocket: WebSocket):
         await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
 
     queue = broker.subscribe(campaign)
+    await websocket.send_text(json.dumps(session.status_event(), ensure_ascii=False))
     try:
         while True:
             receive_task = asyncio.ensure_future(websocket.receive_text())
