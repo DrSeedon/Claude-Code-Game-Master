@@ -32,6 +32,7 @@ const el = {
   mobileHeader: document.querySelector('.mobile-header'),
   mobileBack: document.getElementById('mobile-back'),
   mobileNew: document.getElementById('mobile-new-btn'),
+  mobileModelBtn: document.getElementById('mobile-model-btn'),
   mobileTitle: document.getElementById('mobile-title'),
   campaignList: document.getElementById('campaign-list'),
   newBtn: document.getElementById('new-campaign-btn'),
@@ -42,8 +43,8 @@ const el = {
   titleText: document.getElementById('chat-title-text'),
   connStatus: document.getElementById('conn-status'),
   connLabel: document.querySelector('#conn-status .conn-label'),
-  providerSelect: document.getElementById('provider-select'),
-  modelSelect: document.getElementById('model-select'),
+  modelPickerBtn: document.getElementById('model-picker-btn'),
+  modelMenu: document.getElementById('model-menu'),
   stopBtn: document.getElementById('stop-btn'),
   viewTabs: document.getElementById('view-tabs'),
   chatView: document.getElementById('chat-view'),
@@ -313,6 +314,9 @@ function hideWaiting() {
 function setGenerating(on) {
   state.generating = on;
   el.stopBtn.hidden = !on || state.mode !== 'game';
+  el.modelPickerBtn.disabled = on;
+  el.mobileModelBtn.disabled = on;
+  if (on) closeModelMenu();
   if (on) { if (!stream.active) showWaiting(); }
   else hideWaiting();
 }
@@ -382,7 +386,7 @@ function hideCharPanel() { el.charPanel.hidden = true; el.charPanel.innerHTML = 
 function showRateLimit(content, retryAfter) {
   const base = typeof retryAfter === 'number'
     ? `⏳ Лимит: подождите ~${retryAfter}с`
-    : '⏳ Достигнут лимит запросов/сессии Claude — подождите и попробуйте снова';
+    : '⏳ Достигнут лимит запросов или сессии AI-провайдера — подождите и попробуйте снова';
   el.rateLimitBar.textContent = content ? `${base}` : base;
   el.rateLimitBar.hidden = false;
 }
@@ -391,7 +395,7 @@ function hideRateLimit() { el.rateLimitBar.hidden = true; el.rateLimitBar.textCo
 // ── New session (reset Claude context, keep history) ───────────────────────
 async function newSession() {
   if (state.mode !== 'game' || !state.campaign) return;
-  if (!confirm('Сбросить контекст Claude? История чата сохранится.')) return;
+  if (!confirm('Сбросить контекст текущей AI-модели? История чата сохранится.')) return;
   const name = state.campaign;
   // Close the socket FIRST so no turn can start between the reset check and the
   // provider.reset() on the server (avoids resetting mid-turn).
@@ -420,6 +424,13 @@ function gameUrl() {
   if (state.currentProvider) params.set('provider', state.currentProvider);
   if (state.currentModel) params.set('model', state.currentModel);
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/game?${params.toString()}`;
+}
+
+function wizardUrl() {
+  const params = new URLSearchParams();
+  if (state.currentProvider) params.set('provider', state.currentProvider);
+  if (state.currentModel) params.set('model', state.currentModel);
+  return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard?${params.toString()}`;
 }
 
 function connect(url) {
@@ -453,7 +464,7 @@ function connect(url) {
     state.attempt += 1;
     state.reconnectTimer = setTimeout(() => {
       if (state.mode === 'game') connect(gameUrl());
-      else if (state.mode === 'wizard') connect(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard`);
+      else if (state.mode === 'wizard') connect(wizardUrl());
     }, delay);
   };
 }
@@ -725,6 +736,7 @@ function showMobileChat(title) {
   el.app.classList.add('show-chat');
   el.mobileTitle.textContent = title;
   el.mobileBack.hidden = false;
+  el.mobileModelBtn.hidden = false;
   el.mobileNew.hidden = true;   // no "+" while in a chat
 }
 
@@ -733,7 +745,9 @@ function showMobileSidebar() {
   el.app.classList.remove('show-chat');
   el.mobileTitle.textContent = '🎲 DM Game Master';
   el.mobileBack.hidden = true;
+  el.mobileModelBtn.hidden = true;
   el.mobileNew.hidden = false;
+  closeModelMenu();
 }
 
 function mobileBack() {
@@ -760,8 +774,7 @@ function selectCampaign(name) {
   el.titleText.textContent = name;
   el.input.placeholder = 'Введите сообщение…';
   el.wizardResetBtn.hidden = true;   // game mode: no wizard reset
-  el.modelSelect.hidden = false;     // model selectable in game
-  el.providerSelect.hidden = false;
+  el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = false;   // game mode: allow context reset
   el.viewTabs.hidden = false;
   switchView('chat');
@@ -792,8 +805,7 @@ function startWizard() {
   el.titleText.textContent = 'Создание кампании';
   el.input.placeholder = 'Опишите мир или выберите вариант…';
   el.wizardResetBtn.hidden = false;
-  el.modelSelect.hidden = true;  // model is fixed in wizard (config)
-  el.providerSelect.hidden = true;
+  el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = true;  // wizard has no game session to reset
   el.viewTabs.hidden = true;
   switchView('chat');
@@ -802,7 +814,7 @@ function startWizard() {
   showChat();
   markActiveInList();
   if (isMobile()) showMobileChat('Создание кампании');
-  connect(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard`);
+  connect(wizardUrl());
   showInitialWizardGreeting();
   el.input.focus();
 }
@@ -1081,24 +1093,58 @@ function modelsForRuntime(runtimeId) {
 }
 
 function renderRuntimeControls() {
-  el.providerSelect.innerHTML = state.runtimes.map(runtime =>
-    `<option value="${escapeHtml(runtime.id)}">${escapeHtml(runtime.display_name)}</option>`).join('');
-  el.providerSelect.value = state.currentProvider || '';
-  const models = modelsForRuntime(state.currentProvider);
-  el.modelSelect.innerHTML = models.map(model =>
-    `<option value="${escapeHtml(model.id)}">${escapeHtml(model.display_name)}</option>`).join('');
-  if (!models.some(model => model.id === state.currentModel)) state.currentModel = models[0]?.id || null;
-  el.modelSelect.value = state.currentModel || '';
+  const current = state.availableModels.find(model => model.id === state.currentModel);
+  const runtime = state.runtimes.find(item => item.id === current?.runtime);
+  const label = current?.display_name || 'Выбрать модель';
+  const provider = runtime?.display_name || '';
+  el.modelPickerBtn.querySelector('.model-picker-label').textContent = provider ? `${provider} · ${label}` : label;
+  el.modelPickerBtn.title = provider ? `${provider}: ${label}` : label;
+  el.mobileModelBtn.textContent = label;
+  el.mobileModelBtn.title = provider ? `${provider}: ${label}` : label;
+  el.modelMenu.innerHTML = state.runtimes.map(runtimeItem => {
+    const models = modelsForRuntime(runtimeItem.id);
+    if (!models.length) return '';
+    return `<section class="model-menu-group">` +
+      `<div class="model-menu-heading"><span>${escapeHtml(runtimeItem.display_name)}</span><span>${models.length}</span></div>` +
+      models.map(model => {
+        const active = model.id === state.currentModel;
+        return `<button class="model-option${active ? ' active' : ''}" type="button" role="menuitemradio" ` +
+          `aria-checked="${active}" data-model="${escapeHtml(model.id)}">` +
+          `<span class="model-option-dot"></span><span class="model-option-name">${escapeHtml(model.display_name)}</span>` +
+          `<span class="model-option-check">${active ? '✓' : ''}</span></button>`;
+      }).join('') + `</section>`;
+  }).join('');
 }
 
 function reconnectRuntime() {
-  if (state.mode !== 'game' || !state.campaign || state.generating) {
-    renderRuntimeControls();
+  if (state.generating) return;
+  if (state.mode === 'wizard') {
+    startWizard();
     return;
   }
+  if (state.mode !== 'game' || !state.campaign) return;
   closeWs();
   state.attempt = 0;
   connect(gameUrl());
+}
+
+function closeModelMenu() {
+  el.modelMenu.hidden = true;
+  el.modelPickerBtn.setAttribute('aria-expanded', 'false');
+  el.mobileModelBtn.setAttribute('aria-expanded', 'false');
+}
+
+function openModelMenu(trigger) {
+  if (state.generating || !state.availableModels.length) return;
+  if (!el.modelMenu.hidden) { closeModelMenu(); return; }
+  renderRuntimeControls();
+  el.modelMenu.hidden = false;
+  const rect = trigger.getBoundingClientRect();
+  const width = Math.min(340, window.innerWidth - 24);
+  el.modelMenu.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 80)}px`;
+  el.modelMenu.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
+  el.modelPickerBtn.setAttribute('aria-expanded', 'true');
+  el.mobileModelBtn.setAttribute('aria-expanded', 'true');
 }
 
 async function loadModels() {
@@ -1111,17 +1157,24 @@ async function loadModels() {
   renderRuntimeControls();
 }
 
-el.providerSelect.addEventListener('change', () => {
-  if (state.generating) { renderRuntimeControls(); return; }
-  state.currentProvider = el.providerSelect.value;
-  state.currentModel = modelsForRuntime(state.currentProvider)[0]?.id || null;
+el.modelPickerBtn.addEventListener('click', () => openModelMenu(el.modelPickerBtn));
+el.mobileModelBtn.addEventListener('click', () => openModelMenu(el.mobileModelBtn));
+el.modelMenu.addEventListener('click', event => {
+  const option = event.target.closest('.model-option');
+  if (!option || state.generating) return;
+  const model = state.availableModels.find(item => item.id === option.dataset.model);
+  if (!model || model.id === state.currentModel) { closeModelMenu(); return; }
+  state.currentModel = model.id;
+  state.currentProvider = model.runtime;
+  closeModelMenu();
   renderRuntimeControls();
   reconnectRuntime();
 });
-el.modelSelect.addEventListener('change', () => {
-  if (state.generating) { renderRuntimeControls(); return; }
-  state.currentModel = el.modelSelect.value;
-  reconnectRuntime();
+document.addEventListener('click', event => {
+  if (!event.target.closest('.model-picker-trigger') && !event.target.closest('#model-menu')) closeModelMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeModelMenu();
 });
 
 // ─────────────────────────── Boot ─────────────────────────────────────────

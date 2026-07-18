@@ -19,8 +19,10 @@
     <header class="mobile-header">
       <button class="mobile-back-btn" id="mobile-back" aria-label="Назад" hidden>←</button>
       <span class="mobile-title" id="mobile-title">🎲 DM Game Master</span>
+      <button class="mobile-model-btn model-picker-trigger" id="mobile-model-btn" aria-label="Выбрать модель" hidden></button>
       <button class="mobile-new-btn" id="mobile-new-btn" aria-label="Новая кампания">+</button>
     </header>
+    <div id="model-menu" class="model-menu" role="menu" aria-label="Выбор AI-модели" hidden></div>
 
     <!-- Sidebar: campaign list + new-campaign button -->
     <aside id="sidebar">
@@ -56,14 +58,17 @@
             </span>
           </div>
           <div class="chat-controls">
-            <button id="new-session-btn" class="btn new-session-btn" title="Сбросить контекст Claude (история сохранится)" hidden>🔄 Новая сессия</button>
+            <button id="new-session-btn" class="btn new-session-btn" title="Сбросить контекст текущей AI-модели (история сохранится)" hidden>🔄 Новая сессия</button>
             <button id="wizard-reset-btn" class="btn wizard-reset-btn" title="Начать создание заново" hidden>🗑️ Сбросить</button>
             <span id="ctx-usage" class="ctx-usage" title="Использование контекста" hidden>
               <span class="ctx-bar"><span class="ctx-fill"></span></span>
               <span class="ctx-label">0%</span>
             </span>
-            <select id="provider-select" class="runtime-select" title="AI-провайдер" hidden></select>
-            <select id="model-select" class="runtime-select" title="Модель"></select>
+            <button id="model-picker-btn" class="model-picker-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+              <span class="model-provider-dot"></span>
+              <span class="model-picker-label">Загрузка моделей…</span>
+              <span class="model-picker-chevron">⌄</span>
+            </button>
             <button id="stop-btn" class="btn stop-btn" title="Остановить ход" hidden>■ Стоп</button>
           </div>
         </header>

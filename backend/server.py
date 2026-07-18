@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
@@ -31,11 +32,15 @@ from backend.campaign_api import (
 from backend.event_log import read_events
 from backend.game_session import get_or_create_session, get_runtime_registry, peek_session
 from backend.live_broker import broker
-from backend.providers.claude_sdk import ClaudeSDKProvider
 from backend.campaign_views import get_campaign_views
 from backend.map_view import get_map_snapshot
 from backend.wizard_prompt import load_wizard_system_prompt
-from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+from backend.runtime import ProviderBuildContext
+from backend.wizard_mcp import (
+    WizardEvents,
+    build_wizard_mcp,
+    decode_wizard_events,
+)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -512,30 +517,68 @@ async def root():
 async def wizard_websocket(websocket: WebSocket):
     """Ephemeral campaign-creation wizard — streams like the game handler.
 
-    Fresh provider per connection (no session_id / no event log / no resume).
-    Tool calls go through an IN-PROCESS MCP (backend/wizard_mcp.py), so the DM's
-    text streams token-by-token (`stream`) while tool invocations surface as
-    `activity` blocks and their side effects (choices / completion) drain from
-    WizardEvents into show_choices / clear_choices / wizard_complete events.
+    Fresh provider per connection. Claude uses the SDK's in-process MCP;
+    Codex uses the equivalent stdio MCP and relays the same wizard events.
     """
     await websocket.accept()
 
+    provider = None
     try:
         config = get_config()
         wizard_prompt = load_wizard_system_prompt()
+        registry = get_runtime_registry()
+        allowed, default_model = _model_options()
+        requested_model = websocket.query_params.get("model")
+        model_name = requested_model if requested_model in allowed else default_model
+        model_runtime = registry.get_model(model_name).runtime_id
+        runtime_id = websocket.query_params.get("provider") or model_runtime
+        if runtime_id != model_runtime:
+            raise ValueError(
+                f"model '{model_name}' does not belong to runtime '{runtime_id}'"
+            )
+        provider = registry.build(
+            ProviderBuildContext(
+                project_root=config.project_root,
+                campaign_name=None,
+                model_name=model_name,
+            )
+        )
     except ValueError as e:
         await websocket.send_text(json.dumps({"type": "error", "content": str(e)}))
         await websocket.close()
         return
 
-    # In-process MCP: tools push structured events here (no subprocess, no files).
     events = WizardEvents()
-    wizard_mcp = {"wizard": build_wizard_mcp(events)}
-
-    provider = ClaudeSDKProvider(project_root=config.project_root, model_name=config.model_name)
+    if runtime_id == "claude":
+        wizard_mcp = {"wizard": build_wizard_mcp(events)}
+    else:
+        wizard_mcp = {
+            "wizard": {
+                "command": sys.executable,
+                "args": ["-m", "backend.wizard_mcp_stdio"],
+            }
+        }
 
     async def send(event: dict) -> None:
         await websocket.send_text(json.dumps(event, ensure_ascii=False))
+
+    async def emit_wizard_events(pending: list[dict]) -> None:
+        for event in pending:
+            if event["type"] == "show_choices":
+                await send({"type": "show_choices", "data": event["data"]})
+            elif event["type"] == "clear_choices":
+                await send({"type": "clear_choices"})
+            elif event["type"] == "create_campaign":
+                if event.get("success"):
+                    await send({
+                        "type": "wizard_complete",
+                        "campaign_name": event.get("campaign_name"),
+                    })
+                else:
+                    await send({
+                        "type": "error",
+                        "content": event.get("error", "Creation failed"),
+                    })
 
     try:
         while True:
@@ -547,7 +590,7 @@ async def wizard_websocket(websocket: WebSocket):
                 async for event in provider.process_message(
                     user_message=user_message,
                     system_prompt=wizard_prompt,
-                    model_name=config.model_name,
+                    model_name=model_name,
                     mcp_servers=wizard_mcp,
                 ):
                     payload = event.to_dict()
@@ -557,19 +600,14 @@ async def wizard_websocket(websocket: WebSocket):
                     elif et in ("text", "error"):
                         await send({"type": et, "content": payload["content"]})
                     elif et in ("tool_use", "tool_result", "activity"):
-                        await send({"type": "activity", "content": payload["content"]})
-
-                # Drain tool side effects collected in-process during the turn.
-                for ev in events.drain():
-                    if ev["type"] == "show_choices":
-                        await send({"type": "show_choices", "data": ev["data"]})
-                    elif ev["type"] == "clear_choices":
-                        await send({"type": "clear_choices"})
-                    elif ev["type"] == "create_campaign":
-                        if ev.get("success"):
-                            await send({"type": "wizard_complete", "campaign_name": ev.get("campaign_name")})
-                        else:
-                            await send({"type": "error", "content": ev.get("error", "Creation failed")})
+                        relayed = decode_wizard_events(payload["content"])
+                        if relayed:
+                            await emit_wizard_events(relayed)
+                        elif et != "tool_result":
+                            await send({"type": "activity", "content": payload["content"]})
+                    elif et == "rate_limit":
+                        await send({"type": "rate_limit", **payload})
+                    await emit_wizard_events(events.drain())
 
             except Exception as e:
                 print(f"❌ Wizard error: {e}")
@@ -579,6 +617,9 @@ async def wizard_websocket(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print("Wizard disconnected")
+    finally:
+        if provider is not None:
+            await provider.close()
 
 
 @app.get("/ws/game")

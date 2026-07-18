@@ -186,6 +186,43 @@ class TestWizardMCPTools:
         assert drained[0]["data"]["step"] == "concept"
         assert ev.drain() == []  # drain clears the buffer
 
+    def test_provider_neutral_event_round_trip(self):
+        from backend.wizard_mcp import decode_wizard_events, encode_wizard_event
+
+        event = {
+            "type": "show_choices",
+            "data": {"step": "concept", "title": "World", "controls": []},
+        }
+        tool_result = f"prefix\n{encode_wizard_event(event)}\nChoices displayed"
+
+        assert decode_wizard_events(tool_result) == [event]
+
+    def test_stdio_tool_result_contains_relay_event(self):
+        from backend.wizard_mcp import decode_wizard_events
+        from backend.wizard_mcp_stdio import _result
+
+        tool_result = _result(
+            "show_choices",
+            {
+                "step": "settings",
+                "title": "Settings",
+                "submit_label": "Next",
+                "controls": [],
+            },
+        )
+
+        assert decode_wizard_events(tool_result) == [
+            {
+                "type": "show_choices",
+                "data": {
+                    "step": "settings",
+                    "title": "Settings",
+                    "submit_label": "Next",
+                    "controls": [],
+                },
+            }
+        ]
+
     @staticmethod
     async def _invoke(cfg, tool_name, arguments):
         """Invoke a registered in-process MCP tool by name (real handler body runs)."""
