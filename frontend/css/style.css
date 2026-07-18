@@ -8,8 +8,7 @@
   --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Noto Sans',
     'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', monospace;
+  --font-mono: 'Cousine', 'Liberation Mono', 'DejaVu Sans Mono', monospace;
   --sidebar-w: 280px;
 }
 
@@ -501,8 +500,9 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .tool-result { margin-top: 10px; }
 .tool-output { color: #cbd5e1; }
 .chat-time {
-  display: block; align-self: flex-end; margin-top: 2px; color: #56657a;
-  font: 500 9px var(--font-mono); line-height: 1; text-align: right; white-space: nowrap;
+  display: block; align-self: flex-end; margin-top: 3px; color: #728198;
+  font: 500 10px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  letter-spacing: 0; text-align: right; white-space: nowrap;
 }
 .msg-user .chat-time { color: rgba(226,232,240,.55); }
 .activity-note .chat-time { align-self: center; margin: 0 0 0 5px; }
