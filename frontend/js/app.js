@@ -666,14 +666,17 @@ function findPendingTool(toolUseId = '') {
 function createToolCard(content, metadata = {}, timestamp = null) {
   const tool = toolPresentation(content, metadata);
   if (!tool) return null;
-  const card = document.createElement('details');
+  const card = document.createElement('section');
   card.className = 'msg-activity tool-card';
   card.dataset.toolStatus = 'running';
+  card.dataset.open = 'false';
   card.dataset.toolUseId = String(metadata.tool_use_id || '');
   card.dataset.toolName = tool.name;
 
-  const summary = document.createElement('summary');
+  const summary = document.createElement('button');
+  summary.type = 'button';
   summary.className = 'tool-card-summary';
+  summary.setAttribute('aria-expanded', 'false');
   const icon = document.createElement('span');
   icon.className = 'tool-card-icon';
   icon.textContent = toolIcon(tool.name);
@@ -701,6 +704,7 @@ function createToolCard(content, metadata = {}, timestamp = null) {
 
   const details = document.createElement('div');
   details.className = 'tool-card-details';
+  details.hidden = true;
   const commandLabel = document.createElement('div');
   commandLabel.className = 'tool-detail-label';
   commandLabel.textContent = ui('Вызов', 'Call');
@@ -712,6 +716,12 @@ function createToolCard(content, metadata = {}, timestamp = null) {
   result.hidden = true;
   details.append(commandLabel, command, result);
   card.append(summary, details);
+  summary.addEventListener('click', () => {
+    const open = card.dataset.open !== 'true';
+    card.dataset.open = String(open);
+    summary.setAttribute('aria-expanded', String(open));
+    details.hidden = !open;
+  });
   insertBeforeStream(card);
   return card;
 }

@@ -371,7 +371,7 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .chat-start-mark { font-size: 48px; }
 .chat-start h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); }
 
-.msg { display: flex; flex-direction: column; gap: 4px; max-width: 82%; }
+.msg { display: flex; flex: 0 0 auto; flex-direction: column; gap: 4px; max-width: 82%; }
 .msg-role { font-size: 11px; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.5px; }
 .msg-body {
   padding: 12px 16px; border-radius: var(--r-lg); line-height: 1.55;
@@ -391,7 +391,7 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 
 /* Compact activity cards — Orchestra-style summary first, raw details on demand. */
 .msg-activity {
-  align-self: flex-start; max-width: min(92%, 820px);
+  align-self: flex-start; flex: 0 0 auto; max-width: min(92%, 820px);
   color: var(--ink-faint); font: 11px var(--font-mono);
 }
 .activity-note {
@@ -411,11 +411,11 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
   background: linear-gradient(180deg, rgba(18,28,47,.92), rgba(12,20,35,.92));
   box-shadow: 0 6px 22px rgba(0,0,0,.13);
 }
-.tool-card summary { list-style: none; }
-.tool-card summary::-webkit-details-marker { display: none; }
 .tool-card-summary {
+  width: 100%; border: 0; border-radius: 0; appearance: none;
   display: grid; grid-template-columns: 34px minmax(0,1fr) auto auto auto; align-items: center;
   gap: 10px; min-height: 54px; padding: 8px 10px; cursor: pointer; user-select: none;
+  background: transparent; color: inherit; font: inherit; text-align: left;
 }
 .tool-card-summary:hover { background: rgba(56,189,248,.045); }
 .tool-card-icon {
@@ -442,7 +442,7 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .tool-card[data-tool-status="error"] { border-left-color: #ef4444; }
 .tool-card[data-tool-status="error"] .tool-card-status { color: #fca5a5; }
 .tool-card-chevron { color: #64748b; font-size: 15px; transition: transform .15s ease; }
-.tool-card[open] .tool-card-chevron { transform: rotate(180deg); }
+.tool-card[data-open="true"] .tool-card-chevron { transform: rotate(180deg); }
 .tool-card-details {
   padding: 10px 12px 12px; border-top: 1px solid #263248;
   background: rgba(5,10,19,.45);
@@ -468,7 +468,7 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 
 /* Error banner */
 .msg-error {
-  align-self: center; max-width: 90%; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px;
+  align-self: center; flex: 0 0 auto; max-width: 90%; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px;
   padding: 10px 16px; border-radius: var(--r-md);
   background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4);
   color: #fca5a5; font-size: 13px; white-space: pre-wrap; word-break: break-word;
@@ -476,7 +476,7 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 
 /* Waiting-for-first-token indicator (Orchestra .waiting-dots) */
 .waiting {
-  align-self: flex-start; display: flex; align-items: center; gap: 8px;
+  align-self: flex-start; display: flex; flex: 0 0 auto; align-items: center; gap: 8px;
   padding: 4px 16px; color: var(--ink-faint); font-size: 13px;
 }
 .waiting-dots span { animation: dot-blink 1.4s infinite; opacity: 0.2; font-size: 20px; line-height: 1; }
