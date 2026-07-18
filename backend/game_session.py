@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from backend.event_log import append_event, read_events
+from backend.event_log import append_event, read_current_session_events
 from backend.live_broker import broker
 from backend.runtime import (
     AgentEvent,
@@ -40,6 +40,8 @@ def get_or_create_session(
     project_root: Path,
     model_name: str,
     runtime_id: str | None = None,
+    *,
+    reasoning_effort: str | None = None,
 ) -> "GameSession":
     """Return the sole mutation/turn owner for a campaign."""
     registry = get_runtime_registry()
@@ -55,11 +57,16 @@ def get_or_create_session(
             project_root,
             model_name,
             runtime_id=requested_runtime,
+            reasoning_effort=reasoning_effort,
             registry=registry,
         )
         _sessions[campaign] = session
     else:
-        session.configure(requested_runtime, model_name)
+        session.configure(
+            requested_runtime,
+            model_name,
+            reasoning_effort=reasoning_effort,
+        )
     return session
 
 
@@ -77,6 +84,7 @@ class GameSession:
         model_name: str,
         *,
         runtime_id: str | None = None,
+        reasoning_effort: str | None = None,
         registry: RuntimeRegistry | None = None,
     ) -> None:
         self.campaign = campaign
@@ -87,6 +95,10 @@ class GameSession:
         if model.runtime_id != self.runtime_id:
             raise ValueError(f"model '{model_name}' does not belong to runtime '{self.runtime_id}'")
         self.model_name = model_name
+        self.reasoning_effort = self.registry.resolve_reasoning_effort(
+            model_name,
+            reasoning_effort,
+        )
         self.provider = self._build_provider()
         self.campaign_dir = self.project_root / "world-state" / "campaigns" / campaign
         self.running = False
@@ -95,28 +107,48 @@ class GameSession:
         self._mutation_lock = asyncio.Lock()
         self._history_handoff: str | None = None
 
-    def _build_provider(self, model_name: str | None = None):
+    def _build_provider(
+        self,
+        model_name: str | None = None,
+        reasoning_effort: str | None = None,
+    ):
         return self.registry.build(
             ProviderBuildContext(
                 project_root=self.project_root,
                 campaign_name=self.campaign,
                 model_name=model_name or self.model_name,
+                reasoning_effort=reasoning_effort or self.reasoning_effort,
             )
         )
 
-    def configure(self, runtime_id: str, model_name: str) -> bool:
+    def configure(
+        self,
+        runtime_id: str,
+        model_name: str,
+        *,
+        reasoning_effort: str | None = None,
+    ) -> bool:
         """Apply runtime/model selection only between turns."""
-        if runtime_id == self.runtime_id and model_name == self.model_name:
-            return False
-        if self.running or self._mutation_lock.locked():
-            raise RuntimeError("provider cannot be switched while a turn is in progress")
         model = self.registry.get_model(model_name)
         if model.runtime_id != runtime_id:
             raise ValueError(f"model '{model_name}' does not belong to runtime '{runtime_id}'")
-        new_provider = self._build_provider(model_name)
+        resolved_effort = self.registry.resolve_reasoning_effort(
+            model_name,
+            reasoning_effort,
+        )
+        if (
+            runtime_id == self.runtime_id
+            and model_name == self.model_name
+            and resolved_effort == self.reasoning_effort
+        ):
+            return False
+        if self.running or self._mutation_lock.locked():
+            raise RuntimeError("provider cannot be switched while a turn is in progress")
+        new_provider = self._build_provider(model_name, resolved_effort)
         old_provider = self.provider
         self.runtime_id = runtime_id
         self.model_name = model_name
+        self.reasoning_effort = resolved_effort
         self.provider = new_provider
         self._history_handoff = self._build_history_handoff()
         asyncio.create_task(old_provider.close())
@@ -126,7 +158,7 @@ class GameSession:
         """Keep narrative continuity when a fresh provider replaces another."""
         events = [
             event
-            for event in read_events(self.campaign_dir)
+            for event in read_current_session_events(self.campaign_dir)
             if event.get("type") in {"user_message", "text"}
             and str(event.get("content", "")).strip()
         ][-HANDOFF_MAX_EVENTS:]
@@ -156,15 +188,15 @@ class GameSession:
         model = self.registry.get_model(model_name)
         self.configure(model.runtime_id, model_name)
 
-    async def reset_session(self) -> bool:
+    async def reset_session(self) -> dict[str, Any] | None:
         if self.running:
-            return False
+            return None
         async with self._mutation_lock:
             if self.running:
-                return False
+                return None
             await self.provider.reset()
             self._history_handoff = None
-            return True
+            return append_event(self.campaign_dir, "session_reset", "")
 
     async def interrupt(self) -> bool:
         if not self.running:

@@ -72,6 +72,7 @@ def test_registry_applies_model_effort_unless_caller_overrides_it(tmp_path):
             "fake-1",
             "Fake 1",
             "fake",
+            reasoning_efforts=("low", "medium", "high"),
             selected_reasoning_effort="medium",
         )
     )
@@ -87,6 +88,47 @@ def test_registry_applies_model_effort_unless_caller_overrides_it(tmp_path):
     )
 
     assert [context.reasoning_effort for context in captured] == ["medium", "high"]
+
+
+def test_registry_rejects_unsupported_or_fixed_model_effort(tmp_path):
+    registry = RuntimeRegistry()
+    registry.register_runtime(_runtime())
+    registry.register_model(
+        ModelDefinition(
+            "configurable",
+            "Configurable",
+            "fake",
+            reasoning_efforts=("low", "medium", "high"),
+            selected_reasoning_effort="medium",
+        )
+    )
+    registry.register_model(
+        ModelDefinition(
+            "fixed",
+            "Fixed",
+            "fake",
+            selected_reasoning_effort="native",
+        )
+    )
+
+    with pytest.raises(ValueError, match="unsupported reasoning effort"):
+        registry.build(
+            ProviderBuildContext(
+                tmp_path,
+                "campaign",
+                "configurable",
+                reasoning_effort="max",
+            )
+        )
+    with pytest.raises(ValueError, match="fixed reasoning effort"):
+        registry.build(
+            ProviderBuildContext(
+                tmp_path,
+                "campaign",
+                "fixed",
+                reasoning_effort="high",
+            )
+        )
 
 
 def test_registry_rejects_duplicate_and_unknown_entries():

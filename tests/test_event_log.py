@@ -4,7 +4,12 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from backend.event_log import append_event, read_events, EVENT_LOG_FILENAME
+from backend.event_log import (
+    EVENT_LOG_FILENAME,
+    append_event,
+    read_current_session_events,
+    read_events,
+)
 
 
 @pytest.fixture
@@ -56,6 +61,23 @@ def test_read_events_after_id_filters(campaign_dir):
 
     assert len(events) == 1
     assert events[0]["content"] == "c"
+
+
+def test_current_session_events_start_after_latest_reset_boundary(campaign_dir):
+    old_user = append_event(campaign_dir, "user_message", "old question")
+    old_dm = append_event(campaign_dir, "text", "old answer")
+    boundary = append_event(campaign_dir, "session_reset", "")
+    current = append_event(campaign_dir, "text", "new answer")
+
+    assert [event["id"] for event in read_events(campaign_dir)] == [
+        old_user["id"],
+        old_dm["id"],
+        boundary["id"],
+        current["id"],
+    ]
+    assert read_current_session_events(campaign_dir) == [current]
+    assert read_current_session_events(campaign_dir, after_id=old_dm["id"]) == [current]
+    assert read_current_session_events(campaign_dir, after_id=current["id"]) == []
 
 
 def test_read_events_skips_corrupted_lines(campaign_dir):

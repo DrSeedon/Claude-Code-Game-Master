@@ -29,7 +29,7 @@ from backend.campaign_api import (
     activate_campaign,
     delete_campaign,
 )
-from backend.event_log import read_events
+from backend.event_log import append_event, read_current_session_events
 from backend.game_session import get_or_create_session, get_runtime_registry, peek_session
 from backend.live_broker import broker
 from backend.campaign_views import get_campaign_views
@@ -249,17 +249,21 @@ async def api_activate_campaign(name: str):
 
 @app.post("/api/campaigns/{name}/reset-session")
 async def api_reset_session(name: str):
-    """Start a fresh Claude conversation for the campaign — clears the DM's working
-    context (session_id) but keeps the event log / chat history. No-op if the
-    campaign has no live session. 409 if a turn is currently running."""
+    """Start a fresh provider conversation and append a visible-session boundary."""
     if not _valid_campaign_name(name):
         raise HTTPException(status_code=400, detail="Invalid campaign name")
+    campaign_dir = _campaign_path(name)
     session = peek_session(name)
     if session is None:
-        return {"success": True, "reset": False}  # nothing live to reset
-    if not await session.reset_session():
-        raise HTTPException(status_code=409, detail="A turn is in progress")
-    return {"success": True, "reset": True}
+        boundary = append_event(campaign_dir, "session_reset", "")
+        reset = False
+    else:
+        boundary = await session.reset_session()
+        if boundary is None:
+            raise HTTPException(status_code=409, detail="A turn is in progress")
+        reset = True
+    broker.publish(name, boundary)
+    return {"success": True, "reset": reset, "after_id": boundary["id"]}
 
 
 @app.post("/api/campaigns/{name}/interrupt")
@@ -535,6 +539,7 @@ async def wizard_websocket(websocket: WebSocket):
         model_name = requested_model if requested_model in allowed else default_model
         model_runtime = registry.get_model(model_name).runtime_id
         runtime_id = websocket.query_params.get("provider") or model_runtime
+        reasoning_effort = websocket.query_params.get("effort")
         if runtime_id != model_runtime:
             raise ValueError(
                 f"model '{model_name}' does not belong to runtime '{runtime_id}'"
@@ -544,6 +549,7 @@ async def wizard_websocket(websocket: WebSocket):
                 project_root=config.project_root,
                 campaign_name=None,
                 model_name=model_name,
+                reasoning_effort=reasoning_effort,
             )
         )
     except ValueError as e:
@@ -691,9 +697,14 @@ async def game_websocket(websocket: WebSocket):
     registry = get_runtime_registry()
     model_runtime = registry.get_model(model_name).runtime_id
     requested_runtime = websocket.query_params.get("provider") or model_runtime
+    reasoning_effort = websocket.query_params.get("effort")
     try:
         session = get_or_create_session(
-            campaign, config.project_root, model_name, requested_runtime
+            campaign,
+            config.project_root,
+            model_name,
+            requested_runtime,
+            reasoning_effort=reasoning_effort,
         )
     except (ValueError, RuntimeError) as exc:
         await websocket.send_text(json.dumps({"type": "error", "content": str(exc)}))
@@ -701,7 +712,10 @@ async def game_websocket(websocket: WebSocket):
         return
 
     # Replay only what the client missed, driven by the after_id cursor it sent
-    history = read_events(session.campaign_dir, after_id=after_id)
+    history = read_current_session_events(
+        session.campaign_dir,
+        after_id=after_id,
+    )
     if history:
         await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
 

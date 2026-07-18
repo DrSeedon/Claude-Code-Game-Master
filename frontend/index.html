@@ -20,6 +20,7 @@
       <button class="mobile-back-btn" id="mobile-back" aria-label="Назад" hidden>←</button>
       <span class="mobile-title" id="mobile-title">🎲 DM Game Master</span>
       <button class="mobile-model-btn model-picker-trigger" id="mobile-model-btn" aria-label="Выбрать модель" hidden></button>
+      <button class="mobile-settings-btn" id="mobile-settings-btn" aria-label="Глобальные настройки">⚙</button>
       <button class="mobile-new-btn" id="mobile-new-btn" aria-label="Новая кампания">+</button>
     </header>
     <div id="model-menu" class="model-menu" role="menu" aria-label="Выбор AI-модели" hidden></div>
@@ -31,7 +32,10 @@
           <span class="brand-mark">🎲</span>
           <span class="brand-name">DM Game Master</span>
         </div>
-        <button id="new-campaign-btn" class="btn btn-primary btn-icon" title="Новая кампания">+</button>
+        <div class="sidebar-actions">
+          <button id="settings-btn" class="btn settings-btn" title="Глобальные настройки" aria-label="Глобальные настройки">⚙</button>
+          <button id="new-campaign-btn" class="btn btn-primary btn-icon" title="Новая кампания">+</button>
+        </div>
       </div>
       <div id="campaign-list" class="campaign-list"></div>
     </aside>
@@ -58,7 +62,7 @@
             </span>
           </div>
           <div class="chat-controls">
-            <button id="new-session-btn" class="btn new-session-btn" title="Сбросить контекст текущей AI-модели (история сохранится)" hidden>🔄 Новая сессия</button>
+            <button id="new-session-btn" class="btn new-session-btn" title="Очистить чат и начать с новым контекстом" hidden>🔄 Новая сессия</button>
             <button id="wizard-reset-btn" class="btn wizard-reset-btn" title="Начать создание заново" hidden>🗑️ Сбросить</button>
             <span id="ctx-usage" class="ctx-usage" title="Использование контекста" hidden>
               <span class="ctx-bar"><span class="ctx-fill"></span></span>
@@ -123,6 +127,28 @@
       <div class="right-panel-head">Настройки кампании</div>
       <div id="choices" class="choices"></div>
     </aside>
+  </div>
+
+  <div id="settings-layer" class="settings-layer" hidden>
+    <button class="settings-backdrop" type="button" data-settings-close aria-label="Закрыть настройки"></button>
+    <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-head">
+        <div>
+          <span class="settings-kicker">AI CONTROL DECK</span>
+          <h2 id="settings-title">Глобальные настройки</h2>
+        </div>
+        <button id="settings-close-btn" class="settings-close-btn" type="button" aria-label="Закрыть">×</button>
+      </header>
+      <div class="settings-intro">
+        <p id="settings-intro-text">Effort сохраняется отдельно для каждой модели и применяется и в игре, и в визарде.</p>
+        <p id="settings-recommendation">Для ведущего рекомендован high: он лучше держит правила и причинность. Medium выбирайте ради скорости.</p>
+      </div>
+      <div id="effort-settings" class="effort-settings"></div>
+      <footer class="settings-foot">
+        <span class="settings-save-dot"></span>
+        <span id="settings-save-label">Изменения сохраняются автоматически</span>
+      </footer>
+    </section>
   </div>
 
   <script src="/static/js/app.js"></script>

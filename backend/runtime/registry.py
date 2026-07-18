@@ -117,10 +117,41 @@ class RuntimeRegistry:
             models = (model for model in models if model.runtime_id == runtime_id)
         return sorted(models, key=lambda model: model.id)
 
+    def resolve_reasoning_effort(
+        self,
+        model_id: str,
+        requested: str | None = None,
+    ) -> str:
+        """Return a validated effort for one model.
+
+        An empty ``reasoning_efforts`` tuple means the provider owns the value;
+        callers may use the advertised fixed default but cannot override it.
+        """
+        model = self.get_model(model_id)
+        default = model.selected_reasoning_effort or "high"
+        if requested is None or not requested.strip():
+            return default
+        if not model.reasoning_efforts:
+            if requested != default:
+                raise ValueError(
+                    f"model '{model_id}' has fixed reasoning effort '{default}'"
+                )
+            return default
+        if requested not in model.reasoning_efforts:
+            allowed = ", ".join(model.reasoning_efforts)
+            raise ValueError(
+                f"unsupported reasoning effort '{requested}' for model "
+                f"'{model_id}'; choose one of: {allowed}"
+            )
+        return requested
+
     def build(self, context: ProviderBuildContext) -> AgentProvider:
         model = self.get_model(context.model_name)
         runtime = self.get_runtime(model.runtime_id)
-        effort = context.reasoning_effort or model.selected_reasoning_effort or "high"
+        effort = self.resolve_reasoning_effort(
+            model.id,
+            context.reasoning_effort,
+        )
         provider = runtime.factory(replace(context, reasoning_effort=effort))
         if not isinstance(provider, AgentProvider):
             raise TypeError(f"runtime '{runtime.id}' returned an incompatible provider")

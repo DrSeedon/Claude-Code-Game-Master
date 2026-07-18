@@ -18,15 +18,17 @@ the header: name, HP bar (green/yellow/red), XP, gold (formatted), inventory cou
 location. Loaded on `selectCampaign`, refreshed after each `done`, hidden in wizard /
 on mobile-back. Verified: shows "Aria" for a seeded campaign.
 
-## P4 — new-session button (reset Claude context, keep history)
-- `claude_sdk.py`: `provider.reset()` = disconnect + `_session_id = None` (plain
-  `close()` keeps session_id and resumes — wrong for a fresh session).
-- `game_session.py`: `reset_session()` (refuses while a turn runs) + `peek_session()`.
-- `server.py`: `POST /api/campaigns/{name}/reset-session` — validates name, 409 if a
-  turn is running, `{reset:false}` if no live session.
-- Frontend: 🔄 button → confirm → **close WS first** (so no turn can start between the
-  server's running-check and reset) → POST → reconnect keeping `afterId` (no history
-  replay → no chat duplication). Verified: 2 msgs before → 2 after (no dup), reconnected.
+## P4 — new-session button (fresh provider context and empty visible chat)
+- Each provider implements `reset()` by forgetting its resumable conversation ID.
+- `GameSession.reset_session()` refuses while a turn runs, resets the provider, and
+  appends a `session_reset` boundary under the campaign mutation lock.
+- `POST /api/campaigns/{name}/reset-session` publishes the boundary and returns its
+  event ID. The append-only log is preserved for audit, while WebSocket replay starts
+  after the latest boundary.
+- Frontend: 🔄 button → confirm → close WS → POST → clear chat/context indicators →
+  reconnect after the boundary → show `Start game`. Nothing is sent to the model until
+  the player presses that button or writes a message. Verified across reconnect and
+  page reload.
 
 ## P3 — rate/session limit indicator
 - `claude_sdk.py`: `_rate_limit_info(err)` matches rate/session/usage-limit/429/overloaded

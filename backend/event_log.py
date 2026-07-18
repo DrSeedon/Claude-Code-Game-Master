@@ -42,6 +42,33 @@ def read_events(campaign_dir: Path, after_id: int = 0) -> List[Dict]:
     return events
 
 
+def read_current_session_events(
+    campaign_dir: Path,
+    after_id: int = 0,
+) -> List[Dict]:
+    """Read replayable chat events after the latest session boundary.
+
+    Reset markers stay in the append-only log for auditability, but neither the
+    marker nor events from earlier AI conversations are replayed into the chat.
+    """
+    events = read_events(campaign_dir)
+    latest_boundary = max(
+        (
+            event.get("id", 0)
+            for event in events
+            if event.get("type") == "session_reset"
+        ),
+        default=0,
+    )
+    replay_after = max(after_id, latest_boundary)
+    return [
+        event
+        for event in events
+        if event.get("id", 0) > replay_after
+        and event.get("type") != "session_reset"
+    ]
+
+
 def _last_id_from_tail(file_obj, chunk_size: int = 64 * 1024) -> int:
     """Find the last valid id, expanding only when one event exceeds the tail window."""
     file_obj.seek(0, os.SEEK_END)

@@ -13,7 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 
 import backend.server as server_module
 import backend.game_session as game_session_module
-from backend.event_log import append_event
+from backend.event_log import append_event, read_events
 
 
 @pytest.fixture(autouse=True)
@@ -121,6 +121,60 @@ def test_after_id_zero_returns_full_history(client, tmp_path):
         history_msg = ws.receive_json()
 
     assert len(history_msg["messages"]) == 1
+
+
+def test_new_session_boundary_hides_old_chat_without_truncating_log(
+    client, tmp_path
+):
+    campaign_dir = _campaign_dir(tmp_path, "blood-arena")
+    append_event(campaign_dir, "user_message", "old question")
+    append_event(campaign_dir, "text", "old answer")
+
+    response = client.post("/api/campaigns/blood-arena/reset-session")
+    assert response.status_code == 200
+    boundary_id = response.json()["after_id"]
+    append_event(campaign_dir, "text", "new session answer")
+
+    stored = read_events(campaign_dir)
+    assert [event["type"] for event in stored] == [
+        "user_message",
+        "text",
+        "session_reset",
+        "text",
+    ]
+    assert stored[2]["id"] == boundary_id
+
+    with client.websocket_connect("/ws/game?campaign=blood-arena") as ws:
+        history_msg = ws.receive_json()
+
+    assert [message["content"] for message in history_msg["messages"]] == [
+        "new session answer"
+    ]
+
+
+def test_game_websocket_applies_valid_effort_and_rejects_invalid_one(
+    client, tmp_path
+):
+    _campaign_dir(tmp_path, "blood-arena")
+    url = (
+        "/ws/game?campaign=blood-arena&provider=codex"
+        "&model=gpt-5.6-terra&effort=xhigh"
+    )
+    with client.websocket_connect(url):
+        pass
+
+    session = game_session_module._sessions["blood-arena"]
+    assert session.reasoning_effort == "xhigh"
+    assert session.provider.reasoning_effort == "xhigh"
+
+    game_session_module._sessions.clear()
+    with client.websocket_connect(
+        "/ws/game?campaign=blood-arena&provider=codex"
+        "&model=gpt-5.6-terra&effort=impossible"
+    ) as ws:
+        error = ws.receive_json()
+    assert error["type"] == "error"
+    assert "unsupported reasoning effort" in error["content"]
 
 
 def test_no_history_message_when_log_empty(client, tmp_path, sent):

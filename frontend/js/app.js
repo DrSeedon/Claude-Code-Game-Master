@@ -22,6 +22,7 @@ const STREAM_PARSE_INTERVAL = 50;  // ms between visible re-parses (Orchestra _S
 
 const BASE_RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_DELAY_MS = 10000;
+const MODEL_EFFORTS_STORAGE_KEY = 'dm-model-reasoning-efforts';
 
 const TOOL_BLOCK_RE = /```tool:\w+\s*\n\{[\s\S]*?\}\s*\n```/g;  // wizard strips inline tool blocks
 
@@ -32,6 +33,7 @@ const el = {
   mobileBack: document.getElementById('mobile-back'),
   mobileNew: document.getElementById('mobile-new-btn'),
   mobileModelBtn: document.getElementById('mobile-model-btn'),
+  mobileSettingsBtn: document.getElementById('mobile-settings-btn'),
   mobileTitle: document.getElementById('mobile-title'),
   campaignList: document.getElementById('campaign-list'),
   newBtn: document.getElementById('new-campaign-btn'),
@@ -46,6 +48,14 @@ const el = {
   modelPickerBtn: document.getElementById('model-picker-btn'),
   modelPickerLabel: document.querySelector('#model-picker-btn .model-picker-label'),
   modelMenu: document.getElementById('model-menu'),
+  settingsBtn: document.getElementById('settings-btn'),
+  settingsLayer: document.getElementById('settings-layer'),
+  settingsCloseBtn: document.getElementById('settings-close-btn'),
+  settingsTitle: document.getElementById('settings-title'),
+  settingsIntroText: document.getElementById('settings-intro-text'),
+  settingsRecommendation: document.getElementById('settings-recommendation'),
+  settingsSaveLabel: document.getElementById('settings-save-label'),
+  effortSettings: document.getElementById('effort-settings'),
   stopBtn: document.getElementById('stop-btn'),
   viewTabs: document.getElementById('view-tabs'),
   dashboardLocale: document.getElementById('dashboard-locale'),
@@ -92,6 +102,7 @@ const state = {
   runtimes: [],
   currentProvider: null,
   currentModel: null,    // selected model — sent as ?model= on the game WS
+  modelEfforts: readStoredModelEfforts(),
   currentView: 'chat',
   campaignViews: null,
   dashboardSnapshots: {},
@@ -105,6 +116,28 @@ const state = {
   mapData: null,
   map: null,
 };
+
+function readStoredModelEfforts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MODEL_EFFORTS_STORAGE_KEY) || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([model, effort]) => (
+        typeof model === 'string' && typeof effort === 'string'
+      ))
+    );
+  } catch {
+    return {};
+  }
+}
+
+function persistModelEfforts() {
+  try {
+    localStorage.setItem(MODEL_EFFORTS_STORAGE_KEY, JSON.stringify(state.modelEfforts));
+  } catch {
+    // Browser storage is optional; the current tab still keeps the selection.
+  }
+}
 
 const DASHBOARD_TAB_LABELS = {
   ru: {
@@ -260,9 +293,12 @@ function setDashboardLocale(locale, { persist = true } = {}) {
   document.documentElement.lang = state.dashboardLocale;
   el.mobileBack.setAttribute('aria-label', ui('Назад', 'Back'));
   el.mobileModelBtn.setAttribute('aria-label', ui('Выбрать модель', 'Choose model'));
+  el.mobileSettingsBtn.setAttribute('aria-label', ui('Глобальные настройки', 'Global settings'));
   el.mobileNew.setAttribute('aria-label', ui('Новая кампания', 'New campaign'));
   el.modelMenu.setAttribute('aria-label', ui('Выбор AI-модели', 'AI model selection'));
   el.newBtn.title = ui('Новая кампания', 'New campaign');
+  el.settingsBtn.title = ui('Глобальные настройки', 'Global settings');
+  el.settingsBtn.setAttribute('aria-label', el.settingsBtn.title);
   el.welcomeText.textContent = ui(
     'Выберите кампанию слева или создайте новую, чтобы начать приключение.',
     'Choose a campaign on the left or create one to begin.'
@@ -270,8 +306,8 @@ function setDashboardLocale(locale, { persist = true } = {}) {
   el.welcomeNewBtn.textContent = ui('+ Новая кампания', '+ New campaign');
   el.connStatus.title = ui('Статус соединения', 'Connection status');
   el.newSessionBtn.title = ui(
-    'Сбросить контекст текущей AI-модели (история сохранится)',
-    'Reset the current AI model context (history is preserved)'
+    'Очистить чат и начать с новым контекстом',
+    'Clear the chat and start with fresh context'
   );
   el.newSessionBtn.textContent = ui('🔄 Новая сессия', '🔄 New session');
   el.wizardResetBtn.title = ui('Начать создание заново', 'Restart campaign creation');
@@ -281,6 +317,24 @@ function setDashboardLocale(locale, { persist = true } = {}) {
   el.stopBtn.textContent = ui('■ Стоп', '■ Stop');
   el.sendBtn.textContent = ui('Отправить', 'Send');
   el.rightPanelHead.textContent = ui('Настройки кампании', 'Campaign setup');
+  el.settingsTitle.textContent = ui('Глобальные настройки', 'Global settings');
+  el.settingsIntroText.textContent = ui(
+    'Effort сохраняется отдельно для каждой модели и применяется и в игре, и в визарде.',
+    'Effort is stored per model and applies to both the game and the wizard.'
+  );
+  el.settingsRecommendation.textContent = ui(
+    'Для ведущего рекомендован high: он лучше держит правила и причинность. Medium выбирайте ради скорости.',
+    'High is recommended for the game master: it tracks rules and causality better. Choose medium for speed.'
+  );
+  el.settingsSaveLabel.textContent = ui(
+    'Изменения сохраняются автоматически',
+    'Changes are saved automatically'
+  );
+  el.settingsCloseBtn.setAttribute('aria-label', ui('Закрыть', 'Close'));
+  el.settingsLayer.querySelector('[data-settings-close]').setAttribute(
+    'aria-label',
+    ui('Закрыть настройки', 'Close settings')
+  );
   const chatStart = el.chat.querySelector('.chat-start');
   if (chatStart) {
     chatStart.querySelector('h2').textContent = ui('Готов к приключению?', 'Ready for an adventure?');
@@ -303,7 +357,10 @@ function setDashboardLocale(locale, { persist = true } = {}) {
   el.mapFitBtn.title = ui('Показать всю карту', 'Fit entire map');
   el.mapFitBtn.setAttribute('aria-label', el.mapFitBtn.title);
   setConnStatus(state.connStatus);
-  if (state.availableModels.length) renderRuntimeControls();
+  if (state.availableModels.length) {
+    renderRuntimeControls();
+    renderEffortSettings();
+  }
   else el.modelPickerLabel.textContent = ui('Загрузка моделей…', 'Loading models…');
   if (state.currentView === 'map') renderMap();
   else if (state.currentView !== 'chat' && state.campaignViews) renderDashboard(state.currentView);
@@ -532,7 +589,13 @@ function setGenerating(on) {
   el.stopBtn.hidden = !on || state.mode !== 'game';
   el.modelPickerBtn.disabled = on;
   el.mobileModelBtn.disabled = on;
-  if (on) closeModelMenu();
+  el.settingsBtn.disabled = on;
+  el.mobileSettingsBtn.disabled = on;
+  el.newSessionBtn.disabled = on;
+  if (on) {
+    closeModelMenu();
+    closeSettings();
+  }
   if (on) { if (!stream.active) showWaiting(); }
   else hideWaiting();
 }
@@ -619,22 +682,42 @@ function showRateLimit(content, retryAfter) {
 }
 function hideRateLimit() { el.rateLimitBar.hidden = true; el.rateLimitBar.textContent = ''; }
 
-// ── New session (reset Claude context, keep history) ───────────────────────
+// ── New session (fresh provider context + visible chat boundary) ───────────
+function prepareFreshSession(afterId = null) {
+  if (Number.isFinite(Number(afterId))) state.afterId = Number(afterId);
+  state.localEcho = new Set();
+  setGenerating(false);
+  clearChat();
+  hideCtxUsage();
+  hideRateLimit();
+  el.input.value = '';
+  autosize();
+  switchView('chat');
+  showChatStart();
+  updateInputEnabled();
+}
+
 async function newSession() {
   if (state.mode !== 'game' || !state.campaign) return;
   if (!confirm(ui(
-    'Сбросить контекст текущей AI-модели? История чата сохранится.',
-    'Reset the current AI model context? Chat history will be preserved.'
+    'Начать новую сессию? Чат очистится, а текущее состояние мира сохранится.',
+    'Start a new session? The chat will be cleared while the current world state is preserved.'
   ))) return;
   const name = state.campaign;
   // Close the socket FIRST so no turn can start between the reset check and the
   // provider.reset() on the server (avoids resetting mid-turn).
   closeWs();
-  try { await fetch(`/api/campaigns/${encodeURIComponent(name)}/reset-session`, { method: 'POST' }); }
-  catch { /* reconnect anyway */ }
-  hideCtxUsage();
-  // Keep the current afterId → no history replay on reconnect (chat already shows it,
-  // and reset does NOT touch the event log). The next turn just runs contextless.
+  try {
+    const response = await fetch(
+      `/api/campaigns/${encodeURIComponent(name)}/reset-session`,
+      { method: 'POST' }
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || ui('Не удалось начать новую сессию', 'Could not start a new session'));
+    prepareFreshSession(result.after_id);
+  } catch (error) {
+    addError(error.message || ui('Не удалось начать новую сессию', 'Could not start a new session'));
+  }
   connect(gameUrl());
 }
 
@@ -653,6 +736,8 @@ function gameUrl() {
   const params = new URLSearchParams({ campaign: state.campaign, after_id: String(state.afterId) });
   if (state.currentProvider) params.set('provider', state.currentProvider);
   if (state.currentModel) params.set('model', state.currentModel);
+  const effort = selectedModelEffort(state.currentModel);
+  if (effort) params.set('effort', effort);
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/game?${params.toString()}`;
 }
 
@@ -660,6 +745,8 @@ function wizardUrl() {
   const params = new URLSearchParams();
   if (state.currentProvider) params.set('provider', state.currentProvider);
   if (state.currentModel) params.set('model', state.currentModel);
+  const effort = selectedModelEffort(state.currentModel);
+  if (effort) params.set('effort', effort);
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/wizard?${params.toString()}`;
 }
 
@@ -744,6 +831,10 @@ function handleEvent(data) {
 
     case 'history':
       renderHistory(data.messages || []);
+      break;
+
+    case 'session_reset':
+      if (state.mode === 'game') prepareFreshSession(data.id);
       break;
 
     case 'usage':
@@ -1946,40 +2037,69 @@ function modelsForRuntime(runtimeId) {
   return state.availableModels.filter(model => model.runtime === runtimeId);
 }
 
-function modelMeta(model) {
-  const context = Number(model.context_window);
-  const contextLabel = Number.isFinite(context) ? `${Math.round(context / 1000)}k ctx` : '';
-  const effort = model.selected_reasoning_effort || 'provider_default';
-  const effortLabel = effort === 'provider_default'
-    ? ui('effort: провайдер', 'effort: provider')
-    : `effort: ${effort}`;
-  const primary = [contextLabel, effortLabel].filter(Boolean);
-  const usage = model.usage_limits || {};
-  if (model.id === 'gpt-5.3-codex-spark') {
-    primary.push('Pro', ui('сверхбыстрый', 'ultrafast'));
-    return {
-      primary: primary.join(' · '),
-      secondary: ui(
-        'Отдельный лимит Spark · точные цифры не опубликованы',
-        'Separate Spark limit · exact numbers are not published'
-      ),
-    };
-  }
-  if (usage.scope === 'codex_shared') {
-    const pro5 = Array.isArray(usage.pro_5x) ? usage.pro_5x.join('–') : '—';
-    const pro20 = Array.isArray(usage.pro_20x) ? usage.pro_20x.join('–') : '—';
-    return {
-      primary: primary.join(' · '),
-      secondary: ui(
-        `Pro 5× ≈${pro5} · 20× ≈${pro20} сообщ./${usage.window_hours || 5}ч`,
-        `Pro 5× ≈${pro5} · 20× ≈${pro20} msgs/${usage.window_hours || 5}h`
-      ),
-    };
-  }
-  return {
-    primary: [...primary, 'Claude Agent SDK'].join(' · '),
-    secondary: ui('Лимит подписки Claude', 'Claude subscription limit'),
+function selectedModelEffort(modelId) {
+  const model = state.availableModels.find(item => item.id === modelId);
+  const allowed = Array.isArray(model?.reasoning_efforts) ? model.reasoning_efforts : [];
+  if (!allowed.length) return null;
+  const saved = state.modelEfforts[model.id];
+  if (allowed.includes(saved)) return saved;
+  return allowed.includes(model.selected_reasoning_effort)
+    ? model.selected_reasoning_effort
+    : allowed[0];
+}
+
+function effortLabel(effort) {
+  const labels = {
+    low: ui('Низкий', 'Low'),
+    medium: ui('Средний', 'Medium'),
+    high: ui('Высокий', 'High'),
+    xhigh: ui('Очень высокий', 'Extra high'),
+    max: ui('Максимальный', 'Maximum'),
+    native: ui('Нативный', 'Native'),
+    provider_default: ui('Определяет провайдер', 'Provider controlled'),
   };
+  return labels[effort] || effort;
+}
+
+function renderEffortSettings() {
+  if (!state.availableModels.length) {
+    el.effortSettings.innerHTML = `<div class="settings-empty">${ui('Модели ещё загружаются…', 'Models are still loading…')}</div>`;
+    return;
+  }
+  el.effortSettings.innerHTML = state.runtimes.map(runtime => {
+    const models = modelsForRuntime(runtime.id);
+    if (!models.length) return '';
+    return `<section class="effort-provider">` +
+      `<div class="effort-provider-head">${escapeHtml(runtime.display_name)}</div>` +
+      `<div class="effort-model-list">${models.map(model => {
+        const efforts = Array.isArray(model.reasoning_efforts) ? model.reasoning_efforts : [];
+        const current = model.id === state.currentModel;
+        const fixed = model.selected_reasoning_effort || 'provider_default';
+        const control = efforts.length
+          ? `<label class="effort-select-wrap">` +
+              `<span>${ui('Глубина', 'Depth')}</span>` +
+              `<select class="effort-select" data-effort-model="${escapeHtml(model.id)}">` +
+                efforts.map(effort => (
+                  `<option value="${escapeHtml(effort)}"${selectedModelEffort(model.id) === effort ? ' selected' : ''}>` +
+                    `${escapeHtml(effortLabel(effort))} · ${escapeHtml(effort)}` +
+                  `</option>`
+                )).join('') +
+              `</select>` +
+            `</label>`
+          : `<div class="effort-fixed">` +
+              `<span>${ui('Фиксировано', 'Fixed')}</span>` +
+              `<strong>${escapeHtml(effortLabel(fixed))}</strong>` +
+            `</div>`;
+        return `<article class="effort-model-row${current ? ' current' : ''}">` +
+          `<div class="effort-model-copy">` +
+            `<span class="effort-model-name">${escapeHtml(model.display_name)}</span>` +
+            `<span class="effort-model-note">${efforts.length
+              ? ui('Настраивается независимо для этой модели', 'Configured independently for this model')
+              : ui('Эта модель не принимает ручной effort', 'This model does not accept manual effort')}</span>` +
+          `</div>${control}</article>`;
+      }).join('')}</div>` +
+    `</section>`;
+  }).join('');
 }
 
 function renderRuntimeControls() {
@@ -1998,19 +2118,16 @@ function renderRuntimeControls() {
       `<div class="model-menu-heading"><span>${escapeHtml(runtimeItem.display_name)}</span><span>${models.length}</span></div>` +
       models.map(model => {
         const active = model.id === state.currentModel;
-        const meta = modelMeta(model);
         return `<button class="model-option${active ? ' active' : ''}" type="button" role="menuitemradio" ` +
           `aria-checked="${active}" data-model="${escapeHtml(model.id)}">` +
-          `<span class="model-option-dot"></span><span class="model-option-copy">` +
+          `<span class="model-option-dot"></span>` +
           `<span class="model-option-name">${escapeHtml(model.display_name)}</span>` +
-          `<span class="model-option-meta">${escapeHtml(meta.primary)}</span>` +
-          `<span class="model-option-limit">${escapeHtml(meta.secondary)}</span></span>` +
           `<span class="model-option-check">${active ? '✓' : ''}</span></button>`;
       }).join('') + `</section>`;
   }).join('');
 }
 
-function reconnectRuntime() {
+function reconnectRuntime(change = 'model') {
   if (state.generating) return;
   if (state.mode === 'wizard') {
     const messages = [...el.chat.querySelectorAll('.msg-user, .msg-dm')]
@@ -2025,10 +2142,15 @@ function reconnectRuntime() {
     state.attempt = 0;
     connect(wizardUrl());
     const model = state.availableModels.find(item => item.id === state.currentModel);
-    addActivity(ui(
-      `Модель визарда переключена: ${model?.display_name || state.currentModel}`,
-      `Wizard model switched: ${model?.display_name || state.currentModel}`
-    ));
+    addActivity(change === 'effort'
+      ? ui(
+        `Effort визарда изменён: ${selectedModelEffort(state.currentModel)}`,
+        `Wizard effort changed: ${selectedModelEffort(state.currentModel)}`
+      )
+      : ui(
+        `Модель визарда переключена: ${model?.display_name || state.currentModel}`,
+        `Wizard model switched: ${model?.display_name || state.currentModel}`
+      ));
     return;
   }
   if (state.mode !== 'game' || !state.campaign) return;
@@ -2043,13 +2165,28 @@ function closeModelMenu() {
   el.mobileModelBtn.setAttribute('aria-expanded', 'false');
 }
 
+function closeSettings() {
+  el.settingsLayer.hidden = true;
+  document.body.classList.remove('settings-open');
+}
+
+function openSettings() {
+  if (state.generating) return;
+  closeModelMenu();
+  renderEffortSettings();
+  el.settingsLayer.hidden = false;
+  document.body.classList.add('settings-open');
+  requestAnimationFrame(() => el.settingsCloseBtn.focus());
+}
+
 function openModelMenu(trigger) {
   if (state.generating || !state.availableModels.length) return;
   if (!el.modelMenu.hidden) { closeModelMenu(); return; }
+  closeSettings();
   renderRuntimeControls();
   el.modelMenu.hidden = false;
   const rect = trigger.getBoundingClientRect();
-  const width = Math.min(430, window.innerWidth - 24);
+  const width = Math.min(340, window.innerWidth - 24);
   el.modelMenu.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 80)}px`;
   el.modelMenu.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
   el.modelPickerBtn.setAttribute('aria-expanded', 'true');
@@ -2064,6 +2201,7 @@ async function loadModels() {
   state.currentProvider = data.default?.runtime || state.runtimes[0]?.id || null;
   state.currentModel = data.default?.model || modelsForRuntime(state.currentProvider)[0]?.id || null;
   renderRuntimeControls();
+  renderEffortSettings();
 }
 
 el.modelPickerBtn.addEventListener('click', () => openModelMenu(el.modelPickerBtn));
@@ -2079,11 +2217,31 @@ el.modelMenu.addEventListener('click', event => {
   renderRuntimeControls();
   reconnectRuntime();
 });
+el.settingsBtn.addEventListener('click', openSettings);
+el.mobileSettingsBtn.addEventListener('click', openSettings);
+el.settingsCloseBtn.addEventListener('click', closeSettings);
+el.settingsLayer.querySelector('[data-settings-close]').addEventListener('click', closeSettings);
+el.effortSettings.addEventListener('change', event => {
+  const select = event.target.closest('[data-effort-model]');
+  if (!select || state.generating) return;
+  const model = state.availableModels.find(item => item.id === select.dataset.effortModel);
+  const efforts = Array.isArray(model?.reasoning_efforts) ? model.reasoning_efforts : [];
+  if (!model || !efforts.includes(select.value)) {
+    renderEffortSettings();
+    return;
+  }
+  state.modelEfforts[model.id] = select.value;
+  persistModelEfforts();
+  if (model.id === state.currentModel) reconnectRuntime('effort');
+});
 document.addEventListener('click', event => {
   if (!event.target.closest('.model-picker-trigger') && !event.target.closest('#model-menu')) closeModelMenu();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeModelMenu();
+  if (event.key === 'Escape') {
+    closeModelMenu();
+    closeSettings();
+  }
 });
 
 // ─────────────────────────── Boot ─────────────────────────────────────────

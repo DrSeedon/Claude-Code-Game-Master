@@ -38,6 +38,34 @@ def test_get_or_create_session_returns_existing(tmp_path):
     assert first is second
 
 
+def test_get_or_create_session_rebuilds_provider_when_effort_changes(tmp_path):
+    async def scenario():
+        session = get_or_create_session(
+            "camp-a",
+            tmp_path,
+            "gpt-5.6-terra",
+            "codex",
+            reasoning_effort="medium",
+        )
+        old_provider = session.provider
+
+        same = get_or_create_session(
+            "camp-a",
+            tmp_path,
+            "gpt-5.6-terra",
+            "codex",
+            reasoning_effort="high",
+        )
+        await asyncio.sleep(0)
+
+        assert same is session
+        assert session.reasoning_effort == "high"
+        assert session.provider is not old_provider
+        assert session.provider.reasoning_effort == "high"
+
+    asyncio.run(scenario())
+
+
 def test_get_or_create_session_different_campaigns_are_isolated(tmp_path):
     a = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
     b = get_or_create_session("camp-b", tmp_path, "claude-sonnet-5")
@@ -155,7 +183,7 @@ def test_provider_switch_is_transactional_when_build_fails(tmp_path, monkeypatch
     session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     old_provider = session.provider
 
-    def fail_build(_model_name=None):
+    def fail_build(_model_name=None, _reasoning_effort=None):
         raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(session, "_build_provider", fail_build)
@@ -188,7 +216,8 @@ def test_reset_blocks_turn_and_provider_switch(tmp_path):
             session.configure("codex", "gpt-5.6-sol")
 
         release.set()
-        assert await reset_task is True
+        boundary = await reset_task
+        assert boundary["type"] == "session_reset"
 
     asyncio.run(scenario())
 
@@ -217,4 +246,20 @@ def test_provider_switch_hands_recent_transcript_to_first_turn(tmp_path):
     assert "PLAYER: I open the vault." in prompt
     assert "GAME MASTER: The alarm starts ringing." in prompt
     assert "PLAYER: I hide." not in prompt
+    assert session._history_handoff is None
+
+
+def test_provider_switch_after_reset_does_not_restore_old_chat(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    append_event(session.campaign_dir, "user_message", "old question")
+    append_event(session.campaign_dir, "text", "old answer")
+
+    async def scenario():
+        boundary = await session.reset_session()
+        assert boundary["type"] == "session_reset"
+        session.configure("codex", "gpt-5.6-terra")
+        await asyncio.sleep(0)
+
+    asyncio.run(scenario())
+
     assert session._history_handoff is None
