@@ -7,6 +7,8 @@ Covers the AC from frontend-migration-blueprint.md §3.1/§5:
 - two campaigns stream independently (no cross-talk)
 """
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -123,6 +125,26 @@ def test_after_id_zero_returns_full_history(client, tmp_path):
     assert len(history_msg["messages"]) == 1
 
 
+def test_disconnect_during_initial_history_replay_is_clean(client, tmp_path):
+    campaign_dir = _campaign_dir(tmp_path, "blood-arena")
+    append_event(campaign_dir, "text", "large replay payload")
+
+    class DisconnectingWebSocket:
+        query_params = {"campaign": "blood-arena", "after_id": "0"}
+        accepted = False
+
+        async def accept(self):
+            self.accepted = True
+
+        async def send_text(self, _payload):
+            raise WebSocketDisconnect(code=1006)
+
+    websocket = DisconnectingWebSocket()
+    asyncio.run(server_module.game_websocket(websocket))
+
+    assert websocket.accepted
+
+
 def test_new_session_boundary_hides_old_chat_without_truncating_log(
     client, tmp_path
 ):
@@ -150,6 +172,26 @@ def test_new_session_boundary_hides_old_chat_without_truncating_log(
     assert [message["content"] for message in history_msg["messages"]] == [
         "new session answer"
     ]
+
+
+def test_compact_endpoint_preserves_visible_chat(client, tmp_path):
+    campaign_dir = _campaign_dir(tmp_path, "blood-arena")
+    append_event(campaign_dir, "user_message", "keep this visible")
+    session = game_session_module.get_or_create_session(
+        "blood-arena",
+        tmp_path,
+        "claude-sonnet-5",
+    )
+
+    response = client.post("/api/campaigns/blood-arena/compact")
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "handoff_reset"
+    assert not any(
+        event["type"] == "session_reset"
+        for event in read_events(campaign_dir)
+    )
+    assert session._history_handoff
 
 
 def test_game_websocket_applies_valid_effort_and_rejects_invalid_one(

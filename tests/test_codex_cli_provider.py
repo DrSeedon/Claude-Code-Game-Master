@@ -185,6 +185,34 @@ class FakeAppServerProcess:
                     },
                 }
             )
+            return
+        if method == "thread/compact/start":
+            self._response(request)
+            compact_usage = {
+                "inputTokens": 40,
+                "cachedInputTokens": 20,
+                "outputTokens": 5,
+            }
+            self.stdout.feed_json(
+                {
+                    "method": "thread/tokenUsage/updated",
+                    "params": {
+                        "threadId": self.thread_id,
+                        "turnId": "compact-1",
+                        "tokenUsage": {
+                            "last": compact_usage,
+                            "total": compact_usage,
+                            "modelContextWindow": 200,
+                        },
+                    },
+                }
+            )
+            self.stdout.feed_json(
+                {
+                    "method": "thread/compacted",
+                    "params": {"threadId": self.thread_id},
+                }
+            )
 
     async def wait(self):
         if self.returncode is None:
@@ -285,6 +313,8 @@ def test_new_turn_uses_persistent_app_server_and_safe_sandbox(tmp_path):
     assert options["stdin"] == asyncio.subprocess.PIPE
     assert options["cwd"] == str(tmp_path.resolve())
     assert options["env"]["DM_ACTIVE_CAMPAIGN"] == "test-campaign"
+    assert options["env"]["NO_COLOR"] == "1"
+    assert options["env"]["TERM"] == "dumb"
     thread_start = next(
         request for request in process.requests if request.get("method") == "thread/start"
     )
@@ -456,6 +486,34 @@ def test_interrupt_uses_native_turn_interrupt(tmp_path):
         "threadId": "thread-1",
         "turnId": "turn-1",
     }
+
+
+def test_compact_uses_native_thread_request_and_refreshes_usage(tmp_path):
+    process = FakeAppServerProcess()
+
+    async def factory(*_command, **_options):
+        return process
+
+    provider = CodexCLIProvider(tmp_path, process_factory=factory)
+
+    async def scenario():
+        await provider._connect("system", None)
+        compacted = await provider.compact()
+        usage = provider.get_context_usage()
+        await provider.close()
+        return compacted, usage
+
+    compacted, usage = asyncio.run(scenario())
+
+    assert compacted is True
+    request = next(
+        request
+        for request in process.requests
+        if request.get("method") == "thread/compact/start"
+    )
+    assert request["params"] == {"threadId": "thread-1"}
+    assert usage.used_tokens == 40
+    assert usage.percent == 20
 
 
 def test_reset_forgets_thread_and_rejects_dangerous_sandbox(tmp_path):

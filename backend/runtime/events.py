@@ -31,6 +31,7 @@ class ContextUsage:
     used_tokens: int
     total_tokens: int
     cached_input_tokens: int = 0
+    breakdown: Mapping[str, int] = field(default_factory=dict)
 
     @property
     def percent(self) -> int:
@@ -38,10 +39,13 @@ class ContextUsage:
             return 0
         return min(100, round(self.used_tokens * 100 / self.total_tokens))
 
-    def to_dict(self) -> dict[str, int]:
-        return {
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "percent": self.percent,
             "used_tokens": self.used_tokens,
             "total_tokens": self.total_tokens,
             "cached_input_tokens": self.cached_input_tokens,
         }
+        if self.breakdown:
+            result["breakdown"] = dict(self.breakdown)
+        return result

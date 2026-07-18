@@ -188,17 +188,17 @@ class DiceRoller:
 def _dc_color(dc):
     """DC difficulty gradient: green→yellow→orange→red→magenta→bold magenta."""
     if dc <= 5:
-        return "\033[32m"
+        return Colors.GREEN
     elif dc <= 10:
-        return "\033[92m"
+        return Colors.LIGHT_GREEN
     elif dc <= 15:
-        return "\033[33m"
+        return Colors.YELLOW
     elif dc <= 20:
-        return "\033[91m"
+        return Colors.LIGHT_RED
     elif dc <= 25:
-        return "\033[31m"
+        return Colors.RED
     else:
-        return "\033[1;35m"
+        return Colors.BOLD_MAGENTA
 
 
 def format_enhanced(result, label=None, dc=None, ac=None):
@@ -739,8 +739,8 @@ def main():
                 cwd=str(campaign_dir.parent.parent.parent)
             )
             if weapon_ammo not in check.stdout:
-                RS = "\033[0m"
-                BR = "\033[1;31m"
+                RS = Colors.RESET
+                BR = Colors.BOLD_RED
                 print(f"  {BR}\u26a0\ufe0f No {weapon_ammo}! Cannot fire.{RS}")
                 sys.exit(0)
 
@@ -826,8 +826,8 @@ def main():
                 if ammo_result.returncode == 0 and ammo_result.stdout.strip():
                     print(ammo_result.stdout.strip())
                 elif "not found" in (ammo_result.stderr or ""):
-                    RS = "\033[0m"
-                    BR = "\033[1;31m"
+                    RS = Colors.RESET
+                    BR = Colors.BOLD_RED
                     print(f"  {BR}\u26a0\ufe0f No {weapon_ammo} left!{RS}")
 
     except ValueError as e:

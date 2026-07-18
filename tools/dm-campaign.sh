@@ -82,7 +82,7 @@ case "$ACTION" in
         fi
         ;;
 
-    "info")
+    "info"|"status")
         if [ -z "$1" ]; then
             $PYTHON_CMD "$LIB_DIR/campaign_manager.py" info
         else

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Mapping
 from typing import AsyncGenerator, Dict, Optional
 from pathlib import Path
 
@@ -63,6 +64,37 @@ def _extract_tool_result(block: ToolResultBlock) -> str:
     return str(raw)
 
 
+def _context_usage_from_sdk(raw: Mapping[str, object]) -> ContextUsage:
+    """Preserve Claude Code's exact `/context` category breakdown."""
+    breakdown: dict[str, int] = {}
+    categories = raw.get("categories")
+    if isinstance(categories, list):
+        for category in categories:
+            if not isinstance(category, Mapping):
+                continue
+            name = str(category.get("name") or "").strip()
+            try:
+                tokens = max(0, int(category.get("tokens") or 0))
+            except (TypeError, ValueError):
+                tokens = 0
+            if name and tokens:
+                breakdown[name] = breakdown.get(name, 0) + tokens
+
+    try:
+        used = max(0, int(raw.get("totalTokens") or 0))
+    except (TypeError, ValueError):
+        used = 0
+    try:
+        total = max(0, int(raw.get("maxTokens") or raw.get("rawMaxTokens") or 0))
+    except (TypeError, ValueError):
+        total = 0
+    return ContextUsage(
+        used_tokens=used,
+        total_tokens=total or ClaudeSDKProvider.CONTEXT_WINDOW,
+        breakdown=breakdown,
+    )
+
+
 class ClaudeSDKProvider:
 
     # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
@@ -83,9 +115,12 @@ class ClaudeSDKProvider:
         self._session_id: Optional[str] = resume_session_id
         self._environment = dict(environment or {})
         self._last_usage: Optional[dict] = None  # token counts from the latest ResultMessage
+        self._last_context_usage: ContextUsage | None = None
 
     def _make_options(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeAgentOptions:
         process_env = {**_proxy_env(), **self._environment}
+        process_env["NO_COLOR"] = "1"
+        process_env["TERM"] = "dumb"
         if self.campaign_name:
             process_env["DM_ACTIVE_CAMPAIGN"] = self.campaign_name
         options = ClaudeAgentOptions(
@@ -211,6 +246,19 @@ class ClaudeSDKProvider:
                 usage = getattr(msg, "usage", None)
                 if isinstance(usage, dict):
                     self._last_usage = usage
+                client = self._client
+                if client is not None:
+                    try:
+                        raw_context = await asyncio.wait_for(
+                            client.get_context_usage(),
+                            timeout=5,
+                        )
+                        if isinstance(raw_context, Mapping):
+                            self._last_context_usage = _context_usage_from_sdk(
+                                raw_context
+                            )
+                    except Exception as exc:
+                        logger.debug("Claude context breakdown unavailable: %s", exc)
                 if msg.is_error and msg.result:
                     yield AgentEvent("error", msg.result)
                 yield AgentEvent(
@@ -239,6 +287,8 @@ class ClaudeSDKProvider:
         of the latest ResultMessage, as a fraction of the model's window. Mirrors
         Orchestra's ctx% calc. Output tokens don't count — they aren't in context.
         """
+        if self._last_context_usage is not None:
+            return self._last_context_usage
         u = self._last_usage
         if not u:
             return None
@@ -249,6 +299,14 @@ class ClaudeSDKProvider:
         )
         total = self.CONTEXT_WINDOW
         return ContextUsage(used_tokens=used, total_tokens=total)
+
+    async def compact(self) -> bool:
+        """Claude Agent SDK exposes auto-compaction but no manual control call.
+
+        Returning False asks GameSession to use the provider-neutral
+        WorldGraph + recent-transcript handoff compaction path.
+        """
+        return False
 
     async def interrupt(self) -> bool:
         client = self._client
@@ -272,6 +330,8 @@ class ClaudeSDKProvider:
         untouched — only Claude's working memory is cleared."""
         await self._disconnect()
         self._session_id = None
+        self._last_usage = None
+        self._last_context_usage = None
 
     async def reconnect(self, system_prompt: str, mcp_servers: Optional[Dict] = None) -> None:
         await self._disconnect()

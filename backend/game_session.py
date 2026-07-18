@@ -214,6 +214,46 @@ class GameSession:
             return False
         return await self.provider.interrupt()
 
+    async def compact_session(self) -> dict[str, Any] | None:
+        """Compact provider memory without clearing the visible campaign chat."""
+        if self.running:
+            return None
+        async with self._mutation_lock:
+            if self.running:
+                return None
+            native = await self.provider.compact()
+            mode = "native"
+            if not native:
+                handoff = self._build_history_handoff()
+                await self.provider.reset()
+                self._history_handoff = handoff
+                mode = "handoff_reset"
+
+            stored = append_event(
+                self.campaign_dir,
+                "activity",
+                "Context compacted",
+                metadata={
+                    "activity_type": "context_compaction",
+                    "ui_key": "context_compacted",
+                    "mode": mode,
+                },
+            )
+            broker.publish(self.campaign, stored)
+            usage = self.provider.get_context_usage()
+            usage_payload = usage.to_dict() if usage else None
+            if usage:
+                broker.publish(
+                    self.campaign,
+                    {"type": "usage", **usage_payload},
+                )
+            return {
+                "success": True,
+                "mode": mode,
+                "event_id": stored["id"],
+                "usage": usage_payload,
+            }
+
     def send(
         self,
         user_message: str,
@@ -301,12 +341,7 @@ class GameSession:
             if usage:
                 broker.publish(
                     self.campaign,
-                    {
-                        "type": "usage",
-                        "percent": usage.percent,
-                        "used": usage.used_tokens,
-                        "total": usage.total_tokens,
-                    },
+                    {"type": "usage", **usage.to_dict()},
                 )
             broker.publish(self.campaign, self.status_event())
             broker.publish(self.campaign, {"type": "done"})

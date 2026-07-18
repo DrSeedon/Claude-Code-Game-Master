@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DM Game Master</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20260718-2" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260718-6" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.31.2/dist/cytoscape.min.js"></script>
@@ -19,6 +19,7 @@
       <span id="mobile-agent-status" class="agent-status mobile-agent-status idle" title="Статус AI-агента">
         <span class="agent-status-icon">☕</span><span class="agent-status-label">idle</span>
       </span>
+      <button class="mobile-compact-btn" id="mobile-compact-btn" aria-label="Сжать контекст" title="Сжать контекст" hidden>⇣</button>
       <button class="mobile-model-btn model-picker-trigger" id="mobile-model-btn" aria-label="Выбрать модель" hidden></button>
       <button class="mobile-settings-btn" id="mobile-settings-btn" aria-label="Глобальные настройки">⚙</button>
       <button class="mobile-new-btn" id="mobile-new-btn" aria-label="Новая кампания">+</button>
@@ -67,10 +68,12 @@
           <div class="chat-controls">
             <button id="new-session-btn" class="btn new-session-btn" title="Очистить чат и начать с новым контекстом" hidden>🔄 Новая сессия</button>
             <button id="wizard-reset-btn" class="btn wizard-reset-btn" title="Начать создание заново" hidden>🗑️ Сбросить</button>
-            <span id="ctx-usage" class="ctx-usage" title="Использование контекста" hidden>
+            <button id="compact-btn" class="btn compact-btn" title="Сжать контекст, сохранив историю кампании" hidden>⇣ Compact</button>
+            <button id="ctx-usage" class="ctx-usage" type="button" aria-expanded="false" hidden>
               <span class="ctx-bar"><span class="ctx-fill"></span></span>
               <span class="ctx-label">0%</span>
-            </span>
+              <span id="ctx-details" class="ctx-details" hidden></span>
+            </button>
             <button id="model-picker-btn" class="model-picker-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
               <span class="model-provider-dot"></span>
               <span class="model-picker-label">Загрузка моделей…</span>
@@ -154,6 +157,6 @@
     </section>
   </div>
 
-  <script src="/static/js/app.js?v=20260718-2"></script>
+  <script src="/static/js/app.js?v=20260718-6"></script>
 </body>
 </html>

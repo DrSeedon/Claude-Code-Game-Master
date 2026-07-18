@@ -2,6 +2,7 @@
 """Mass Combat Engine — individual unit tracking for large-scale battles."""
 
 import json
+import os
 import random
 import re
 import sys
@@ -9,27 +10,36 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 
+def _ansi(code: str) -> str:
+    enabled = (
+        sys.stdout.isatty()
+        and os.environ.get("TERM") != "dumb"
+        and not os.environ.get("NO_COLOR")
+    )
+    return f"\033[{code}m" if enabled else ""
+
+
 class C:
-    RST = "\033[0m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    RED = "\033[31m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    BLUE = "\033[34m"
-    MAGENTA = "\033[35m"
-    CYAN = "\033[36m"
-    WHITE = "\033[37m"
-    BRED = "\033[91m"
-    BGREEN = "\033[92m"
-    BYELLOW = "\033[93m"
-    BBLUE = "\033[94m"
-    BMAGENTA = "\033[95m"
-    BCYAN = "\033[96m"
-    BG_RED = "\033[41m"
-    BG_GREEN = "\033[42m"
-    BG_YELLOW = "\033[43m"
-    BG_BLUE = "\033[44m"
+    RST = _ansi("0")
+    BOLD = _ansi("1")
+    DIM = _ansi("2")
+    RED = _ansi("31")
+    GREEN = _ansi("32")
+    YELLOW = _ansi("33")
+    BLUE = _ansi("34")
+    MAGENTA = _ansi("35")
+    CYAN = _ansi("36")
+    WHITE = _ansi("37")
+    BRED = _ansi("91")
+    BGREEN = _ansi("92")
+    BYELLOW = _ansi("93")
+    BBLUE = _ansi("94")
+    BMAGENTA = _ansi("95")
+    BCYAN = _ansi("96")
+    BG_RED = _ansi("41")
+    BG_GREEN = _ansi("42")
+    BG_YELLOW = _ansi("43")
+    BG_BLUE = _ansi("44")
 
     @staticmethod
     def c(text, *codes):
@@ -357,7 +367,7 @@ class MassCombatEngine:
 
         targets = self._get_targets(attacker_faction, target_group, target_faction)
         if not targets:
-            return f"[ERROR] No valid targets found."
+            return "[ERROR] No valid targets found."
 
         attackers = [
             uid for uid in grp["unit_ids"]
@@ -755,7 +765,7 @@ class MassCombatEngine:
         lines.append("")
 
         all_groups = []
-        for faction, groups in self.state["factions"].items():
+        for _faction, groups in self.state["factions"].items():
             for grp_name in groups:
                 if grp_name not in all_groups:
                     all_groups.append(grp_name)

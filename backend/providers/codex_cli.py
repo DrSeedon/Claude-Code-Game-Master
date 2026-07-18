@@ -392,6 +392,8 @@ class CodexCLIProvider:
             for key, value in server_env.items():
                 if _ENV_NAME.fullmatch(str(key)):
                     env[str(key)] = str(value)
+        env["NO_COLOR"] = "1"
+        env["TERM"] = "dumb"
         return env
 
     async def _connect(
@@ -528,20 +530,7 @@ class CodexCLIProvider:
                 continue
 
             if method == "thread/tokenUsage/updated":
-                usage = params.get("tokenUsage") or {}
-                if isinstance(usage, Mapping):
-                    last = usage.get("last") or {}
-                    if isinstance(last, Mapping):
-                        self._last_call_usage = {
-                            "input_tokens": _nonnegative_int(last.get("inputTokens")),
-                            "cached_input_tokens": _nonnegative_int(
-                                last.get("cachedInputTokens")
-                            ),
-                            "output_tokens": _nonnegative_int(last.get("outputTokens")),
-                        }
-                    window = usage.get("modelContextWindow")
-                    if isinstance(window, int) and window > 0:
-                        self._context_window = window
+                self._capture_token_usage(params)
                 continue
 
             if method == "error":
@@ -730,6 +719,63 @@ class CodexCLIProvider:
             return True
         except (RuntimeError, asyncio.TimeoutError):
             return False
+
+    def _capture_token_usage(self, params: Mapping[str, Any]) -> None:
+        usage = params.get("tokenUsage") or {}
+        if not isinstance(usage, Mapping):
+            return
+        last = usage.get("last") or {}
+        if isinstance(last, Mapping):
+            self._last_call_usage = {
+                "input_tokens": _nonnegative_int(last.get("inputTokens")),
+                "cached_input_tokens": _nonnegative_int(
+                    last.get("cachedInputTokens")
+                ),
+                "output_tokens": _nonnegative_int(last.get("outputTokens")),
+            }
+        window = usage.get("modelContextWindow")
+        if isinstance(window, int) and window > 0:
+            self._context_window = window
+
+    async def compact(self) -> bool:
+        """Run Codex app-server's native manual compaction for an idle thread."""
+        if self._active_turn_id or not self._thread_id or not self.is_alive:
+            return False
+        async with self._turn_lock:
+            try:
+                self._last_call_usage = None
+                await asyncio.wait_for(
+                    self._request(
+                        "thread/compact/start",
+                        {"threadId": self._thread_id},
+                    ),
+                    timeout=10,
+                )
+                while True:
+                    message = await asyncio.wait_for(
+                        self._notifications.get(),
+                        timeout=120,
+                    )
+                    method = str(message.get("method") or "")
+                    params = message.get("params") or {}
+                    if not isinstance(params, Mapping):
+                        params = {}
+                    thread_id = params.get("threadId")
+                    if (
+                        thread_id
+                        and self._thread_id
+                        and str(thread_id) != self._thread_id
+                    ):
+                        continue
+                    if method == "thread/tokenUsage/updated":
+                        self._capture_token_usage(params)
+                        continue
+                    if method in {"thread/compacted", "context/compacted"}:
+                        return True
+                    if method == "error" and not params.get("willRetry"):
+                        return False
+            except (CodexProtocolError, RuntimeError, asyncio.TimeoutError):
+                return False
 
     async def close(self) -> None:
         process = self._proc

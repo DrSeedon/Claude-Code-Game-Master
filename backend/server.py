@@ -276,6 +276,19 @@ async def api_interrupt_session(name: str):
     return {"success": True, "interrupted": interrupted}
 
 
+@app.post("/api/campaigns/{name}/compact")
+async def api_compact_session(name: str):
+    if not _valid_campaign_name(name):
+        raise HTTPException(status_code=400, detail="Invalid campaign name")
+    session = peek_session(name)
+    if session is None:
+        raise HTTPException(status_code=409, detail="No active provider context")
+    result = await session.compact_session()
+    if result is None:
+        raise HTTPException(status_code=409, detail="A turn is in progress")
+    return result
+
+
 def _campaign_path(name: str) -> Path:
     if not _valid_campaign_name(name):
         raise HTTPException(status_code=400, detail="Invalid campaign name")
@@ -739,17 +752,18 @@ async def game_websocket(websocket: WebSocket):
         await websocket.close(code=1008)
         return
 
-    # Replay only what the client missed, driven by the after_id cursor it sent
-    history = read_current_session_events(
-        session.campaign_dir,
-        after_id=after_id,
-    )
-    if history:
-        await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
-
     queue = broker.subscribe(campaign)
-    await websocket.send_text(json.dumps(session.status_event(), ensure_ascii=False))
     try:
+        # Subscribe before replay so events emitted while a large history is sent
+        # are queued instead of falling into the replay/live hand-off gap.
+        history = read_current_session_events(
+            session.campaign_dir,
+            after_id=after_id,
+        )
+        if history:
+            await websocket.send_text(json.dumps({"type": "history", "messages": history}, ensure_ascii=False))
+        await websocket.send_text(json.dumps(session.status_event(), ensure_ascii=False))
+
         while True:
             receive_task = asyncio.ensure_future(websocket.receive_text())
             queue_task = asyncio.ensure_future(queue.get())

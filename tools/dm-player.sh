@@ -3,15 +3,45 @@
 
 source "$(dirname "$0")/common.sh"
 
-require_active_campaign
-
-ACTION=$1
-shift
-
 WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 
+show_usage() {
+    echo "D&D Player Character Manager"
+    echo "Usage: dm-player.sh <action> [args]"
+    echo ""
+    echo "Actions:"
+    echo "  show                         - Show player character sheet"
+    echo "  status                       - Alias for show"
+    echo "  get <name>                   - Get full character JSON"
+    echo "  list                         - List all player IDs"
+    echo "  set <name>                   - Set character as current active PC"
+    echo "  xp [name] <+amount>          - Award XP to character"
+    echo "  hp [name] <+/-amount>        - Modify character HP"
+    echo "  hp-max [name] <+/-amount>    - Modify max HP"
+    echo "  gold [name] [+/-amount]      - Modify or show character money"
+    echo "  condition <name> <action>    - Manage conditions (add/remove/list)"
+    echo "  level-check <name>           - Check XP and level status"
+    echo "  save-json '<json>'           - Save complete character from JSON"
+    dispatch_middleware_help "dm-player.sh"
+}
+
+ACTION="${1:-}"
 case "$ACTION" in
-    show)
+    -h|--help|help)
+        show_usage
+        exit 0
+        ;;
+    "")
+        show_usage
+        exit 1
+        ;;
+esac
+shift
+
+require_active_campaign
+
+case "$ACTION" in
+    show|status|view)
         $WG player-show
         ;;
 
@@ -161,22 +191,9 @@ case "$ACTION" in
         ;;
 
     *)
-        echo "D&D Player Character Manager"
-        echo "Usage: dm-player.sh <action> [args]"
-        echo ""
-        echo "Actions:"
-        echo "  show                         - Show player character sheet"
-        echo "  get <name>                   - Get full character JSON"
-        echo "  list                         - List all player IDs"
-        echo "  set <name>                   - Set character as current active PC"
-        echo "  xp [name] <+amount>          - Award XP to character"
-        echo "  hp [name] <+/-amount>        - Modify character HP"
-        echo "  hp-max [name] <+/-amount>    - Modify max HP"
-        echo "  gold [name] [+/-amount]      - Modify or show character money"
-        echo "  condition <name> <action>    - Manage conditions (add/remove/list)"
-        echo "  level-check <name>           - Check XP and level status"
-        echo "  save-json '<json>'           - Save complete character from JSON"
-        dispatch_middleware_help "dm-player.sh"
+        echo "Unknown action: $ACTION" >&2
+        show_usage
+        exit 1
         ;;
 esac
 

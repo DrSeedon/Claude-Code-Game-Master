@@ -10,35 +10,48 @@ Usage:
     uv run python lib/colors.py dice 17 5 22 hit
 """
 
+import os
+import sys
+
+
+def _ansi(code: str) -> str:
+    enabled = (
+        sys.stdout.isatty()
+        and os.environ.get("TERM") != "dumb"
+        and not os.environ.get("NO_COLOR")
+    )
+    return f"\033[{code}m" if enabled else ""
+
+
 # ANSI Color Codes
 class Colors:
     # Reset
-    RESET = "\033[0m"
+    RESET = _ansi("0")
     RS = RESET
 
     # Standard colors
-    RED = "\033[31m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    CYAN = "\033[36m"
+    RED = _ansi("31")
+    GREEN = _ansi("32")
+    YELLOW = _ansi("33")
+    CYAN = _ansi("36")
 
     # Light variants
-    LIGHT_GREEN = "\033[92m"
-    LIGHT_RED = "\033[91m"
+    LIGHT_GREEN = _ansi("92")
+    LIGHT_RED = _ansi("91")
 
     # Bold variants
-    BOLD = "\033[1m"
-    BOLD_RED = "\033[1;31m"
-    BOLD_GREEN = "\033[1;32m"
-    BOLD_YELLOW = "\033[1;33m"
-    BOLD_CYAN = "\033[1;36m"
+    BOLD = _ansi("1")
+    BOLD_RED = _ansi("1;31")
+    BOLD_GREEN = _ansi("1;32")
+    BOLD_YELLOW = _ansi("1;33")
+    BOLD_CYAN = _ansi("1;36")
 
     # Dim for secondary info
-    DIM = "\033[2m"
+    DIM = _ansi("2")
 
     # Magenta
-    MAGENTA = "\033[35m"
-    BOLD_MAGENTA = "\033[1;35m"
+    MAGENTA = _ansi("35")
+    BOLD_MAGENTA = _ansi("1;35")
 
     # Short aliases (used across lib/ files)
     R = RED

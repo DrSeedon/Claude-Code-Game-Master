@@ -129,7 +129,7 @@ validate_name() {
 }
 
 # Color output functions (only if terminal supports it)
-if [ -t 1 ] && [ "${TERM}" != "dumb" ]; then
+if [ -t 1 ] && [ "${TERM}" != "dumb" ] && [ -z "${NO_COLOR:-}" ]; then
     RED='\033[0;31m'
     GREEN='\033[0;32m'
     YELLOW='\033[1;33m'

@@ -3,7 +3,7 @@
 
 source "$(dirname "$0")/common.sh"
 
-if [ "$#" -lt 1 ]; then
+show_usage() {
     echo "Usage: dm-session.sh <action> [args]"
     echo ""
     echo "Session Actions:"
@@ -26,11 +26,22 @@ if [ "$#" -lt 1 ]; then
     echo "  dm-session.sh save \"before-boss-fight\""
     echo "  dm-session.sh restore 20250127-before-boss-fight"
     echo "  dm-session.sh context"
+}
+
+if [ "$#" -lt 1 ]; then
+    show_usage
     exit 1
 fi
 
 ACTION="$1"
 shift
+
+case "$ACTION" in
+    -h|--help|help)
+        show_usage
+        exit 0
+        ;;
+esac
 
 dispatch_middleware "dm-session.sh" "$ACTION" "$@"
 MW_RC=$?

@@ -33,6 +33,28 @@
 | `dm-overview.sh` | Quick summary of world state |
 | `dm-time.sh` | Advance game time |
 
+### Web Runtime Command Contract
+
+The web runtime injects this compiled ruleset directly. It is already scoped to
+the selected campaign.
+
+- Run exactly one `bash tools/dm-session.sh context` when gameplay starts or
+  when campaign state must be reloaded. Do not follow it with redundant
+  overview, player, campaign, or help calls unless a specific required field is
+  missing from its output.
+- Use `bash tools/dm-player.sh show` for the active character sheet,
+  `bash tools/dm-session.sh status` for compact session status, and
+  `bash tools/dm-campaign.sh info` for campaign metadata.
+- Never guess tool actions. Use only syntax documented in this compiled
+  ruleset. If a required action is not documented, inspect that one wrapper
+  instead of trying several speculative commands.
+- Never run terminal-adapter preparation commands from the web runtime. In
+  particular, do not run `scripts/list_campaigns.sh`,
+  `scripts/prepare_session.sh`, any `/dm` command, or read
+  `/tmp/dm-rules.md`.
+- Module tools must use the exact path shown by the active module rules. Never
+  shorten a module path into an assumed `tools/<name>.sh` wrapper.
+
 ### World State Files
 
 Each campaign in `world-state/campaigns/<name>/`:

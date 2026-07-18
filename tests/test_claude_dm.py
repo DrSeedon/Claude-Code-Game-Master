@@ -14,6 +14,15 @@ def test_prompt_contains_dnd_rules_for_campaign():
     assert "Narrator Style" in prompt    # narrator layered on top
 
 
+def test_prompt_has_canonical_startup_tool_contract():
+    prompt = load_system_prompt("dragon-quest")
+
+    assert "Run exactly one `bash tools/dm-session.sh context`" in prompt
+    assert "`bash tools/dm-player.sh show`" in prompt
+    assert "`bash tools/dm-campaign.sh info`" in prompt
+    assert "Never guess tool actions" in prompt
+
+
 def test_prompt_without_campaign_still_has_core_rules():
     """No campaign scoped → CORE dm-slots still emit (fallback), never an empty prompt."""
     prompt = load_system_prompt(None)
@@ -59,6 +68,29 @@ def test_rate_limit_info_classifies():
         "content": "rate limit exceeded, retry-after 30", "retry_after": 30}
     assert _rate_limit_info(Exception("session limit reached"))["content"]  # no retry_after
     assert _rate_limit_info(Exception("connection refused")) is None
+
+
+def test_claude_context_usage_keeps_provider_breakdown():
+    from backend.providers.claude_sdk import _context_usage_from_sdk
+
+    usage = _context_usage_from_sdk(
+        {
+            "totalTokens": 118_000,
+            "maxTokens": 200_000,
+            "categories": [
+                {"name": "System prompt", "tokens": 24_000, "color": "blue"},
+                {"name": "Messages", "tokens": 94_000, "color": "green"},
+            ],
+        }
+    )
+
+    assert usage.used_tokens == 118_000
+    assert usage.total_tokens == 200_000
+    assert usage.percent == 59
+    assert usage.breakdown == {
+        "System prompt": 24_000,
+        "Messages": 94_000,
+    }
 
 
 def test_campaign_name_validation_matches_creation():

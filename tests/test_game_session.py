@@ -84,6 +84,8 @@ def test_provider_process_environment_is_campaign_scoped(tmp_path):
     )
 
     assert options.env["DM_ACTIVE_CAMPAIGN"] == "camp-a"
+    assert options.env["NO_COLOR"] == "1"
+    assert options.env["TERM"] == "dumb"
 
 
 def test_send_starts_turn_and_marks_running(tmp_path):
@@ -289,6 +291,33 @@ def test_reset_blocks_turn_and_provider_switch(tmp_path):
         assert boundary["type"] == "session_reset"
 
     asyncio.run(scenario())
+
+
+def test_compact_falls_back_to_fresh_provider_with_history_handoff(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    append_event(session.campaign_dir, "user_message", "I enter the hangar.")
+    append_event(session.campaign_dir, "text", "The blast doors close behind you.")
+    calls = []
+
+    async def no_native_compaction():
+        calls.append("compact")
+        return False
+
+    async def reset_provider():
+        calls.append("reset")
+
+    session.provider.compact = no_native_compaction
+    session.provider.reset = reset_provider
+
+    async def scenario():
+        return await session.compact_session()
+
+    result = asyncio.run(scenario())
+
+    assert result["mode"] == "handoff_reset"
+    assert calls == ["compact", "reset"]
+    assert "PLAYER: I enter the hangar." in session._history_handoff
+    assert "GAME MASTER: The blast doors close behind you." in session._history_handoff
 
 
 def test_provider_switch_hands_recent_transcript_to_first_turn(tmp_path):

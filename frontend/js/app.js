@@ -34,6 +34,7 @@ const el = {
   mobileBack: document.getElementById('mobile-back'),
   mobileNew: document.getElementById('mobile-new-btn'),
   mobileModelBtn: document.getElementById('mobile-model-btn'),
+  mobileCompactBtn: document.getElementById('mobile-compact-btn'),
   mobileSettingsBtn: document.getElementById('mobile-settings-btn'),
   mobileTitle: document.getElementById('mobile-title'),
   campaignList: document.getElementById('campaign-list'),
@@ -74,11 +75,13 @@ const el = {
   ctxUsage: document.getElementById('ctx-usage'),
   ctxFill: document.querySelector('#ctx-usage .ctx-fill'),
   ctxLabel: document.querySelector('#ctx-usage .ctx-label'),
+  ctxDetails: document.getElementById('ctx-details'),
   rightPanel: document.getElementById('right-panel'),
   rightPanelHead: document.querySelector('#right-panel .right-panel-head'),
   choices: document.getElementById('choices'),
   wizardResetBtn: document.getElementById('wizard-reset-btn'),
   newSessionBtn: document.getElementById('new-session-btn'),
+  compactBtn: document.getElementById('compact-btn'),
   charPanel: document.getElementById('char-panel'),
   rateLimitBar: document.getElementById('rate-limit-bar'),
   input: document.getElementById('input'),
@@ -118,6 +121,7 @@ const state = {
     catch { return 'ru'; }
   })(),
   mapData: null,
+  contextUsage: null,
   map: null,
 };
 
@@ -337,9 +341,17 @@ function setDashboardLocale(locale, { persist = true } = {}) {
     'Clear the chat and start with fresh context'
   );
   el.newSessionBtn.textContent = ui('🔄 Новая сессия', '🔄 New session');
+  el.compactBtn.title = ui(
+    'Сжать контекст, сохранив видимый чат и состояние мира',
+    'Compact context while preserving visible chat and world state'
+  );
+  el.compactBtn.textContent = ui('⇣ Compact', '⇣ Compact');
+  el.mobileCompactBtn.title = ui('Сжать контекст', 'Compact context');
+  el.mobileCompactBtn.setAttribute('aria-label', el.mobileCompactBtn.title);
   el.wizardResetBtn.title = ui('Начать создание заново', 'Restart campaign creation');
   el.wizardResetBtn.textContent = ui('🗑️ Сбросить', '🗑️ Reset');
   el.ctxUsage.title = ui('Использование контекста', 'Context usage');
+  if (state.contextUsage) renderCtxDetails();
   el.stopBtn.title = ui('Остановить ход', 'Stop turn');
   el.stopBtn.textContent = ui('■ Стоп', '■ Stop');
   el.sendBtn.textContent = ui('Отправить', 'Send');
@@ -616,8 +628,15 @@ function stripShellWrapper(command) {
   return value;
 }
 
+function stripTerminalCodes(value) {
+  return String(value || '')
+    .replace(/[\u001b\u241b]\][^\u0007]*(?:\u0007|[\u001b\u241b]\\)/g, '')
+    .replace(/[\u001b\u241b]\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\r(?!\n)/g, '\n');
+}
+
 function toolPresentation(content, metadata = {}) {
-  const raw = String(content || '').replace(/^🔧\s*/, '').trim();
+  const raw = stripTerminalCodes(content).replace(/^🔧\s*/, '').trim();
   let name = String(metadata.tool_name || metadata.short_name || '').trim();
   let body = raw;
   if (!name) {
@@ -728,11 +747,12 @@ function createToolCard(content, metadata = {}, timestamp = null) {
 
 function attachToolResult(card, content, metadata = {}, timestamp = null) {
   if (!card) return false;
-  const resultText = String(content || '').replace(/^[✅❌]\s*/, '');
+  const cleanContent = stripTerminalCodes(content);
+  const resultText = cleanContent.replace(/^[✅❌]\s*/, '');
   const exitCode = metadata.exit_code;
   const failed = Boolean(metadata.is_error)
     || (exitCode != null && Number(exitCode) !== 0)
-    || String(content || '').trim().startsWith('❌');
+    || cleanContent.trim().startsWith('❌');
   card.dataset.toolStatus = failed ? 'error' : 'success';
   const status = card.querySelector('.tool-card-status');
   status.innerHTML = `<span class="tool-status-dot"></span><span>${failed
@@ -772,7 +792,7 @@ function addActivityNote(content, activityType = 'activity', timestamp = null) {
       : '◆';
   const text = document.createElement('span');
   text.className = 'activity-note-text';
-  text.textContent = String(content || '');
+  text.textContent = stripTerminalCodes(content);
   div.append(icon, text);
   addBubbleTime(div, timestamp);
   if (String(content || '').length > ACTIVITY_COLLAPSE_LEN) {
@@ -783,6 +803,12 @@ function addActivityNote(content, activityType = 'activity', timestamp = null) {
 }
 
 function addActivity(content, metadata = {}, timestamp = null) {
+  if (metadata.ui_key === 'context_compacted') {
+    content = ui(
+      'Контекст сжат; видимый чат и состояние мира сохранены.',
+      'Context compacted; visible chat and world state were preserved.'
+    );
+  }
   let activityType = String(metadata.activity_type || '');
   const tool = toolPresentation(content, metadata);
   if (!activityType && tool) activityType = 'tool_use';
@@ -848,6 +874,8 @@ function setGenerating(on) {
   el.settingsBtn.disabled = on;
   el.mobileSettingsBtn.disabled = on;
   el.newSessionBtn.disabled = on;
+  el.compactBtn.disabled = on;
+  el.mobileCompactBtn.disabled = on;
   if (on) {
     closeModelMenu();
     closeSettings();
@@ -915,13 +943,84 @@ function updateInputEnabled() {
 }
 
 // Context usage indicator ---------------------------------------------------
-function updateCtxUsage(percent, used, total) {
+function contextCategoryLabel(name) {
+  const key = String(name || '').toLowerCase();
+  const known = [
+    [/system prompt|system instructions/, ['Системный промпт', 'System prompt']],
+    [/system tools|built.?in tools/, ['Системные инструменты', 'System tools']],
+    [/mcp/, ['MCP-инструменты', 'MCP tools']],
+    [/messages|conversation|chat/, ['Сообщения и результаты инструментов', 'Messages and tool results']],
+    [/memory/, ['Файлы памяти', 'Memory files']],
+    [/agents/, ['Агенты', 'Agents']],
+    [/skills/, ['Skills', 'Skills']],
+  ];
+  const match = known.find(([pattern]) => pattern.test(key));
+  return match ? ui(match[1][0], match[1][1]) : String(name);
+}
+
+function renderCtxDetails() {
+  const data = state.contextUsage;
+  if (!data || !el.ctxDetails) return;
+  el.ctxDetails.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'ctx-details-head';
+  const title = document.createElement('span');
+  title.textContent = ui('Контекст модели', 'Model context');
+  const total = document.createElement('strong');
+  total.textContent = `${Number(data.used || 0).toLocaleString()} / ${Number(data.total || 0).toLocaleString()}`;
+  head.append(title, total);
+  const range = document.createElement('div');
+  range.className = 'ctx-details-range';
+  range.textContent = ui(
+    '0–50% норма · 51–80% внимание · 81–100% критично',
+    '0–50% normal · 51–80% warning · 81–100% critical'
+  );
+  el.ctxDetails.append(head, range);
+
+  const entries = Object.entries(data.breakdown || {})
+    .filter(([, tokens]) => Number(tokens) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]));
+  for (const [name, tokens] of entries) {
+    const row = document.createElement('div');
+    row.className = 'ctx-detail-row';
+    const label = document.createElement('span');
+    label.textContent = contextCategoryLabel(name);
+    const value = document.createElement('strong');
+    value.textContent = Number(tokens).toLocaleString();
+    row.append(label, value);
+    el.ctxDetails.appendChild(row);
+  }
+  const note = document.createElement('div');
+  note.className = 'ctx-detail-note';
+  if (entries.length) {
+    note.textContent = ui(
+      'Категории получены напрямую от провайдера.',
+      'Categories are reported directly by the provider.'
+    );
+  } else {
+    note.textContent = ui(
+      'Этот провайдер сообщает общий input context без разбивки по категориям.',
+      'This provider reports total input context without category breakdown.'
+    );
+  }
+  if (Number(data.cached || 0) > 0) {
+    note.textContent += ui(
+      ` Из него кешировано: ${Number(data.cached).toLocaleString()} токенов.`,
+      ` Cached portion: ${Number(data.cached).toLocaleString()} tokens.`
+    );
+  }
+  el.ctxDetails.appendChild(note);
+}
+
+function updateCtxUsage(percent, used, total, cached = 0, breakdown = {}) {
   const pct = Math.max(0, Math.min(100, percent || 0));
   const level = pct > 80 ? 'critical' : pct > 50 ? 'warning' : 'safe';
   el.ctxUsage.hidden = false;
   el.ctxUsage.dataset.level = level;
   el.ctxFill.style.width = pct + '%';
   el.ctxLabel.textContent = pct + '% ctx';
+  state.contextUsage = { percent: pct, used, total, cached, breakdown };
+  renderCtxDetails();
   const range = level === 'critical'
     ? ui('критично: 81–100%', 'critical: 81–100%')
     : level === 'warning'
@@ -936,6 +1035,9 @@ function hideCtxUsage() {
   el.ctxUsage.dataset.level = 'safe';
   el.ctxFill.style.width = '0';
   el.ctxLabel.textContent = '0%';
+  el.ctxUsage.setAttribute('aria-expanded', 'false');
+  el.ctxDetails.hidden = true;
+  state.contextUsage = null;
 }
 
 // ── Character dashboard (game mode) ────────────────────────────────────────
@@ -1017,6 +1119,46 @@ async function newSession() {
     addError(error.message || ui('Не удалось начать новую сессию', 'Could not start a new session'));
   }
   connect(gameUrl());
+}
+
+async function compactSession() {
+  if (state.mode !== 'game' || !state.campaign || state.generating) return;
+  const buttons = [el.compactBtn, el.mobileCompactBtn];
+  buttons.forEach(button => { button.disabled = true; button.classList.add('compacting'); });
+  el.input.disabled = true;
+  el.sendBtn.disabled = true;
+  const original = el.compactBtn.textContent;
+  el.compactBtn.textContent = ui('⇣ Сжатие…', '⇣ Compacting…');
+  try {
+    const response = await fetch(
+      `/api/campaigns/${encodeURIComponent(state.campaign)}/compact`,
+      { method: 'POST' }
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.detail || ui('Не удалось сжать контекст', 'Could not compact context'));
+    }
+    if (result.usage) {
+      updateCtxUsage(
+        result.usage.percent,
+        result.usage.used_tokens,
+        result.usage.total_tokens,
+        result.usage.cached_input_tokens,
+        result.usage.breakdown
+      );
+    } else {
+      hideCtxUsage();
+    }
+  } catch (error) {
+    addError(error.message || ui('Не удалось сжать контекст', 'Could not compact context'));
+  } finally {
+    el.compactBtn.textContent = original;
+    buttons.forEach(button => {
+      button.disabled = state.generating;
+      button.classList.remove('compacting');
+    });
+    updateInputEnabled();
+  }
 }
 
 // ─────────────────────────── WebSocket lifecycle ──────────────────────────
@@ -1136,7 +1278,13 @@ function handleEvent(data) {
       break;
 
     case 'usage':
-      updateCtxUsage(data.percent, data.used, data.total);
+      updateCtxUsage(
+        data.percent,
+        data.used_tokens ?? data.used,
+        data.total_tokens ?? data.total,
+        data.cached_input_tokens,
+        data.breakdown
+      );
       break;
 
     case 'agent_status':
@@ -1919,6 +2067,7 @@ function showMobileSidebar() {
   el.mobileTitle.textContent = '🎲 DM Game Master';
   el.mobileBack.hidden = true;
   el.mobileModelBtn.hidden = true;
+  el.mobileCompactBtn.hidden = true;
   el.mobileNew.hidden = false;
   closeModelMenu();
 }
@@ -1956,6 +2105,8 @@ function selectCampaign(name) {
   el.wizardResetBtn.hidden = true;   // game mode: no wizard reset
   el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = false;   // game mode: allow context reset
+  el.compactBtn.hidden = false;
+  el.mobileCompactBtn.hidden = false;
   el.viewTabs.hidden = false;
   switchView('chat');
   hideRateLimit();
@@ -1992,6 +2143,8 @@ function startWizard() {
   el.wizardResetBtn.hidden = false;
   el.modelPickerBtn.hidden = false;
   el.newSessionBtn.hidden = true;  // wizard has no game session to reset
+  el.compactBtn.hidden = true;
+  el.mobileCompactBtn.hidden = true;
   el.viewTabs.hidden = true;
   switchView('chat');
   hideCharPanel();
@@ -2304,6 +2457,19 @@ el.newBtn.addEventListener('click', startWizard);
 el.welcomeNewBtn.addEventListener('click', startWizard);
 el.wizardResetBtn.addEventListener('click', resetWizard);
 el.newSessionBtn.addEventListener('click', newSession);
+el.compactBtn.addEventListener('click', compactSession);
+el.mobileCompactBtn.addEventListener('click', compactSession);
+el.ctxUsage.addEventListener('click', event => {
+  event.stopPropagation();
+  if (event.target.closest('.ctx-details')) return;
+  const open = el.ctxDetails.hidden;
+  el.ctxDetails.hidden = !open;
+  el.ctxUsage.setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('click', () => {
+  el.ctxDetails.hidden = true;
+  el.ctxUsage.setAttribute('aria-expanded', 'false');
+});
 el.stopBtn.addEventListener('click', async () => {
   if (!state.campaign || !state.generating) return;
   await fetch(`/api/campaigns/${encodeURIComponent(state.campaign)}/interrupt`, { method: 'POST' });

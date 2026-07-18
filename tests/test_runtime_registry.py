@@ -21,6 +21,9 @@ class FakeProvider:
     async def interrupt(self):
         return False
 
+    async def compact(self):
+        return False
+
     async def reset(self):
         return None
 
@@ -153,7 +156,7 @@ def test_registry_rejects_incompatible_factory(tmp_path):
 
 def test_event_and_context_usage_serialize():
     event = AgentEvent("tool_use", "Bash: pwd", {"tool_name": "Bash"})
-    usage = ContextUsage(50, 200, 40)
+    usage = ContextUsage(50, 200, 40, {"System prompt": 20, "Messages": 30})
 
     assert event.to_dict() == {
         "type": "tool_use",
@@ -165,6 +168,7 @@ def test_event_and_context_usage_serialize():
         "used_tokens": 50,
         "total_tokens": 200,
         "cached_input_tokens": 40,
+        "breakdown": {"System prompt": 20, "Messages": 30},
     }
 
 
