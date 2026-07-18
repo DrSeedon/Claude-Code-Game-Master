@@ -401,6 +401,7 @@ function setDashboardLocale(locale, { persist = true } = {}) {
     renderEffortSettings();
   }
   else el.modelPickerLabel.textContent = ui('Загрузка моделей…', 'Loading models…');
+  if (state.mode === 'game' && state.campaign) loadCharPanel(state.campaign);
   if (state.currentView === 'map') renderMap();
   else if (state.currentView !== 'chat' && state.campaignViews) renderDashboard(state.currentView);
 }
@@ -1059,12 +1060,13 @@ async function loadCharPanel(campaign) {
   const items = (s.inventory || []).length;
   el.charPanel.innerHTML =
     `<span class="cp-name">${escapeHtml(s.name || ui('Персонаж', 'Character'))}</span>` +
-    (s.location ? `<span class="cp-stat">📍 ${escapeHtml(s.location)}</span>` : '') +
-    `<span class="cp-stat">❤ <b>${s.hp}/${s.max_hp}</b>` +
+    (s.location ? `<span class="cp-stat cp-location"><span class="cp-key">${ui('Локация', 'Location')}</span>` +
+      `<b>${escapeHtml(s.location)}</b></span>` : '') +
+    `<span class="cp-stat"><span class="cp-key">HP</span><b>${s.hp}/${s.max_hp}</b>` +
       `<span class="cp-hpbar"><span class="cp-hpfill" style="width:${hpPct}%;background:${hpColor}"></span></span></span>` +
-    `<span class="cp-stat">✨ <b>${s.xp}</b> XP</span>` +
-    `<span class="cp-stat">💰 <b>${formatGold(s.gold)}</b></span>` +
-    `<span class="cp-stat">🎒 <b>${items}</b></span>`;
+    `<span class="cp-stat"><span class="cp-key">XP</span><b>${s.xp}</b></span>` +
+    `<span class="cp-stat"><span class="cp-key">${ui('Монеты', 'Money')}</span><b>${formatGold(s.gold)}</b></span>` +
+    `<span class="cp-stat"><span class="cp-key">${ui('Предм.', 'Items')}</span><b>${items}</b></span>`;
   el.charPanel.hidden = false;
 }
 function hideCharPanel() { el.charPanel.hidden = true; el.charPanel.innerHTML = ''; }

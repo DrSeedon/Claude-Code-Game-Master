@@ -119,8 +119,20 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
   background: rgba(15,23,42,0.4); font-size: 12px; flex-shrink: 0;
 }
 .char-panel .cp-name { font-weight: 700; color: var(--ink); }
-.char-panel .cp-stat { color: var(--ink-soft); white-space: nowrap; }
-.char-panel .cp-stat b { color: var(--ink); font-weight: 600; }
+.char-panel .cp-stat {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-soft); white-space: nowrap;
+}
+.char-panel .cp-stat b { color: var(--ink); font-weight: 650; }
+.char-panel .cp-key {
+  color: #7f8da3; font: 650 9px/1 var(--font-mono);
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.char-panel .cp-location { min-width: 0; }
+.char-panel .cp-location b {
+  max-width: min(36vw, 420px); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
 .char-panel .cp-hpbar { display: inline-block; width: 60px; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-left: 4px; }
 .char-panel .cp-hpfill { height: 100%; border-radius: 3px; transition: width 0.3s, background 0.3s; }
 
