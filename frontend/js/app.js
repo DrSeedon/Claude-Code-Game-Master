@@ -729,16 +729,149 @@ function dashboardDataValue(value) {
   return escapeHtml(JSON.stringify(value ?? null));
 }
 
+const ABILITY_DEFS = [
+  { key: 'str', label: 'STR', aliases: ['str', 'strength', 'сил', 'сила'] },
+  { key: 'dex', label: 'DEX', aliases: ['dex', 'dexterity', 'лов', 'ловкость'] },
+  { key: 'con', label: 'CON', aliases: ['con', 'constitution', 'вын', 'выносливость', 'тел'] },
+  { key: 'int', label: 'INT', aliases: ['int', 'intelligence', 'инт', 'интеллект'] },
+  { key: 'wis', label: 'WIS', aliases: ['wis', 'wisdom', 'мдр', 'мудрость'] },
+  { key: 'cha', label: 'CHA', aliases: ['cha', 'charisma', 'хар', 'харизма'] },
+];
+
+function signedNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return number >= 0 ? `+${number}` : String(number);
+}
+
+function abilityScore(character, definition) {
+  const sources = [character.stats, character.abilities];
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of [definition.key, definition.label, ...definition.aliases]) {
+      const value = Number(source[key]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return 10;
+}
+
+function abilityGrid(character) {
+  return `<div class="ability-grid">${ABILITY_DEFS.map(definition => {
+    const score = abilityScore(character, definition);
+    const modifier = Math.floor((score - 10) / 2);
+    return `<div class="ability-cell" data-key="${dashboardDataKey('ability', definition.key)}" ` +
+      `data-value="${dashboardDataValue(score)}"><span class="ability-label">${definition.label}</span>` +
+      `<strong>${dashboardNumber(score, 0)}</strong><span class="ability-mod">${signedNumber(modifier)}</span></div>`;
+  }).join('')}</div>`;
+}
+
+function savingThrowList(character) {
+  const level = Math.max(1, Number(character.level) || 1);
+  const proficiencyBonus = 2 + Math.floor((level - 1) / 4);
+  const proficiencies = new Set(
+    (Array.isArray(character.save_proficiencies) ? character.save_proficiencies : [])
+      .map(value => String(value).toLocaleLowerCase('ru'))
+  );
+  const saves = character.saves && typeof character.saves === 'object' ? character.saves : {};
+  const rows = ABILITY_DEFS.map(definition => {
+    const proficient = definition.aliases.some(alias => proficiencies.has(alias)) ||
+      proficiencies.has(definition.key) || proficiencies.has(definition.label.toLowerCase());
+    const explicit = [definition.key, definition.label, ...definition.aliases]
+      .map(key => saves[key])
+      .find(value => Number.isFinite(Number(value)));
+    const modifier = explicit == null
+      ? Math.floor((abilityScore(character, definition) - 10) / 2) + (proficient ? proficiencyBonus : 0)
+      : Number(explicit);
+    return `<div class="save-row" data-key="${dashboardDataKey('save', definition.key)}" ` +
+      `data-value="${dashboardDataValue(modifier)}"><span class="save-name">` +
+      `<span class="proficiency-dot${proficient ? ' active' : ''}">${proficient ? '●' : '○'}</span>${definition.label}</span>` +
+      `<strong>${signedNumber(modifier)}</strong></div>`;
+  }).join('');
+  return `<div class="save-list">${rows}</div><div class="card-footnote">Бонус мастерства +${proficiencyBonus}</div>`;
+}
+
+function skillList(skills) {
+  const entries = Object.entries(skills || {}).sort((left, right) => {
+    const leftTotal = Number(typeof left[1] === 'object' ? left[1]?.total : left[1]) || 0;
+    const rightTotal = Number(typeof right[1] === 'object' ? right[1]?.total : right[1]) || 0;
+    return rightTotal - leftTotal || left[0].localeCompare(right[0], 'ru');
+  });
+  if (!entries.length) return emptyPanel();
+  return `<div class="skill-list">${entries.map(([name, raw]) => {
+    const details = raw && typeof raw === 'object' ? raw : { total: raw };
+    const total = Number(details.total) || 0;
+    const breakdown = Object.entries(details.breakdown || {})
+      .filter(([, value]) => Number(value) !== 0)
+      .map(([label, value]) => `${label} ${signedNumber(value)}`)
+      .join(', ');
+    const dc = Number(details.dc_mod);
+    const dcText = Number.isFinite(dc) && dc !== 0 ? `DC ${signedNumber(dc)}` : '';
+    const notes = [breakdown, dcText, details.note].filter(Boolean);
+    return `<div class="skill-row" data-key="${dashboardDataKey('skill', name)}" ` +
+      `data-value="${dashboardDataValue(details)}"><div class="skill-main"><span>${escapeHtml(name)}</span>` +
+      `<strong class="${total >= 5 ? 'high' : ''}">${signedNumber(total)}</strong></div>` +
+      (notes.length ? `<div class="skill-detail">${escapeHtml(notes.join(' · '))}</div>` : '') + `</div>`;
+  }).join('')}</div>`;
+}
+
+function customStatBars(stats) {
+  const entries = Object.entries(stats || {});
+  if (!entries.length) return emptyPanel();
+  return `<div class="custom-stat-grid">${entries.map(([name, raw]) => {
+    const details = raw && typeof raw === 'object' ? raw : { value: raw };
+    const value = Number(details.value ?? details.current);
+    const maximum = Number(details.max);
+    const hasRange = Number.isFinite(value) && Number.isFinite(maximum) && maximum > 0;
+    const display = hasRange ? `${dashboardNumber(value)} / ${dashboardNumber(maximum)}` : dashboardValue(raw);
+    return `<div class="custom-stat" data-key="${dashboardDataKey('custom-stat', name)}" ` +
+      `data-value="${dashboardDataValue(details)}"><div class="custom-stat-head"><span>${escapeHtml(dashboardLabel(name))}</span>` +
+      `<strong>${escapeHtml(display)}</strong></div>` +
+      (hasRange ? `<div class="vital-track"><div class="vital-fill stat" style="width:${dashboardPercent(value, maximum)}%"></div></div>` : '') +
+      `</div>`;
+  }).join('')}</div>`;
+}
+
+function equipmentList(equipment) {
+  if (!equipment || typeof equipment !== 'object' || !Object.keys(equipment).length) return emptyPanel();
+  const armor = equipment.armor && typeof equipment.armor === 'object' ? [equipment.armor] : [];
+  const weapons = Array.isArray(equipment.weapons) ? equipment.weapons : [];
+  const tools = Array.isArray(equipment.tools) ? equipment.tools : [];
+  const rows = [
+    ...armor.map(item => ({ ...item, kind: 'Броня' })),
+    ...weapons.map(item => ({ ...item, kind: 'Оружие' })),
+    ...tools.map(item => ({ ...item, kind: 'Инструмент' })),
+  ];
+  if (!rows.length) return kvGrid(equipment);
+  return `<div class="equipment-list">${rows.map((item, index) => {
+    const detail = [
+      item.kind,
+      item.damage,
+      item.base_ac != null ? `КЗ ${item.base_ac}` : '',
+      item.properties,
+      item.source,
+    ].filter(Boolean).join(' · ');
+    return `<div class="equipment-row" data-key="${dashboardDataKey('equipment', item.id || item.name || index)}" ` +
+      `data-value="${dashboardDataValue(item)}"><span><strong>${escapeHtml(String(item.name || 'Без названия'))}</strong>` +
+      `<small>${escapeHtml(detail)}</small></span>${item.equipped ? '<span class="equipped-mark">Надето</span>' : ''}</div>`;
+  }).join('')}</div>`;
+}
+
+function ledgerList(entries, emptyText) {
+  if (!entries.length) return emptyPanel(emptyText);
+  return `<div class="ledger-list">${entries.map(entry =>
+    `<div class="ledger-row"><span>${escapeHtml(entry.label)}</span><strong>${escapeHtml(entry.value)}</strong></div>`
+  ).join('')}</div>`;
+}
+
 function renderCharacter(data) {
   const character = data.character || {};
   const campaign = data.campaign || {};
   const hp = character.hp || {};
   const xp = character.xp || {};
   const classLine = [character.race, character.class, character.subclass].filter(Boolean).join(' · ');
-  const activeQuests = (data.quests || []).filter(quest => quest.status === 'active').length;
   const conditions = Array.isArray(character.conditions) ? character.conditions : [];
   const features = Array.isArray(character.features) ? character.features : [];
-  const equipment = character.equipment || {};
   const identity = {
     Класс: character.class,
     Подкласс: character.subclass,
@@ -747,38 +880,55 @@ function renderCharacter(data) {
     Уровень: character.level,
     Локация: character.location || campaign.location,
   };
-  const defence = {
-    КЗ: character.ac,
-    Защита: character.prot,
-    Скорость: character.speed,
-    Спасброски: character.save_proficiencies,
-  };
-  const vitals =
-    `<div class="vital-row"><div class="vital-top"><span>Здоровье</span><b>${escapeHtml(`${hp.current ?? 0} / ${hp.max ?? 0}`)}</b></div>` +
-      `<div class="vital-track"><div class="vital-fill hp" style="width:${dashboardPercent(hp.current, hp.max)}%"></div></div></div>` +
-    `<div class="vital-row"><div class="vital-top"><span>Опыт</span><b>${escapeHtml(dashboardValue(xp.current, '0'))}${xp.next_level ? ` / ${escapeHtml(String(xp.next_level))}` : ''}</b></div>` +
-      `<div class="vital-track"><div class="vital-fill xp" style="width:${xp.next_level ? dashboardPercent(xp.current, xp.next_level) : 100}%"></div></div></div>`;
   const chips = items => items.length
     ? `<div class="chip-list">${items.map(item => `<span class="data-chip">${escapeHtml(dashboardValue(item))}</span>`).join('')}</div>`
     : emptyPanel();
+  const economy = data.economy || {};
+  const recurring = [
+    ...(economy.income || []).map(item => ({ label: item.name || 'Доход', value: dashboardValue(item.amount ?? item) })),
+    ...(economy.expenses || []).map(item => ({ label: item.name || 'Расход', value: dashboardValue(item.amount ?? item) })),
+    ...(economy.production || []).map(item => ({ label: item.name || 'Производство', value: dashboardValue(item.status ?? item) })),
+  ];
+  const consequences = Array.isArray(data.consequences) ? data.consequences : [];
+  const consequenceRows = consequences.map(item => ({
+    label: String(item.name || item.consequence || 'Событие'),
+    value: dashboardValue(item.remaining ?? item.status ?? item.trigger ?? ''),
+  }));
+  const campaignMeta = [campaign.campaign_name || campaign.name, campaign.genre].filter(Boolean).join(' · ');
+  const placeAndTime = [
+    character.location || campaign.location,
+    campaign.current_date,
+    campaign.precise_time,
+  ].filter(Boolean).join(' · ');
 
-  return dashboardHeader('Досье кампании', character.name || 'Персонаж', classLine || campaign.genre || '') +
-    summaryRow([
-      summaryTile('Уровень', character.level ?? 1, classLine || 'Персонаж', 'rgba(129,140,248,.18)'),
-      summaryTile('Локация', character.location || campaign.location || 'Неизвестно', campaign.current_date || '', 'rgba(56,189,248,.16)'),
-      summaryTile('Средства', character.money?.formatted || '0', 'Доступный баланс', 'rgba(234,179,8,.16)'),
-      summaryTile('Активные задания', activeQuests, `${(data.quests || []).length} всего`, 'rgba(34,197,94,.14)'),
-    ]) +
+  return `<header class="ledger-head"><div><div class="dashboard-kicker">${escapeHtml(campaignMeta || 'Кампания')}</div>` +
+    `<h2>${escapeHtml(character.name || 'Персонаж')}</h2><div class="dashboard-meta">${escapeHtml(classLine)}</div></div>` +
+    `<div class="ledger-place"><strong>${escapeHtml(character.location || campaign.location || 'Локация неизвестна')}</strong>` +
+    `<span>${escapeHtml(placeAndTime)}</span></div></header>` +
+    `<section class="hero-vitals">` +
+      `<div class="hero-vital hp-card"><span class="hero-vital-label">HP</span><strong>${escapeHtml(`${hp.current ?? 0} / ${hp.max ?? 0}`)}</strong>` +
+        `<div class="vital-track"><div class="vital-fill hp" style="width:${dashboardPercent(hp.current, hp.max)}%"></div></div></div>` +
+      `<div class="hero-vital xp-card"><span class="hero-vital-label">XP · LVL ${escapeHtml(String(character.level ?? 1))}</span>` +
+        `<strong>${escapeHtml(`${dashboardValue(xp.current, '0')} / ${dashboardValue(xp.next_level)}`)}</strong>` +
+        `<div class="vital-track"><div class="vital-fill xp" style="width:${xp.next_level ? dashboardPercent(xp.current, xp.next_level) : 100}%"></div></div></div>` +
+      `<div class="hero-vital hero-vital-compact"><span class="hero-vital-label">КЗ</span><strong>${escapeHtml(dashboardValue(character.ac))}</strong>` +
+        `<small>${character.prot != null ? `Защита ${escapeHtml(String(character.prot))}` : 'Броня'}</small></div>` +
+      `<div class="hero-vital money-card"><span class="hero-vital-label">Средства</span><strong>${escapeHtml(character.money?.formatted || economy.balance?.formatted || '0')}</strong>` +
+        `<small>Доступный баланс</small></div>` +
+    `</section>` +
+    (Object.keys(character.custom_stats || {}).length
+      ? dashCard('Особые показатели', customStatBars(character.custom_stats), { classes: 'full', delay: 20 })
+      : '') +
     `<div class="dash-grid">` +
-      dashCard('Состояние', vitals, { classes: 'full', delay: 30 }) +
-      dashCard('Личное дело', kvGrid(identity), { delay: 55 }) +
-      dashCard('Бой и защита', kvGrid(defence), { delay: 80 }) +
-      dashCard('Характеристики', kvGrid({ ...(character.stats || {}), ...(character.abilities || {}) }), { delay: 105 }) +
-      dashCard('Навыки', kvGrid(character.skills), { delay: 130 }) +
-      dashCard('Особые показатели', kvGrid(character.custom_stats), { delay: 155 }) +
-      dashCard('Состояния', chips(conditions), { count: conditions.length, delay: 180 }) +
-      dashCard('Экипировка', kvGrid(equipment), { delay: 205 }) +
-      dashCard('Особенности', chips(features), { count: features.length, classes: 'full', delay: 230 }) +
+      dashCard('Характеристики', abilityGrid(character), { classes: 'third', delay: 45 }) +
+      dashCard('Спасброски', savingThrowList(character), { classes: 'third', delay: 70 }) +
+      dashCard('Навыки', skillList(character.skills), { classes: 'third', delay: 95 }) +
+      dashCard('Личное дело', kvGrid(identity), { delay: 120 }) +
+      dashCard('Состояния', chips(conditions), { count: conditions.length, delay: 145 }) +
+      dashCard('Экипировка', equipmentList(character.equipment), { classes: 'full', delay: 170 }) +
+      dashCard('Особенности', chips(features), { count: features.length, classes: 'full', delay: 195 }) +
+      (recurring.length ? dashCard('Экономика', ledgerList(recurring, 'Нет регулярных операций'), { delay: 220 }) : '') +
+      (consequenceRows.length ? dashCard('Последствия', ledgerList(consequenceRows, 'Нет видимых последствий'), { delay: 245 }) : '') +
     `</div>`;
 }
 
@@ -1405,6 +1555,16 @@ function modelsForRuntime(runtimeId) {
   return state.availableModels.filter(model => model.runtime === runtimeId);
 }
 
+function modelMeta(model) {
+  const context = Number(model.context_window);
+  const contextLabel = Number.isFinite(context) ? `${Math.round(context / 1000)}k` : '';
+  if (model.id === 'gpt-5.3-codex-spark') {
+    return [contextLabel, 'Pro', 'отдельный лимит', 'сверхбыстрый'].filter(Boolean).join(' · ');
+  }
+  if (model.runtime === 'codex') return [contextLabel, 'стандартный лимит'].filter(Boolean).join(' · ');
+  return [contextLabel, 'Claude Agent SDK'].filter(Boolean).join(' · ');
+}
+
 function renderRuntimeControls() {
   const current = state.availableModels.find(model => model.id === state.currentModel);
   const runtime = state.runtimes.find(item => item.id === current?.runtime);
@@ -1423,7 +1583,9 @@ function renderRuntimeControls() {
         const active = model.id === state.currentModel;
         return `<button class="model-option${active ? ' active' : ''}" type="button" role="menuitemradio" ` +
           `aria-checked="${active}" data-model="${escapeHtml(model.id)}">` +
-          `<span class="model-option-dot"></span><span class="model-option-name">${escapeHtml(model.display_name)}</span>` +
+          `<span class="model-option-dot"></span><span class="model-option-copy">` +
+          `<span class="model-option-name">${escapeHtml(model.display_name)}</span>` +
+          `<span class="model-option-meta">${escapeHtml(modelMeta(model))}</span></span>` +
           `<span class="model-option-check">${active ? '✓' : ''}</span></button>`;
       }).join('') + `</section>`;
   }).join('');

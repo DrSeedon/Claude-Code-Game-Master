@@ -198,6 +198,20 @@ def test_mcp_servers_use_dotted_config_without_exposing_unsafe_names(tmp_path):
     assert not any("bad.name" in arg for arg in args)
 
 
+def test_spark_uses_its_native_reasoning_profile(tmp_path):
+    provider = CodexCLIProvider(tmp_path, model_name="gpt-5.3-codex-spark")
+
+    command = provider._build_command(
+        "Make a targeted edit.",
+        "Follow the project rules.",
+        "gpt-5.3-codex-spark",
+        None,
+    )
+
+    assert "gpt-5.3-codex-spark" in command
+    assert not any("model_reasoning_effort" in value for value in command)
+
+
 def test_process_exit_without_turn_completed_is_reported(tmp_path):
     async def factory(*command, **options):
         return FakeProcess([], stderr=b"authentication failed", returncode=1)

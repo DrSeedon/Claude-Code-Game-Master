@@ -288,6 +288,32 @@ def test_snapshot_without_player_returns_empty_player_views(tmp_path):
     assert snapshot["inventory"]["items"] == []
 
 
+def test_inventory_projection_normalizes_legacy_weight_suffixes(tmp_path):
+    campaign = _write_campaign(tmp_path)
+    world_path = campaign / "world.json"
+    world = json.loads(world_path.read_text(encoding="utf-8"))
+    world["nodes"]["player:active"]["inventory"]["unique"].extend(
+        [
+            "Field kit [1.5kg]",
+            {"name": "Ceremonial blade [0,4kg]", "weight": 0.6},
+        ]
+    )
+    world_path.write_text(json.dumps(world), encoding="utf-8")
+
+    inventory = get_campaign_views(campaign)["inventory"]
+
+    assert {"name": "Field kit", "quantity": 1, "unique": True, "weight": 1.5} in (
+        inventory["items"]
+    )
+    assert {
+        "name": "Ceremonial blade",
+        "quantity": 1,
+        "unique": True,
+        "weight": 0.6,
+    } in inventory["items"]
+    assert inventory["total_weight"] == 6.8
+
+
 def test_player_visibility_filters_npcs_quests_wiki_and_consequences(tmp_path):
     projector = CampaignViewProjector(_write_campaign(tmp_path))
 

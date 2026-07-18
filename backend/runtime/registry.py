@@ -188,6 +188,7 @@ def create_default_registry() -> RuntimeRegistry:
         )
     )
     for model_id, label in (
+        ("gpt-5.3-codex-spark", "GPT-5.3 Codex Spark"),
         ("gpt-5.6-sol", "GPT-5.6 Sol"),
         ("gpt-5.6-terra", "GPT-5.6 Terra"),
         ("gpt-5.6-luna", "GPT-5.6 Luna"),
@@ -198,7 +199,10 @@ def create_default_registry() -> RuntimeRegistry:
                 display_name=label,
                 runtime_id="codex",
                 context_window=CODEX_CONTEXT_LIMITS.get(model_id),
-                reasoning_efforts=CODEX_REASONING_EFFORTS,
+                reasoning_efforts=(
+                    () if model_id == "gpt-5.3-codex-spark"
+                    else CODEX_REASONING_EFFORTS
+                ),
             )
         )
     return registry

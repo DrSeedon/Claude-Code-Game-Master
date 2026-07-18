@@ -108,7 +108,11 @@ def test_default_registry_exposes_supported_model_catalog():
         "claude-sonnet-5",
     ]
     assert [model.id for model in registry.list_models("codex")] == [
+        "gpt-5.3-codex-spark",
         "gpt-5.6-luna",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
     ]
+    spark = registry.get_model("gpt-5.3-codex-spark")
+    assert spark.context_window == 128_000
+    assert spark.reasoning_efforts == ()

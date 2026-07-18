@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,10 @@ _PARTY_SHEET_FIELDS = {
     "speed",
     "stats",
 }
+_LEGACY_ITEM_WEIGHT_RE = re.compile(
+    r"\s*\[(?P<weight>\d+(?:[.,]\d+)?)\s*kg\]\s*$",
+    re.IGNORECASE,
+)
 
 
 def _node_data(node: dict[str, Any]) -> dict[str, Any]:
@@ -198,6 +203,21 @@ def player_location(
     return _resolve_location_name(graph, overview.get("current_location"))
 
 
+def _item_name_and_weight(
+    raw_name: Any,
+    explicit_weight: Any = None,
+) -> tuple[str, int | float | None]:
+    """Normalize legacy ``Name [0.5kg]`` inventory strings for web views."""
+    name = str(raw_name)
+    match = _LEGACY_ITEM_WEIGHT_RE.search(name)
+    weight = explicit_weight if isinstance(explicit_weight, (int, float)) else None
+    if match:
+        name = name[: match.start()].rstrip()
+        if weight is None:
+            weight = float(match.group("weight").replace(",", "."))
+    return name, weight
+
+
 def inventory_items(
     graph: WorldGraph,
     owner_id: str,
@@ -223,31 +243,47 @@ def inventory_items(
             for name, raw in sorted(stackable.items(), key=lambda item: item[0].casefold()):
                 details = raw if isinstance(raw, dict) else {}
                 quantity = details.get("qty", raw if isinstance(raw, (int, float)) else 1)
+                display_name, weight = _item_name_and_weight(
+                    name,
+                    details.get("weight"),
+                )
                 row = {
-                    "name": str(name),
+                    "name": display_name,
                     "quantity": _number(quantity, 1),
                     "unique": False,
                 }
-                if isinstance(details.get("weight"), (int, float)):
-                    row["weight"] = details["weight"]
+                if weight is not None:
+                    row["weight"] = weight
                 result.append(row)
 
         unique = inventory.get("unique", [])
         if isinstance(unique, list):
             for raw in unique:
                 if isinstance(raw, dict):
-                    name = raw.get("name") or raw.get("description") or "Unnamed item"
+                    source_name = (
+                        raw.get("name") or raw.get("description") or "Unnamed item"
+                    )
+                    name, weight = _item_name_and_weight(
+                        source_name,
+                        raw.get("weight"),
+                    )
                     row = {
-                        "name": str(name),
+                        "name": name,
                         "quantity": _number(raw.get("qty", 1), 1),
                         "unique": True,
                     }
-                    if isinstance(raw.get("weight"), (int, float)):
-                        row["weight"] = raw["weight"]
-                    if raw.get("description") and raw.get("description") != name:
+                    if weight is not None:
+                        row["weight"] = weight
+                    if (
+                        raw.get("description")
+                        and raw.get("description") != source_name
+                    ):
                         row["description"] = str(raw["description"])
                 else:
-                    row = {"name": str(raw), "quantity": 1, "unique": True}
+                    name, weight = _item_name_and_weight(raw)
+                    row = {"name": name, "quantity": 1, "unique": True}
+                    if weight is not None:
+                        row["weight"] = weight
                 result.append(row)
         return result
 

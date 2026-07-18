@@ -17,6 +17,7 @@ from backend.runtime.events import AgentEvent, ContextUsage
 logger = logging.getLogger(__name__)
 
 CODEX_CONTEXT_LIMITS = {
+    "gpt-5.3-codex-spark": 128_000,
     "gpt-5.6-sol": 258_400,
     "gpt-5.6-terra": 258_400,
     "gpt-5.6-luna": 258_400,
@@ -331,9 +332,10 @@ class CodexCLIProvider:
                 command.extend(
                     ["-c", f"developer_instructions={_toml_string(system_prompt)}"]
                 )
-        command.extend(
-            ["-c", f"model_reasoning_effort={_toml_string(self.reasoning_effort)}"]
-        )
+        if model_name != "gpt-5.3-codex-spark":
+            command.extend(
+                ["-c", f"model_reasoning_effort={_toml_string(self.reasoning_effort)}"]
+            )
         for config in self._mcp_config_args(mcp_servers):
             command.extend(["-c", config])
         if self._thread_id:
