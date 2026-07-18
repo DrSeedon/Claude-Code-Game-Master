@@ -26,6 +26,17 @@ Once installed:
 3. Ask for `/new-game`. In Codex, slash commands are intent aliases handled by
    `codex-skills/dm/`; they do not need native command registration.
 
+Or launch the browser UI:
+
+```bash
+./webui.sh
+```
+
+Open `http://127.0.0.1:18083/`, choose a campaign, and select any available
+Claude or Codex model from the runtime menu. Campaign creation and gameplay use
+the same provider-neutral event contract; changing the model reconnects the UI
+without changing the canonical campaign state.
+
 ---
 
 ## Two Modes: Classic and Advanced
@@ -185,6 +196,14 @@ The vanilla core (`lib/`, `tools/`) is never modified by modules. Advanced featu
 Claude command files and the Codex DM skill are thin client adapters. Both use
 the same tools, compiled rules, modules, and campaign data under
 `.claude/additional/`.
+
+The web backend is FastAPI with asyncio WebSockets. One `GameSession` owns the
+mutation lock and active AI runtime for each campaign. Claude runs through a
+persistent Claude Agent SDK client; Codex runs through a persistent
+`codex app-server` JSON-RPC process with resumable threads and native
+interrupts. The frontend is dependency-light HTML, CSS, and JavaScript, with
+Cytoscape used for the campaign map. Browser dashboards receive projected
+player-safe views rather than raw `world.json`.
 
 See [docs/architecture.ru.md](docs/architecture.ru.md) for the current business
 logic, storage boundaries, migration model, and guidance on where changes

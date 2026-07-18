@@ -1,4 +1,4 @@
-"""Codex CLI provider using resumable JSONL sessions."""
+"""Persistent Codex app-server provider for web game sessions."""
 
 from __future__ import annotations
 
@@ -24,10 +24,21 @@ CODEX_CONTEXT_LIMITS = {
 }
 CODEX_REASONING_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 _SAFE_SANDBOXES = {"read-only", "workspace-write"}
+_MCP_APPROVAL_MODES = {"auto", "prompt", "writes", "approve"}
 _CONFIG_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+_TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 ProcessFactory = Callable[..., Awaitable[Any]]
+
+
+class CodexProtocolError(RuntimeError):
+    """JSON-RPC error returned by Codex app-server."""
+
+    def __init__(self, method: str, error: Mapping[str, Any]):
+        self.method = method
+        self.error = dict(error)
+        super().__init__(f"{method}: {error.get('message', 'Codex app-server error')}")
 
 
 def _nonnegative_int(value: Any) -> int:
@@ -44,6 +55,8 @@ def _toml_string(value: str) -> str:
 
 
 def _read_rollout_context(path: Path) -> ContextUsage | None:
+    """Read the latest model-call context as a fallback for older app-server builds."""
+
     latest: ContextUsage | None = None
     try:
         with path.open(encoding="utf-8", errors="replace") as handle:
@@ -74,143 +87,169 @@ def _read_rollout_context(path: Path) -> ContextUsage | None:
     return latest
 
 
-def _tool_name(item: Mapping[str, Any]) -> tuple[str, str]:
-    item_type = str(item.get("type") or "")
-    if item_type == "command_execution":
-        return "Bash", "Bash"
-    if item_type == "mcp_tool_call":
-        server = str(item.get("server") or "")
-        short_name = str(item.get("tool") or "MCP")
-        return (f"{server}__{short_name}" if server else short_name), short_name
-    if item_type == "web_search":
-        return "WebSearch", "WebSearch"
-    return item_type or "tool", item_type or "tool"
+def _result_text(result: Any) -> str:
+    if isinstance(result, Mapping):
+        content = result.get("content")
+        if isinstance(content, list):
+            return "\n".join(
+                str(block.get("text", block)) if isinstance(block, Mapping) else str(block)
+                for block in content
+            )[:10_000]
+        return json.dumps(result, ensure_ascii=False)[:10_000]
+    if isinstance(result, list):
+        return "\n".join(
+            str(block.get("text", block)) if isinstance(block, Mapping) else str(block)
+            for block in result
+        )[:10_000]
+    return str(result)[:10_000]
+
+
+def _reasoning_text(item: Mapping[str, Any]) -> str:
+    raw = item.get("summary") or item.get("content") or item.get("text") or ""
+    if isinstance(raw, list):
+        return "\n".join(
+            str(part.get("text", part)) if isinstance(part, Mapping) else str(part)
+            for part in raw
+            if part
+        )
+    return str(raw)
+
+
+def _tool_use(name: str, summary: str, item_id: str = "") -> AgentEvent:
+    short_name = name.rsplit("__", 1)[-1]
+    return AgentEvent(
+        "tool_use",
+        f"{name}: {summary}",
+        {
+            "tool_name": name,
+            "short_name": short_name,
+            "tool_use_id": item_id,
+        },
+    )
 
 
 def normalize_codex_event(payload: Mapping[str, Any]) -> list[AgentEvent]:
-    """Map one Codex JSONL object to provider-neutral events."""
+    """Map one Codex app-server notification to provider-neutral events."""
 
-    event_type = str(payload.get("type") or "")
-    if event_type == "thread.started":
-        thread_id = str(payload.get("thread_id") or "")
-        if not thread_id:
+    method = str(payload.get("method") or "")
+    params = payload.get("params") or {}
+    if not isinstance(params, Mapping):
+        params = {}
+
+    if method == "thread/started":
+        thread = params.get("thread") or {}
+        thread_id = str(
+            (thread.get("id") if isinstance(thread, Mapping) else None)
+            or params.get("threadId")
+            or ""
+        )
+        return (
+            [AgentEvent("status", "Codex session started", {"session_id": thread_id})]
+            if thread_id
+            else []
+        )
+
+    if method == "turn/started":
+        turn = params.get("turn") or {}
+        turn_id = str(turn.get("id") if isinstance(turn, Mapping) else "")
+        return [AgentEvent("status", f"Codex turn {turn_id} started")]
+
+    if method == "item/agentMessage/delta":
+        text = str(params.get("delta") or "")
+        return [AgentEvent("text_delta", text)] if text else []
+
+    if method == "item/started":
+        item = params.get("item") or {}
+        if not isinstance(item, Mapping):
             return []
-        return [
-            AgentEvent(
-                "status",
-                "Codex session started",
-                {"session_id": thread_id},
-            )
-        ]
-
-    if event_type in {"item.updated", "item.delta"}:
-        item = payload.get("item") or {}
-        delta = payload.get("delta") or item.get("delta") or {}
-        text = delta.get("text", "") if isinstance(delta, Mapping) else str(delta)
-        if item.get("type") == "agent_message" and text:
-            return [AgentEvent("text_delta", str(text))]
+        item_type = item.get("type")
+        item_id = str(item.get("id") or "")
+        if item_type == "commandExecution":
+            return [_tool_use("Bash", str(item.get("command") or ""), item_id)]
+        if item_type == "mcpToolCall":
+            server = str(item.get("server") or "")
+            tool = str(item.get("tool") or "MCP")
+            name = f"mcp__{server}__{tool}" if server else tool
+            args = json.dumps(item.get("arguments") or {}, ensure_ascii=False)[:500]
+            return [_tool_use(name, args, item_id)]
+        if item_type == "webSearch":
+            return [_tool_use("WebSearch", str(item.get("query") or ""), item_id)]
+        if item_type == "contextCompaction":
+            return [AgentEvent("activity", "Codex is compacting the conversation context")]
         return []
 
-    if event_type == "item.started":
-        item = payload.get("item") or {}
-        item_type = item.get("type")
-        if item_type not in {"command_execution", "mcp_tool_call", "web_search"}:
+    if method == "item/completed":
+        item = params.get("item") or {}
+        if not isinstance(item, Mapping):
             return []
-        full_name, short_name = _tool_name(item)
-        if item_type == "command_execution":
-            summary = str(item.get("command") or "")
-        elif item_type == "mcp_tool_call":
-            summary = json.dumps(item.get("arguments") or {}, ensure_ascii=False)[:500]
-        else:
-            summary = str(item.get("query") or "")
-        return [
-            AgentEvent(
-                "tool_use",
-                f"{full_name}: {summary}",
-                {"tool_name": full_name, "short_name": short_name},
-            )
-        ]
-
-    if event_type == "item.completed":
-        item = payload.get("item") or {}
         item_type = item.get("type")
-        if item_type == "agent_message":
+        item_id = str(item.get("id") or "")
+        if item_type == "agentMessage":
             text = str(item.get("text") or "")
             return [AgentEvent("text", text)] if text else []
-        if item_type == "reasoning":
-            text = str(item.get("text") or item.get("summary") or "")
+        if item_type in {"reasoning", "plan"}:
+            text = _reasoning_text(item)
             return [AgentEvent("thinking", text)] if text else []
-        if item_type == "command_execution":
+        if item_type == "commandExecution":
             return [
                 AgentEvent(
                     "tool_result",
-                    str(item.get("aggregated_output") or ""),
-                    {"exit_code": item.get("exit_code")},
+                    str(item.get("aggregatedOutput") or ""),
+                    {"exit_code": item.get("exitCode"), "tool_use_id": item_id},
                 )
             ]
-        if item_type == "file_change":
+        if item_type == "fileChange":
             changes = item.get("changes") or []
             content = ", ".join(
                 f"{change.get('kind', '')} {change.get('path', '')}".strip()
                 for change in changes
                 if isinstance(change, Mapping)
             )
-            return [AgentEvent("file_change", content)] if content else []
-        if item_type == "mcp_tool_call":
+            return (
+                [AgentEvent("file_change", content, {"tool_use_id": item_id})]
+                if content
+                else []
+            )
+        if item_type == "mcpToolCall":
             events: list[AgentEvent] = []
-            result = item.get("result")
-            if isinstance(result, Mapping):
-                blocks = result.get("content") or []
-                text = "\n".join(
-                    str(block.get("text") or block)
-                    for block in blocks
-                    if isinstance(block, Mapping)
+            if item.get("result") is not None:
+                events.append(
+                    AgentEvent(
+                        "tool_result",
+                        _result_text(item["result"]),
+                        {"tool_use_id": item_id},
+                    )
                 )
-                if not text:
-                    text = str(result)
-                events.append(AgentEvent("tool_result", text[:10_000]))
-            error = item.get("error")
-            if error:
-                message = error.get("message", str(error)) if isinstance(error, Mapping) else str(error)
-                events.append(AgentEvent("error", message))
+            if item.get("error"):
+                error = item["error"]
+                message = (
+                    error.get("message", str(error))
+                    if isinstance(error, Mapping)
+                    else str(error)
+                )
+                events.append(AgentEvent("error", str(message)))
             return events
-        if item_type == "web_search":
-            result = str(item.get("result") or item.get("query") or "")
-            return [AgentEvent("tool_result", result)] if result else []
+        if item_type == "webSearch":
+            return [
+                AgentEvent(
+                    "tool_result",
+                    f"Web search completed: {item.get('query', '')}",
+                    {"tool_use_id": item_id},
+                )
+            ]
         if item_type == "error":
             return [AgentEvent("error", str(item.get("message") or "Codex item failed"))]
         return []
 
-    if event_type == "turn.completed":
-        usage = payload.get("usage") or {}
-        metadata = {
-            "ok": True,
-            "stop_reason": "end_turn",
-            "input_tokens": _nonnegative_int(usage.get("input_tokens")),
-            "cached_input_tokens": _nonnegative_int(usage.get("cached_input_tokens")),
-            "output_tokens": _nonnegative_int(usage.get("output_tokens")),
-        }
-        return [AgentEvent("turn_end", "Turn completed", metadata)]
-
-    if event_type == "turn.failed":
-        error = payload.get("error") or {}
-        message = error.get("message", "Codex turn failed") if isinstance(error, Mapping) else str(error)
-        return [
-            AgentEvent("error", str(message)),
-            AgentEvent(
-                "turn_end",
-                "Turn failed",
-                {"ok": False, "stop_reason": "turn_failed"},
-            ),
-        ]
-
-    if event_type == "error":
-        return [AgentEvent("error", str(payload.get("message") or "Codex error"))]
+    if method == "context/compacted":
+        return [AgentEvent("activity", "Codex conversation context compacted")]
+    if method == "item/mcpToolCall/progress":
+        return [AgentEvent("activity", f"MCP: {params.get('message', '')}")]
     return []
 
 
 class CodexCLIProvider:
-    """Per-turn Codex process with a resumable conversation thread."""
+    """Persistent Codex app-server process with one resumable thread."""
 
     def __init__(
         self,
@@ -235,7 +274,9 @@ class CodexCLIProvider:
         self.model_name = model_name
         self.campaign_name = campaign_name
         self.reasoning_effort = (
-            reasoning_effort if reasoning_effort in CODEX_REASONING_EFFORTS else "high"
+            "native"
+            if model_name == "gpt-5.3-codex-spark"
+            else reasoning_effort if reasoning_effort in CODEX_REASONING_EFFORTS else "high"
         )
         self.sandbox = sandbox
         self._thread_id = resume_thread_id
@@ -245,10 +286,18 @@ class CodexCLIProvider:
         self._rollout_root = rollout_root
         self._rollout_path: Path | None = None
         self._proc: Any | None = None
+        self._reader_task: asyncio.Task[None] | None = None
         self._stderr_task: asyncio.Task[None] | None = None
-        self._last_stderr = ""
-        self._turn_completed = False
+        self._notifications: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._request_seq = 0
+        self._write_lock = asyncio.Lock()
         self._turn_lock = asyncio.Lock()
+        self._active_turn_id: str | None = None
+        self._disconnecting = False
+        self._last_stderr = ""
+        self._last_call_usage: dict[str, int] | None = None
+        self._context_window = CODEX_CONTEXT_LIMITS.get(model_name, 258_400)
 
     @property
     def session_id(self) -> str | None:
@@ -292,55 +341,41 @@ class CodexCLIProvider:
                         f"mcp_servers.{name}.bearer_token_env_var="
                         f"{_toml_string(str(token_env))}"
                     )
+            enabled_tools = raw_config.get("enabled_tools")
+            if isinstance(enabled_tools, (list, tuple)):
+                safe_tools = [
+                    str(tool)
+                    for tool in enabled_tools
+                    if _TOOL_NAME.fullmatch(str(tool))
+                ]
+                args.append(
+                    f"mcp_servers.{name}.enabled_tools=["
+                    + ", ".join(_toml_string(tool) for tool in safe_tools)
+                    + "]"
+                )
+            approval_mode = raw_config.get("default_tools_approval_mode")
+            if approval_mode in _MCP_APPROVAL_MODES:
+                args.append(
+                    f"mcp_servers.{name}.default_tools_approval_mode="
+                    f"{_toml_string(str(approval_mode))}"
+                )
+            for option in ("enabled", "required"):
+                if isinstance(raw_config.get(option), bool):
+                    args.append(
+                        f"mcp_servers.{name}.{option}="
+                        f"{str(raw_config[option]).lower()}"
+                    )
         return args
 
-    def _build_command(
-        self,
-        message: str,
-        system_prompt: str,
-        model_name: str,
-        mcp_servers: Mapping[str, Any] | None,
-    ) -> list[str]:
-        if self._thread_id:
-            command = [
-                self._codex_bin,
-                "exec",
-                "resume",
-                "--json",
-                "--color",
-                "never",
-                "-m",
-                model_name,
-                "-c",
-                f"sandbox_mode={_toml_string(self.sandbox)}",
-            ]
-        else:
-            command = [
-                self._codex_bin,
-                "exec",
-                "--json",
-                "--color",
-                "never",
-                "-m",
-                model_name,
-                "-s",
-                self.sandbox,
-                "-C",
-                str(self.project_root),
-            ]
-            if system_prompt:
-                command.extend(
-                    ["-c", f"developer_instructions={_toml_string(system_prompt)}"]
-                )
-        if model_name != "gpt-5.3-codex-spark":
+    def _build_command(self, mcp_servers: Mapping[str, Any] | None) -> list[str]:
+        command = [self._codex_bin]
+        if self.reasoning_effort != "native":
             command.extend(
                 ["-c", f"model_reasoning_effort={_toml_string(self.reasoning_effort)}"]
             )
         for config in self._mcp_config_args(mcp_servers):
             command.extend(["-c", config])
-        if self._thread_id:
-            command.append(self._thread_id)
-        command.append(message)
+        command.extend(["app-server", "--stdio"])
         return command
 
     def _build_env(self, mcp_servers: Mapping[str, Any] | None) -> dict[str, str]:
@@ -359,6 +394,86 @@ class CodexCLIProvider:
                     env[str(key)] = str(value)
         return env
 
+    async def _connect(
+        self,
+        system_prompt: str,
+        mcp_servers: Mapping[str, Any] | None,
+    ) -> None:
+        if self.is_alive:
+            return
+        if self._proc is not None:
+            await self.close()
+
+        self._notifications = asyncio.Queue()
+        self._disconnecting = False
+        self._last_stderr = ""
+        self._proc = await self._process_factory(
+            *self._build_command(mcp_servers),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=self._build_env(mcp_servers),
+            cwd=str(self.project_root),
+            limit=16 * 1024 * 1024,
+        )
+        self._reader_task = asyncio.create_task(self._read_stdout())
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
+        try:
+            await asyncio.wait_for(
+                self._request(
+                    "initialize",
+                    {
+                        "clientInfo": {
+                            "name": "dm-game-master",
+                            "title": "DM Game Master",
+                            "version": "1",
+                        }
+                    },
+                ),
+                timeout=30,
+            )
+            await self._notify("initialized", {})
+            params: dict[str, Any] = {
+                "cwd": str(self.project_root),
+                "model": self.model_name,
+                "approvalPolicy": "never",
+                "sandbox": self.sandbox,
+            }
+            if system_prompt:
+                params["developerInstructions"] = system_prompt
+            if self._thread_id:
+                params["threadId"] = self._thread_id
+                method = "thread/resume"
+            else:
+                method = "thread/start"
+            result = await asyncio.wait_for(self._request(method, params), timeout=30)
+            thread = result.get("thread") or {}
+            thread_id = thread.get("id") if isinstance(thread, Mapping) else None
+            if not thread_id:
+                raise RuntimeError("Codex app-server returned no thread id")
+            self._thread_id = str(thread_id)
+            self._rollout_path = None
+        except BaseException:
+            await self.close()
+            raise
+
+    async def _start_turn(self, user_message: str) -> None:
+        if not self._thread_id:
+            raise RuntimeError("Codex thread is not initialized")
+        params: dict[str, Any] = {
+            "threadId": self._thread_id,
+            "input": [{"type": "text", "text": user_message}],
+            "model": self.model_name,
+        }
+        if self.reasoning_effort != "native":
+            params["effort"] = self.reasoning_effort
+        result = await asyncio.wait_for(self._request("turn/start", params), timeout=30)
+        turn = result.get("turn") or {}
+        turn_id = turn.get("id") if isinstance(turn, Mapping) else None
+        if not turn_id:
+            raise RuntimeError("Codex app-server returned no turn id")
+        self._active_turn_id = str(turn_id)
+
     async def process_message(
         self,
         user_message: str,
@@ -368,122 +483,285 @@ class CodexCLIProvider:
     ) -> AsyncIterator[AgentEvent]:
         if not user_message.strip():
             yield AgentEvent("error", "Player message must not be empty")
+            yield AgentEvent("turn_end", "Turn failed", {"ok": False})
             return
 
         async with self._turn_lock:
             if model_name != self.model_name:
                 await self.reset()
                 self.model_name = model_name
-            command = self._build_command(
-                user_message,
-                system_prompt,
-                model_name,
-                mcp_servers,
-            )
-            self._turn_completed = False
-            self._last_stderr = ""
+                self._context_window = CODEX_CONTEXT_LIMITS.get(model_name, 258_400)
+            self._last_call_usage = None
             try:
-                self._proc = await self._process_factory(
-                    *command,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=self._build_env(mcp_servers),
-                    cwd=str(self.project_root),
-                    limit=16 * 1024 * 1024,
+                await self._connect(system_prompt, mcp_servers)
+                await self._start_turn(user_message)
+            except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+                await self.close()
+                yield AgentEvent("error", f"Could not start Codex app-server turn: {exc}")
+                yield AgentEvent(
+                    "turn_end",
+                    "Turn failed",
+                    {
+                        "ok": False,
+                        "stop_reason": "startup_error",
+                        "session_id": self._thread_id,
+                    },
                 )
-            except (OSError, RuntimeError) as exc:
-                yield AgentEvent("error", f"Could not start Codex CLI: {exc}")
                 return
 
-            self._stderr_task = asyncio.create_task(self._drain_stderr())
             try:
-                async for event in self._read_events():
+                async for event in self._events():
                     yield event
-                return_code = await self._proc.wait()
-                if self._stderr_task:
-                    try:
-                        await asyncio.wait_for(self._stderr_task, timeout=5)
-                    except asyncio.TimeoutError:
-                        self._stderr_task.cancel()
-                if not self._turn_completed:
-                    detail = self._last_stderr or f"Codex exited with status {return_code}"
-                    yield AgentEvent("error", detail)
-                    yield AgentEvent(
-                        "turn_end",
-                        "Turn did not complete",
-                        {
-                            "ok": False,
-                            "stop_reason": f"process_exit_{return_code}",
-                            "returncode": return_code,
-                            "session_id": self._thread_id,
-                        },
-                    )
             except asyncio.CancelledError:
                 await self.interrupt()
                 raise
-            finally:
-                self._proc = None
-                self._stderr_task = None
 
-    async def _read_events(self) -> AsyncIterator[AgentEvent]:
-        if not self._proc or not self._proc.stdout:
-            return
+    async def _events(self) -> AsyncIterator[AgentEvent]:
         while True:
-            try:
-                raw_line = await self._proc.stdout.readline()
-            except ValueError:
-                logger.warning("Codex emitted a JSONL line larger than the stream limit")
+            message = await self._notifications.get()
+            method = str(message.get("method") or "")
+            params = message.get("params") or {}
+            if not isinstance(params, Mapping):
+                params = {}
+            thread_id = params.get("threadId")
+            if thread_id and self._thread_id and str(thread_id) != self._thread_id:
                 continue
-            if not raw_line:
-                break
-            try:
-                payload = json.loads(raw_line.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
+
+            if method == "thread/tokenUsage/updated":
+                usage = params.get("tokenUsage") or {}
+                if isinstance(usage, Mapping):
+                    last = usage.get("last") or {}
+                    if isinstance(last, Mapping):
+                        self._last_call_usage = {
+                            "input_tokens": _nonnegative_int(last.get("inputTokens")),
+                            "cached_input_tokens": _nonnegative_int(
+                                last.get("cachedInputTokens")
+                            ),
+                            "output_tokens": _nonnegative_int(last.get("outputTokens")),
+                        }
+                    window = usage.get("modelContextWindow")
+                    if isinstance(window, int) and window > 0:
+                        self._context_window = window
                 continue
-            if payload.get("type") == "thread.started":
-                thread_id = payload.get("thread_id")
-                if thread_id:
-                    self._thread_id = str(thread_id)
-                    self._rollout_path = None
-            if payload.get("type") in {"turn.completed", "turn.failed"}:
-                self._turn_completed = True
-            for event in normalize_codex_event(payload):
-                if event.type == "turn_end":
-                    metadata = dict(event.metadata)
-                    metadata["session_id"] = self._thread_id
-                    event = AgentEvent(event.type, event.content, metadata)
+
+            if method == "error":
+                error = params.get("error") or {}
+                if not isinstance(error, Mapping):
+                    error = {"message": str(error)}
+                content = str(error.get("message") or "Codex error")
+                if params.get("willRetry"):
+                    yield AgentEvent("activity", f"Codex reconnecting: {content}")
+                    continue
+                model_error = self._classify_error(error)
+                event_type = "rate_limit" if model_error == "rate_limit" else "error"
+                yield AgentEvent(event_type, content, {"model_error": model_error})
+                continue
+
+            if method == "turn/completed":
+                turn = params.get("turn") or {}
+                if not isinstance(turn, Mapping):
+                    turn = {}
+                status = str(turn.get("status") or "failed")
+                error = turn.get("error") or {}
+                if status == "failed" and isinstance(error, Mapping) and error.get("message"):
+                    yield AgentEvent("error", str(error["message"]))
+                self._active_turn_id = None
+                usage = self._last_call_usage or {}
+                yield AgentEvent(
+                    "turn_end",
+                    f"Turn {status}",
+                    {
+                        "ok": status == "completed",
+                        "stop_reason": {
+                            "completed": "end_turn",
+                            "interrupted": "interrupted",
+                            "failed": "turn_failed",
+                        }.get(status, status),
+                        "session_id": self._thread_id,
+                        **usage,
+                    },
+                )
+                return
+
+            if method == "_process/exited":
+                self._active_turn_id = None
+                returncode = params.get("returncode")
+                detail = str(params.get("stderr") or "").strip()
+                yield AgentEvent(
+                    "error",
+                    detail or f"Codex app-server exited with status {returncode}",
+                )
+                yield AgentEvent(
+                    "turn_end",
+                    "Turn failed",
+                    {
+                        "ok": False,
+                        "stop_reason": f"process_exit_{returncode}",
+                        "returncode": returncode,
+                        "session_id": self._thread_id,
+                    },
+                )
+                return
+
+            for event in normalize_codex_event(message):
                 yield event
 
-    async def _drain_stderr(self) -> None:
-        if not self._proc or not self._proc.stderr:
+    async def _request(self, method: str, params: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.is_alive or not self._proc.stdin:
+            raise RuntimeError("Codex app-server is not running")
+        self._request_seq += 1
+        request_id = self._request_seq
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        try:
+            await self._write({"method": method, "id": request_id, "params": dict(params)})
+            result = await future
+            return dict(result) if isinstance(result, Mapping) else {}
+        except CodexProtocolError as exc:
+            raise CodexProtocolError(method, exc.error) from exc
+        finally:
+            self._pending_requests.pop(request_id, None)
+
+    async def _notify(self, method: str, params: Mapping[str, Any]) -> None:
+        await self._write({"method": method, "params": dict(params)})
+
+    async def _write(self, payload: Mapping[str, Any]) -> None:
+        if not self.is_alive or not self._proc.stdin:
+            raise RuntimeError("Codex app-server stdin is unavailable")
+        encoded = (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+        async with self._write_lock:
+            self._proc.stdin.write(encoded)
+            await self._proc.stdin.drain()
+
+    async def _read_stdout(self) -> None:
+        process = self._proc
+        if not process or not process.stdout:
             return
-        chunks: list[bytes] = []
-        while True:
-            chunk = await self._proc.stderr.read(4096)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        self._last_stderr = b"".join(chunks)[-2000:].decode("utf-8", errors="replace")
+        try:
+            while True:
+                raw = await process.stdout.readline()
+                if not raw:
+                    break
+                try:
+                    message = json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    logger.warning("Codex app-server emitted invalid JSONL")
+                    continue
+                request_id = message.get("id")
+                if request_id is not None and message.get("method"):
+                    await self._write(
+                        {
+                            "id": request_id,
+                            "error": {
+                                "code": -32601,
+                                "message": (
+                                    "DM Game Master does not implement client request "
+                                    f"{message.get('method')}"
+                                ),
+                            },
+                        }
+                    )
+                    continue
+                if request_id is not None:
+                    future = self._pending_requests.get(request_id)
+                    if future and not future.done():
+                        if "error" in message:
+                            future.set_exception(
+                                CodexProtocolError(
+                                    "request",
+                                    message.get("error") or {},
+                                )
+                            )
+                        else:
+                            future.set_result(message.get("result") or {})
+                    continue
+                if message.get("method"):
+                    await self._notifications.put(message)
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            logger.exception("Codex app-server reader failed: %s", exc)
+        finally:
+            returncode = await process.wait()
+            failure = RuntimeError(f"Codex app-server exited with status {returncode}")
+            for future in self._pending_requests.values():
+                if not future.done():
+                    future.set_exception(failure)
+            if not self._disconnecting:
+                await self._notifications.put(
+                    {
+                        "method": "_process/exited",
+                        "params": {
+                            "returncode": returncode,
+                            "stderr": self._last_stderr,
+                        },
+                    }
+                )
+
+    async def _drain_stderr(self) -> None:
+        process = self._proc
+        if not process or not process.stderr:
+            return
+        try:
+            while True:
+                chunk = await process.stderr.read(4096)
+                if not chunk:
+                    break
+                self._last_stderr = (
+                    self._last_stderr + chunk.decode("utf-8", errors="replace")
+                )[-4000:]
+        except asyncio.CancelledError:
+            return
 
     async def interrupt(self) -> bool:
-        process = self._proc
-        if process is None or process.returncode is not None:
+        if not self._active_turn_id or not self._thread_id or not self.is_alive:
             return False
-        process.terminate()
         try:
-            await asyncio.wait_for(process.wait(), timeout=5)
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.wait()
-        return True
+            await asyncio.wait_for(
+                self._request(
+                    "turn/interrupt",
+                    {
+                        "threadId": self._thread_id,
+                        "turnId": self._active_turn_id,
+                    },
+                ),
+                timeout=5,
+            )
+            return True
+        except (RuntimeError, asyncio.TimeoutError):
+            return False
 
     async def close(self) -> None:
-        await self.interrupt()
+        process = self._proc
+        if process is None:
+            return
+        self._disconnecting = True
+        if self._active_turn_id and process.returncode is None:
+            await self.interrupt()
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+        for task in (self._reader_task, self._stderr_task):
+            if task and not task.done():
+                task.cancel()
+        for future in self._pending_requests.values():
+            if not future.done():
+                future.set_exception(RuntimeError("Codex app-server disconnected"))
+        self._pending_requests.clear()
+        self._proc = None
+        self._reader_task = None
+        self._stderr_task = None
+        self._active_turn_id = None
 
     async def reset(self) -> None:
         await self.close()
         self._thread_id = None
         self._rollout_path = None
+        self._last_call_usage = None
 
     def _find_rollout(self) -> Path | None:
         if not self._thread_id:
@@ -507,8 +785,62 @@ class CodexCLIProvider:
         return self._rollout_path
 
     def get_context_usage(self) -> ContextUsage | None:
+        if self._last_call_usage:
+            return ContextUsage(
+                used_tokens=self._last_call_usage["input_tokens"],
+                total_tokens=self._context_window,
+                cached_input_tokens=self._last_call_usage["cached_input_tokens"],
+            )
         rollout = self._find_rollout()
         return _read_rollout_context(rollout) if rollout else None
 
+    @staticmethod
+    def _classify_error(error: Mapping[str, Any]) -> str:
+        info = error.get("codexErrorInfo")
+        if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
+            return "rate_limit"
+        if info == "contextWindowExceeded":
+            return "context_window"
+        if info in {"serverOverloaded", "internalServerError"}:
+            return "server_error"
+        if isinstance(info, Mapping) and any(
+            key in info
+            for key in (
+                "httpConnectionFailed",
+                "responseStreamConnectionFailed",
+                "responseStreamDisconnected",
+                "responseTooManyFailedAttempts",
+            )
+        ):
+            return "server_error"
+        message = str(error.get("message") or "").lower()
+        if any(
+            part in message
+            for part in (
+                "rate limit",
+                "usage limit",
+                "session limit",
+                "too many requests",
+                "429",
+            )
+        ):
+            return "rate_limit"
+        if any(
+            part in message
+            for part in (
+                "connection refused",
+                "stream disconnected",
+                "network error",
+                "tls",
+                "unexpected eof",
+            )
+        ):
+            return "server_error"
+        return "error"
+
     def get_provider_name(self) -> str:
-        return "Codex CLI (subscription)"
+        return "Codex app-server (subscription)"
+
+
+# Compatibility name for callers that want to state the transport explicitly.
+CodexAppServerProvider = CodexCLIProvider

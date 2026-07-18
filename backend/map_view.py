@@ -85,6 +85,55 @@ def _coordinate(data: dict[str, Any]) -> dict[str, float] | None:
     return {"x": x, "y": y}
 
 
+def _location_visible(
+    name: str,
+    locations: dict[str, dict[str, Any]],
+    current_chain: set[str],
+) -> bool:
+    """Return whether a location and all its ancestors are player-visible."""
+    if name in current_chain:
+        return True
+    seen: set[str] = set()
+    current: str | None = name
+    while current and current in locations and current not in seen:
+        seen.add(current)
+        data = locations[current]
+        if data.get("hidden") is True:
+            return False
+        if not bool(data.get("discovered", data.get("known", True))):
+            return False
+        parent = data.get("parent")
+        current = parent if isinstance(parent, str) else None
+    return True
+
+
+def _entry_projection(data: dict[str, Any], is_entry_point: bool) -> dict[str, Any]:
+    config = data.get("entry_config")
+    if not isinstance(config, dict) or config.get("hidden") is True:
+        return {"is_entry_point": False, "config": {}}
+    safe_config = {
+        key: _json_safe(config[key])
+        for key in ("name", "label")
+        if key in config
+    }
+    return {
+        "is_entry_point": is_entry_point,
+        "config": safe_config if is_entry_point else {},
+    }
+
+
+def _vehicle_projection(data: dict[str, Any]) -> dict[str, Any] | None:
+    vehicle = data.get("_vehicle")
+    if not isinstance(vehicle, dict):
+        return None
+    result = {
+        key: _json_safe(vehicle[key])
+        for key in ("vehicle_id", "is_vehicle_anchor", "vehicle_type", "stationary")
+        if key in vehicle
+    }
+    return result or None
+
+
 def _ancestor_chain(
     location: str | None,
     locations: dict[str, dict[str, Any]],
@@ -148,6 +197,8 @@ def _connection_projection(
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for raw_source, raw_target, raw_data in get_unique_edges(locations):
+        if raw_source not in locations or raw_target not in locations:
+            continue
         source, target = sorted((raw_source, raw_target))
         data = dict(raw_data or {})
         bearing = data.get("bearing")
@@ -230,7 +281,6 @@ def get_map_snapshot(campaign_dir: str | Path) -> dict[str, Any]:
     if not locations:
         return snapshot
 
-    children = _children_index(locations)
     player_data = store.get_player_data()
     player_position = overview.get("player_position")
     if not isinstance(player_position, dict):
@@ -244,6 +294,12 @@ def get_map_snapshot(campaign_dir: str | Path) -> dict[str, Any]:
         current_location = None
 
     chain = _ancestor_chain(current_location, locations)
+    visible_locations = {
+        name: data
+        for name, data in locations.items()
+        if _location_visible(name, locations, set(chain))
+    }
+    children = _children_index(visible_locations)
     current_data = locations.get(current_location, {})
     parent = current_data.get("parent")
     compound = parent if isinstance(parent, str) and parent in locations else None
@@ -266,17 +322,21 @@ def get_map_snapshot(campaign_dir: str | Path) -> dict[str, Any]:
         "coordinates": _coordinate(locations.get(global_location, {})),
     }
     snapshot["breadcrumb"] = ["World", *chain]
-    snapshot["hierarchy"] = _hierarchy(locations, children)
+    snapshot["hierarchy"] = _hierarchy(visible_locations, children)
 
     nodes = []
-    for name in sorted(locations):
-        data = locations[name]
+    for name in sorted(visible_locations):
+        data = visible_locations[name]
         parent = data.get("parent")
-        parent = parent if isinstance(parent, str) and parent in locations else None
+        parent = (
+            parent
+            if isinstance(parent, str) and parent in visible_locations
+            else None
+        )
         location_type = data.get("type", "world")
-        entry_points = set(locations.get(parent, {}).get("entry_points", []))
-        discovered = bool(data.get("discovered", data.get("known", True)))
-        hidden = bool(data.get("hidden", False))
+        entry_points = set(
+            visible_locations.get(parent, {}).get("entry_points", [])
+        )
         global_eligible = parent is None and location_type != "interior"
         interior_eligible = parent is not None
         nodes.append(
@@ -287,24 +347,21 @@ def get_map_snapshot(campaign_dir: str | Path) -> dict[str, Any]:
                 "coordinates": _coordinate(data),
                 "parent": parent,
                 "children": children.get(name, []),
-                "entry": {
-                    "is_entry_point": name in entry_points,
-                    "config": _json_safe(data.get("entry_config") or {}),
-                },
-                "vehicle": _json_safe(data.get("_vehicle")) if data.get("_vehicle") else None,
+                "entry": _entry_projection(data, name in entry_points),
+                "vehicle": _vehicle_projection(data),
                 "visibility": {
-                    "discovered": discovered,
-                    "hidden": hidden,
-                    "global": global_eligible and discovered and not hidden,
-                    "interior": interior_eligible and discovered and not hidden,
+                    "discovered": True,
+                    "hidden": False,
+                    "global": global_eligible,
+                    "interior": interior_eligible,
                 },
             }
         )
 
     snapshot["nodes"] = nodes
-    snapshot["connections"] = _connection_projection(locations)
+    snapshot["connections"] = _connection_projection(visible_locations)
     snapshot["layouts"] = _interior_layouts(
-        locations,
+        visible_locations,
         children,
         snapshot["connections"],
     )

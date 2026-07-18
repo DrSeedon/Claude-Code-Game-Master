@@ -90,7 +90,10 @@ def test_projects_world_graph_map_and_current_context(tmp_path):
                 "Airlock",
                 type="interior",
                 parent="Ship",
-                entry_config={"name": "Dock"},
+                entry_config={
+                    "name": "Dock",
+                    "on_enter": {"description": "Secret ambush"},
+                },
                 _vehicle={"vehicle_id": "ship-01", "is_vehicle_anchor": False},
             ),
         },
@@ -166,6 +169,7 @@ def test_projects_world_graph_map_and_current_context(tmp_path):
     assert nodes["Airlock"]["visibility"]["global"] is False
     assert nodes["Airlock"]["visibility"]["interior"] is True
     assert nodes["Ship"]["vehicle"]["vehicle_id"] == "ship-01"
+    assert "Secret ambush" not in json.dumps(snapshot)
     assert snapshot["hierarchy"][1]["name"] == "Ship"
     assert [child["name"] for child in snapshot["hierarchy"][1]["children"]] == [
         "Airlock",
@@ -228,16 +232,11 @@ def test_interior_layout_is_deterministic_and_honors_inferred_children(tmp_path)
     second = get_map_snapshot(campaign)
 
     assert first["layouts"] == second["layouts"]
-    assert set(first["layouts"]["Base"]) == {"Door", "Hall", "Lab"}
+    assert set(first["layouts"]["Base"]) == {"Door", "Hall"}
     positions = first["layouts"]["Base"].values()
-    assert len({(position["x"], position["y"]) for position in positions}) == 3
+    assert len({(position["x"], position["y"]) for position in positions}) == 2
     assert all(40 <= position["x"] <= 760 for position in positions)
     assert all(40 <= position["y"] <= 560 for position in positions)
     projected = {node["name"]: node for node in first["nodes"]}
-    assert projected["Base"]["children"] == ["Door", "Hall", "Lab"]
-    assert projected["Lab"]["visibility"] == {
-        "discovered": True,
-        "hidden": True,
-        "global": False,
-        "interior": False,
-    }
+    assert projected["Base"]["children"] == ["Door", "Hall"]
+    assert "Lab" not in json.dumps(first)

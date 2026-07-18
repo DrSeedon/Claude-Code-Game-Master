@@ -223,6 +223,29 @@ class TestWizardMCPTools:
             }
         ]
 
+    def test_stdio_schema_requires_dashboard_field_names(self):
+        from backend.wizard_mcp_stdio import WizardControl
+        from pydantic import ValidationError
+
+        control = WizardControl.model_validate({
+            "type": "radio",
+            "id": "rules",
+            "label": "Rules",
+            "options": [{
+                "id": "survival-zone",
+                "title": "Survival Zone",
+                "color": "green",
+            }],
+        })
+
+        assert control.options[0].title == "Survival Zone"
+        with pytest.raises(ValidationError):
+            WizardControl.model_validate({
+                "type": "radio",
+                "name": "rules",
+                "label": "Rules",
+            })
+
     @staticmethod
     async def _invoke(cfg, tool_name, arguments):
         """Invoke a registered in-process MCP tool by name (real handler body runs)."""

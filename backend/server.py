@@ -559,6 +559,13 @@ async def wizard_websocket(websocket: WebSocket):
             "wizard": {
                 "command": sys.executable,
                 "args": ["-m", "backend.wizard_mcp_stdio"],
+                "enabled_tools": [
+                    "show_choices",
+                    "clear_choices",
+                    "create_campaign",
+                ],
+                "default_tools_approval_mode": "approve",
+                "required": True,
             }
         }
 

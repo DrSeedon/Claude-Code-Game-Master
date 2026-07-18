@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,7 +40,7 @@ class ProviderBuildContext:
     campaign_name: str | None
     model_name: str
     resume_session_id: str | None = None
-    reasoning_effort: str = "high"
+    reasoning_effort: str | None = None
     environment: Mapping[str, str] | None = None
 
 
@@ -62,6 +62,8 @@ class ModelDefinition:
     runtime_id: str
     context_window: int | None = None
     reasoning_efforts: tuple[str, ...] = ()
+    selected_reasoning_effort: str | None = None
+    usage_limits: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +72,8 @@ class ModelDefinition:
             "runtime": self.runtime_id,
             "context_window": self.context_window,
             "reasoning_efforts": list(self.reasoning_efforts),
+            "selected_reasoning_effort": self.selected_reasoning_effort,
+            "usage_limits": dict(self.usage_limits or {}),
         }
 
 
@@ -116,13 +120,47 @@ class RuntimeRegistry:
     def build(self, context: ProviderBuildContext) -> AgentProvider:
         model = self.get_model(context.model_name)
         runtime = self.get_runtime(model.runtime_id)
-        provider = runtime.factory(context)
+        effort = context.reasoning_effort or model.selected_reasoning_effort or "high"
+        provider = runtime.factory(replace(context, reasoning_effort=effort))
         if not isinstance(provider, AgentProvider):
             raise TypeError(f"runtime '{runtime.id}' returned an incompatible provider")
         return provider
 
 
 CODEX_REASONING_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+CODEX_MODEL_DEFAULTS = {
+    "gpt-5.3-codex-spark": {
+        "effort": "native",
+        "usage_limits": {"scope": "spark_separate", "plan": "pro"},
+    },
+    "gpt-5.6-sol": {
+        "effort": "high",
+        "usage_limits": {
+            "scope": "codex_shared",
+            "window_hours": 5,
+            "pro_5x": [75, 450],
+            "pro_20x": [300, 1800],
+        },
+    },
+    "gpt-5.6-terra": {
+        "effort": "medium",
+        "usage_limits": {
+            "scope": "codex_shared",
+            "window_hours": 5,
+            "pro_5x": [100, 550],
+            "pro_20x": [400, 2200],
+        },
+    },
+    "gpt-5.6-luna": {
+        "effort": "low",
+        "usage_limits": {
+            "scope": "codex_shared",
+            "window_hours": 5,
+            "pro_5x": [250, 1400],
+            "pro_20x": [1000, 5600],
+        },
+    },
+}
 
 
 def create_default_registry() -> RuntimeRegistry:
@@ -163,14 +201,16 @@ def create_default_registry() -> RuntimeRegistry:
                 display_name=label,
                 runtime_id="claude",
                 context_window=ClaudeSDKProvider.CONTEXT_WINDOW,
+                selected_reasoning_effort="provider_default",
+                usage_limits={"scope": "provider_subscription"},
             )
         )
     registry.register_runtime(
         RuntimeDefinition(
             id="codex",
-            display_name="Codex CLI",
+            display_name="Codex app-server",
             capabilities=RuntimeCapabilities(
-                event_stream="per_turn",
+                event_stream="persistent",
                 resume=True,
                 interrupt=True,
                 hibernate=True,
@@ -193,6 +233,7 @@ def create_default_registry() -> RuntimeRegistry:
         ("gpt-5.6-terra", "GPT-5.6 Terra"),
         ("gpt-5.6-luna", "GPT-5.6 Luna"),
     ):
+        defaults = CODEX_MODEL_DEFAULTS[model_id]
         registry.register_model(
             ModelDefinition(
                 id=model_id,
@@ -203,6 +244,8 @@ def create_default_registry() -> RuntimeRegistry:
                     () if model_id == "gpt-5.3-codex-spark"
                     else CODEX_REASONING_EFFORTS
                 ),
+                selected_reasoning_effort=defaults["effort"],
+                usage_limits=defaults["usage_limits"],
             )
         )
     return registry

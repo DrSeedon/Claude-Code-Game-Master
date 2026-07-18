@@ -1,9 +1,10 @@
-"""AI provider for DM system (Claude SDK only)."""
+"""Built-in subscription-backed AI providers."""
 
-from backend.providers.base import BaseProvider
 from backend.providers.claude_sdk import ClaudeSDKProvider
+from backend.providers.codex_cli import CodexAppServerProvider, CodexCLIProvider
 
 __all__ = [
-    "BaseProvider",
     "ClaudeSDKProvider",
+    "CodexAppServerProvider",
+    "CodexCLIProvider",
 ]

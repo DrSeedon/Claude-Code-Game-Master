@@ -20,9 +20,8 @@ const ACTIVITY_COLLAPSE_LEN = 200;
 const STREAM_BASE_CPS = 12;        // min chars drawn per frame (Orchestra _STREAM_BASE_CPS)
 const STREAM_PARSE_INTERVAL = 50;  // ms between visible re-parses (Orchestra _STREAM_PARSE_INTERVAL)
 
-const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY_MS = 2000;
-const MAX_RECONNECT_DELAY_MS = 30000;
+const MAX_RECONNECT_DELAY_MS = 10000;
 
 const TOOL_BLOCK_RE = /```tool:\w+\s*\n\{[\s\S]*?\}\s*\n```/g;  // wizard strips inline tool blocks
 
@@ -689,7 +688,6 @@ function connect(url) {
     if (state.ws !== sock) return;
     state.ws = null;
     if (event.wasClean) { setConnStatus('disconnected'); return; }
-    if (state.attempt >= MAX_RECONNECT_ATTEMPTS) { setConnStatus('failed'); return; }
     setConnStatus('reconnecting');
     const delay = Math.min(BASE_RECONNECT_DELAY_MS * 2 ** state.attempt, MAX_RECONNECT_DELAY_MS);
     state.attempt += 1;
@@ -699,6 +697,23 @@ function connect(url) {
     }, delay);
   };
 }
+
+function reconnectNow() {
+  if (state.ws || (state.mode !== 'game' && state.mode !== 'wizard')) return;
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
+  state.attempt = 0;
+  connect(state.mode === 'game' ? gameUrl() : wizardUrl());
+}
+
+window.addEventListener('online', reconnectNow);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.connStatus !== 'connected') {
+    reconnectNow();
+  }
+});
 
 // ─────────────────────────── Event dispatch ───────────────────────────────
 function handleEvent(data) {
@@ -1933,19 +1948,38 @@ function modelsForRuntime(runtimeId) {
 
 function modelMeta(model) {
   const context = Number(model.context_window);
-  const contextLabel = Number.isFinite(context) ? `${Math.round(context / 1000)}k` : '';
+  const contextLabel = Number.isFinite(context) ? `${Math.round(context / 1000)}k ctx` : '';
+  const effort = model.selected_reasoning_effort || 'provider_default';
+  const effortLabel = effort === 'provider_default'
+    ? ui('effort: провайдер', 'effort: provider')
+    : `effort: ${effort}`;
+  const primary = [contextLabel, effortLabel].filter(Boolean);
+  const usage = model.usage_limits || {};
   if (model.id === 'gpt-5.3-codex-spark') {
-    return [
-      contextLabel,
-      'Pro',
-      ui('отдельный лимит', 'separate limit'),
-      ui('сверхбыстрый', 'ultrafast'),
-    ].filter(Boolean).join(' · ');
+    primary.push('Pro', ui('сверхбыстрый', 'ultrafast'));
+    return {
+      primary: primary.join(' · '),
+      secondary: ui(
+        'Отдельный лимит Spark · точные цифры не опубликованы',
+        'Separate Spark limit · exact numbers are not published'
+      ),
+    };
   }
-  if (model.runtime === 'codex') {
-    return [contextLabel, ui('стандартный лимит', 'standard limit')].filter(Boolean).join(' · ');
+  if (usage.scope === 'codex_shared') {
+    const pro5 = Array.isArray(usage.pro_5x) ? usage.pro_5x.join('–') : '—';
+    const pro20 = Array.isArray(usage.pro_20x) ? usage.pro_20x.join('–') : '—';
+    return {
+      primary: primary.join(' · '),
+      secondary: ui(
+        `Pro 5× ≈${pro5} · 20× ≈${pro20} сообщ./${usage.window_hours || 5}ч`,
+        `Pro 5× ≈${pro5} · 20× ≈${pro20} msgs/${usage.window_hours || 5}h`
+      ),
+    };
   }
-  return [contextLabel, 'Claude Agent SDK'].filter(Boolean).join(' · ');
+  return {
+    primary: [...primary, 'Claude Agent SDK'].join(' · '),
+    secondary: ui('Лимит подписки Claude', 'Claude subscription limit'),
+  };
 }
 
 function renderRuntimeControls() {
@@ -1964,11 +1998,13 @@ function renderRuntimeControls() {
       `<div class="model-menu-heading"><span>${escapeHtml(runtimeItem.display_name)}</span><span>${models.length}</span></div>` +
       models.map(model => {
         const active = model.id === state.currentModel;
+        const meta = modelMeta(model);
         return `<button class="model-option${active ? ' active' : ''}" type="button" role="menuitemradio" ` +
           `aria-checked="${active}" data-model="${escapeHtml(model.id)}">` +
           `<span class="model-option-dot"></span><span class="model-option-copy">` +
           `<span class="model-option-name">${escapeHtml(model.display_name)}</span>` +
-          `<span class="model-option-meta">${escapeHtml(modelMeta(model))}</span></span>` +
+          `<span class="model-option-meta">${escapeHtml(meta.primary)}</span>` +
+          `<span class="model-option-limit">${escapeHtml(meta.secondary)}</span></span>` +
           `<span class="model-option-check">${active ? '✓' : ''}</span></button>`;
       }).join('') + `</section>`;
   }).join('');
@@ -2013,7 +2049,7 @@ function openModelMenu(trigger) {
   renderRuntimeControls();
   el.modelMenu.hidden = false;
   const rect = trigger.getBoundingClientRect();
-  const width = Math.min(340, window.innerWidth - 24);
+  const width = Math.min(430, window.innerWidth - 24);
   el.modelMenu.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 80)}px`;
   el.modelMenu.style.left = `${Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12))}px`;
   el.modelPickerBtn.setAttribute('aria-expanded', 'true');

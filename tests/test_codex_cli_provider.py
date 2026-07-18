@@ -10,79 +10,249 @@ from backend.providers.codex_cli import (
 )
 
 
-class FakeStream:
-    def __init__(self, chunks):
-        self._chunks = list(chunks)
+class QueueStream:
+    def __init__(self):
+        self.queue = asyncio.Queue()
 
     async def readline(self):
-        return self._chunks.pop(0) if self._chunks else b""
+        return await self.queue.get()
 
     async def read(self, _size):
-        return self._chunks.pop(0) if self._chunks else b""
+        return await self.queue.get()
+
+    def feed_json(self, payload):
+        self.queue.put_nowait((json.dumps(payload) + "\n").encode())
+
+    def feed(self, chunk):
+        self.queue.put_nowait(chunk)
 
 
-class FakeProcess:
-    def __init__(self, stdout_lines, stderr=b"", returncode=0):
-        self.stdout = FakeStream(stdout_lines)
-        self.stderr = FakeStream([stderr] if stderr else [])
+class FakeStdin:
+    def __init__(self, process):
+        self.process = process
+
+    def write(self, data):
+        for line in data.decode().splitlines():
+            if line:
+                self.process.handle(json.loads(line))
+
+    async def drain(self):
+        return None
+
+
+class FakeAppServerProcess:
+    def __init__(
+        self,
+        *,
+        thread_id="thread-1",
+        auto_complete=True,
+        turn_status="completed",
+        turn_error=None,
+        usage=None,
+        exit_after_turn_start=False,
+    ):
+        self.stdout = QueueStream()
+        self.stderr = QueueStream()
+        self.stdin = FakeStdin(self)
         self.returncode = None
-        self._final_returncode = returncode
+        self.thread_id = thread_id
+        self.auto_complete = auto_complete
+        self.turn_status = turn_status
+        self.turn_error = turn_error
+        self.usage = usage or {
+            "inputTokens": 100,
+            "cachedInputTokens": 80,
+            "outputTokens": 20,
+        }
+        self.exit_after_turn_start = exit_after_turn_start
+        self.requests = []
         self.terminated = False
         self.killed = False
+        self._closed = asyncio.Event()
+        self._turn_number = 0
+
+    def _response(self, request, result=None, error=None):
+        payload = {"id": request["id"]}
+        if error is not None:
+            payload["error"] = error
+        else:
+            payload["result"] = result or {}
+        self.stdout.feed_json(payload)
+
+    def handle(self, request):
+        self.requests.append(request)
+        method = request.get("method")
+        if request.get("id") is None:
+            return
+        if method == "initialize":
+            self._response(request, {"userAgent": "fake-app-server"})
+            return
+        if method in {"thread/start", "thread/resume"}:
+            self._response(request, {"thread": {"id": self.thread_id}})
+            self.stdout.feed_json(
+                {
+                    "method": "thread/started",
+                    "params": {
+                        "thread": {"id": self.thread_id},
+                        "threadId": self.thread_id,
+                    },
+                }
+            )
+            return
+        if method == "turn/start":
+            self._turn_number += 1
+            turn_id = f"turn-{self._turn_number}"
+            self._response(request, {"turn": {"id": turn_id}})
+            if self.exit_after_turn_start:
+                self.stderr.feed(b"authentication failed")
+                self.stderr.feed(b"")
+                self.returncode = 1
+                self.stdout.feed(b"")
+                self._closed.set()
+                return
+            self.stdout.feed_json(
+                {
+                    "method": "turn/started",
+                    "params": {
+                        "threadId": self.thread_id,
+                        "turn": {"id": turn_id},
+                    },
+                }
+            )
+            if self.auto_complete:
+                self.stdout.feed_json(
+                    {
+                        "method": "item/agentMessage/delta",
+                        "params": {
+                            "threadId": self.thread_id,
+                            "turnId": turn_id,
+                            "delta": "Ready",
+                        },
+                    }
+                )
+                self.stdout.feed_json(
+                    {
+                        "method": "item/completed",
+                        "params": {
+                            "threadId": self.thread_id,
+                            "turnId": turn_id,
+                            "item": {
+                                "id": f"message-{self._turn_number}",
+                                "type": "agentMessage",
+                                "text": "Ready",
+                            },
+                        },
+                    }
+                )
+                self.stdout.feed_json(
+                    {
+                        "method": "thread/tokenUsage/updated",
+                        "params": {
+                            "threadId": self.thread_id,
+                            "turnId": turn_id,
+                            "tokenUsage": {
+                                "last": self.usage,
+                                "total": self.usage,
+                                "modelContextWindow": 200,
+                            },
+                        },
+                    }
+                )
+                turn = {"id": turn_id, "status": self.turn_status}
+                if self.turn_error:
+                    turn["error"] = self.turn_error
+                self.stdout.feed_json(
+                    {
+                        "method": "turn/completed",
+                        "params": {
+                            "threadId": self.thread_id,
+                            "turn": turn,
+                        },
+                    }
+                )
+            return
+        if method == "turn/interrupt":
+            self._response(request)
+            self.stdout.feed_json(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": self.thread_id,
+                        "turn": {
+                            "id": request["params"]["turnId"],
+                            "status": "interrupted",
+                        },
+                    },
+                }
+            )
 
     async def wait(self):
-        self.returncode = self._final_returncode
+        if self.returncode is None:
+            await self._closed.wait()
         return self.returncode
 
     def terminate(self):
         self.terminated = True
         self.returncode = -15
+        self.stdout.feed(b"")
+        self.stderr.feed(b"")
+        self._closed.set()
 
     def kill(self):
         self.killed = True
         self.returncode = -9
+        self.stdout.feed(b"")
+        self.stderr.feed(b"")
+        self._closed.set()
 
 
 def collect(provider, **kwargs):
     async def scenario():
-        return [
+        events = [
             event
             async for event in provider.process_message(
                 kwargs.get("message", "continue"),
                 kwargs.get("system_prompt", "Run the campaign."),
-                kwargs.get("model", "gpt-5.6-sol"),
+                kwargs.get("model", provider.model_name),
                 kwargs.get("mcp_servers"),
             )
         ]
+        await provider.close()
+        return events
 
     return asyncio.run(scenario())
 
 
-def test_normalizes_core_codex_events():
+def test_normalizes_core_app_server_events():
     started = normalize_codex_event(
         {
-            "type": "item.started",
-            "item": {"type": "command_execution", "command": "pwd"},
+            "method": "item/started",
+            "params": {
+                "item": {
+                    "id": "command-1",
+                    "type": "commandExecution",
+                    "command": "pwd",
+                }
+            },
         }
     )
     completed = normalize_codex_event(
         {
-            "type": "item.completed",
-            "item": {
-                "type": "command_execution",
-                "aggregated_output": "/project",
-                "exit_code": 0,
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "id": "command-1",
+                    "type": "commandExecution",
+                    "aggregatedOutput": "/project",
+                    "exitCode": 0,
+                }
             },
         }
     )
-    final = normalize_codex_event(
+    delta = normalize_codex_event(
         {
-            "type": "turn.completed",
-            "usage": {
-                "input_tokens": 100,
-                "cached_input_tokens": 80,
-                "output_tokens": 20,
-            },
+            "method": "item/agentMessage/delta",
+            "params": {"delta": "Hello"},
         }
     )
 
@@ -90,35 +260,12 @@ def test_normalizes_core_codex_events():
     assert started[0].metadata["tool_name"] == "Bash"
     assert completed[0].type == "tool_result"
     assert completed[0].metadata["exit_code"] == 0
-    assert final[0].metadata["input_tokens"] == 100
+    assert delta[0].type == "text_delta"
 
 
-def test_malformed_usage_is_normalized_without_crashing():
-    events = normalize_codex_event(
-        {
-            "type": "turn.completed",
-            "usage": {
-                "input_tokens": "unknown",
-                "cached_input_tokens": -5,
-                "output_tokens": None,
-            },
-        }
-    )
-
-    assert events[0].metadata["input_tokens"] == 0
-    assert events[0].metadata["cached_input_tokens"] == 0
-    assert events[0].metadata["output_tokens"] == 0
-
-
-def test_new_turn_uses_safe_workspace_sandbox_and_campaign_env(tmp_path):
+def test_new_turn_uses_persistent_app_server_and_safe_sandbox(tmp_path):
     calls = []
-    process = FakeProcess(
-        [
-            b'{"type":"thread.started","thread_id":"thread-1"}\n',
-            b'{"type":"item.completed","item":{"type":"agent_message","text":"Ready"}}\n',
-            b'{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}\n',
-        ]
-    )
+    process = FakeAppServerProcess()
 
     async def factory(*command, **options):
         calls.append((command, options))
@@ -133,27 +280,35 @@ def test_new_turn_uses_safe_workspace_sandbox_and_campaign_env(tmp_path):
     events = collect(provider)
 
     command, options = calls[0]
-    assert command[:3] == ("/usr/bin/codex", "exec", "--json")
-    assert "-s" in command
-    assert command[command.index("-s") + 1] == "workspace-write"
-    assert "--dangerously-bypass-approvals-and-sandbox" not in command
+    assert command[-2:] == ("app-server", "--stdio")
+    assert "exec" not in command
+    assert options["stdin"] == asyncio.subprocess.PIPE
     assert options["cwd"] == str(tmp_path.resolve())
     assert options["env"]["DM_ACTIVE_CAMPAIGN"] == "test-campaign"
+    thread_start = next(
+        request for request in process.requests if request.get("method") == "thread/start"
+    )
+    assert thread_start["params"]["sandbox"] == "workspace-write"
+    assert thread_start["params"]["approvalPolicy"] == "never"
+    assert thread_start["params"]["developerInstructions"] == "Run the campaign."
     assert provider.session_id == "thread-1"
-    assert [event.type for event in events] == ["status", "text", "turn_end"]
+    assert [event.type for event in events] == [
+        "status",
+        "status",
+        "text_delta",
+        "text",
+        "turn_end",
+    ]
     assert events[-1].metadata["session_id"] == "thread-1"
 
 
-def test_second_turn_resumes_persistent_thread(tmp_path):
+def test_second_turn_reuses_process_and_thread(tmp_path):
     calls = []
+    process = FakeAppServerProcess(thread_id="thread-existing")
 
     async def factory(*command, **options):
         calls.append(command)
-        return FakeProcess(
-            [
-                b'{"type":"turn.completed","usage":{"input_tokens":20,"output_tokens":3}}\n',
-            ]
-        )
+        return process
 
     provider = CodexCLIProvider(
         tmp_path,
@@ -161,16 +316,26 @@ def test_second_turn_resumes_persistent_thread(tmp_path):
         codex_bin="codex",
         process_factory=factory,
     )
-    collect(provider)
 
-    command = calls[0]
-    assert command[:3] == ("codex", "exec", "resume")
-    assert "thread-existing" in command
-    assert "-C" not in command
-    assert any(
-        value == 'sandbox_mode="workspace-write"'
-        for value in command
-    )
+    async def scenario():
+        for message in ("first", "second"):
+            events = [
+                event
+                async for event in provider.process_message(
+                    message,
+                    "system",
+                    "gpt-5.6-sol",
+                )
+            ]
+            assert events[-1].type == "turn_end"
+        assert provider.is_alive is True
+        await provider.close()
+
+    asyncio.run(scenario())
+
+    assert len(calls) == 1
+    assert sum(r.get("method") == "thread/resume" for r in process.requests) == 1
+    assert sum(r.get("method") == "turn/start" for r in process.requests) == 2
 
 
 def test_mcp_servers_use_dotted_config_without_exposing_unsafe_names(tmp_path):
@@ -182,6 +347,9 @@ def test_mcp_servers_use_dotted_config_without_exposing_unsafe_names(tmp_path):
                 "command": "uv",
                 "args": ["run", "server.py"],
                 "env": {"CAMPAIGN": "test"},
+                "enabled_tools": ["show_choices", "bad tool"],
+                "default_tools_approval_mode": "approve",
+                "required": True,
             },
             "bad.name": {"command": "ignored"},
             "docs": {
@@ -194,62 +362,100 @@ def test_mcp_servers_use_dotted_config_without_exposing_unsafe_names(tmp_path):
     assert 'mcp_servers.game_tools.command="uv"' in args
     assert 'mcp_servers.game_tools.args=["run", "server.py"]' in args
     assert 'mcp_servers.game_tools.env={CAMPAIGN="test"}' in args
+    assert 'mcp_servers.game_tools.enabled_tools=["show_choices"]' in args
+    assert 'mcp_servers.game_tools.default_tools_approval_mode="approve"' in args
+    assert "mcp_servers.game_tools.required=true" in args
     assert 'mcp_servers.docs.url="https://example.test/mcp"' in args
     assert not any("bad.name" in arg for arg in args)
 
 
-def test_spark_uses_its_native_reasoning_profile(tmp_path):
+def test_spark_uses_native_reasoning_profile(tmp_path):
     provider = CodexCLIProvider(tmp_path, model_name="gpt-5.3-codex-spark")
 
-    command = provider._build_command(
-        "Make a targeted edit.",
-        "Follow the project rules.",
-        "gpt-5.3-codex-spark",
-        None,
-    )
+    command = provider._build_command(None)
 
-    assert "gpt-5.3-codex-spark" in command
+    assert provider.reasoning_effort == "native"
+    assert command[-2:] == ["app-server", "--stdio"]
     assert not any("model_reasoning_effort" in value for value in command)
 
 
-def test_process_exit_without_turn_completed_is_reported(tmp_path):
-    async def factory(*command, **options):
-        return FakeProcess([], stderr=b"authentication failed", returncode=1)
+def test_malformed_usage_is_normalized_without_crashing(tmp_path):
+    process = FakeAppServerProcess(
+        usage={
+            "inputTokens": "unknown",
+            "cachedInputTokens": -5,
+            "outputTokens": None,
+        }
+    )
+
+    async def factory(*_command, **_options):
+        return process
+
+    provider = CodexCLIProvider(tmp_path, process_factory=factory)
+    events = collect(provider)
+    end = events[-1]
+
+    assert end.metadata["input_tokens"] == 0
+    assert end.metadata["cached_input_tokens"] == 0
+    assert end.metadata["output_tokens"] == 0
+
+
+def test_process_exit_during_turn_is_reported(tmp_path):
+    process = FakeAppServerProcess(exit_after_turn_start=True)
+
+    async def factory(*_command, **_options):
+        return process
 
     provider = CodexCLIProvider(tmp_path, process_factory=factory)
     events = collect(provider)
 
-    assert [event.type for event in events] == ["error", "turn_end"]
-    assert "authentication failed" in events[0].content
-    assert events[1].metadata["ok"] is False
+    assert [event.type for event in events][-2:] == ["error", "turn_end"]
+    assert events[-1].metadata["ok"] is False
+    assert events[-1].metadata["stop_reason"] == "process_exit_1"
 
 
-def test_turn_failed_is_terminal_and_not_duplicated(tmp_path):
-    async def factory(*command, **options):
-        return FakeProcess(
-            [
-                b'{"type":"turn.failed","error":{"message":"model unavailable"}}\n',
-            ],
-            returncode=1,
-        )
+def test_failed_turn_is_terminal_and_not_duplicated(tmp_path):
+    process = FakeAppServerProcess(
+        turn_status="failed",
+        turn_error={"message": "model unavailable"},
+    )
+
+    async def factory(*_command, **_options):
+        return process
 
     provider = CodexCLIProvider(tmp_path, process_factory=factory)
     events = collect(provider)
 
-    assert [event.type for event in events] == ["error", "turn_end"]
-    assert events[0].content == "model unavailable"
-    assert events[1].metadata["stop_reason"] == "turn_failed"
+    assert [event.type for event in events][-2:] == ["error", "turn_end"]
+    assert events[-2].content == "model unavailable"
+    assert events[-1].metadata["stop_reason"] == "turn_failed"
 
 
-def test_interrupt_terminates_running_process(tmp_path):
-    provider = CodexCLIProvider(tmp_path)
-    process = FakeProcess([])
-    provider._proc = process
+def test_interrupt_uses_native_turn_interrupt(tmp_path):
+    process = FakeAppServerProcess(auto_complete=False)
 
-    interrupted = asyncio.run(provider.interrupt())
+    async def factory(*_command, **_options):
+        return process
+
+    provider = CodexCLIProvider(tmp_path, process_factory=factory)
+
+    async def scenario():
+        await provider._connect("system", None)
+        await provider._start_turn("wait")
+        interrupted = await provider.interrupt()
+        await provider.close()
+        return interrupted
+
+    interrupted = asyncio.run(scenario())
 
     assert interrupted is True
-    assert process.terminated is True
+    request = next(
+        request for request in process.requests if request.get("method") == "turn/interrupt"
+    )
+    assert request["params"] == {
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+    }
 
 
 def test_reset_forgets_thread_and_rejects_dangerous_sandbox(tmp_path):
@@ -299,6 +505,23 @@ def test_rollout_context_uses_latest_model_call(tmp_path):
     assert usage.used_tokens == 90
     assert usage.cached_input_tokens == 70
     assert usage.percent == 45
+
+
+def test_context_usage_prefers_native_app_server_notification(tmp_path):
+    process = FakeAppServerProcess()
+
+    async def factory(*_command, **_options):
+        return process
+
+    provider = CodexCLIProvider(tmp_path, process_factory=factory)
+    collect(provider)
+
+    usage = provider.get_context_usage()
+
+    assert usage is not None
+    assert usage.used_tokens == 100
+    assert usage.cached_input_tokens == 80
+    assert usage.percent == 50
 
 
 def test_context_usage_locates_thread_rollout(tmp_path):
