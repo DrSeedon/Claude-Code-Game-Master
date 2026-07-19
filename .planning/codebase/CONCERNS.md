@@ -35,8 +35,8 @@
 ## Known Bugs
 
 **Test runner collision on `test_encounter_engine.py`:**
-- Symptoms: `uv run pytest` (without path) crashes with `import file mismatch` — two files with same module name at `tests/` and `.claude/additional/modules/world-travel/tests/`.
-- Workaround: `uv run pytest --ignore=.claude/additional/modules/world-travel/tests/`
+- Symptoms: `uv run pytest` (without path) crashes with `import file mismatch` — two files with same module name at `tests/` and `modules/world-travel/tests/`.
+- Workaround: `uv run pytest --ignore=modules/world-travel/tests/`
 - Fix: Rename one of the test files to be unique.
 
 ---

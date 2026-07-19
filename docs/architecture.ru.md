@@ -201,7 +201,7 @@ CORE-движок встреч и дубликат `ModuleDataManager`.
 | Метаданные и схема новой кампании | `lib/campaign_schema.py`, `lib/campaign_manager.py` |
 | Один составной сюжетный переход | `lib/scene_manager.py`, `tools/dm-scene.sh` |
 | Общие правила ведения игры | `.claude/additional/dm-slots/` |
-| Жанровая механика, которую можно выключить | `.claude/additional/modules/<module>/` |
+| Жанровая механика, которую можно выключить | `modules/<module>/` |
 | Лор, имена, особые правила одной кампании | `campaign-rules.md` и узлы её `world.json` |
 | Поведение Codex при `/dm` | `codex-skills/dm/` |
 | Поведение Claude slash-команды | `.claude/commands/` |

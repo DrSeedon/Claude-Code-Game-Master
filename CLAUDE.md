@@ -8,7 +8,7 @@
 ## Architecture
 - `lib/` — CORE Python: dice, player, session, inventory, currency, NPCs, locations, plots, consequences, notes
 - `tools/` — thin bash wrappers + `dispatch_middleware` for module hooks
-- `.claude/additional/modules/` — optional gameplay modules (custom-stats, world-travel, mass-combat, firearms-combat)
+- `modules/` — optional gameplay modules (custom-stats, world-travel, mass-combat, firearms-combat)
 - `.claude/additional/dm-slots/` — DM rules (loaded into `/tmp/dm-rules.md`)
 - `.claude/additional/infrastructure/` — loaders (dm-active-modules-rules.sh, dm-campaign-rules.sh, dm-narrator.sh)
 - `.claude/additional/campaign-rules-templates/` — campaign rule templates
@@ -17,7 +17,7 @@
 ## CORE tools (always available)
 | Tool | Lib | Purpose |
 |------|-----|---------|
-| `dm-roll.sh` | `dice.py` | Dice with `--label`, `--dc`, `--ac`. Auto-lookup: `--skill "name"`, `--save "name"`, `--attack "weapon"`, `--advantage`, `--disadvantage`. Reads player node from world.json. Auto-combat: `--target "creature"` (player attacks, AC from world.json), `--defend --from "creature"` (creature attacks, stats from world.json). Auto-damage on hit. |
+| `dm-roll.sh` | `dice.py` | Dice with `--label`, `--dc`, `--ac`. Auto-lookup: `--skill "name"`, `--save "name"`, `--attack "weapon"`, `--initiative "name" ...`, `--advantage`, `--disadvantage`. Reads entities from world.json. Auto-combat: `--target "creature"` (player attacks, AC from world.json), `--defend --from "creature"` (creature attacks, stats from world.json). Auto-damage on hit. |
 | `dm-inventory.sh` | `inventory_manager.py` | Items, weight, gold, HP/XP, transfers, `remove` (sold/destroyed/consumed), `use` (auto-consume via wiki), `craft` (auto-craft via wiki recipe). Always use `--qty N`, never call multiple times. |
 | `dm-status.sh` | `inventory_manager.py status` | Compact inventory for session start |
 | `dm-player.sh` | `player_manager.py` | XP, HP, HP max, gold, conditions |
@@ -47,12 +47,16 @@
 - `format_money(2537)` → `"25g 3s 7c"`, `parse_money("2gp 5sp")` → `250`
 
 ## Module pattern (for optional modules)
-Each module in `.claude/additional/modules/<name>/`:
+Each module in `modules/<name>/`:
 - `middleware/<tool>.sh` — intercepts CORE tool calls (pre-hook: exit 0 = handled)
 - `middleware/<tool>.sh.post` — runs after CORE (post-hook: always runs)
 - `lib/` — module Python code
 - `tools/` — module-specific CLI
 - `module.json` — metadata, replaces dm-slots
+
+Modules declare neutral `provides`, `providers`, and `action_routes` contracts in
+`module.json`. A module MUST NOT import, inspect, or name another gameplay
+module. CORE composes active capabilities and resolved DM rules.
 
 **Modules MUST be campaign-agnostic (MANDATORY).** This is a public repo used by multiple campaigns. NEVER add campaign-specific content (character names, spell names, setting-specific rules, faction names) to module code, module rules, or dm-slots. Campaign-specific rules belong in `campaign-rules.md` for that campaign only.
 

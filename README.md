@@ -69,7 +69,7 @@ At campaign creation you get a module selection menu, narrator style picker, and
 | ⚔️ **firearms-combat** | Automated combat resolver. RPM → shots per round, fire modes (single/burst/full\_auto), PEN vs PROT damage scaling, subclass bonuses. | Modern or military campaigns |
 | 🛡️ **mass-combat** | Individual unit tracking, group attacks, AOE damage, cover, and battle XP for large encounters. | Squad and army-scale battles |
 
-Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module.json`. Drop a folder into `.claude/additional/modules/` to install community modules.
+Each module is self-contained: its own `tools/`, `lib/`, `rules.md`, and `module.json`. Drop a folder into `modules/` to install community modules.
 
 ---
 

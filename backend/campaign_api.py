@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from backend.config import get_project_root
+from backend.campaign_templates import get_campaign_template
 from lib.campaign_context import (
     InvalidCampaignName,
     resolve_campaign_dir,
@@ -123,6 +124,7 @@ def create_campaign(
     narrator_style: str = "",
     rules: str = "",
     character: Optional[dict] = None,
+    template_id: str = "",
 ) -> Dict:
     """Create new campaign.
 
@@ -137,6 +139,7 @@ def create_campaign(
         narrator_style: Narrator style
         rules: Campaign rules template
         character: Character data for player node creation
+        template_id: Optional built-in or user campaign template id
 
     Returns:
         Dict with created campaign info or error:
@@ -159,7 +162,34 @@ def create_campaign(
             "error": f"Campaign name contains invalid characters: {name!r}",
         }
 
-    manager = CampaignManager(str(get_project_root() / "world-state"))
+    project_root = get_project_root()
+    template = None
+    if template_id:
+        template = get_campaign_template(template_id, project_root)
+        if not template:
+            return {
+                "success": False,
+                "error": f"Campaign template '{template_id}' not found",
+            }
+        genre = genre or template.get("genre") or ", ".join(
+            template.get("genres", [])
+        )
+        tone = tone or template.get("tone", "")
+        description = description or template.get("description", "")
+        if modules is None:
+            modules = list(template.get("modules", []))
+        narrator_style = (
+            narrator_style or template.get("narrator_style", "")
+        )
+        rules = rules or template.get("rules", "")
+        if character is None and template.get("character_name"):
+            character = {
+                "name": template["character_name"],
+                "class": template.get("character_class", ""),
+                "background": template.get("character_background", ""),
+            }
+
+    manager = CampaignManager(str(project_root / "world-state"))
     campaign_dir = manager.create(
         safe_name,
         safe_name,
@@ -169,6 +199,7 @@ def create_campaign(
             "description": description,
             "modules": modules or [],
             "narrator_style": narrator_style,
+            "template_id": template_id,
         },
         character=character,
         rules=rules,
@@ -186,6 +217,7 @@ def create_campaign(
         "description": description,
         "created_at": overview["created_at"],
         "active": False,
+        "template_id": template_id,
     }
 
 

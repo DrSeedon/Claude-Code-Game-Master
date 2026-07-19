@@ -10,9 +10,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-WORLD_TRAVEL_LIB = (
-    PROJECT_ROOT / ".claude" / "additional" / "modules" / "world-travel" / "lib"
-)
+WORLD_TRAVEL_LIB = PROJECT_ROOT / "modules" / "world-travel" / "lib"
 
 
 def _load_world_travel_module(name: str) -> ModuleType:

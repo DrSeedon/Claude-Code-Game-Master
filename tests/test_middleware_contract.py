@@ -11,8 +11,6 @@ COMMON_ADVANCED = (
 def run_dispatch(tmp_path: Path, middleware_exit: int) -> subprocess.CompletedProcess:
     middleware = (
         tmp_path
-        / ".claude"
-        / "additional"
         / "modules"
         / "test-module"
         / "middleware"

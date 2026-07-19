@@ -28,7 +28,7 @@ enabled = [k for k, v in mods.items() if v]
 
 found = []
 for mod in enabled:
-    rules_path = f"{project_root}/.claude/additional/modules/{mod}/creation-rules.md"
+    rules_path = f"{project_root}/modules/{mod}/creation-rules.md"
     if not os.path.exists(rules_path):
         continue
     with open(rules_path) as f:

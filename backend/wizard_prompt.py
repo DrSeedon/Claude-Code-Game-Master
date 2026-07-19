@@ -3,13 +3,14 @@
 import json
 from pathlib import Path
 from backend.config import get_project_root
+from backend.campaign_templates import list_campaign_templates
 
 
 def load_wizard_system_prompt() -> str:
     project_root = get_project_root()
     modules = _load_modules(project_root)
     narrators = _load_narrators(project_root)
-    rules = _load_rules(project_root)
+    templates = _load_templates(project_root)
 
     return f"""# Campaign Creation Wizard
 
@@ -22,7 +23,7 @@ You are a Campaign Setup Assistant. Help the player create a new campaign throug
 - After your text, call the appropriate MCP tool to update the interactive sidebar
 
 ## CRITICAL RULES
-- You have MCP tools: `show_choices`, `clear_choices`, and `create_campaign`. Use ONLY these.
+- You have MCP tools: `show_choices`, `clear_choices`, `save_campaign_template`, and `create_campaign`. Use ONLY these.
 - Do NOT use Read, Write, Bash, Edit, ToolSearch, AskUserQuestion, or any other tools.
 - YOU control the sidebar panel. Call show_choices to display options, clear_choices to hide them.
 - When the player submits from sidebar, it auto-clears. Do NOT call clear_choices after a submit — just call show_choices for the next step.
@@ -44,10 +45,16 @@ You are a Campaign Setup Assistant. Help the player create a new campaign throug
 ## Workflow
 
 ### Step 1: Concept
-Ask what kind of campaign. Then show_choices with rules templates as radio + text_input for custom ideas.
+The web client initially shows the real campaign template catalogue and installed
+modules. Preserve exact template and module IDs from sidebar metadata. If the
+player types instead, ask what kind of campaign and call show_choices with
+campaign templates as radio + custom text.
 
 ### Step 2: Settings
-Based on concept, show_choices with modules (checkbox) + narrator style (radio). Color-code recommendations.
+Based on concept, show_choices with EVERY available module (checkbox) + narrator
+style (radio). Color-code recommendations. Never claim modules are unavailable
+when the Available Modules section below is non-empty. Preserve all modules the
+player selected in Step 1.
 
 ### Step 3: Character
 For EACH field (name, class, background), show a radio control with 3 AI-generated presets PLUS a text_input for custom entry.
@@ -62,7 +69,12 @@ Example structure for each field:
 Player can pick a preset OR type custom. If both filled, custom takes priority.
 
 ### Step 4: Confirm
-Summarize in chat. When player confirms, output create_campaign block.
+Summarize in chat and show confirmation controls. When the player confirms,
+call create_campaign and pass `template_id` when a template was selected.
+
+If the player asks to save, remember, or reuse the current setup as a template,
+call `save_campaign_template` immediately. This does not create a campaign and
+does not require campaign confirmation.
 
 ## IMPORTANT
 - Player might type in chat instead of using sidebar — adapt
@@ -78,8 +90,8 @@ Summarize in chat. When player confirms, output create_campaign block.
 ### Narrator Styles
 {narrators}
 
-### Rules Templates
-{rules}
+### Campaign Templates
+{templates}
 """
 
 
@@ -170,6 +182,38 @@ def get_wizard_tool_schemas():
             }
         },
         {
+            "name": "save_campaign_template",
+            "description": "Persist the current wizard configuration as a reusable user campaign template without creating a campaign.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Stable kebab-case template ID"
+                    },
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "genres": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "genre": {"type": "string"},
+                    "tone": {"type": "string"},
+                    "recommended_for": {"type": "string"},
+                    "modules": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "narrator_style": {"type": "string"},
+                    "rules": {"type": "string"},
+                    "character_name": {"type": "string"},
+                    "character_class": {"type": "string"},
+                    "character_background": {"type": "string"}
+                },
+                "required": ["id", "name"]
+            }
+        },
+        {
             "name": "create_campaign",
             "description": "Create the campaign with all collected settings. Call this ONLY after the player confirms.",
             "input_schema": {
@@ -188,9 +232,11 @@ def get_wizard_tool_schemas():
                     },
                     "narrator_style": {"type": "string"},
                     "rules": {"type": "string"},
+                    "template_id": {"type": "string"},
                     "character_name": {"type": "string"},
                     "character_class": {"type": "string"},
-                    "character_race": {"type": "string"}
+                    "character_race": {"type": "string"},
+                    "character_background": {"type": "string"}
                 },
                 "required": ["name", "character_name"]
             }
@@ -199,7 +245,7 @@ def get_wizard_tool_schemas():
 
 
 def _load_modules(project_root: Path) -> str:
-    modules_dir = project_root / ".claude" / "additional" / "modules"
+    modules_dir = project_root / "modules"
     if not modules_dir.exists():
         return "No modules available."
 
@@ -242,15 +288,24 @@ def _load_narrators(project_root: Path) -> str:
     return "\n".join(parts) if parts else "No narrator styles available."
 
 
-def _load_rules(project_root: Path) -> str:
-    rules_dir = project_root / ".claude" / "additional" / "campaign-rules-templates"
-    if not rules_dir.exists():
-        return "No rules templates available."
-
+def _load_templates(project_root: Path) -> str:
     parts = []
-    for path in sorted(rules_dir.glob("*.md")):
-        content = path.read_text(encoding="utf-8")
-        parts.append(f"#### {path.stem}")
-        parts.append(content[:600])
+    for template in list_campaign_templates(project_root):
+        parts.append(f"#### {template['id']}")
+        parts.append(f"**Name**: {template['name']}")
+        parts.append(f"**Source**: {template['source']}")
+        parts.append(f"**Description**: {template['description']}")
+        if template["genres"]:
+            parts.append(f"**Genres**: {', '.join(template['genres'])}")
+        if template["modules"]:
+            parts.append(
+                f"**Default modules**: {', '.join(template['modules'])}"
+            )
+        if template["narrator_style"]:
+            parts.append(
+                f"**Narrator**: {template['narrator_style']}"
+            )
+        if template["rules"]:
+            parts.append(f"**Rules preview**:\n{template['rules'][:600]}")
         parts.append("")
-    return "\n".join(parts) if parts else "No rules templates available."
+    return "\n".join(parts) if parts else "No campaign templates available."

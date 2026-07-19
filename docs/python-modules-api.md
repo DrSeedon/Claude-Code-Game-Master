@@ -38,7 +38,7 @@ bash tools/dm-roll.sh --defend --from "goblin"
 The firearms module additionally owns fire-mode salvos and ammunition:
 
 ```bash
-bash .claude/additional/modules/firearms-combat/tools/dm-combat.sh resolve \
+bash modules/firearms-combat/tools/dm-combat.sh resolve \
   --attacker "Ada" --weapon "C-14" --fire-mode burst \
   --target "creature:hydralisk"
 ```

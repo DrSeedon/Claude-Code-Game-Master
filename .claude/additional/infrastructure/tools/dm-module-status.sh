@@ -11,7 +11,7 @@ ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.t
 OVERVIEW="$PROJECT_ROOT/world-state/campaigns/$ACTIVE/campaign-overview.json"
 [ -f "$OVERVIEW" ] || exit 0
 
-MODULES_DIR="$PROJECT_ROOT/.claude/additional/modules"
+MODULES_DIR="$PROJECT_ROOT/modules"
 
 ENABLED=$(uv run python -c "
 import json, sys

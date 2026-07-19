@@ -23,7 +23,7 @@ uv run pytest --cov=lib              # coverage (requires pytest-cov)
 
 **Location:**
 - Core tests: `tests/` (flat, co-located with project root)
-- Module tests: `.claude/additional/modules/<name>/tests/` (each module owns its tests)
+- Module tests: `modules/<name>/tests/` (each module owns its tests)
 
 **Naming:**
 - `test_<lib_module_name>.py` — mirrors the lib filename: `test_world_graph.py` ↔ `lib/world_graph.py`
@@ -32,9 +32,9 @@ uv run pytest --cov=lib              # coverage (requires pytest-cov)
 **pytest discovery:**
 ```toml
 [tool.pytest.ini_options]
-testpaths = ["tests", ".claude/additional/modules"]
+testpaths = ["tests", "modules"]
 ```
-Module tests are auto-discovered from `.claude/additional/modules` subtrees.
+Module tests are auto-discovered from `modules` subtrees.
 
 **Structure:**
 ```
@@ -47,16 +47,16 @@ tests/
   test_player_manager.py    # PlayerManager HP, XP, conditions (WorldGraph player node)
   test_session_manager.py   # SessionManager move, save/restore, context (WorldGraph)
 
-.claude/additional/modules/world-travel/tests/
+modules/world-travel/tests/
   test_navigation.py        # PathFinder coordinate math
   test_encounter_engine.py  # module encounter logic
   test_vehicle_manager.py
   test_hierarchy_manager.py
 
-.claude/additional/modules/mass-combat/tests/
+modules/mass-combat/tests/
   test_mass_combat.py
 
-.claude/additional/modules/firearms-combat/tests/
+modules/firearms-combat/tests/
   test_firearms_resolver.py
 ```
 
@@ -193,7 +193,7 @@ uv run pytest --cov=lib --cov-report=term-missing
 
 **Integration Tests:**
 - Not formally separated — some tests in `tests/test_session_manager.py` and `test_player_manager.py` touch multiple managers (PlayerManager + file persistence verification)
-- Module tests in `.claude/additional/modules/*/tests/` test module libs end-to-end
+- Module tests in `modules/*/tests/` test module libs end-to-end
 
 **E2E Tests:**
 - Not used — no shell/CLI invocation tests

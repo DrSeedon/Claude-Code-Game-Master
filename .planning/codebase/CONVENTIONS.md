@@ -174,7 +174,7 @@ exit $CORE_RC
 
 ## Campaign-Agnosticism Rule
 
-Module code (`.claude/additional/modules/`) must contain zero campaign-specific content (character names, spell names, faction names). Campaign-specific rules go in `campaign-rules.md` per campaign. Violation = public repo pollution.
+Module code (`modules/`) must contain zero campaign-specific content (character names, spell names, faction names). Campaign-specific rules go in `campaign-rules.md` per campaign. Violation = public repo pollution.
 
 ---
 

@@ -22,12 +22,21 @@ bash tools/dm-roll.sh --attack "Longsword" --ac 16
 # Advantage/disadvantage with auto-lookup
 bash tools/dm-roll.sh --skill "Stealth" --dc 12 --advantage
 bash tools/dm-roll.sh --save "DEX" --dc 14 --disadvantage
+
+# Batch initiative — auto-reads DEX/initiative from WorldGraph entities
+bash tools/dm-roll.sh --initiative "Steve Huys" "Dax Trent" "Lian Ko" "Hector Rivas" "Zergling"
+
+# Temporary NPC without a WorldGraph node — explicit modifier for that entry
+bash tools/dm-roll.sh --initiative "Unknown Contact:+2"
 ```
 
 Use auto-lookup for ALL player character rolls. Fall back to manual notation only for:
 - NPC/monster rolls (no player node entry)
 - Custom/situational rolls (damage, healing, random tables)
 - Rolls with ad-hoc modifiers not in world.json player node
+
+Initiative is a CORE operation. Use one `--initiative` call for the complete
+turn order; do not chain one manual `1d20+N` command per combatant.
 
 ## Auto-Combat (creatures from wiki)
 
@@ -56,6 +65,13 @@ bash tools/dm-wiki.sh add "goblin" --name "Goblin" --type creature \
 ```
 
 **On hit:** auto-rolls damage dice. On crit: doubles damage dice. On miss: no damage roll.
+
+### Module Routing
+
+CORE auto-combat resolves ordinary D&D weapons and spells. The compiled
+**Resolved Gameplay Profile** gives the exact command for any active specialized
+weapon resolver. Follow that route directly. If no specialized route is listed,
+use CORE ranged-weapon resolution.
 
 ## Manual Notation (for NPCs, damage, custom rolls)
 

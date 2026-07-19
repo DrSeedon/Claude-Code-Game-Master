@@ -227,7 +227,7 @@ Defined in `tools/common.sh` (with advanced dispatch in `.claude/additional/infr
 ```
 dispatch_middleware("dm-session.sh", "move", args...)
   │
-  ├── For each module in .claude/additional/modules/*/
+  ├── For each module in modules/*/
   │   ├── Check module enabled: _module_enabled(module-id)
   │   │   └── Python: module_loader.is_module_enabled()
   │   │       └── Reads campaign-overview.json → campaign_rules.modules
@@ -291,7 +291,7 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
   │
   ├─[1] dispatch_middleware "dm-session.sh" "move" "Town" "--elapsed" "2"
   │     │
-  │     ├── Iterate: .claude/additional/modules/*/middleware/dm-session.sh
+  │     ├── Iterate: modules/*/middleware/dm-session.sh
   │     │   └── world-travel/middleware/dm-session.sh → EXISTS
   │     │       ├── _module_enabled("world-travel") → checks campaign-overview.json
   │     │       │   └── campaign_rules.modules["world-travel"] == true?
@@ -342,7 +342,7 @@ Tool invoked (e.g., dm-session.sh move "Town" --elapsed 2)
 
 ## Optional Modules
 
-Located in `.claude/additional/modules/` (3 modules total):
+Located in `modules/` (3 modules total):
 
 ### world-travel
 - **ID**: `world-travel`

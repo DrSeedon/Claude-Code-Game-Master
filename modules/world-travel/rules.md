@@ -1,0 +1,312 @@
+# World Travel — DM Rules
+
+## Navigation
+
+```bash
+bash tools/dm-session.sh move "Temple"
+bash tools/dm-session.sh move "Temple" --speed-multiplier 1.5
+```
+
+Move = distance/time calc + clock advance + auto encounter check.
+**Multi-hop**: if no direct connection, BFS finds shortest route through intermediate locations. Each hop: stats tick → encounter check → arrive. DM gets narrative opportunity at each stop.
+
+### Adding World Locations [MANDATORY]
+
+**NEVER** use CORE `dm-location.sh add` for world-level locations — it creates locations without coordinates, so the web map cannot position them.
+
+**ALWAYS** use the world-travel navigation manager which auto-calculates coordinates from bearing + distance:
+
+```bash
+bash modules/world-travel/tools/dm-navigation.sh add "New Place" "description" \
+  --from "Known Location" --bearing 45 --distance 800 --terrain forest
+```
+
+This calculates coordinates from the origin location plus bearing/distance, creates the connection, and makes the location available to the web map immediately.
+
+- `--from` — any existing location with coordinates
+- `--bearing` — degrees (0=N, 90=E, 180=S, 270=W)
+- `--distance` — meters
+- `--terrain` — terrain type for the connecting path
+
+### Connections [MANDATORY]
+
+CORE `dm-location.sh connect` is graph-compatible, but it does not include travel distance, bearing, or terrain. Use the navigation manager for traversable world routes:
+
+Use the navigation manager for additional connections between existing locations:
+
+```bash
+bash modules/world-travel/tools/dm-navigation.sh connect "A" "B" --terrain forest --distance 2000
+```
+
+Do not edit connections directly in `world.json`. The navigation command writes canonical bidirectional `connected` edges with the required metadata.
+
+**ALWAYS specify `--terrain`**. Default is `open` but DM should pick the correct terrain type for the area.
+
+**Route validation**: direct connections that pass through another location's radius are BLOCKED. Create intermediate connections instead (A→C, C→B).
+
+Route decisions (no direct connection):
+```bash
+bash modules/world-travel/tools/dm-navigation.sh decide "Village" "Temple"
+```
+
+Direction blocking:
+```bash
+bash modules/world-travel/tools/dm-navigation.sh block "Cliff Edge" 160 200 "Steep cliff drop"
+bash modules/world-travel/tools/dm-navigation.sh unblock "Cliff Edge" 160 200
+```
+
+The campaign web UI projects the canonical WorldGraph into a Cytoscape map.
+
+---
+
+## Random Encounters
+
+Auto-fires after every `move`. Manual:
+```bash
+bash modules/world-travel/tools/dm-encounter.sh check "Village" "Ruins" 2000 open
+```
+
+| Type | Waypoint? | Action |
+|------|-----------|--------|
+| Combat | Yes | Enemies, initiate combat |
+| Social | Yes | NPC encounter, dialogue |
+| Hazard | Yes | Obstacle (anomaly, trap) |
+| Loot | No | Items found |
+| Flavor | No | Atmosphere, continue |
+
+Waypoint = temp location mid-journey. Player: **Forward** or **Back**. Removed after leaving.
+
+DC: `base_dc + (segment_km × distance_modifier) + time_modifier`. Max 30.
+
+Skip encounters when: system disabled, distance < 300m, teleportation, movement inside building, middleware already ran it.
+
+---
+
+## Hierarchical Locations
+
+All locations are `location:*` nodes in `world.json`. Hierarchy is represented by projected `parent` and `children` metadata on those nodes.
+
+| Type | Coordinates | Children | Examples |
+|------|------------|----------|----------|
+| `world` | Yes | No | Map point |
+| `compound` | Yes (top-level) | Yes | City, ship, castle |
+| `interior` | No | No | Room, hall |
+
+### Create
+
+```bash
+# Compound
+bash modules/world-travel/tools/dm-hierarchy.sh create-compound "City" --entry-points "Gate"
+
+# Rooms
+bash modules/world-travel/tools/dm-hierarchy.sh add-room "Gate" --parent "City" --entry-point
+bash modules/world-travel/tools/dm-hierarchy.sh add-room "Square" --parent "City" --connections '[{"to": "Gate"}]'
+
+# Nested compound
+bash modules/world-travel/tools/dm-hierarchy.sh create-compound "Castle" --parent "City" --entry-points "Castle Gate"
+```
+
+### Entry Points
+
+Interior with `is_entry_point: true` + `entry_config`:
+- `on_enter`/`on_exit` — DM hint (NOT automated)
+- `locked` — blocked until key/solution
+- `hidden` — DM knows, player doesn't yet
+
+### Navigate
+
+```bash
+bash modules/world-travel/tools/dm-hierarchy.sh enter "City" --via "Gate"
+bash modules/world-travel/tools/dm-hierarchy.sh move "Square"
+bash modules/world-travel/tools/dm-hierarchy.sh exit
+```
+
+### View
+
+```bash
+bash modules/world-travel/tools/dm-hierarchy.sh tree
+bash modules/world-travel/tools/dm-hierarchy.sh tree "City"
+bash modules/world-travel/tools/dm-hierarchy.sh validate
+```
+
+### Player Position
+
+Player MUST always be on `interior`, never on `compound` directly. Auto-resolves to first entry point on `dm-session.sh start`/`context`.
+
+`location_stack` tracks full path: `["City", "Castle", "Throne Room"]`.
+
+NPCs use `tags.locations[]` — association tags, not positional tracking. DM decides sublocation by narrative.
+
+### Interior Rules
+
+- No `coordinates` — the web map uses a deterministic interior layout
+- Connections are canonical (stored once, read bidirectionally)
+- `diameter_meters` on compounds = visual size on global map
+
+### Interior Terrain [MANDATORY]
+
+Every interior location MUST have a `terrain` field set to distinguish area types on the web map. The terrain value maps to `terrain_colors` in `module-data/world-travel.json`.
+
+Common interior terrain types:
+
+| Terrain | Use for | Example color |
+|---------|---------|---------------|
+| `outdoor` | Open areas, yards, gates, rooftops | [90, 110, 90] |
+| `indoor` | Rooms, halls, shops, quarters | [70, 65, 55] |
+
+These terrain types MUST be added to `terrain_colors` in `module-data/world-travel.json` during campaign creation. They are campaign-specific — different genres may use different interior types (e.g. `corridor`, `hangar`, `cave-room`).
+
+When creating a compound with rooms:
+1. Add `indoor`/`outdoor` (or genre-appropriate) colors to `terrain_colors`
+2. Set `"terrain": "indoor"` or `"terrain": "outdoor"` on each interior location
+
+```json
+{
+  "terrain_colors": {
+    "outdoor": [90, 110, 90],
+    "indoor": [70, 65, 55]
+  }
+}
+```
+
+### Web Map
+
+- **Global**: top-level locations only. Compounds = squares.
+- **Interior**: shows the current compound using a deterministic force layout.
+- **Breadcrumb**: `World > City > Castle > Room`. Click = navigate.
+- **Player location**: highlighted on both global (parent compound) and interior views.
+- The dashboard refreshes the map after every completed turn.
+
+---
+
+## Vehicles
+
+Vehicles = compounds with `mobile: true`.
+
+### Create
+
+```bash
+bash modules/world-travel/tools/dm-vehicle.sh create kestrel spacecraft "Kestrel Station"
+bash modules/world-travel/tools/dm-vehicle.sh add-room kestrel "Bridge" --from "Kestrel Station" --bearing 90 --distance 10
+```
+
+`add-room` creates bidirectional connections automatically.
+
+### Board / Exit
+
+```bash
+bash modules/world-travel/tools/dm-vehicle.sh board kestrel
+bash modules/world-travel/tools/dm-vehicle.sh board kestrel --room "Bridge"
+bash modules/world-travel/tools/dm-vehicle.sh exit
+```
+
+Inside vehicle: `dm-session.sh move "Room"` is intercepted — no encounters, no time tick.
+
+### Move Vehicle
+
+```bash
+bash modules/world-travel/tools/dm-vehicle.sh move kestrel "Space Station Zeta-9"
+bash modules/world-travel/tools/dm-vehicle.sh move kestrel --x 5000 --y 3200
+```
+
+**To named location**: stops at `stopping_distance` (sum of radii) — never overlaps target.
+**To coordinates**: places exactly.
+
+On move: ALL external connections are wiped and rebuilt by proximity (`proximity_radius_meters`). New connections inherit terrain from nearby location. Player inside = travels with vehicle.
+
+### Status
+
+```bash
+bash modules/world-travel/tools/dm-vehicle.sh status
+bash modules/world-travel/tools/dm-vehicle.sh map kestrel
+```
+
+---
+
+## Terrain
+
+Campaign-defined in `module-data/world-travel.json`:
+
+```json
+{
+  "terrain_colors": {
+    "wasteland": [140, 120, 80],
+    "forest": [50, 100, 50],
+    "road": [160, 150, 110],
+    "outdoor": [90, 110, 90],
+    "indoor": [70, 65, 55]
+  }
+}
+```
+
+No defaults. DM creates types per campaign. Unknown types use `default` fallback color.
+
+### Connection Terrain vs Location Terrain [MANDATORY]
+
+Connection `terrain` = what you walk through to get there. It is exposed as path metadata to the web map.
+
+- Connection terrain must be a **traversable surface**: `wasteland`, `forest`, `road`, `swamp`, `plains`, `space`, etc.
+- NEVER use destination-specific terrain on connections: `anomaly`, `ruins`, `radiation`, `cave` on a 5km path makes no sense.
+- The destination itself can have special properties — handle those as location descriptions, subtypes, or interior terrain.
+
+**Wrong:** `Outpost → Anomaly Field: terrain=anomaly` (5km of anomaly?)
+**Right:** `Outpost → Anomaly Field: terrain=wasteland` (you walk through wasteland to reach it)
+
+### Terrain type categories
+
+| Category | Used on | Examples |
+|----------|---------|---------|
+| **World terrain** | Connections between locations | `wasteland`, `forest`, `road`, `swamp`, `plains`, `mountain`, `space` |
+| **Interior terrain** | Interior locations inside compounds | `outdoor`, `indoor`, `corridor`, `hangar`, `cave-room` |
+
+Do NOT mix these — world terrain on connections, interior terrain on compound rooms.
+
+---
+
+## Auto-Compound on Arrival [MANDATORY]
+
+When the player arrives at a NEW location for the first time, evaluate whether it needs interior structure.
+
+**Convert to compound if:**
+- Settlement (village, outpost, camp, town, city)
+- Building (bar, lab, bunker, warehouse, church)
+- Vehicle/ship (boat, truck, helicopter, spaceship)
+- Dungeon/cave system with distinct areas
+- Any location with 2+ interesting areas inside
+
+**Do NOT convert:**
+- Wilderness (forest, field, swamp, wasteland) — uniform terrain, nothing to split
+- Roads, bridges, rivers — transit locations
+- Abstract/narrative waypoints
+
+**On arrival at convertible location:**
+1. Create compound structure (entry point + hub + key rooms)
+2. Add `outdoor`/`indoor` terrain to each room
+3. Set entry_config on the gate/door if guarded or hidden
+4. Enter via entry point, navigate to hub
+5. THEN narrate the scene
+
+This ensures every meaningful location has explorable interior from the first visit.
+
+---
+
+## Arrival Awareness
+
+On arrival at dangerous/unfamiliar locations, check passive Perception.
+
+**Passive Perception** = 10 + Wisdom mod (+ proficiency if trained)
+
+| Hidden Element | Typical DC |
+|----------------|------------|
+| Someone watching openly | 10 |
+| Hidden watcher | 15 |
+| Well-concealed trap | 15-18 |
+| Secret door | 20+ |
+
+- If passive beats DC → mention in description
+- If passive fails → element remains hidden (note for later)
+- If player actively searches → roll Perception vs DC
+
+## Arrival Narration
+
+Use [Narration](#narration) workflow for the new scene.

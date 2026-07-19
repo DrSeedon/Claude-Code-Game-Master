@@ -65,6 +65,43 @@ def clear_choices() -> str:
 
 
 @mcp.tool()
+def save_campaign_template(
+    id: str,
+    name: str,
+    description: str = "",
+    genres: list[str] | None = None,
+    genre: str = "",
+    tone: str = "",
+    recommended_for: str = "",
+    modules: list[str] | None = None,
+    narrator_style: str = "",
+    rules: str = "",
+    character_name: str = "",
+    character_class: str = "",
+    character_background: str = "",
+) -> str:
+    """Persist the current setup as a reusable campaign template."""
+    return _result(
+        "save_campaign_template",
+        {
+            "id": id,
+            "name": name,
+            "description": description,
+            "genres": genres,
+            "genre": genre,
+            "tone": tone,
+            "recommended_for": recommended_for,
+            "modules": modules,
+            "narrator_style": narrator_style,
+            "rules": rules,
+            "character_name": character_name,
+            "character_class": character_class,
+            "character_background": character_background,
+        },
+    )
+
+
+@mcp.tool()
 def create_campaign(
     name: str,
     character_name: str,
@@ -74,8 +111,10 @@ def create_campaign(
     modules: list[str] | None = None,
     narrator_style: str = "",
     rules: str = "",
+    template_id: str = "",
     character_class: str = "",
     character_race: str = "",
+    character_background: str = "",
 ) -> str:
     """Create a campaign after the player confirms its settings."""
     return _result(
@@ -89,8 +128,10 @@ def create_campaign(
             "modules": modules,
             "narrator_style": narrator_style,
             "rules": rules,
+            "template_id": template_id,
             "character_class": character_class,
             "character_race": character_race,
+            "character_background": character_background,
         },
     )
 

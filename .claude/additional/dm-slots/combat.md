@@ -37,10 +37,17 @@ echo "Enemy: [Name] | HP: [X] | AC: [Y] | Attack: +[Z] | Damage: [dice]"
 bash tools/dm-note.sh "combat" "Combat: [party] vs [enemies] at [location]"
 ```
 
+#### Module Routing
+
+The compiled **Resolved Gameplay Profile** at the top of this rules file is
+authoritative. Use its exact route for individual ordinary attacks, specialized
+weapon attacks, and group or zone combat. Do not choose an inactive alternative
+from examples elsewhere in the rules.
+
 ### Phase 2: Initiative
 ```bash
-# Roll for each combatant
-bash tools/dm-roll.sh "1d20+[dex_mod]" --label "Initiative ([name])"
+# Roll the complete turn order through CORE auto-lookup
+bash tools/dm-roll.sh --initiative "[player]" "[party NPC]" "[enemy]"
 ```
 Track turn order in memory (highest to lowest).
 

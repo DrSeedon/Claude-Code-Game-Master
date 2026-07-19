@@ -4,7 +4,8 @@ The DM calls these tools through the SDK's native in-process MCP
 (`create_sdk_mcp_server`) — no subprocess, no file polling. Each tool pushes a
 structured event onto `WizardEvents`, which the /ws/wizard handler drains after
 the turn and forwards to the browser (show_choices / clear_choices /
-wizard_complete). `create_campaign` also does the actual campaign creation.
+template_saved / wizard_complete). Mutating tools also perform the requested
+filesystem operation.
 """
 
 import json
@@ -82,6 +83,32 @@ def run_wizard_tool(events: WizardEvents, name: str, args: Dict[str, Any]) -> st
         events.push({"type": "clear_choices"})
         return "Choices panel hidden."
 
+    if name == "save_campaign_template":
+        from backend.campaign_templates import save_campaign_template
+
+        result = save_campaign_template(args)
+        if result.get("success"):
+            template = result["template"]
+            events.push({
+                "type": "template_saved",
+                "template": {
+                    key: value
+                    for key, value in template.items()
+                    if key != "rules"
+                },
+                "success": True,
+            })
+            return (
+                f"Campaign template '{template['name']}' saved successfully."
+            )
+        error = result.get("error", "unknown error")
+        events.push({
+            "type": "template_saved",
+            "error": error,
+            "success": False,
+        })
+        return f"Error saving campaign template: {error}"
+
     if name != "create_campaign":
         raise ValueError(f"unknown wizard tool: {name}")
 
@@ -97,10 +124,12 @@ def run_wizard_tool(events: WizardEvents, name: str, args: Dict[str, Any]) -> st
         modules=args.get("modules") or None,
         narrator_style=args.get("narrator_style", ""),
         rules=args.get("rules", ""),
+        template_id=args.get("template_id", ""),
         character={
             "name": character_name,
             "class": args.get("character_class", ""),
             "race": args.get("character_race", ""),
+            "background": args.get("character_background", ""),
         } if character_name else None,
     )
     if result.get("success"):
@@ -119,7 +148,8 @@ def build_wizard_mcp(events: "WizardEvents"):
     """Build an in-process MCP server config bound to `events`.
 
     Returns a McpSdkServerConfig to pass as mcp_servers={"wizard": <config>}.
-    Tool names become mcp__wizard__{show_choices,clear_choices,create_campaign}.
+    Tool names become mcp__wizard__{show_choices,clear_choices,
+    save_campaign_template,create_campaign}.
     """
 
     @tool(
@@ -142,6 +172,33 @@ def build_wizard_mcp(events: "WizardEvents"):
         return _ok(run_wizard_tool(events, "clear_choices", args))
 
     @tool(
+        "save_campaign_template",
+        "Persist the current wizard configuration as a reusable user template "
+        "without creating a campaign.",
+        {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "genres": {"type": "array", "items": {"type": "string"}},
+                "genre": {"type": "string"},
+                "tone": {"type": "string"},
+                "recommended_for": {"type": "string"},
+                "modules": {"type": "array", "items": {"type": "string"}},
+                "narrator_style": {"type": "string"},
+                "rules": {"type": "string"},
+                "character_name": {"type": "string"},
+                "character_class": {"type": "string"},
+                "character_background": {"type": "string"},
+            },
+            "required": ["id", "name"],
+        },
+    )
+    async def save_template(args: Dict[str, Any]) -> dict:
+        return _ok(run_wizard_tool(events, "save_campaign_template", args))
+
+    @tool(
         "create_campaign",
         "Create the campaign with collected settings. Call only after the player "
         "confirms. name must be kebab-case (e.g. 'zombie-apocalypse').",
@@ -158,8 +215,10 @@ def build_wizard_mcp(events: "WizardEvents"):
                 "modules": {"type": "array", "items": {"type": "string"}},
                 "narrator_style": {"type": "string"},
                 "rules": {"type": "string"},
+                "template_id": {"type": "string"},
                 "character_class": {"type": "string"},
                 "character_race": {"type": "string"},
+                "character_background": {"type": "string"},
             },
             "required": ["name", "character_name"],
         },
@@ -167,4 +226,7 @@ def build_wizard_mcp(events: "WizardEvents"):
     async def create_campaign(args: Dict[str, Any]) -> dict:
         return _ok(run_wizard_tool(events, "create_campaign", args))
 
-    return create_sdk_mcp_server("wizard", tools=[show_choices, clear_choices, create_campaign])
+    return create_sdk_mcp_server(
+        "wizard",
+        tools=[show_choices, clear_choices, save_template, create_campaign],
+    )

@@ -129,7 +129,7 @@ Claude-Code-Game-Master/
 - New domain logic: `lib/<name>.py` (extend EntityManager)
 - New CLI: `tools/dm-<name>.sh` (source common.sh, dispatch middleware)
 - New entity type: add to `NODE_TYPES` in `lib/world_graph.py`
-- New module: `.claude/additional/modules/<id>/` with `module.json` + `rules.md`
+- New module: `modules/<id>/` with `module.json` + `rules.md`
 - New custom rule: `.claude/additional/campaign-custom-rules/<id>.md`
 - New narrator style: `.claude/additional/narrator-styles/<id>.md`
 

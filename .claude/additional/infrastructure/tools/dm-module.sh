@@ -22,7 +22,7 @@ case "$ACTION" in
             echo "Usage: dm-module.sh activate <module-id>"
             exit 1
         fi
-        uv run python .claude/additional/module_loader.py activate --module "$MODULE"
+        uv run python lib/module_loader.py activate --module "$MODULE"
         ;;
     deactivate)
         MODULE="${2:-}"
@@ -30,14 +30,14 @@ case "$ACTION" in
             echo "Usage: dm-module.sh deactivate <module-id>"
             exit 1
         fi
-        uv run python .claude/additional/module_loader.py deactivate --module "$MODULE"
+        uv run python lib/module_loader.py deactivate --module "$MODULE"
         ;;
     list-verbose)
         uv run python - "$PROJECT_ROOT" <<'PYEOF'
 import sys, json, os, glob
 
 root = sys.argv[1]
-modules_dir = os.path.join(root, ".claude", "additional", "modules")
+modules_dir = os.path.join(root, "modules")
 active_file = os.path.join(root, "world-state", "active-campaign.txt")
 campaign_modules = None
 try:
@@ -84,6 +84,6 @@ for i, path in enumerate(paths, 1):
 PYEOF
         ;;
     *)
-        uv run python .claude/additional/module_loader.py "$@"
+        uv run python lib/module_loader.py "$@"
         ;;
 esac

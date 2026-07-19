@@ -9,10 +9,12 @@ import re
 from typing import Dict
 
 try:
-    from lib.combat_rules import first_present, node_mechanics, penetration_damage
+    from lib.combat_rules import first_present, node_mechanics
+    from lib.module_runtime import ModuleRuntime
     from lib.world_graph import WorldGraph
 except ImportError:
-    from combat_rules import first_present, node_mechanics, penetration_damage
+    from combat_rules import first_present, node_mechanics
+    from module_runtime import ModuleRuntime
     from world_graph import WorldGraph
 
 # Import colors for formatted output
@@ -317,6 +319,134 @@ def _load_character():
     return merged
 
 
+def _active_runtime() -> ModuleRuntime:
+    """Build the neutral runtime for the active campaign."""
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parent.parent
+    campaign_dir = _get_campaign_path()
+    return ModuleRuntime(project_root=project_root, campaign_dir=campaign_dir)
+
+
+def _weapon_requires_firearm_route(char: dict, weapon_name: str) -> bool:
+    """Identify automatic-fire weapons without naming a provider module."""
+    for weapon in char.get("equipment", {}).get("weapons", []):
+        if weapon_name.casefold() not in str(weapon.get("name", "")).casefold():
+            continue
+        return bool(
+            weapon.get("rpm")
+            or weapon.get("allowed_fire_modes")
+            or weapon.get("fire_modes")
+        )
+    return False
+
+
+def _combat_profile(entity: dict) -> dict:
+    """Normalize provider-owned fields without interpreting them in CORE."""
+    profile = _active_runtime().call_provider(
+        "combat.profile.normalize",
+        entity,
+    )
+    return profile if isinstance(profile, dict) else {}
+
+
+def _load_world_nodes() -> dict:
+    """Load active WorldGraph nodes for batch auto-lookups."""
+    import json
+
+    campaign_dir = _get_campaign_path()
+    if not campaign_dir:
+        return {}
+    world_file = campaign_dir / "world.json"
+    if not world_file.exists():
+        return {}
+    try:
+        with open(world_file, encoding="utf-8") as f:
+            return json.load(f).get("nodes", {})
+    except (OSError, ValueError):
+        return {}
+
+
+def _initiative_modifier(node: dict) -> tuple[int, str]:
+    """Resolve an initiative modifier from a player, NPC, or creature node."""
+    data = node.get("data", {})
+    if not isinstance(data, dict):
+        data = {}
+    mechanics = _extract_mechanics(node)
+    sheet = data.get("character_sheet", {})
+    if not isinstance(sheet, dict):
+        sheet = {}
+
+    for source_name, source in (
+        ("initiative", mechanics),
+        ("initiative", data),
+        ("initiative", sheet),
+    ):
+        if source_name in source:
+            return int(source[source_name]), "initiative"
+
+    for source in (mechanics, data, sheet):
+        for key in ("initiative_mod", "dex_mod", "dexterity_mod"):
+            if key in source:
+                return int(source[key]), key
+
+    for source in (mechanics, data, sheet):
+        stats = source.get("stats") or source.get("abilities")
+        if isinstance(stats, dict):
+            for key in ("dex", "DEX", "dexterity", "ловкость"):
+                if key in stats:
+                    return (int(stats[key]) - 10) // 2, key
+
+    for source in (mechanics, data, sheet):
+        for key in ("dex", "DEX", "dexterity", "ловкость"):
+            if key in source:
+                return (int(source[key]) - 10) // 2, key
+
+    return 0, "default"
+
+
+def _resolve_initiative_combatant(entry: str, nodes: dict) -> tuple[str, int, str]:
+    """Resolve a named combatant, allowing ``name:+N`` for temporary NPCs."""
+    override = re.match(r"^(.*?)(?:\s*[:=]\s*([+-]?\d+))$", entry)
+    query = override.group(1).strip() if override else entry.strip()
+    if not query:
+        raise ValueError(f"Invalid initiative combatant: {entry!r}")
+
+    if override:
+        return query, int(override.group(2)), "override"
+
+    query_lower = query.casefold()
+    node = None
+    node_id = None
+    if query_lower in {"active", "player", "player:active"}:
+        node_id = "player:active"
+        node = nodes.get(node_id)
+    else:
+        for candidate_id, candidate in nodes.items():
+            if candidate_id.casefold() == query_lower or str(candidate.get("name", "")).casefold() == query_lower:
+                node_id = candidate_id
+                node = candidate
+                break
+
+        if node is None:
+            matches = [
+                (candidate_id, candidate)
+                for candidate_id, candidate in nodes.items()
+                if query_lower in candidate_id.casefold()
+                or query_lower in str(candidate.get("name", "")).casefold()
+            ]
+            if matches:
+                node_id, node = matches[0]
+
+    if node is None:
+        raise ValueError(
+            f"Combatant '{query}' not found. Use name:+N for a temporary NPC."
+        )
+
+    modifier, source = _initiative_modifier(node)
+    return str(node.get("name", query)), modifier, source
+
+
 def _extract_mechanics(node):
     """Extract mechanics dict from a WorldGraph node (handles nested data.mechanics)."""
     return node_mechanics(node)
@@ -437,25 +567,41 @@ def _resolve_attack(char, weapon_name=None):
     return mod, 'ближний бой', '1d4', None, None, None
 
 
-def _weapon_pen(char, resolved_name):
-    """Return penetration for the weapon selected by _resolve_attack."""
+def _weapon_combat_profile(char, resolved_name):
+    """Return the active provider profile for the selected weapon."""
     weapons = char.get("equipment", {}).get("weapons", [])
     for weapon in weapons:
         if weapon.get("name") == resolved_name:
-            return int(first_present(weapon, "pen", "penetration", default=0))
-    return 0
+            return _combat_profile(weapon)
+    return {}
 
 
-def _persist_auto_damage(target_id, raw_damage, pen, prot):
-    """Apply armor scaling and persist damage to a WorldGraph combatant."""
+def _persist_auto_damage(
+    target_id,
+    raw_damage,
+    attacker_profile,
+    defender_profile,
+):
+    """Apply an optional active damage provider and persist target HP."""
     campaign_dir = _get_campaign_path()
     if not campaign_dir:
         raise RuntimeError("No active campaign for automatic damage")
-    final_damage, scaling = penetration_damage(raw_damage, pen, prot)
+    result = _active_runtime().call_provider(
+        "combat.damage",
+        raw_damage,
+        {"combat_profile": attacker_profile},
+        {"combat_profile": defender_profile},
+    )
+    if result is None:
+        final_damage = max(0, int(raw_damage))
+        details = ""
+    else:
+        final_damage = int(result["damage"])
+        details = str(result.get("details", ""))
     transition = WorldGraph(campaign_dir).apply_damage(target_id, final_damage)
     if not transition:
         raise RuntimeError(f"Failed to apply damage to {target_id}")
-    return final_damage, scaling, transition
+    return final_damage, details, transition
 
 
 def _load_spell(name):
@@ -522,7 +668,51 @@ def main():
     parser.add_argument("--range", type=int, help="Distance to target in feet (auto-applies disadvantage if beyond normal range)")
     parser.add_argument("--advantage", "--adv", action="store_true", help="Roll with advantage (2d20kh1)")
     parser.add_argument("--disadvantage", "--dis", action="store_true", help="Roll with disadvantage (2d20kl1)")
+    parser.add_argument(
+        "--initiative",
+        nargs="+",
+        metavar="COMBATANT",
+        help="Batch initiative lookup and roll; use name:+N for a temporary NPC",
+    )
     args = parser.parse_args()
+
+    if args.initiative:
+        if any(
+            value is not None
+            for value in (args.notation, args.label, args.dc, args.ac, args.skill,
+                          args.save, args.attack, args.spell, args.target,
+                          args.from_creature)
+        ) or args.defend:
+            parser.error("--initiative cannot be combined with another roll mode")
+
+        nodes = _load_world_nodes()
+        roller = DiceRoller()
+        turn_order = []
+        for index, entry in enumerate(args.initiative):
+            try:
+                name, modifier, source = _resolve_initiative_combatant(entry, nodes)
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+
+            notation = f"1d20+{modifier}" if modifier >= 0 else f"1d20{modifier}"
+            if args.advantage:
+                notation = notation.replace("1d20", "2d20kh1")
+            elif args.disadvantage:
+                notation = notation.replace("1d20", "2d20kl1")
+
+            result = roller.roll(notation)
+            label = f"Инициатива ({name})"
+            if source == "default":
+                label += " [default +0]"
+            print(format_enhanced(result, label=label))
+            turn_order.append((result["total"], modifier, -index, name))
+        ordered_names = [
+            name
+            for _, _, _, name in sorted(turn_order, reverse=True)
+        ]
+        print(f"⚔ Порядок ходов: {' → '.join(ordered_names)}")
+        return
 
     char = None
     notation = args.notation
@@ -535,8 +725,8 @@ def main():
     atk_name = None
     atk_damage = None
     damage_target_id = None
-    damage_pen = 0
-    damage_prot = 0
+    damage_attacker_profile = {}
+    damage_defender_profile = {}
 
     if args.skill or args.save or args.attack is not None:
         char = _load_character()
@@ -617,7 +807,7 @@ def main():
         creature_ac = int(mechanics.get('ac', mechanics.get('AC', 10)))
         creature_name = creature_data.get('name', args.target)
         damage_target_id = creature_data.get("id")
-        damage_prot = int(first_present(mechanics, "prot", "protection", default=0))
+        damage_defender_profile = _combat_profile(mechanics)
 
         if spell_data:
             s_mechanics = spell_data.get('mechanics', {})
@@ -632,7 +822,7 @@ def main():
                     dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
                     label = f"Spell: {spell_name} → {creature_name} ({char_name}){dmg_tag}"
                 damage_dice = spell_damage
-                damage_pen = int(first_present(s_mechanics, "pen", "penetration", default=0))
+                damage_attacker_profile = _combat_profile(s_mechanics)
             elif spell_save_type:
                 if not char:
                     char = _load_character()
@@ -658,7 +848,7 @@ def main():
                     dmg_tag = f" [dmg: {spell_damage}]" if spell_damage else ""
                     label = f"{creature_name} {spell_save_type.upper()} Save vs {spell_name}{dmg_tag}"
                 damage_dice = spell_damage
-                damage_pen = int(first_present(s_mechanics, "pen", "penetration", default=0))
+                damage_attacker_profile = _combat_profile(s_mechanics)
             else:
                 if spell_damage:
                     notation = spell_damage
@@ -670,7 +860,7 @@ def main():
             if not label:
                 label = f"Attack: {atk_name} → {creature_name} ({char_name})"
             damage_dice = atk_damage
-            damage_pen = _weapon_pen(char, atk_name)
+            damage_attacker_profile = _weapon_combat_profile(char, atk_name)
         elif args.skill:
             pass
         else:
@@ -684,7 +874,17 @@ def main():
                 if not label:
                     label = f"Attack: {atk_name} → {creature_name} ({char_name})"
                 damage_dice = atk_damage
-                damage_pen = _weapon_pen(char, atk_name)
+                damage_attacker_profile = _weapon_combat_profile(char, atk_name)
+
+    if (args.attack is not None or args.target) and char and atk_name:
+        firearm_route = _active_runtime().action_route("combat.attack.firearm")
+        if firearm_route and _weapon_requires_firearm_route(char, atk_name):
+            print(
+                f"Error: '{atk_name}' requires the active firearm route. "
+                f"Use: {firearm_route}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     if args.defend and args.from_creature:
         creature_data = _load_creature(args.from_creature)
@@ -715,12 +915,8 @@ def main():
                 player_ac += dex_mod
             ac = int(player_ac)
             damage_target_id = "player:active"
-            damage_prot = int(
-                first_present(char, "prot", "protection", default=armor.get("prot", 0))
-            )
-            damage_pen = int(
-                first_present(mechanics, "pen", "penetration", default=0)
-            )
+            damage_defender_profile = _combat_profile({**armor, **char})
+            damage_attacker_profile = _combat_profile(mechanics)
         if not label:
             label = f"{creature_name} attacks {char_name if char else '?'} [dmg: {creature_dmg}]"
         damage_dice = creature_dmg
@@ -798,16 +994,19 @@ def main():
                 dmg_line = format_enhanced(dmg_result, label="Damage")
             print(dmg_line)
             if damage_target_id:
-                final_damage, scaling, transition = _persist_auto_damage(
+                final_damage, profile_details, transition = _persist_auto_damage(
                     damage_target_id,
                     dmg_result["total"],
-                    damage_pen,
-                    damage_prot,
+                    damage_attacker_profile,
+                    damage_defender_profile,
+                )
+                profile_output = (
+                    f"  {profile_details} -> {final_damage} HP"
+                    if profile_details
+                    else f"  {final_damage} HP"
                 )
                 print(
-                    f"  PEN {damage_pen} vs PROT {damage_prot} [{scaling}]"
-                    f" -> {final_damage} HP"
-                    f" -> {transition['name']}:"
+                    f"{profile_output} -> {transition['name']}:"
                     f" {transition['old_hp']} -> {transition['new_hp']} HP"
                 )
         elif damage_dice and not is_hit:

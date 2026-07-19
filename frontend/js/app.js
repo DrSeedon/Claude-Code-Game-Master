@@ -105,6 +105,8 @@ const state = {
   activeChoices: null,   // current wizard choices payload
   choiceSel: {},         // radio/checkbox selections {controlId: id | id[]}
   choiceText: {},        // text_input values {controlId: value}
+  wizardCatalog: { templates: [], modules: [], narrators: [] },
+  wizardCatalogLoaded: false,
   availableModels: [],   // models from /api/models (cycle order)
   runtimes: [],
   currentProvider: null,
@@ -1354,6 +1356,10 @@ function handleEvent(data) {
     case 'wizard_complete':
       onWizardComplete(data.campaign_name);
       break;
+
+    case 'template_saved':
+      onTemplateSaved(data.template || {});
+      break;
   }
 }
 
@@ -2198,66 +2204,58 @@ function resetWizard() {
 }
 
 // ─────────────────────────── Wizard ───────────────────────────────────────
-// Preset settings shown client-side on wizard open (ported from React Wizard.tsx)
-function wizardPresets() {
-  const option = (id, ru, en, color) => ({
-    id,
-    title: ui(ru[0], en[0]),
-    description: ui(ru[1], en[1]),
-    comment: ui(ru[2], en[2]),
-    color,
-  });
+async function loadWizardCatalog({ force = false } = {}) {
+  if (state.wizardCatalogLoaded && !force) return state.wizardCatalog;
+  const endpoints = [
+    '/api/templates/campaigns',
+    '/api/templates/modules',
+    '/api/templates/narrators',
+  ];
+  const responses = await Promise.all(endpoints.map(async endpoint => {
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`${endpoint}: HTTP ${response.status}`);
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  }));
+  state.wizardCatalog = {
+    templates: responses[0],
+    modules: responses[1],
+    narrators: responses[2],
+  };
+  state.wizardCatalogLoaded = true;
+  return state.wizardCatalog;
+}
+
+function wizardPresets(catalog = state.wizardCatalog) {
+  const templates = catalog.templates.map(template => ({
+    id: template.id,
+    title: template.name || template.id,
+    description: template.description || '',
+    comment: template.source === 'user'
+      ? ui('Сохранённый пользовательский шаблон', 'Saved user template')
+      : ui('Встроенный шаблон из каталога', 'Built-in catalogue template'),
+    badge: template.source === 'user' ? ui('СВОЙ', 'SAVED') : '',
+    color: template.source === 'user' ? 'green' : 'yellow',
+  }));
+  const modules = catalog.modules.map(module => ({
+    id: module.id,
+    title: module.name || module.id,
+    description: module.description || '',
+    comment: module.enabled_by_default
+      ? ui('Включён по умолчанию', 'Enabled by default')
+      : ui('Добавляет отдельный набор механик', 'Adds a separate mechanics package'),
+    color: module.enabled_by_default ? 'green' : 'yellow',
+  }));
   return {
     step: 'concept',
-    title: ui('Мир кампании', 'Campaign world'),
-    submit_label: ui('Выбрать', 'Choose'),
+    title: ui('Каталог кампаний', 'Campaign catalogue'),
+    submit_label: ui('Продолжить настройку', 'Continue setup'),
     controls: [
       {
         type: 'radio',
-        id: 'preset',
-        label: ui('Готовые сеттинги', 'Preset settings'),
-        options: [
-          option('standard-dnd',
-            ['Стандартный D&D', 'Классическое фэнтези — драконы, подземелья, магия', 'Проверенная классика для любого игрока'],
-            ['Standard D&D', 'Classic fantasy — dragons, dungeons, and magic', 'A familiar foundation for any player'],
-            'green'),
-          option('zombie-apocalypse',
-            ['Зомби-апокалипсис', 'Мертвецы, выживание, дефицит ресурсов', 'Напряжение и моральные дилеммы'],
-            ['Zombie apocalypse', 'Undead, survival, and scarce resources', 'Tension and moral dilemmas'],
-            'green'),
-          option('survival-zone',
-            ['Зона выживания (STALKER)', 'Аномалии, радиация, артефакты, фракции', 'Атмосфера постапока и исследование'],
-            ['Survival zone (STALKER)', 'Anomalies, radiation, artifacts, and factions', 'Post-apocalyptic exploration'],
-            'green'),
-          option('space-travel',
-            ['Космос', 'Корабль, экипаж, галактика, ресурсы', 'Эпик среди звёзд'],
-            ['Space', 'Ship, crew, galaxy, and resources', 'An epic among the stars'],
-            'green'),
-          option('horror-investigation',
-            ['Хоррор-расследование', 'Безумие, культы, запретное знание', 'Для любителей Лавкрафта'],
-            ['Horror investigation', 'Madness, cults, and forbidden knowledge', 'For Lovecraft fans'],
-            'yellow'),
-          option('political-intrigue',
-            ['Политические интриги', 'Влияние, альянсы, предательства', 'Война умов, а не мечей'],
-            ['Political intrigue', 'Influence, alliances, and betrayal', 'A battle of minds rather than swords'],
-            'yellow'),
-          option('gladiator-arena',
-            ['Гладиаторская арена', 'Раб → бог арены, пермасмерть', 'Чистый бой и прогрессия'],
-            ['Gladiator arena', 'Slave → arena god, permanent death', 'Combat and progression'],
-            'yellow'),
-          option('roguelike-missions',
-            ['Рогалик: База + Миссии', 'XCOM/Darkest Dungeon — хаб + вылазки', 'Прогрессия и риск'],
-            ['Roguelike: Base + Missions', 'XCOM/Darkest Dungeon — hub and expeditions', 'Progression and risk'],
-            'yellow'),
-          option('civilization',
-            ['Цивилизация', 'От племени до империи', 'Управляешь народом, а не персонажем'],
-            ['Civilization', 'From tribe to empire', 'Lead a people rather than one character'],
-            'yellow'),
-          option('monster-hunters',
-            ['Охотники на монстров', 'Ведьмак meets Warhammer — контракты, бой', 'Структурированные сессии'],
-            ['Monster hunters', 'The Witcher meets Warhammer — contracts and combat', 'Structured sessions'],
-            'yellow'),
-        ],
+        id: 'template_id',
+        label: ui('Готовые и сохранённые шаблоны', 'Built-in and saved templates'),
+        options: templates,
       },
       {
         type: 'text_input',
@@ -2269,16 +2267,48 @@ function wizardPresets() {
         ),
         required: false,
       },
+      {
+        type: 'checkbox',
+        id: 'modules',
+        label: ui('Модули механик', 'Gameplay modules'),
+        options: modules,
+      },
     ],
   };
 }
 
-function showInitialWizardGreeting() {
+async function showInitialWizardGreeting() {
   addDmMessage(ui(
-    'Привет! Давай создадим кампанию.\n\nВыбери готовый сеттинг ниже или опиши свой мир в чате.',
-    'Hi! Let’s create a campaign.\n\nChoose a preset below or describe your world in chat.'
+    'Привет! Давай создадим кампанию.\n\nЗагружаю реальные шаблоны и установленные модули — выбирай готовую основу или опиши свой мир.',
+    'Hi! Let’s create a campaign.\n\nLoading the real templates and installed modules—choose a foundation or describe your world.'
   ));
-  renderChoices(wizardPresets());
+  el.rightPanel.hidden = false;
+  el.choices.innerHTML = `<div class="wizard-catalog-loading">` +
+    `<span class="catalog-pulse"></span>` +
+    escapeHtml(ui('Читаю каталог шаблонов и модулей…', 'Loading templates and modules…')) +
+    `</div>`;
+  try {
+    const catalog = await loadWizardCatalog({ force: true });
+    if (state.mode === 'wizard') renderChoices(wizardPresets(catalog));
+  } catch (error) {
+    if (state.mode !== 'wizard') return;
+    addError(ui(
+      `Не удалось загрузить каталог: ${error.message}`,
+      `Could not load the catalogue: ${error.message}`
+    ));
+    renderChoices(wizardPresets());
+  }
+}
+
+async function onTemplateSaved(template) {
+  if (template.id) {
+    state.wizardCatalogLoaded = false;
+    try { await loadWizardCatalog({ force: true }); } catch { /* Saved on disk; refresh can wait. */ }
+  }
+  addDmMessage(ui(
+    `💾 Шаблон «${template.name || template.id || 'без имени'}» сохранён в постоянный каталог.`,
+    `💾 Template “${template.name || template.id || 'unnamed'}” was saved to the persistent catalogue.`
+  ));
 }
 
 function sendWizard(text, meta) {
@@ -2291,10 +2321,16 @@ function sendWizard(text, meta) {
   // First message includes sidebar context so the DM knows step 1 = choosing the world
   if (!state.wizardFirstMsgSent) {
     state.wizardFirstMsgSent = true;
-    const presetNames = (state.activeChoices?.controls || [])
-      .flatMap(c => (c.options || []).map(o => o.title)).join(', ');
-    if (presetNames) {
-      msg = `[System: The sidebar currently shows campaign setting presets: ${presetNames}. This is step 1 — choosing the campaign world.]\n\n${msg}`;
+    const catalogue = (state.activeChoices?.controls || [])
+      .filter(control => Array.isArray(control.options))
+      .map(control => (
+        `${control.id}: ${control.options.map(option => `${option.title} [${option.id}]`).join(', ')}`
+      ))
+      .join('\n');
+    if (catalogue) {
+      msg = `[System: The sidebar loaded the current campaign catalogue from the server. ` +
+        `These IDs are authoritative:\n${catalogue}\nThis is step 1 — choosing a template, ` +
+        `custom concept, and initial modules.]\n\n${msg}`;
     }
   }
   if (meta) msg = `${meta}\n${msg}`;
@@ -2391,6 +2427,7 @@ function renderChoices(data) {
           `<div class="option-top">` +
             `<span class="color-dot" style="background:${colors.dot}"></span>` +
             `<span class="option-title">${escapeHtml(opt.title)}</span>` +
+            (opt.badge ? `<span class="option-badge">${escapeHtml(opt.badge)}</span>` : '') +
             `<span class="option-mark">${mark}</span>` +
           `</div>` +
           (opt.description ? `<div class="option-desc">${escapeHtml(opt.description)}</div>` : '') +
@@ -2405,6 +2442,25 @@ function renderChoices(data) {
 
   const footer = document.createElement('div');
   footer.className = 'choices-footer';
+  if (String(data.step || '').toLowerCase().includes('confirm')) {
+    const save = document.createElement('button');
+    save.className = 'btn template-save-btn';
+    save.textContent = ui('💾 В шаблоны', '💾 Save template');
+    save.title = ui(
+      'Сохранить текущую конфигурацию без создания кампании',
+      'Save the current configuration without creating a campaign'
+    );
+    save.addEventListener('click', () => {
+      sendWizard(
+        ui(
+          'Сохрани текущую конфигурацию как постоянный шаблон кампании.',
+          'Save the current configuration as a persistent campaign template.'
+        ),
+        '[System: The player clicked “Save template”. Call save_campaign_template now; do not create the campaign.]'
+      );
+    });
+    footer.appendChild(save);
+  }
   const skip = document.createElement('button');
   skip.className = 'btn';
   skip.textContent = ui('Пропустить', 'Skip');
@@ -2448,27 +2504,37 @@ function submitChoices() {
   const data = state.activeChoices;
   if (!data || state.connStatus !== 'connected') return;
   const parts = [];
+  const selectionIds = {};
   for (const ctrl of data.controls) {
     const label = ctrl.label || ctrl.id;
     if (ctrl.type === 'text_input') {
       const v = (state.choiceText[ctrl.id] || '').trim();
-      if (v) parts.push(`${label}: ${v}`);
+      if (v) {
+        parts.push(`${label}: ${v}`);
+        selectionIds[ctrl.id] = v;
+      }
     } else if (ctrl.type === 'radio') {
       const v = state.choiceSel[ctrl.id];
       if (typeof v === 'string') {
         const opt = (ctrl.options || []).find(o => o.id === v);
         parts.push(`${label}: ${opt ? opt.title : v}`);
+        selectionIds[ctrl.id] = v;
       }
     } else if (ctrl.type === 'checkbox') {
       const vals = state.choiceSel[ctrl.id];
       if (Array.isArray(vals) && vals.length) {
         const names = vals.map(v => ((ctrl.options || []).find(o => o.id === v) || {}).title || v);
         parts.push(`${label}: ${names.join(', ')}`);
+        selectionIds[ctrl.id] = vals;
       }
     }
   }
   if (parts.length === 0) parts.push(ui('Пропускаю этот шаг', 'Skip this step'));
-  sendWizard(parts.join('\n'), `[Sidebar selection for step "${data.step}"]`);
+  sendWizard(
+    parts.join('\n'),
+    `[Sidebar selection for step "${data.step}"]\n` +
+      `[Selection IDs: ${JSON.stringify(selectionIds)}]`
+  );
   clearChoices();
 }
 

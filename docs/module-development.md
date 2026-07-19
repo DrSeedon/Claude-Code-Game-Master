@@ -7,7 +7,7 @@ Create custom modules for DM Claude. Each module is a self-contained folder that
 ## Quick Start
 
 ```bash
-mkdir -p .claude/additional/modules/my-module/{lib,tools,middleware,tests}
+mkdir -p modules/my-module/{lib,tools,middleware,tests}
 ```
 
 Create `module.json`, `rules.md`, and optionally `creation-rules.md`. That's it — the system auto-discovers modules by scanning for `module.json`.
@@ -17,7 +17,7 @@ Create `module.json`, `rules.md`, and optionally `creation-rules.md`. That's it 
 ## Directory Structure
 
 ```
-.claude/additional/modules/my-module/
+modules/my-module/
 ├── module.json              # Required — module manifest
 ├── rules.md                 # Required — DM instructions during gameplay
 ├── creation-rules.md        # Optional — DM instructions during /new-game
@@ -168,7 +168,7 @@ while [ ! -d "$_dir/.git" ] && [ "$_dir" != "/" ]; do _dir="$(dirname "$_dir")";
 PROJECT_ROOT="$_dir"
 
 cd "$PROJECT_ROOT"
-uv run python .claude/additional/modules/my-module/lib/my_engine.py "$@"
+uv run python modules/my-module/lib/my_engine.py "$@"
 ```
 
 The git-root finder pattern (`while [ ! -d "$_dir/.git" ]`) is mandatory — do NOT use relative `../../..` paths.
@@ -210,7 +210,7 @@ DM instructions loaded during gameplay. Tells Claude when and how to use your mo
 # My Module — DM Rules
 
 ## When to Call
-- After X happens, run: `bash .claude/additional/modules/my-module/tools/dm-my-tool.sh action`
+- After X happens, run: `bash modules/my-module/tools/dm-my-tool.sh action`
 
 ## When NOT to Call
 - Don't call when Y
@@ -320,13 +320,13 @@ class TestMyModule:
         # test your module logic
 ```
 
-Run: `uv run pytest .claude/additional/modules/my-module/tests/ -v`
+Run: `uv run pytest modules/my-module/tests/ -v`
 
 ---
 
 ## Installation
 
-Community modules: drop the folder into `.claude/additional/modules/` and run:
+Community modules: drop the folder into `modules/` and run:
 
 ```bash
 bash .claude/additional/infrastructure/tools/dm-module.sh scan
@@ -345,5 +345,5 @@ bash .claude/additional/infrastructure/tools/dm-module.sh activate my-module
 - [ ] Middleware handles `--help` (exit 1 after printing)
 - [ ] Tools use git-root finder, not relative paths
 - [ ] Python uses `next(p for p in Path(__file__).parents if (p / ".git").exists())`
-- [ ] Tests pass: `uv run pytest .claude/additional/modules/my-module/tests/ -v`
+- [ ] Tests pass: `uv run pytest modules/my-module/tests/ -v`
 - [ ] No modifications to `lib/` or `tools/` (CORE stays clean)

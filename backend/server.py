@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from fastapi import Request, Form
@@ -29,6 +29,10 @@ from backend.campaign_api import (
     create_campaign,
     activate_campaign,
     delete_campaign,
+)
+from backend.campaign_templates import (
+    list_campaign_templates,
+    save_campaign_template,
 )
 from backend.event_log import append_event, read_current_session_events
 from backend.game_session import (
@@ -193,6 +197,25 @@ class CreateCampaignRequest(BaseModel):
     narrator_style: Optional[str] = ""
     rules: Optional[str] = ""
     character: Optional[dict] = None
+    template_id: Optional[str] = ""
+
+
+class SaveCampaignTemplateRequest(BaseModel):
+    """Persistent user-authored campaign template."""
+
+    id: str
+    name: str
+    description: str = ""
+    genres: List[str] = Field(default_factory=list)
+    genre: str = ""
+    tone: str = ""
+    recommended_for: str = ""
+    modules: List[str] = Field(default_factory=list)
+    narrator_style: str = ""
+    rules: str = ""
+    character_name: str = ""
+    character_class: str = ""
+    character_background: str = ""
 
 
 # ─────────────────────────── Campaign API ──────────────────────────────────────
@@ -226,6 +249,7 @@ async def api_create_campaign(body: CreateCampaignRequest):
         narrator_style=body.narrator_style or "",
         rules=body.rules or "",
         character=body.character,
+        template_id=body.template_id or "",
     )
 
     if not result.get("success"):
@@ -410,7 +434,7 @@ def _parse_md_frontmatter(path: Path) -> dict:
 def _get_modules_dir() -> Path:
     """Get path to modules directory relative to project root."""
     config = get_config()
-    return Path(config.project_root) / ".claude" / "additional" / "modules"
+    return Path(config.project_root) / "modules"
 
 
 def _get_narrator_styles_dir() -> Path:
@@ -419,13 +443,32 @@ def _get_narrator_styles_dir() -> Path:
     return Path(config.project_root) / ".claude" / "additional" / "narrator-styles"
 
 
-def _get_campaign_rules_templates_dir() -> Path:
-    """Get path to campaign rules templates directory."""
-    config = get_config()
-    return Path(config.project_root) / ".claude" / "additional" / "campaign-rules-templates"
-
-
 # ─────────────────────────── Template API ──────────────────────────────────────
+
+@app.get("/api/templates/campaigns")
+async def api_get_campaign_templates():
+    """List built-in and user-saved campaign templates."""
+    return [
+        {
+            key: value
+            for key, value in template.items()
+            if key != "rules"
+        }
+        for template in list_campaign_templates()
+    ]
+
+
+@app.post("/api/templates/campaigns", status_code=201)
+async def api_save_campaign_template(body: SaveCampaignTemplateRequest):
+    """Create or update a user campaign template."""
+    result = save_campaign_template(body.model_dump())
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=409,
+            detail=result.get("error", "Template save failed"),
+        )
+    return result
+
 
 @app.get("/api/templates/modules")
 async def api_get_template_modules():
@@ -496,27 +539,8 @@ async def api_get_template_narrators():
 
 @app.get("/api/templates/rules")
 async def api_get_template_rules():
-    """Get list of campaign rules templates.
-
-    Reads .md files from campaign-rules-templates/ and extracts
-    id, name, description, genres sections.
-
-    Returns:
-        list: Rules templates list with id, name, description, genres fields
-    """
-    rules_dir = _get_campaign_rules_templates_dir()
-    result = []
-
-    if not rules_dir.exists():
-        return result
-
-    for rule_path in sorted(rules_dir.glob("*.md")):
-        try:
-            result.append(_parse_md_frontmatter(rule_path))
-        except OSError:
-            continue
-
-    return result
+    """Compatibility alias for the unified campaign template catalogue."""
+    return await api_get_campaign_templates()
 
 
 @app.get("/api/models")
@@ -605,6 +629,7 @@ async def wizard_websocket(websocket: WebSocket):
                 "enabled_tools": [
                     "show_choices",
                     "clear_choices",
+                    "save_campaign_template",
                     "create_campaign",
                 ],
                 "default_tools_approval_mode": "approve",
@@ -639,6 +664,17 @@ async def wizard_websocket(websocket: WebSocket):
                     await send({
                         "type": "error",
                         "content": event.get("error", "Creation failed"),
+                    })
+            elif event["type"] == "template_saved":
+                if event.get("success"):
+                    await send({
+                        "type": "template_saved",
+                        "template": event.get("template", {}),
+                    })
+                else:
+                    await send({
+                        "type": "error",
+                        "content": event.get("error", "Template save failed"),
                     })
 
     try:

@@ -43,8 +43,6 @@ class SceneManager:
     def _world_travel_adapter(self):
         module_lib = (
             Path(__file__).parents[1]
-            / ".claude"
-            / "additional"
             / "modules"
             / "world-travel"
             / "lib"

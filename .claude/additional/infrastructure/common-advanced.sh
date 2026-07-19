@@ -11,10 +11,8 @@
 _module_enabled() {
     local module_id="$1"
     local enabled
-    enabled=$(${PYTHON_CMD:-uv run python} -c "
-import sys
-sys.path.insert(0, '$PROJECT_ROOT/.claude/additional')
-from module_loader import ModuleLoader
+enabled=$(${PYTHON_CMD:-uv run python} -c "
+from lib.module_loader import ModuleLoader
 loader = ModuleLoader()
 print('1' if loader.is_module_enabled('$module_id') else '0')
 " 2>/dev/null)
@@ -28,7 +26,7 @@ print('1' if loader.is_module_enabled('$module_id') else '0')
 dispatch_middleware() {
     local tool="$1"
     shift
-    for mw in "$PROJECT_ROOT"/.claude/additional/modules/*/middleware/"$tool"; do
+    for mw in "$PROJECT_ROOT"/modules/*/middleware/"$tool"; do
         [ -f "$mw" ] || continue
         local module_id
         module_id=$(basename "$(dirname "$(dirname "$mw")")")
@@ -49,7 +47,7 @@ dispatch_middleware() {
 dispatch_middleware_post() {
     local tool="$1"
     shift
-    for mw in "$PROJECT_ROOT"/.claude/additional/modules/*/middleware/"${tool}.post"; do
+    for mw in "$PROJECT_ROOT"/modules/*/middleware/"${tool}.post"; do
         [ -f "$mw" ] || continue
         local module_id
         module_id=$(basename "$(dirname "$(dirname "$mw")")")
@@ -66,7 +64,7 @@ dispatch_middleware_post() {
 # Usage: dispatch_middleware_help <tool-name>
 dispatch_middleware_help() {
     local tool="$1"
-    for mw in "$PROJECT_ROOT"/.claude/additional/modules/*/middleware/"$tool"; do
+    for mw in "$PROJECT_ROOT"/modules/*/middleware/"$tool"; do
         [ -f "$mw" ] || continue
         bash "$mw" --help 2>/dev/null || true
     done

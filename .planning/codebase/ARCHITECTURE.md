@@ -49,7 +49,7 @@
   - `rag/` — vector store, embedder, semantic chunker
 
 **Module Layer:**
-- Location: `.claude/additional/modules/<module-id>/`
+- Location: `modules/<module-id>/`
 - Active modules: `custom-stats`, `world-travel`, `mass-combat`, `firearms-combat`
 - Structure per module: `module.json`, `rules.md`, `lib/`, `tools/`, `middleware/`, `tests/`
 - Reference data (weapons, armor, creatures) stored in world.json as nodes, config in `module-data/<id>.json`

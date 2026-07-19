@@ -1,0 +1,277 @@
+{
+  "version": "1.0.0",
+  "modules": {
+    "mass-combat": {
+      "id": "mass-combat",
+      "name": "Mass Combat System",
+      "version": "1.0.0",
+      "author": "DM System",
+      "description": "Individual unit tracking for large-scale battles. Every unit has HP, attacks individually, dies individually.",
+      "category": "combat",
+      "genre_tags": [
+        "fantasy",
+        "scifi",
+        "modern",
+        "survival",
+        "horror"
+      ],
+      "tags": [
+        "combat",
+        "mass-battle",
+        "unit-tracking",
+        "wargame"
+      ],
+      "enabled_by_default": false,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "incompatible_with": [],
+      "provides": [
+        "combat.mass",
+        "combat.groups",
+        "combat.zones"
+      ],
+      "action_routes": {
+        "combat.mass": "bash modules/mass-combat/tools/dm-mass-combat.sh"
+      },
+      "middleware": [],
+      "features": [
+        "Individual unit HP and attack tracking",
+        "Template-based unit spawning (24 droids in one command)",
+        "Group attacks (whole squad fires at once)",
+        "Named unit attacks (player actions)",
+        "AOE damage with saves (grenades, Force Push)",
+        "Cover system (+2 AC per group)",
+        "Persistent battle state in JSON",
+        "Status table with HP bars",
+        "Advantage/disadvantage support"
+      ],
+      "adds_to_core": {
+        "tools": [
+          "dm-mass-combat.sh"
+        ],
+        "commands": {
+          "dm-mass-combat.sh init": "Initialize a battle",
+          "dm-mass-combat.sh add": "Add units from template",
+          "dm-mass-combat.sh round": "Group attacks (all units fire)",
+          "dm-mass-combat.sh attack": "Single unit attacks specific targets",
+          "dm-mass-combat.sh aoe": "Area damage with optional saves",
+          "dm-mass-combat.sh damage": "Direct HP damage",
+          "dm-mass-combat.sh heal": "Heal a unit",
+          "dm-mass-combat.sh kill": "Instant kill",
+          "dm-mass-combat.sh cover": "Group takes/leaves cover",
+          "dm-mass-combat.sh status": "Show battle status",
+          "dm-mass-combat.sh next-round": "Advance round counter",
+          "dm-mass-combat.sh end": "End battle, calculate XP"
+        }
+      },
+      "use_cases": [
+        "Clone Wars battalion assaults",
+        "Siege battles with 30+ combatants",
+        "Any combat where individual tracking matters",
+        "Squad-based tactical combat"
+      ],
+      "architecture": "Standalone tool. DM calls dm-mass-combat.sh for large battles. Battle state stored in combat-state.json (temporary, deleted on end). No middleware — does not intercept CORE tools.",
+      "replaces": []
+    },
+    "world-travel": {
+      "id": "world-travel",
+      "name": "World Travel (Navigation + Encounters)",
+      "version": "2.0.0",
+      "author": "DM System Core",
+      "description": "Unified travel system: coordinate navigation, pathfinding, maps, and automatic random encounter checks during overland travel",
+      "category": "travel-mechanics",
+      "genre_tags": [
+        "fantasy",
+        "survival",
+        "scifi",
+        "horror",
+        "modern"
+      ],
+      "tags": [
+        "navigation",
+        "maps",
+        "coordinates",
+        "pathfinding",
+        "encounters",
+        "travel"
+      ],
+      "enabled_by_default": false,
+      "dependencies": [],
+      "incompatible_with": [],
+      "provides": [
+        "travel.world",
+        "travel.navigation",
+        "travel.encounters"
+      ],
+      "action_routes": {
+        "travel.world": "bash modules/world-travel/tools/dm-navigation.sh"
+      },
+      "middleware": [
+        "dm-location.sh",
+        "dm-session.sh"
+      ],
+      "features": [
+        "Coordinate system for locations (x, y)",
+        "Bearing-based location creation with auto distance calc",
+        "BFS pathfinding between named locations",
+        "Path preference caching (DM route decisions)",
+        "Direction blocking (cliffs, radiation zones)",
+        "Read-only web map projection for global and interior views",
+        "Distance-based encounter segmentation (1-3 checks per journey)",
+        "DC scaling by distance and time of day",
+        "Encounter nature categories (Dangerous, Neutral, Beneficial, Special)",
+        "Waypoint creation for Combat/Social/Hazard encounters",
+        "Auto-resolve for Loot/Flavor encounters",
+        "Automatic encounter check after every move",
+        "Vehicle system: ships/transports with dual-map (global anchor + internal rooms)",
+        "Board/exit vehicles, move between rooms, move vehicle with connection rebuild"
+      ],
+      "adds_to_core": {
+        "tools": [
+          "dm-navigation.sh",
+          "dm-encounter.sh",
+          "dm-vehicle.sh"
+        ],
+        "commands": {
+          "dm-navigation.sh move <location>": "Move party with distance/time calc + auto encounter",
+          "dm-navigation.sh route <from> <to>": "Calculate route and distance",
+          "dm-navigation.sh decide <from> <to>": "Interactive route decision (cached)",
+          "dm-navigation.sh routes <from> <to>": "Show all possible routes",
+          "dm-navigation.sh block <loc> <from_deg> <to_deg> <reason>": "Block direction range",
+          "dm-navigation.sh unblock <loc> <from_deg> <to_deg>": "Unblock direction",
+          "dm-encounter.sh check <from> <to> <dist> [terrain]": "Manual encounter check",
+          "dm-encounter.sh toggle": "Enable/disable encounter checks",
+          "dm-encounter.sh set-base-dc <dc>": "Set encounter difficulty",
+          "dm-encounter.sh status": "Show encounter config"
+        },
+        "data_fields": {
+          "world.json.location_nodes": {
+            "data.coordinates": "World-space x/y coordinates in meters",
+            "data.blocked_ranges": "Blocked bearing ranges and reasons",
+            "data.type": "world, compound, or interior",
+            "data.parent": "Parent compound name for interiors",
+            "data.children": "Child location names for compounds",
+            "data.vehicle": "Vehicle anchor or room metadata"
+          },
+          "world.json.connected_edges": {
+            "data.distance_meters": "Physical route distance",
+            "data.bearing": "Bearing from edge source to target",
+            "data.terrain": "Traversed terrain type",
+            "data.path": "Narrative route description"
+          },
+          "world.json.player_node": {
+            "data.speed_kmh": "Default overland movement speed"
+          },
+          "campaign-overview.json.path_preferences": "Cached route decisions and display-only map context",
+          "campaign-overview.json.player_position.map_context": "global|local — absent = global (backward compat)",
+          "campaign-overview.json.player_position.vehicle_id": "string|null — active vehicle if inside",
+          "module-data/world-travel.json": "Encounter settings and map terrain colors"
+        }
+      },
+      "use_cases": [
+        "Open-world exploration (STALKER, Fallout-style)",
+        "Wilderness travel with random encounters",
+        "Hex-map or grid-based campaigns",
+        "Realistic travel time + encounter simulation",
+        "Visual map for DM and players"
+      ],
+      "architecture": "Middleware intercepts movement and coordinate-aware location creation. WorldTravelStore projects WorldGraph location nodes and connected edges into the module algorithms; no parallel gameplay store is used.",
+      "replaces": [
+        "movement"
+      ]
+    },
+    "firearms-combat": {
+      "id": "firearms-combat",
+      "name": "Firearms Combat System",
+      "version": "2.0.0",
+      "author": "DM System Core",
+      "description": "Automated firearms combat resolver with penetration mechanics, RPM simulation, and fire mode support for modern/STALKER campaigns",
+      "category": "combat",
+      "genre_tags": [
+        "survival",
+        "modern",
+        "scifi",
+        "horror"
+      ],
+      "tags": [
+        "firearms",
+        "combat",
+        "ballistics",
+        "stalker",
+        "modern"
+      ],
+      "enabled_by_default": false,
+      "dependencies": [],
+      "optional_dependencies": [],
+      "incompatible_with": [],
+      "provides": [
+        "combat.firearms",
+        "combat.penetration"
+      ],
+      "providers": {
+        "combat.damage": "lib/combat_profile.py:resolve_damage",
+        "combat.profile.normalize": "lib/combat_profile.py:normalize_profile",
+        "combat.profile.describe": "lib/combat_profile.py:describe_profile"
+      },
+      "action_routes": {
+        "combat.attack.firearm": "bash modules/firearms-combat/tools/dm-combat.sh resolve"
+      },
+      "middleware": [],
+      "features": [
+        "Duration-based single, burst, and full-auto fire modes",
+        "Separate physical ammo expenditure and bounded salvo resolution",
+        "Magazine capacity and reload signaling",
+        "Penetration vs Protection damage scaling",
+        "Subclass bonuses (sharpshooter)",
+        "Margin-based multi-bullet hits with bounded critical damage",
+        "Multi-target distribution (full-auto)",
+        "Auto XP tracking",
+        "Auto ammo deduction via WorldGraph inventory",
+        "Test mode for dry runs"
+      ],
+      "adds_to_core": {
+        "tools": [
+          "dm-combat.sh"
+        ],
+        "commands": {
+          "dm-combat.sh resolve": "Resolve firearms combat with auto-damage calculation"
+        },
+        "data_fields": {
+          "campaign_rules": {
+            "firearms_system": {
+              "weapons": {
+                "AK-74": {
+                  "damage": "2d8+2",
+                  "pen": 6,
+                  "rpm": 650,
+                  "ammo_type": "5.45x39mm"
+                }
+              },
+              "fire_modes": {
+                "burst": {
+                  "duration_seconds": 1,
+                  "max_salvos_per_target": 3,
+                  "penalty_per_salvo": -2
+                },
+                "full_auto": {
+                  "duration_seconds": 3,
+                  "max_salvos_per_target": 6,
+                  "penalty_per_salvo": -2
+                }
+              }
+            }
+          }
+        }
+      },
+      "use_cases": [
+        "STALKER campaigns with Freedom/Duty firefights",
+        "Fallout-style wasteland combat",
+        "Modern military operations",
+        "Cyberpunk gunfights",
+        "Zombie apocalypse firearms survival"
+      ],
+      "architecture": "Standalone tool. DM calls dm-combat.sh resolve when firearms combat occurs. No middleware — does not intercept CORE tools.",
+      "replaces": []
+    }
+  }
+}

@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 
 def load_module_loader():
-    path = PROJECT_ROOT / ".claude" / "additional" / "module_loader.py"
+    path = PROJECT_ROOT / "lib" / "module_loader.py"
     spec = importlib.util.spec_from_file_location("dm_module_loader", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -24,7 +24,7 @@ def test_world_travel_is_discovered():
 
 def test_activation_supports_list_shaped_campaign_modules(tmp_path):
     root = tmp_path
-    modules_dir = root / ".claude" / "additional" / "modules" / "world-travel"
+    modules_dir = root / "modules" / "world-travel"
     modules_dir.mkdir(parents=True)
     (modules_dir / "module.json").write_text(json.dumps({
         "id": "world-travel",

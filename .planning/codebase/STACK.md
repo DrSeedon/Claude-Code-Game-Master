@@ -5,8 +5,8 @@
 ## Languages
 
 **Primary:**
-- Python 3.11+ — All core logic in `lib/`, module libs in `.claude/additional/modules/*/lib/`
-- Bash — All CLI wrappers in `tools/`, module middleware in `.claude/additional/modules/*/middleware/`
+- Python 3.11+ — All core logic in `lib/`, module libs in `modules/*/lib/`
+- Bash — All CLI wrappers in `tools/`, module middleware in `modules/*/middleware/`
 
 **Secondary:**
 - JSON — Configuration and state files (`world.json`, `campaign-overview.json`, `module.json`)
@@ -31,7 +31,7 @@
 **Testing:**
 - `pytest` — test runner, config in `pyproject.toml` `[tool.pytest.ini_options]`
 - `pytest-cov>=7.0.0` — coverage (dev dependency)
-- Test root: `tests/` and `.claude/additional/modules/` (both scanned)
+- Test root: `tests/` and `modules/` (both scanned)
 
 **Build/Dev:**
 - `black>=23.0.0` — formatter, line length 100, targets py311+py312

@@ -8,8 +8,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 from dice import (
     DiceRoller,
+    _initiative_modifier,
     _load_creature,
     _load_spell,
+    _resolve_initiative_combatant,
     _resolve_attack,
     _resolve_spell_attack,
     main,
@@ -91,6 +93,69 @@ class TestResolveSpellAttack:
         assert prof == 4
 
 
+class TestInitiative:
+    def test_modifier_reads_explicit_value_before_dexterity(self):
+        modifier, source = _initiative_modifier({
+            "data": {
+                "initiative": 7,
+                "abilities": {"dex": 18},
+            },
+        })
+
+        assert (modifier, source) == (7, "initiative")
+
+    def test_modifier_calculates_from_dexterity(self):
+        modifier, source = _initiative_modifier({
+            "data": {"abilities": {"dex": 16}},
+        })
+
+        assert (modifier, source) == (3, "dex")
+
+    def test_temporary_combatant_override(self):
+        assert _resolve_initiative_combatant("Unknown Contact:+2", {}) == (
+            "Unknown Contact",
+            2,
+            "override",
+        )
+
+    def test_batch_roll_prints_sorted_turn_order(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        _write_world(
+            tmp_path,
+            {
+                "npc:slow": {
+                    "type": "npc",
+                    "name": "Slow",
+                    "data": {"dex_mod": 1},
+                },
+                "npc:fast": {
+                    "type": "npc",
+                    "name": "Fast",
+                    "data": {"dex_mod": 4},
+                },
+            },
+        )
+        rolls = iter([10, 15])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dice.py", "--initiative", "Slow", "Fast"],
+        )
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+
+        output = capsys.readouterr().out
+        assert "Инициатива (Slow)" in output
+        assert "Инициатива (Fast)" in output
+        assert "Порядок ходов: Fast → Slow" in output
+
+
 class TestLoadCreature:
     def test_load_from_wiki(self, tmp_path):
         world = {"nodes": {"creature:goblin": {"type": "creature", "name": "Goblin", "data": {"hp": "7", "ac": "13", "attack_bonus": "4", "damage": "1d6+1"}}}}
@@ -122,6 +187,54 @@ class TestLoadCreature:
 
 
 class TestAutomaticDamage:
+    def test_specialized_weapon_is_redirected_to_active_route(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        (tmp_path / "campaign-overview.json").write_text(
+            json.dumps({"modules": {"firearms-combat": True}}),
+            encoding="utf-8",
+        )
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Marine",
+                    "data": {
+                        "level": 1,
+                        "stats": {"dex": 14},
+                        "equipment": {
+                            "weapons": [{
+                                "name": "C-14",
+                                "stat": "dex",
+                                "damage": "2d8+2",
+                                "rpm": 1800,
+                                "equipped": True,
+                            }],
+                        },
+                    },
+                },
+            },
+        )
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dice.py", "--attack", "C-14"],
+        )
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            with pytest.raises(SystemExit) as exc:
+                main()
+
+        assert exc.value.code == 2
+        assert (
+            "bash modules/firearms-combat/tools/dm-combat.sh resolve"
+            in capsys.readouterr().err
+        )
+
     def test_creature_attack_resolves_and_persists_in_one_call(
         self,
         tmp_path,
@@ -168,10 +281,62 @@ class TestAutomaticDamage:
             main()
 
         world = json.loads((tmp_path / "world.json").read_text())
+        assert world["nodes"]["player:active"]["data"]["hp"]["current"] == 6
+        output = capsys.readouterr().out
+        assert "PEN" not in output
+        assert "6 HP -> Steve: 12 -> 6 HP" in output
+
+    def test_active_damage_provider_scales_and_persists(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        (tmp_path / "campaign-overview.json").write_text(
+            json.dumps({"modules": {"firearms-combat": True}}),
+            encoding="utf-8",
+        )
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Steve",
+                    "data": {
+                        "hp": {"current": 12, "max": 12},
+                        "ac": 15,
+                        "prot": 6,
+                        "equipment": {"armor": {"ac": 15, "prot": 6}},
+                    },
+                },
+                "creature:miner": {
+                    "type": "creature",
+                    "name": "Miner",
+                    "data": {
+                        "hp": 10,
+                        "ac": 12,
+                        "atk": 3,
+                        "dmg": "1d6+1",
+                        "pen": 1,
+                    },
+                },
+            },
+        )
+        rolls = iter([13, 5])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dice.py", "--defend", "--from", "miner"],
+        )
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+
+        world = json.loads((tmp_path / "world.json").read_text())
         assert world["nodes"]["player:active"]["data"]["hp"]["current"] == 11
         output = capsys.readouterr().out
-        assert "PEN 1 vs PROT 6 [QUARTER] -> 1 HP" in output
-        assert "Steve: 12 -> 11 HP" in output
+        assert "PEN1/PROT6[QUARTER] -> 1 HP" in output
 
     def test_player_attack_persists_creature_hp(self, tmp_path, monkeypatch):
         _write_world(
@@ -210,7 +375,7 @@ class TestAutomaticDamage:
             main()
 
         world = json.loads((tmp_path / "world.json").read_text())
-        assert world["nodes"]["creature:guard"]["data"]["hp_current"] == 6
+        assert world["nodes"]["creature:guard"]["data"]["hp_current"] == 2
 
     def test_damage_spell_persists_creature_hp(self, tmp_path, monkeypatch):
         _write_world(

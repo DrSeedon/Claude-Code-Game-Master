@@ -47,7 +47,7 @@ class TestWizardPrompt:
 class TestWizardToolSchemas:
     def test_schemas_count(self):
         schemas = get_wizard_tool_schemas()
-        assert len(schemas) == 2
+        assert len(schemas) == 3
 
     def test_show_choices_schema(self):
         schemas = get_wizard_tool_schemas()
@@ -63,6 +63,16 @@ class TestWizardToolSchemas:
         assert "name" in create["input_schema"]["properties"]
         assert "character_name" in create["input_schema"]["properties"]
         assert set(create["input_schema"]["required"]) == {"name", "character_name"}
+
+    def test_save_template_schema(self):
+        schemas = get_wizard_tool_schemas()
+        save = next(
+            schema
+            for schema in schemas
+            if schema["name"] == "save_campaign_template"
+        )
+        assert set(save["input_schema"]["required"]) == {"id", "name"}
+        assert "modules" in save["input_schema"]["properties"]
 
     def test_show_choices_control_types(self):
         schemas = get_wizard_tool_schemas()
@@ -107,6 +117,41 @@ class TestCampaignCreation:
             world = json.loads((campaigns_dir / "char-test" / "world.json").read_text())
             assert "player:active" in world["nodes"]
             assert world["nodes"]["player:active"]["name"] == "Hero"
+
+    def test_create_campaign_applies_saved_template(self, temp_world_state):
+        from backend.campaign_templates import save_campaign_template
+
+        root, campaigns_dir, _ = temp_world_state
+        save_campaign_template(
+            {
+                "id": "fleet-command",
+                "name": "Fleet Command",
+                "genre": "military-sci-fi",
+                "tone": "serious",
+                "modules": ["mass-combat"],
+                "narrator_style": "serious-cinematic",
+                "rules": "Command a fleet.",
+                "character_name": "Admiral Vale",
+                "character_class": "Fleet Commander",
+            },
+            root,
+        )
+
+        with patch("backend.campaign_api.get_project_root", return_value=root):
+            result = create_campaign(
+                name="from-template",
+                template_id="fleet-command",
+            )
+
+        assert result["success"] is True
+        overview = json.loads(
+            (campaigns_dir / "from-template" / "campaign-overview.json").read_text()
+        )
+        assert overview["modules"] == {"mass-combat": True}
+        assert overview["template_id"] == "fleet-command"
+        assert "Command a fleet." in (
+            campaigns_dir / "from-template" / "campaign-rules.md"
+        ).read_text()
 
     def test_create_campaign_duplicate(self, temp_world_state):
         root, _, _ = temp_world_state
@@ -167,7 +212,7 @@ class TestCampaignCreation:
 
 class TestWizardMCPTools:
     """The wizard MCP is in-process: tools push onto WizardEvents, drained by the
-    /ws/wizard handler. build_wizard_mcp registers the three tools with the SDK."""
+    /ws/wizard handler. build_wizard_mcp registers all wizard tools with the SDK."""
 
     def test_build_wizard_mcp_config(self):
         from backend.wizard_mcp import WizardEvents, build_wizard_mcp
@@ -278,6 +323,28 @@ class TestWizardMCPTools:
         asyncio.run(self._invoke(cfg, "clear_choices", {}))
         out = ev.drain()
         assert out[0]["type"] == "clear_choices"
+
+    def test_save_template_persists_and_pushes_event(self, tmp_path):
+        import asyncio
+        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
+
+        ev = WizardEvents()
+        cfg = build_wizard_mcp(ev)
+        with patch(
+            "backend.campaign_templates.get_project_root",
+            return_value=tmp_path,
+        ):
+            asyncio.run(self._invoke(cfg, "save_campaign_template", {
+                "id": "saved-setup",
+                "name": "Saved Setup",
+                "modules": ["mass-combat"],
+            }))
+
+        out = ev.drain()
+        assert out[0]["type"] == "template_saved"
+        assert out[0]["success"] is True
+        saved = tmp_path / "world-state" / "campaign-templates" / "saved-setup.json"
+        assert saved.exists()
 
     def test_create_campaign_optional_fields(self, tmp_path):
         """Only name + character_name are required — the DM must not have to supply
