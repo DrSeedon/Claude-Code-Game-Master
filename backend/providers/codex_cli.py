@@ -174,6 +174,17 @@ def normalize_codex_event(payload: Mapping[str, Any]) -> list[AgentEvent]:
             return [_tool_use(name, args, item_id)]
         if item_type == "webSearch":
             return [_tool_use("WebSearch", str(item.get("query") or ""), item_id)]
+        if item_type == "imageGeneration":
+            return [
+                _tool_use(
+                    "ImageGeneration",
+                    json.dumps(
+                        {"status": str(item.get("status") or "started")},
+                        ensure_ascii=False,
+                    ),
+                    item_id,
+                )
+            ]
         if item_type == "contextCompaction":
             return [AgentEvent("activity", "Codex is compacting the conversation context")]
         return []
@@ -237,6 +248,36 @@ def normalize_codex_event(payload: Mapping[str, Any]) -> list[AgentEvent]:
                     {"tool_use_id": item_id},
                 )
             ]
+        if item_type == "imageGeneration":
+            status = str(item.get("status") or "")
+            saved_path = str(item.get("savedPath") or "")
+            result = str(item.get("result") or "")
+            revised_prompt = str(item.get("revisedPrompt") or "")
+            events = [
+                AgentEvent(
+                    "tool_result",
+                    json.dumps(
+                        {
+                            "status": status,
+                            "generated": bool(saved_path or result),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    {"tool_use_id": item_id, "is_error": status == "failed"},
+                )
+            ]
+            if status != "failed" and (saved_path or result.startswith("data:image/")):
+                metadata = {
+                    "tool_use_id": item_id,
+                    "source_path": saved_path,
+                    "alt": "Cinematic campaign scene",
+                }
+                if result.startswith("data:image/"):
+                    metadata["data_url"] = result
+                if revised_prompt:
+                    metadata["revised_prompt"] = revised_prompt
+                events.append(AgentEvent("image", "", metadata))
+            return events
         if item_type == "error":
             return [AgentEvent("error", str(item.get("message") or "Codex item failed"))]
         return []
@@ -441,14 +482,30 @@ class CodexCLIProvider:
                 "approvalPolicy": "never",
                 "sandbox": self.sandbox,
             }
-            if system_prompt:
-                params["developerInstructions"] = system_prompt
             if self._thread_id:
                 params["threadId"] = self._thread_id
                 method = "thread/resume"
             else:
+                if system_prompt:
+                    params["developerInstructions"] = system_prompt
                 method = "thread/start"
-            result = await asyncio.wait_for(self._request(method, params), timeout=30)
+            try:
+                result = await asyncio.wait_for(
+                    self._request(method, params),
+                    timeout=30,
+                )
+            except CodexProtocolError:
+                if method != "thread/resume":
+                    raise
+                stale_thread_id = self._thread_id
+                logger.warning(
+                    "Codex thread %s could not be resumed; starting with transcript handoff",
+                    stale_thread_id,
+                )
+                self._thread_id = None
+                await self.close()
+                await self._connect(system_prompt, mcp_servers)
+                return
             thread = result.get("thread") or {}
             thread_id = thread.get("id") if isinstance(thread, Mapping) else None
             if not thread_id:
@@ -624,6 +681,7 @@ class CodexCLIProvider:
 
     async def _read_stdout(self) -> None:
         process = self._proc
+        notifications = self._notifications
         if not process or not process.stdout:
             return
         try:
@@ -665,7 +723,7 @@ class CodexCLIProvider:
                             future.set_result(message.get("result") or {})
                     continue
                 if message.get("method"):
-                    await self._notifications.put(message)
+                    await notifications.put(message)
         except asyncio.CancelledError:
             return
         except Exception as exc:
@@ -676,8 +734,8 @@ class CodexCLIProvider:
             for future in self._pending_requests.values():
                 if not future.done():
                     future.set_exception(failure)
-            if not self._disconnecting:
-                await self._notifications.put(
+            if not self._disconnecting and process is self._proc:
+                await notifications.put(
                     {
                         "method": "_process/exited",
                         "params": {
@@ -781,6 +839,8 @@ class CodexCLIProvider:
         process = self._proc
         if process is None:
             return
+        reader_task = self._reader_task
+        stderr_task = self._stderr_task
         self._disconnecting = True
         if self._active_turn_id and process.returncode is None:
             await self.interrupt()
@@ -791,9 +851,17 @@ class CodexCLIProvider:
             except asyncio.TimeoutError:
                 process.kill()
                 await process.wait()
-        for task in (self._reader_task, self._stderr_task):
-            if task and not task.done():
+        current_task = asyncio.current_task()
+        tasks = [
+            task
+            for task in (reader_task, stderr_task)
+            if task and task is not current_task
+        ]
+        for task in tasks:
+            if not task.done():
                 task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         for future in self._pending_requests.values():
             if not future.done():
                 future.set_exception(RuntimeError("Codex app-server disconnected"))

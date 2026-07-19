@@ -31,12 +31,19 @@ from backend.campaign_api import (
     delete_campaign,
 )
 from backend.event_log import append_event, read_current_session_events
-from backend.game_session import get_or_create_session, get_runtime_registry, peek_session
+from backend.game_session import (
+    close_all_sessions,
+    get_or_create_session,
+    get_runtime_registry,
+    peek_session,
+)
 from backend.live_broker import broker
+from backend.media import resolve_campaign_media
+from backend.cinematic_mcp import build_cinematic_mcp
 from backend.campaign_views import get_campaign_views
 from backend.map_view import get_map_snapshot
 from backend.wizard_prompt import load_wizard_system_prompt
-from backend.runtime import ProviderBuildContext
+from backend.runtime import ProviderBuildContext, clear_runtime_session
 from backend.wizard_mcp import (
     WizardEvents,
     build_wizard_mcp,
@@ -56,7 +63,10 @@ async def lifespan(_app: FastAPI):
         print(f"Active campaign: {config.campaign_name}")
     else:
         print("No active campaign loaded")
-    yield
+    try:
+        yield
+    finally:
+        await close_all_sessions()
 
 
 app = FastAPI(
@@ -256,6 +266,7 @@ async def api_reset_session(name: str):
     campaign_dir = _campaign_path(name)
     session = peek_session(name)
     if session is None:
+        clear_runtime_session(campaign_dir)
         boundary = append_event(campaign_dir, "session_reset", "")
         reset = False
     else:
@@ -307,6 +318,18 @@ async def api_campaign_views(name: str):
 @app.get("/api/campaigns/{name}/map")
 async def api_campaign_map(name: str):
     return get_map_snapshot(_campaign_path(name))
+
+
+@app.get("/api/campaigns/{name}/media/{filename}")
+async def api_campaign_media(name: str, filename: str):
+    try:
+        path = resolve_campaign_media(_campaign_path(name), filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Campaign image not found") from exc
+    return FileResponse(
+        path,
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 @app.delete("/api/campaigns/{name}", status_code=200)
@@ -752,6 +775,11 @@ async def game_websocket(websocket: WebSocket):
         await websocket.close(code=1008)
         return
 
+    game_mcp = (
+        {"cinematic": build_cinematic_mcp(config.project_root, campaign)}
+        if requested_runtime == "claude"
+        else None
+    )
     queue = broker.subscribe(campaign)
     try:
         # Subscribe before replay so events emitted while a large history is sent
@@ -775,7 +803,7 @@ async def game_websocket(websocket: WebSocket):
                 queue_task.cancel()
                 user_message = receive_task.result()
                 print(f"📩 [{campaign}] Received message: {user_message[:50]}...")
-                if not session.send(user_message, system_prompt):
+                if not session.send(user_message, system_prompt, mcp_servers=game_mcp):
                     await websocket.send_text(json.dumps(
                         {"type": "error", "content": "A turn is already in progress"}, ensure_ascii=False
                     ))

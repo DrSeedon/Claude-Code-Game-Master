@@ -10,6 +10,12 @@ from backend.runtime.registry import (
     RuntimeRegistry,
     create_default_registry,
 )
+from backend.runtime.session_store import (
+    RuntimeSessionState,
+    clear_runtime_session,
+    load_runtime_session,
+    save_runtime_session,
+)
 
 __all__ = [
     "AgentEvent",
@@ -21,4 +27,8 @@ __all__ = [
     "RuntimeDefinition",
     "RuntimeRegistry",
     "create_default_registry",
+    "RuntimeSessionState",
+    "clear_runtime_session",
+    "load_runtime_session",
+    "save_runtime_session",
 ]

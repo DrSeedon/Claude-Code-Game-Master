@@ -50,6 +50,7 @@ class FakeAppServerProcess:
         turn_error=None,
         usage=None,
         exit_after_turn_start=False,
+        reject_resume=False,
     ):
         self.stdout = QueueStream()
         self.stderr = QueueStream()
@@ -65,6 +66,7 @@ class FakeAppServerProcess:
             "outputTokens": 20,
         }
         self.exit_after_turn_start = exit_after_turn_start
+        self.reject_resume = reject_resume
         self.requests = []
         self.terminated = False
         self.killed = False
@@ -88,6 +90,12 @@ class FakeAppServerProcess:
             self._response(request, {"userAgent": "fake-app-server"})
             return
         if method in {"thread/start", "thread/resume"}:
+            if method == "thread/resume" and self.reject_resume:
+                self._response(
+                    request,
+                    error={"code": -32000, "message": "thread not found"},
+                )
+                return
             self._response(request, {"thread": {"id": self.thread_id}})
             self.stdout.feed_json(
                 {
@@ -291,6 +299,55 @@ def test_normalizes_core_app_server_events():
     assert delta[0].type == "text_delta"
 
 
+def test_normalizes_native_image_generation_event():
+    events = normalize_codex_event(
+        {
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "id": "image-1",
+                    "type": "imageGeneration",
+                    "status": "completed",
+                    "savedPath": "/tmp/generated.png",
+                    "revisedPrompt": "A sealed industrial lift",
+                }
+            },
+        }
+    )
+
+    assert [event.type for event in events] == ["tool_result", "image"]
+    assert events[1].metadata["source_path"] == "/tmp/generated.png"
+    assert events[1].metadata["tool_use_id"] == "image-1"
+
+
+def test_close_does_not_leak_old_process_exit_into_reconnect(tmp_path):
+    processes = [FakeAppServerProcess(thread_id="thread-1"), FakeAppServerProcess(thread_id="thread-1")]
+
+    async def factory(*_command, **_options):
+        return processes.pop(0)
+
+    provider = CodexCLIProvider(
+        tmp_path,
+        resume_thread_id="thread-1",
+        process_factory=factory,
+    )
+
+    async def scenario():
+        await provider._connect("system", None)
+        await provider.close()
+        await provider._connect("system", None)
+        try:
+            queued = list(provider._notifications._queue)
+            assert all(
+                message.get("method") != "_process/exited"
+                for message in queued
+            )
+        finally:
+            await provider.close()
+
+    asyncio.run(scenario())
+
+
 def test_new_turn_uses_persistent_app_server_and_safe_sandbox(tmp_path):
     calls = []
     process = FakeAppServerProcess()
@@ -366,6 +423,38 @@ def test_second_turn_reuses_process_and_thread(tmp_path):
     assert len(calls) == 1
     assert sum(r.get("method") == "thread/resume" for r in process.requests) == 1
     assert sum(r.get("method") == "turn/start" for r in process.requests) == 2
+    resume = next(
+        request for request in process.requests if request.get("method") == "thread/resume"
+    )
+    assert "developerInstructions" not in resume["params"]
+
+
+def test_stale_resume_starts_fresh_thread_with_handoff_prompt(tmp_path):
+    stale = FakeAppServerProcess(
+        thread_id="thread-stale",
+        reject_resume=True,
+    )
+    fresh = FakeAppServerProcess(thread_id="thread-fresh")
+    processes = [stale, fresh]
+
+    async def factory(*_command, **_options):
+        return processes.pop(0)
+
+    provider = CodexCLIProvider(
+        tmp_path,
+        resume_thread_id="thread-stale",
+        process_factory=factory,
+    )
+    events = collect(
+        provider,
+        system_prompt="SYSTEM\n<provider_handoff>recent scene</provider_handoff>",
+    )
+
+    assert events[-1].metadata["session_id"] == "thread-fresh"
+    start = next(
+        request for request in fresh.requests if request.get("method") == "thread/start"
+    )
+    assert "recent scene" in start["params"]["developerInstructions"]
 
 
 def test_mcp_servers_use_dotted_config_without_exposing_unsafe_names(tmp_path):

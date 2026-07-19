@@ -9,8 +9,12 @@ import pytest
 
 import backend.game_session as game_session_module
 from backend.event_log import append_event, read_events
-from backend.game_session import GameSession, get_or_create_session
-from backend.runtime import AgentEvent
+from backend.game_session import GameSession, close_all_sessions, get_or_create_session
+from backend.runtime import (
+    AgentEvent,
+    load_runtime_session,
+    save_runtime_session,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +80,26 @@ def test_get_or_create_session_different_campaigns_are_isolated(tmp_path):
     assert b.provider.campaign_name == "camp-b"
 
 
+def test_server_shutdown_closes_all_campaign_providers(tmp_path):
+    first = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
+    second = get_or_create_session("camp-b", tmp_path, "claude-sonnet-5")
+    closed = []
+
+    async def close_first():
+        closed.append("camp-a")
+
+    async def close_second():
+        closed.append("camp-b")
+
+    first.provider.close = close_first
+    second.provider.close = close_second
+
+    asyncio.run(close_all_sessions())
+
+    assert set(closed) == {"camp-a", "camp-b"}
+    assert game_session_module._sessions == {}
+
+
 def test_provider_process_environment_is_campaign_scoped(tmp_path):
     session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
 
@@ -86,6 +110,74 @@ def test_provider_process_environment_is_campaign_scoped(tmp_path):
     assert options.env["DM_ACTIVE_CAMPAIGN"] == "camp-a"
     assert options.env["NO_COLOR"] == "1"
     assert options.env["TERM"] == "dumb"
+
+
+def test_restart_resumes_exact_runtime_and_model_session(tmp_path):
+    campaign_dir = tmp_path / "world-state" / "campaigns" / "camp-a"
+    save_runtime_session(
+        campaign_dir,
+        runtime_id="codex",
+        model_name="gpt-5.6-luna",
+        session_id="thread-before-restart",
+    )
+
+    session = GameSession(
+        "camp-a",
+        tmp_path,
+        "gpt-5.6-luna",
+        runtime_id="codex",
+    )
+
+    assert session.provider.session_id == "thread-before-restart"
+    assert session._persisted_session_id == "thread-before-restart"
+
+
+def test_restart_prepares_transcript_fallback_for_stale_resume(tmp_path):
+    campaign_dir = tmp_path / "world-state" / "campaigns" / "camp-a"
+    append_event(campaign_dir, "user_message", "Where are we?")
+    append_event(campaign_dir, "text", "At the sealed lift on S-0.")
+
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+
+    assert "PLAYER: Where are we?" in session._history_handoff
+    assert "GAME MASTER: At the sealed lift on S-0." in session._history_handoff
+
+
+def test_provider_session_id_is_persisted_after_turn(tmp_path):
+    session = GameSession(
+        "camp-a",
+        tmp_path,
+        "gpt-5.6-luna",
+        runtime_id="codex",
+    )
+    session.provider._thread_id = "thread-after-turn"
+    session.provider.process_message = _fake_events
+
+    async def scenario():
+        assert session.send("continue", "system prompt")
+        await session._turn_task
+
+    asyncio.run(scenario())
+
+    stored = load_runtime_session(session.campaign_dir)
+    assert stored is not None
+    assert stored.runtime_id == "codex"
+    assert stored.model_name == "gpt-5.6-luna"
+    assert stored.session_id == "thread-after-turn"
+
+
+def test_reset_clears_persisted_provider_session(tmp_path):
+    session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
+    save_runtime_session(
+        session.campaign_dir,
+        runtime_id="claude",
+        model_name="claude-sonnet-5",
+        session_id="session-old",
+    )
+
+    asyncio.run(session.reset_session())
+
+    assert load_runtime_session(session.campaign_dir) is None
 
 
 def test_send_starts_turn_and_marks_running(tmp_path):

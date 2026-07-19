@@ -101,8 +101,19 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
     # campaign menu / list. Without this the DM treats every turn as a fresh boot.
     campaign_context = _campaign_context(project_root, campaign_name) if campaign_name else ""
 
+    # Step 5: Provider-neutral cinematic contract. Codex has native image
+    # generation; Claude receives the equivalent in-process MCP tool.
+    cinematic_context = (
+        _cinematic_context(project_root, campaign_name)
+        if campaign_name
+        else ""
+    )
+
     # Combine prompts
-    system_prompt = f"{dm_rules}\n{narrator_style}\n{campaign_rules}\n{campaign_context}"
+    system_prompt = (
+        f"{dm_rules}\n{narrator_style}\n{campaign_rules}\n"
+        f"{campaign_context}\n{cinematic_context}"
+    )
 
     # Ensure we return something meaningful
     if len(system_prompt.strip()) < 100:
@@ -163,3 +174,54 @@ def _campaign_context(project_root: Path, campaign_name: str) -> str:
         "do NOT list campaigns, do NOT ask which campaign to play, do NOT run any campaign-selection flow.",
     ]
     return "\n---\n" + "\n".join(lines) + "\n"
+
+
+def _cinematic_context(project_root: Path, campaign_name: str) -> str:
+    """Return the shared scene-art skill plus this campaign's visual policy."""
+
+    skill_path = project_root / "codex-skills" / "cinematic-scene" / "SKILL.md"
+    if not skill_path.exists():
+        return ""
+
+    config: dict = {}
+    overview_path = (
+        project_root
+        / "world-state"
+        / "campaigns"
+        / campaign_name
+        / "campaign-overview.json"
+    )
+    try:
+        overview = json.loads(overview_path.read_text(encoding="utf-8"))
+        raw_config = overview.get("cinematic_visuals")
+        if isinstance(raw_config, dict):
+            config = raw_config
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+
+    enabled = config.get("enabled") is True
+    frequency = str(config.get("frequency") or "explicit-only")
+    aspect_ratio = str(config.get("aspect_ratio") or "16:9")
+    presentation = str(config.get("presentation") or "game-loading-screen")
+    automatic_policy = (
+        "Automatic major-beat images are enabled."
+        if enabled
+        else "Automatic images are disabled; generate only when the player explicitly asks."
+    )
+    runtime_contract = f"""---
+# Cinematic Scene Runtime
+
+- {automatic_policy}
+- Frequency: {frequency}
+- Aspect ratio: {aspect_ratio}
+- Presentation: {presentation}
+- In Claude Agent SDK, call `mcp__cinematic__render_scene`.
+- In Codex app-server, use native image generation.
+- Invoke image generation as the final action of the turn.
+
+"""
+    try:
+        skill = skill_path.read_text(encoding="utf-8")
+    except OSError:
+        return runtime_contract
+    return runtime_contract + skill + "\n"

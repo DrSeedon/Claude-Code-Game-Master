@@ -1,7 +1,7 @@
 """Tests for load_system_prompt — the DM system prompt must contain the DnD rules
 for the campaign being played (regression: it used to return only a narrator style)."""
 
-from backend.claude_dm import load_system_prompt
+from backend.claude_dm import _cinematic_context, load_system_prompt
 
 
 def test_prompt_contains_dnd_rules_for_campaign():
@@ -59,6 +59,181 @@ def test_prompt_has_current_campaign_context(tmp_path):
     assert "Current Campaign" in ctx
     assert "sci-fi" in ctx
     assert "do NOT list campaigns" in ctx
+
+
+def test_cinematic_context_exposes_provider_neutral_tool_contract(tmp_path):
+    import json
+
+    skill = tmp_path / "codex-skills" / "cinematic-scene" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("# Cinematic Scene\n\nGenerate a widescreen image.", encoding="utf-8")
+    campaign = tmp_path / "world-state" / "campaigns" / "space"
+    campaign.mkdir(parents=True)
+    (campaign / "campaign-overview.json").write_text(
+        json.dumps(
+            {
+                "cinematic_visuals": {
+                    "enabled": True,
+                    "frequency": "occasional",
+                    "aspect_ratio": "16:9",
+                    "presentation": "game-loading-screen",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    context = _cinematic_context(tmp_path, "space")
+
+    assert "Automatic major-beat images are enabled" in context
+    assert "`mcp__cinematic__render_scene`" in context
+    assert "native image generation" in context
+    assert "# Cinematic Scene" in context
+
+
+def test_claude_cinematic_tool_result_emits_clean_result_and_image(tmp_path):
+    from claude_agent_sdk.types import ToolResultBlock
+
+    from backend.cinematic_mcp import encode_cinematic_event
+    from backend.providers.claude_sdk import _tool_result_events
+
+    image = tmp_path / "frame.png"
+    marker = encode_cinematic_event(
+        {
+            "type": "image",
+            "source_path": str(image),
+            "alt": "Hangar reveal",
+        }
+    )
+    block = ToolResultBlock(
+        tool_use_id="tool-9",
+        content=marker + "\nCinematic image generated and published.",
+        is_error=False,
+    )
+
+    events = _tool_result_events(block)
+
+    assert [event.type for event in events] == ["tool_result", "image"]
+    assert "__DM_CINEMATIC_EVENT__" not in events[0].content
+    assert events[1].metadata["source_path"] == str(image)
+    assert events[1].metadata["alt"] == "Hangar reveal"
+
+
+def test_claude_stale_resume_retries_fresh_with_same_handoff_prompt(tmp_path):
+    import asyncio
+
+    from backend.providers.claude_sdk import ClaudeSDKProvider
+
+    class FakeClient:
+        async def query(self, _message):
+            return None
+
+        async def receive_messages(self):
+            if False:
+                yield None
+
+        async def disconnect(self):
+            return None
+
+    provider = ClaudeSDKProvider(
+        tmp_path,
+        resume_session_id="session-stale",
+    )
+    attempts = []
+
+    async def fake_connect(_model, system_prompt, _mcp):
+        attempts.append((provider.session_id, system_prompt))
+        if len(attempts) == 1:
+            raise RuntimeError("session id not found")
+        return FakeClient()
+
+    provider._connect = fake_connect
+
+    async def scenario():
+        return [
+            event
+            async for event in provider.process_message(
+                "continue",
+                "SYSTEM\n<provider_handoff>recent scene</provider_handoff>",
+                "claude-sonnet-5",
+            )
+        ]
+
+    assert asyncio.run(scenario()) == []
+    assert attempts == [
+        (
+            "session-stale",
+            "SYSTEM\n<provider_handoff>recent scene</provider_handoff>",
+        ),
+        (
+            None,
+            "SYSTEM\n<provider_handoff>recent scene</provider_handoff>",
+        ),
+    ]
+
+
+def test_claude_stream_publishes_cinematic_image_after_final_text(tmp_path):
+    import asyncio
+
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ResultMessage,
+        TextBlock,
+        UserMessage,
+    )
+    from claude_agent_sdk.types import ToolResultBlock
+
+    from backend.cinematic_mcp import encode_cinematic_event
+    from backend.providers.claude_sdk import ClaudeSDKProvider
+
+    marker = encode_cinematic_event(
+        {
+            "type": "image",
+            "source_path": str(tmp_path / "frame.png"),
+        }
+    )
+
+    class FakeClient:
+        async def receive_messages(self):
+            yield UserMessage(
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="tool-1",
+                        content=marker + "\nImage ready.",
+                        is_error=False,
+                    )
+                ]
+            )
+            yield AssistantMessage(
+                content=[TextBlock("Final acknowledgement.")],
+                model="claude-sonnet-5",
+            )
+            yield ResultMessage(
+                subtype="success",
+                duration_ms=10,
+                duration_api_ms=5,
+                is_error=False,
+                num_turns=1,
+                session_id="session-1",
+            )
+
+        async def get_context_usage(self):
+            return {}
+
+    provider = ClaudeSDKProvider(tmp_path)
+    provider._client = FakeClient()
+
+    async def scenario():
+        return [event async for event in provider._stream_events()]
+
+    events = asyncio.run(scenario())
+
+    assert [event.type for event in events] == [
+        "tool_result",
+        "text",
+        "image",
+        "turn_end",
+    ]
 
 
 def test_rate_limit_info_classifies():

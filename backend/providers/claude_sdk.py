@@ -16,10 +16,15 @@ from claude_agent_sdk import (
     TextBlock,
     ToolUseBlock,
     StreamEvent,
+    UserMessage,
 )
 from claude_agent_sdk.types import ToolResultBlock
 
 from backend.runtime.events import AgentEvent, ContextUsage
+from backend.cinematic_mcp import (
+    decode_cinematic_events,
+    strip_cinematic_events,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +60,17 @@ def _rate_limit_info(err: Exception) -> Optional[dict]:
     return out
 
 
+def _is_stale_resume_error(err: Exception) -> bool:
+    """Return whether Claude rejected a persisted conversation identifier."""
+
+    message = str(err).lower()
+    missing = ("not found", "does not exist", "unknown", "invalid", "expired")
+    return (
+        ("session id" in message or "resume" in message or "conversation" in message)
+        and any(signal in message for signal in missing)
+    )
+
+
 def _extract_tool_result(block: ToolResultBlock) -> str:
     raw = getattr(block, "content", "")
     if isinstance(raw, list):
@@ -62,6 +78,58 @@ def _extract_tool_result(block: ToolResultBlock) -> str:
     if isinstance(raw, dict):
         return raw.get("text", str(raw))
     return str(raw)
+
+
+def _tool_result_events(block: ToolResultBlock) -> list[AgentEvent]:
+    raw = _extract_tool_result(block)
+    clean = strip_cinematic_events(raw)
+    metadata = {
+        "tool_use_id": str(getattr(block, "tool_use_id", "") or ""),
+        "is_error": bool(block.is_error),
+    }
+    events = [
+        AgentEvent(
+            "tool_result",
+            clean or "Cinematic image generated and published.",
+            metadata,
+        )
+    ]
+    for image in decode_cinematic_events(raw):
+        if image.get("type") != "image" or not image.get("source_path"):
+            continue
+        events.append(
+            AgentEvent(
+                "image",
+                "",
+                {
+                    "tool_use_id": metadata["tool_use_id"],
+                    "source_path": str(image["source_path"]),
+                    "alt": str(image.get("alt") or "Cinematic campaign scene"),
+                },
+            )
+        )
+
+    content = block.content if isinstance(block.content, list) else []
+    for item in content:
+        if not isinstance(item, Mapping) or item.get("type") != "image":
+            continue
+        source = item.get("source") or {}
+        if not isinstance(source, Mapping):
+            continue
+        if source.get("type") == "base64" and source.get("data"):
+            media_type = str(source.get("media_type") or "image/png")
+            events.append(
+                AgentEvent(
+                    "image",
+                    "",
+                    {
+                        "tool_use_id": metadata["tool_use_id"],
+                        "data_url": f"data:{media_type};base64,{source['data']}",
+                        "alt": "Cinematic campaign scene",
+                    },
+                )
+            )
+    return events
 
 
 def _context_usage_from_sdk(raw: Mapping[str, object]) -> ContextUsage:
@@ -141,11 +209,14 @@ class ClaudeSDKProvider:
             options.mcp_servers = mcp_servers
             mcp_tool_names = []
             for server_name in mcp_servers:
-                mcp_tool_names.extend([
-                    f"mcp__{server_name}__show_choices",
-                    f"mcp__{server_name}__clear_choices",
-                    f"mcp__{server_name}__create_campaign",
-                ])
+                if server_name == "wizard":
+                    mcp_tool_names.extend([
+                        f"mcp__{server_name}__show_choices",
+                        f"mcp__{server_name}__clear_choices",
+                        f"mcp__{server_name}__create_campaign",
+                    ])
+                elif server_name == "cinematic":
+                    mcp_tool_names.append("mcp__cinematic__render_scene")
             options.allowed_tools = mcp_tool_names
         return options
 
@@ -175,6 +246,7 @@ class ClaudeSDKProvider:
         max_failures = 3
 
         while True:
+            resume_attempt = self._client is None and bool(self._session_id)
             try:
                 if self._client is None:
                     self._client = await self._connect(model_name, system_prompt, mcp_servers)
@@ -186,6 +258,14 @@ class ClaudeSDKProvider:
                 consecutive_failures += 1
                 logger.error(f"SDK turn failed (attempt {consecutive_failures}/{max_failures}): {e}", exc_info=True)
                 await self._disconnect()
+                if resume_attempt and _is_stale_resume_error(e):
+                    logger.warning(
+                        "Claude session %s could not be resumed; starting with transcript handoff",
+                        self._session_id,
+                    )
+                    self._session_id = None
+                    consecutive_failures = 0
+                    continue
                 rl = _rate_limit_info(e)
                 if rl is not None:
                     # Rate / session limit — retrying won't help within the window.
@@ -200,6 +280,7 @@ class ClaudeSDKProvider:
                 await asyncio.sleep(2)
 
     async def _stream_events(self) -> AsyncGenerator[AgentEvent, None]:
+        pending_images: list[AgentEvent] = []
         async for msg in self._client.receive_messages():
             if isinstance(msg, StreamEvent):
                 ev = msg.event or {}
@@ -230,16 +311,19 @@ class ClaudeSDKProvider:
                             },
                         )
                     elif isinstance(block, ToolResultBlock):
-                        yield AgentEvent(
-                            "tool_result",
-                            _extract_tool_result(block),
-                            {
-                                "tool_use_id": str(
-                                    getattr(block, "tool_use_id", "") or ""
-                                ),
-                                "is_error": bool(block.is_error),
-                            },
-                        )
+                        for event in _tool_result_events(block):
+                            if event.type == "image":
+                                pending_images.append(event)
+                            else:
+                                yield event
+            elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, ToolResultBlock):
+                        for event in _tool_result_events(block):
+                            if event.type == "image":
+                                pending_images.append(event)
+                            else:
+                                yield event
             elif isinstance(msg, ResultMessage):
                 if msg.session_id:
                     self._session_id = msg.session_id
@@ -261,6 +345,12 @@ class ClaudeSDKProvider:
                         logger.debug("Claude context breakdown unavailable: %s", exc)
                 if msg.is_error and msg.result:
                     yield AgentEvent("error", msg.result)
+                # Claude often adds a final acknowledgement after an MCP tool
+                # result. Publish cinematic frames only after that text so the
+                # image remains the final visible story beat.
+                for image in pending_images:
+                    yield image
+                pending_images.clear()
                 yield AgentEvent(
                     "turn_end",
                     "Turn completed" if not msg.is_error else "Turn failed",

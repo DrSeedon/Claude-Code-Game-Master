@@ -604,6 +604,33 @@ function addDmMessage(content, timestamp = null) {
   trimMessages(); maybeAutoScroll();
 }
 
+function addImageMessage(content, metadata = {}, timestamp = null) {
+  const url = String(metadata.url || '');
+  if (!url.startsWith('/api/campaigns/')) {
+    addError(ui('Получен небезопасный адрес изображения.', 'Unsafe image URL received.'), timestamp);
+    return;
+  }
+  removeChatStart();
+  const wrap = document.createElement('figure');
+  wrap.className = 'msg msg-dm msg-image';
+  wrap.innerHTML = '<div class="msg-role">DM · CINEMATIC</div>';
+  const link = document.createElement('a');
+  link.className = 'cinematic-frame';
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  const image = document.createElement('img');
+  image.src = url;
+  image.alt = content || ui('Кинематографический кадр сцены', 'Cinematic scene frame');
+  image.loading = 'lazy';
+  image.decoding = 'async';
+  link.appendChild(image);
+  wrap.appendChild(link);
+  addBubbleTime(wrap, timestamp);
+  insertBeforeStream(wrap);
+  trimMessages(); maybeAutoScroll();
+}
+
 function toolIcon(name) {
   const short = String(name || '').split('__').pop();
   if (/bash|shell|command/i.test(short)) return '›_';
@@ -1265,6 +1292,11 @@ function handleEvent(data) {
       addActivity(data.content, data.metadata || {}, data.timestamp);
       break;
 
+    case 'image':
+      if (stream.active) { const t = finalizeStream(); if (t.trim()) addDmMessage(t); }
+      addImageMessage(data.content, data.metadata || {}, data.timestamp);
+      break;
+
     case 'error':
       resetStream();
       setGenerating(false);
@@ -1335,6 +1367,7 @@ function renderHistory(messages) {
     if (state.localEcho.has(`${role}:${m.content}`)) continue;
     if (m.type === 'user_message') addUserMessage(m.content, m.timestamp);
     else if (m.type === 'activity') addActivity(m.content, m.metadata || {}, m.timestamp);
+    else if (m.type === 'image') addImageMessage(m.content, m.metadata || {}, m.timestamp);
     else if (m.type === 'error') addError(m.content, m.timestamp);
     else addDmMessage(m.content, m.timestamp);  // 'text'
   }

@@ -263,3 +263,36 @@ def test_two_campaigns_stream_independently(client, tmp_path, sent):
     assert ("camp-b", "b says hi") in sent
     # No interference: session registry keeps them as distinct GameSession instances
     assert game_session_module._sessions["camp-a"] is not game_session_module._sessions["camp-b"]
+
+
+def test_claude_game_websocket_receives_cinematic_mcp(client, tmp_path, monkeypatch):
+    _campaign_dir(tmp_path, "camp-a")
+    captured = {}
+
+    def fake_send(self, user_message, system_prompt, mcp_servers=None):
+        captured["mcp_servers"] = mcp_servers
+        return True
+
+    monkeypatch.setattr(game_session_module.GameSession, "send", fake_send)
+
+    with client.websocket_connect(
+        "/ws/game?campaign=camp-a&provider=claude&model=claude-sonnet-5"
+    ) as ws:
+        ws.send_text("show the hangar")
+
+    assert set(captured["mcp_servers"]) == {"cinematic"}
+
+
+def test_generated_campaign_media_endpoint(client, tmp_path):
+    from backend.media import store_generated_image
+
+    campaign_dir = _campaign_dir(tmp_path, "camp-a")
+    source = tmp_path / "frame.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\ncampaign-frame")
+    published = store_generated_image(campaign_dir, source_path=source)
+
+    response = client.get(f"/api/campaigns/camp-a/media/{published.filename}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content == source.read_bytes()
