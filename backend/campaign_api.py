@@ -11,12 +11,6 @@ from typing import Dict, List, Optional
 
 from backend.config import get_project_root
 from backend.campaign_templates import get_campaign_template
-from backend.campaign_setup import (
-    CampaignSetupError,
-    apply_campaign_setup,
-    campaign_readiness_errors,
-    validate_campaign_setup,
-)
 from lib.campaign_context import (
     InvalidCampaignName,
     resolve_campaign_dir,
@@ -134,12 +128,12 @@ def create_campaign(
     rules: str = "",
     character: Optional[dict] = None,
     template_id: str = "",
-    setup: Optional[dict] = None,
-    require_ready: bool = False,
 ) -> Dict:
-    """Create new campaign.
+    """Create a new campaign shell.
 
-    Creates campaign directory and basic campaign-overview.json.
+    Creates the campaign directory, world.json, and campaign-overview.json. The
+    wizard fills in world content (locations, NPCs, quests, player sheet)
+    afterwards with the ordinary dm-*.sh tools.
 
     Args:
         name: Stable campaign ID used as the directory name
@@ -152,8 +146,6 @@ def create_campaign(
         rules: Campaign rules template
         character: Character data for player node creation
         template_id: Optional built-in or user campaign template id
-        setup: Optional complete campaign blueprint from the web wizard
-        require_ready: Reject creation unless setup produces playable state
 
     Returns:
         Dict with created campaign info or error:
@@ -204,26 +196,6 @@ def create_campaign(
             }
 
     selected_modules = modules or []
-    if require_ready:
-        if not character or not str(character.get("name") or "").strip():
-            return {
-                "success": False,
-                "error": "A ready campaign requires a named player character",
-            }
-        if setup is None:
-            return {
-                "success": False,
-                "error": "A ready campaign requires a complete setup blueprint",
-            }
-        try:
-            validate_campaign_setup(
-                setup,
-                selected_modules,
-                project_root=project_root,
-            )
-        except CampaignSetupError as exc:
-            return {"success": False, "error": str(exc)}
-
     manager = CampaignManager(str(project_root / "world-state"))
     campaign_dir = manager.create(
         safe_name,
@@ -243,33 +215,6 @@ def create_campaign(
     )
     if campaign_dir is None:
         return {"success": False, "error": f"Campaign '{safe_name}' already exists"}
-
-    if setup is not None:
-        try:
-            apply_campaign_setup(
-                campaign_dir,
-                setup,
-                selected_modules,
-                character_name=str(character.get("name") or "Hero")
-                if character
-                else "Hero",
-            )
-            if require_ready:
-                readiness_errors = campaign_readiness_errors(
-                    campaign_dir,
-                    selected_modules,
-                    project_root=project_root,
-                )
-                if readiness_errors:
-                    raise CampaignSetupError(
-                        "Campaign is not ready: " + "; ".join(readiness_errors)
-                    )
-        except (CampaignSetupError, OSError, TypeError, ValueError) as exc:
-            shutil.rmtree(campaign_dir, ignore_errors=True)
-            return {
-                "success": False,
-                "error": f"Campaign setup failed: {exc}",
-            }
 
     overview = _read_campaign_overview(campaign_dir)
     campaign_id = campaign_dir.name

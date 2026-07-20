@@ -206,20 +206,10 @@ class ClaudeSDKProvider:
             options.system_prompt = system_prompt
 
         if mcp_servers:
+            # Register MCP servers but do NOT set allowed_tools. Under
+            # bypassPermissions every tool is granted; an allowlist would block
+            # the bash tools both the wizard and the DM rely on.
             options.mcp_servers = mcp_servers
-            mcp_tool_names = []
-            for server_name in mcp_servers:
-                if server_name == "wizard":
-                    mcp_tool_names.extend([
-                        f"mcp__{server_name}__show_choices",
-                        f"mcp__{server_name}__clear_choices",
-                        f"mcp__{server_name}__load_creation_rules",
-                        f"mcp__{server_name}__save_campaign_template",
-                        f"mcp__{server_name}__create_campaign",
-                    ])
-                elif server_name == "cinematic":
-                    mcp_tool_names.append("mcp__cinematic__render_scene")
-            options.allowed_tools = mcp_tool_names
         return options
 
     async def _connect(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeSDKClient:

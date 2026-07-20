@@ -1,23 +1,17 @@
-"""Campaign wizard tools shared by in-process and stdio MCP transports.
+"""Campaign wizard UI tools shared by in-process and stdio MCP transports.
 
-The DM calls these tools through the SDK's native in-process MCP
-(`create_sdk_mcp_server`) — no subprocess, no file polling. Each tool pushes a
+The wizard builds the campaign with ordinary bash tools (dm-campaign.sh,
+dm-location.sh, dm-npc.sh, ...). These MCP tools only drive the browser UI:
+`show_choices`/`clear_choices` control the sidebar, and `wizard_complete`
+signals the frontend that the campaign is ready to play. Each call pushes a
 structured event onto `WizardEvents`, which the /ws/wizard handler drains after
-the turn and forwards to the browser (show_choices / clear_choices /
-template_saved / wizard_complete). Mutating tools also perform the requested
-filesystem operation.
+the turn and forwards to the browser.
 """
 
 import json
-from copy import deepcopy
 from typing import Any, Dict, List
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
-from backend.campaign_setup import (
-    CAMPAIGN_SETUP_SCHEMA,
-    CampaignSetupError,
-    load_creation_context,
-)
 
 WIZARD_EVENT_PREFIX = "__DM_WIZARD_EVENT__"
 
@@ -31,7 +25,6 @@ class WizardEvents:
 
     def __init__(self) -> None:
         self._events: List[Dict[str, Any]] = []
-        self._creation_context: tuple[frozenset[str], str] | None = None
 
     def push(self, event: Dict[str, Any]) -> None:
         self._events.append(event)
@@ -41,28 +34,6 @@ class WizardEvents:
         out = self._events
         self._events = []
         return out
-
-    def mark_creation_context(
-        self,
-        modules: list[str],
-        template_id: str,
-    ) -> None:
-        """Remember the exact rules bundle loaded for this wizard session."""
-        self._creation_context = (
-            frozenset(str(module_id) for module_id in modules),
-            str(template_id or ""),
-        )
-
-    def creation_context_matches(
-        self,
-        modules: list[str],
-        template_id: str,
-    ) -> bool:
-        """Return whether creation uses the same inputs as the loaded rules."""
-        return self._creation_context == (
-            frozenset(str(module_id) for module_id in modules),
-            str(template_id or ""),
-        )
 
 
 def _ok(text: str) -> dict:
@@ -95,7 +66,7 @@ def decode_wizard_events(content: str) -> list[dict[str, Any]]:
 
 
 def run_wizard_tool(events: WizardEvents, name: str, args: Dict[str, Any]) -> str:
-    """Execute one wizard operation independently of MCP transport."""
+    """Execute one wizard UI operation independently of MCP transport."""
     if name == "show_choices":
         events.push({
             "type": "show_choices",
@@ -112,103 +83,28 @@ def run_wizard_tool(events: WizardEvents, name: str, args: Dict[str, Any]) -> st
         events.push({"type": "clear_choices"})
         return "Choices panel hidden."
 
-    if name == "save_campaign_template":
-        from backend.campaign_templates import save_campaign_template
-
-        result = save_campaign_template(args)
-        if result.get("success"):
-            template = result["template"]
-            events.push({
-                "type": "template_saved",
-                "template": {
-                    key: value
-                    for key, value in template.items()
-                    if key != "rules"
-                },
-                "success": True,
-            })
-            return (
-                f"Campaign template '{template['name']}' saved successfully."
-            )
-        error = result.get("error", "unknown error")
+    if name == "wizard_complete":
+        campaign_id = str(args.get("campaign_id") or "").strip()
+        if not campaign_id:
+            return "Error: wizard_complete requires a campaign_id."
+        display_name = str(args.get("display_name") or campaign_id)
         events.push({
-            "type": "template_saved",
-            "error": error,
-            "success": False,
-        })
-        return f"Error saving campaign template: {error}"
-
-    if name == "load_creation_rules":
-        try:
-            modules = args.get("modules") or []
-            template_id = args.get("template_id", "")
-            context = load_creation_context(
-                modules,
-                template_id,
-            )
-            events.mark_creation_context(modules, template_id)
-            return context
-        except CampaignSetupError as exc:
-            return f"Error loading campaign creation rules: {exc}"
-
-    if name != "create_campaign":
-        raise ValueError(f"unknown wizard tool: {name}")
-
-    from backend.campaign_api import create_campaign as _create
-
-    campaign_id = args.get("campaign_id", "")
-    display_name = args.get("display_name", "")
-    character_name = args.get("character_name", "")
-    modules = args.get("modules") or []
-    template_id = args.get("template_id", "")
-    if not events.creation_context_matches(modules, template_id):
-        error = (
-            "Creation rules must be loaded for the exact selected template and "
-            "module set before campaign creation"
-        )
-        events.push({"type": "create_campaign", "error": error, "success": False})
-        return f"Error creating campaign: {error}"
-    result = _create(
-        name=campaign_id,
-        display_name=display_name,
-        genre=args.get("genre", ""),
-        tone=args.get("tone", ""),
-        description=args.get("description", ""),
-        modules=modules,
-        narrator_style=args.get("narrator_style", ""),
-        rules=args.get("rules", ""),
-        template_id=template_id,
-        character={
-            "name": character_name,
-            "class": args.get("character_class", ""),
-            "race": args.get("character_race", ""),
-            "background": args.get("character_background", ""),
-        } if character_name else None,
-        setup=args.get("setup"),
-        require_ready=True,
-    )
-    if result.get("success"):
-        events.push({
-            "type": "create_campaign",
-            "campaign_id": result["id"],
-            "display_name": result.get("display_name", display_name),
-            "success": True,
+            "type": "wizard_complete",
+            "campaign_id": campaign_id,
+            "display_name": display_name,
         })
         return (
-            f"Campaign '{result.get('display_name', display_name)}' created "
-            f"successfully with id '{result['id']}'."
+            f"Campaign '{display_name}' is ready. The player can start playing."
         )
-    error = result.get("error", "unknown error")
-    events.push({"type": "create_campaign", "error": error, "success": False})
-    return f"Error creating campaign: {error}"
+
+    raise ValueError(f"unknown wizard tool: {name}")
 
 
 def build_wizard_mcp(events: "WizardEvents"):
     """Build an in-process MCP server config bound to `events`.
 
     Returns a McpSdkServerConfig to pass as mcp_servers={"wizard": <config>}.
-    Tool names become mcp__wizard__{show_choices,clear_choices,
-    load_creation_rules,save_campaign_template,create_campaign}.
+    Tool names become mcp__wizard__{show_choices,clear_choices,wizard_complete}.
     """
 
     @tool(
@@ -231,91 +127,21 @@ def build_wizard_mcp(events: "WizardEvents"):
         return _ok(run_wizard_tool(events, "clear_choices", args))
 
     @tool(
-        "load_creation_rules",
-        "Load authoritative CORE campaign/character creation rules plus only "
-        "the selected modules' creation rules. This is mandatory before "
-        "building the campaign blueprint.",
-        {
-            "type": "object",
-            "properties": {
-                "modules": {"type": "array", "items": {"type": "string"}},
-                "template_id": {"type": "string"},
-            },
-            "required": ["modules"],
-        },
+        "wizard_complete",
+        "Signal the frontend that the campaign is fully built and ready to play. "
+        "Call this once, after creating the campaign with bash tools and the "
+        "player confirms. campaign_id is the storage ID used with "
+        "dm-campaign.sh create; display_name is the human-readable title.",
+        {"campaign_id": str, "display_name": str},
     )
-    async def load_rules(args: Dict[str, Any]) -> dict:
-        return _ok(run_wizard_tool(events, "load_creation_rules", args))
-
-    @tool(
-        "save_campaign_template",
-        "Persist the current wizard configuration as a reusable user template "
-        "without creating a campaign.",
-        {
-            "type": "object",
-            "properties": {
-                "id": {"type": "string"},
-                "name": {"type": "string"},
-                "description": {"type": "string"},
-                "genres": {"type": "array", "items": {"type": "string"}},
-                "genre": {"type": "string"},
-                "tone": {"type": "string"},
-                "recommended_for": {"type": "string"},
-                "modules": {"type": "array", "items": {"type": "string"}},
-                "narrator_style": {"type": "string"},
-                "rules": {"type": "string"},
-                "character_name": {"type": "string"},
-                "character_class": {"type": "string"},
-                "character_background": {"type": "string"},
-            },
-            "required": ["id", "name"],
-        },
-    )
-    async def save_template(args: Dict[str, Any]) -> dict:
-        return _ok(run_wizard_tool(events, "save_campaign_template", args))
-
-    @tool(
-        "create_campaign",
-        "Validate and create a ready-to-play campaign after player confirmation. "
-        "campaign_id is a lowercase kebab-case storage ID; display_name is the "
-        "human title. A complete setup blueprint is mandatory.",
-        {
-            "type": "object",
-            "properties": {
-                "campaign_id": {"type": "string"},
-                "display_name": {"type": "string"},
-                "character_name": {"type": "string"},
-                "genre": {"type": "string"},
-                "tone": {"type": "string"},
-                "description": {"type": "string"},
-                "modules": {"type": "array", "items": {"type": "string"}},
-                "narrator_style": {"type": "string"},
-                "rules": {"type": "string"},
-                "template_id": {"type": "string"},
-                "character_class": {"type": "string"},
-                "character_race": {"type": "string"},
-                "character_background": {"type": "string"},
-                "setup": deepcopy(CAMPAIGN_SETUP_SCHEMA),
-            },
-            "required": [
-                "campaign_id",
-                "display_name",
-                "character_name",
-                "modules",
-                "setup",
-            ],
-        },
-    )
-    async def create_campaign(args: Dict[str, Any]) -> dict:
-        return _ok(run_wizard_tool(events, "create_campaign", args))
+    async def wizard_complete(args: Dict[str, Any]) -> dict:
+        return _ok(run_wizard_tool(events, "wizard_complete", args))
 
     return create_sdk_mcp_server(
         "wizard",
         tools=[
             show_choices,
             clear_choices,
-            load_rules,
-            save_template,
-            create_campaign,
+            wizard_complete,
         ],
     )

@@ -629,9 +629,7 @@ async def wizard_websocket(websocket: WebSocket):
                 "enabled_tools": [
                     "show_choices",
                     "clear_choices",
-                    "load_creation_rules",
-                    "save_campaign_template",
-                    "create_campaign",
+                    "wizard_complete",
                 ],
                 "default_tools_approval_mode": "approve",
                 "required": True,
@@ -655,29 +653,12 @@ async def wizard_websocket(websocket: WebSocket):
                 await send({"type": "show_choices", "data": event["data"]})
             elif event["type"] == "clear_choices":
                 await send({"type": "clear_choices"})
-            elif event["type"] == "create_campaign":
-                if event.get("success"):
-                    await send({
-                        "type": "wizard_complete",
-                        "campaign_id": event.get("campaign_id"),
-                        "display_name": event.get("display_name"),
-                    })
-                else:
-                    await send({
-                        "type": "error",
-                        "content": event.get("error", "Creation failed"),
-                    })
-            elif event["type"] == "template_saved":
-                if event.get("success"):
-                    await send({
-                        "type": "template_saved",
-                        "template": event.get("template", {}),
-                    })
-                else:
-                    await send({
-                        "type": "error",
-                        "content": event.get("error", "Template save failed"),
-                    })
+            elif event["type"] == "wizard_complete":
+                await send({
+                    "type": "wizard_complete",
+                    "campaign_id": event.get("campaign_id"),
+                    "display_name": event.get("display_name"),
+                })
 
     try:
         while True:

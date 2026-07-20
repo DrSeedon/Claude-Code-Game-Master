@@ -1356,10 +1356,6 @@ function handleEvent(data) {
     case 'wizard_complete':
       onWizardComplete(data.campaign_id || data.campaign_name, data.display_name);
       break;
-
-    case 'template_saved':
-      onTemplateSaved(data.template || {});
-      break;
   }
 }
 
@@ -2339,17 +2335,6 @@ async function showInitialWizardGreeting() {
   }
 }
 
-async function onTemplateSaved(template) {
-  if (template.id) {
-    state.wizardCatalogLoaded = false;
-    try { await loadWizardCatalog({ force: true }); } catch { /* Saved on disk; refresh can wait. */ }
-  }
-  addDmMessage(ui(
-    `💾 Шаблон «${template.name || template.id || 'без имени'}» сохранён в постоянный каталог.`,
-    `💾 Template “${template.name || template.id || 'unnamed'}” was saved to the persistent catalogue.`
-  ));
-}
-
 function sendWizard(text, meta) {
   const trimmed = (text || '').trim();
   if (!trimmed || state.connStatus !== 'connected' || state.generating) return;
@@ -2481,25 +2466,6 @@ function renderChoices(data) {
 
   const footer = document.createElement('div');
   footer.className = 'choices-footer';
-  if (String(data.step || '').toLowerCase().includes('confirm')) {
-    const save = document.createElement('button');
-    save.className = 'btn template-save-btn';
-    save.textContent = ui('💾 В шаблоны', '💾 Save template');
-    save.title = ui(
-      'Сохранить текущую конфигурацию без создания кампании',
-      'Save the current configuration without creating a campaign'
-    );
-    save.addEventListener('click', () => {
-      sendWizard(
-        ui(
-          'Сохрани текущую конфигурацию как постоянный шаблон кампании.',
-          'Save the current configuration as a persistent campaign template.'
-        ),
-        '[System: The player clicked “Save template”. Call save_campaign_template now; do not create the campaign.]'
-      );
-    });
-    footer.appendChild(save);
-  }
   const skip = document.createElement('button');
   skip.className = 'btn';
   skip.textContent = ui('Пропустить', 'Skip');

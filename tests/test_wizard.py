@@ -30,7 +30,14 @@ class TestWizardPrompt:
         prompt = load_wizard_system_prompt()
         assert "show_choices" in prompt
         assert "clear_choices" in prompt
-        assert "create_campaign" in prompt
+        assert "wizard_complete" in prompt
+
+    def test_prompt_drives_bash_creation(self):
+        prompt = load_wizard_system_prompt()
+        # Campaign is built with ordinary CLI tools, not a JSON blueprint.
+        assert "dm-campaign.sh" in prompt
+        assert "dm-npc.sh" in prompt
+        assert "dm-player.sh" in prompt
 
     def test_prompt_english_only(self):
         prompt = load_wizard_system_prompt()
@@ -47,7 +54,15 @@ class TestWizardPrompt:
 class TestWizardToolSchemas:
     def test_schemas_count(self):
         schemas = get_wizard_tool_schemas()
-        assert len(schemas) == 4
+        assert len(schemas) == 3
+
+    def test_schema_names(self):
+        schemas = get_wizard_tool_schemas()
+        assert {s["name"] for s in schemas} == {
+            "show_choices",
+            "clear_choices",
+            "wizard_complete",
+        }
 
     def test_show_choices_schema(self):
         schemas = get_wizard_tool_schemas()
@@ -57,39 +72,12 @@ class TestWizardToolSchemas:
         assert "controls" in show["input_schema"]["properties"]
         assert "submit_label" in show["input_schema"]["properties"]
 
-    def test_create_campaign_schema(self):
+    def test_wizard_complete_schema(self):
         schemas = get_wizard_tool_schemas()
-        create = next(s for s in schemas if s["name"] == "create_campaign")
-        assert "campaign_id" in create["input_schema"]["properties"]
-        assert "display_name" in create["input_schema"]["properties"]
-        assert "character_name" in create["input_schema"]["properties"]
-        assert "setup" in create["input_schema"]["properties"]
-        assert set(create["input_schema"]["required"]) == {
-            "campaign_id",
-            "display_name",
-            "character_name",
-            "modules",
-            "setup",
-        }
-
-    def test_load_creation_rules_schema(self):
-        schemas = get_wizard_tool_schemas()
-        load = next(
-            schema for schema in schemas
-            if schema["name"] == "load_creation_rules"
-        )
-        assert set(load["input_schema"]["required"]) == {"modules"}
-        assert "template_id" in load["input_schema"]["properties"]
-
-    def test_save_template_schema(self):
-        schemas = get_wizard_tool_schemas()
-        save = next(
-            schema
-            for schema in schemas
-            if schema["name"] == "save_campaign_template"
-        )
-        assert set(save["input_schema"]["required"]) == {"id", "name"}
-        assert "modules" in save["input_schema"]["properties"]
+        done = next(s for s in schemas if s["name"] == "wizard_complete")
+        assert "campaign_id" in done["input_schema"]["properties"]
+        assert "display_name" in done["input_schema"]["properties"]
+        assert set(done["input_schema"]["required"]) == {"campaign_id"}
 
     def test_show_choices_control_types(self):
         schemas = get_wizard_tool_schemas()
@@ -341,45 +329,22 @@ class TestWizardMCPTools:
         out = ev.drain()
         assert out[0]["type"] == "clear_choices"
 
-    def test_save_template_persists_and_pushes_event(self, tmp_path):
+    def test_wizard_complete_pushes_event(self):
         import asyncio
         from backend.wizard_mcp import WizardEvents, build_wizard_mcp
-
         ev = WizardEvents()
         cfg = build_wizard_mcp(ev)
-        with patch(
-            "backend.campaign_templates.get_project_root",
-            return_value=tmp_path,
-        ):
-            asyncio.run(self._invoke(cfg, "save_campaign_template", {
-                "id": "saved-setup",
-                "name": "Saved Setup",
-                "modules": ["mass-combat"],
-            }))
-
+        asyncio.run(self._invoke(cfg, "wizard_complete", {
+            "campaign_id": "shadowfell", "display_name": "Shadowfell",
+        }))
         out = ev.drain()
-        assert out[0]["type"] == "template_saved"
-        assert out[0]["success"] is True
-        saved = tmp_path / "world-state" / "campaign-templates" / "saved-setup.json"
-        assert saved.exists()
+        assert out[0]["type"] == "wizard_complete"
+        assert out[0]["campaign_id"] == "shadowfell"
+        assert out[0]["display_name"] == "Shadowfell"
 
-    def test_create_campaign_rejects_missing_blueprint_at_schema(self, tmp_path):
-        import asyncio
-        from backend.wizard_mcp import WizardEvents, build_wizard_mcp
-        with patch("backend.campaign_api.get_project_root", return_value=tmp_path):
-            (tmp_path / "world-state" / "campaigns").mkdir(parents=True)
-            ev = WizardEvents()
-            cfg = build_wizard_mcp(ev)
-            result = asyncio.run(self._invoke(
-                cfg,
-                "create_campaign",
-                {
-                    "campaign_id": "min-args",
-                    "display_name": "Minimum Arguments",
-                    "character_name": "Aria",
-                    "modules": [],
-                },
-            ))
-            cr = result.root if hasattr(result, "root") else result
-            assert cr.isError is True
-            assert ev.drain() == []
+    def test_wizard_complete_requires_campaign_id(self):
+        from backend.wizard_mcp import WizardEvents, run_wizard_tool
+        ev = WizardEvents()
+        message = run_wizard_tool(ev, "wizard_complete", {"campaign_id": ""})
+        assert "Error" in message
+        assert ev.drain() == []

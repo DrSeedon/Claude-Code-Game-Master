@@ -1,4 +1,4 @@
-"""Stdio MCP transport for provider-neutral campaign wizard tools."""
+"""Stdio MCP transport for provider-neutral campaign wizard UI tools."""
 
 from __future__ import annotations
 
@@ -67,93 +67,11 @@ def clear_choices() -> str:
 
 
 @mcp.tool()
-def load_creation_rules(
-    modules: list[str],
-    template_id: str = "",
-) -> str:
-    """Load CORE and selected-module rules before building the blueprint."""
+def wizard_complete(campaign_id: str, display_name: str = "") -> str:
+    """Signal the frontend that the campaign is built and ready to play."""
     return _result(
-        "load_creation_rules",
-        {
-            "modules": modules,
-            "template_id": template_id,
-        },
-    )
-
-
-@mcp.tool()
-def save_campaign_template(
-    id: str,
-    name: str,
-    description: str = "",
-    genres: list[str] | None = None,
-    genre: str = "",
-    tone: str = "",
-    recommended_for: str = "",
-    modules: list[str] | None = None,
-    narrator_style: str = "",
-    rules: str = "",
-    character_name: str = "",
-    character_class: str = "",
-    character_background: str = "",
-) -> str:
-    """Persist the current setup as a reusable campaign template."""
-    return _result(
-        "save_campaign_template",
-        {
-            "id": id,
-            "name": name,
-            "description": description,
-            "genres": genres,
-            "genre": genre,
-            "tone": tone,
-            "recommended_for": recommended_for,
-            "modules": modules,
-            "narrator_style": narrator_style,
-            "rules": rules,
-            "character_name": character_name,
-            "character_class": character_class,
-            "character_background": character_background,
-        },
-    )
-
-
-@mcp.tool()
-def create_campaign(
-    campaign_id: str,
-    display_name: str,
-    character_name: str,
-    modules: list[str],
-    setup: dict[str, Any],
-    genre: str = "",
-    tone: str = "",
-    description: str = "",
-    narrator_style: str = "",
-    rules: str = "",
-    template_id: str = "",
-    character_class: str = "",
-    character_race: str = "",
-    character_background: str = "",
-) -> str:
-    """Create a campaign after the player confirms its settings."""
-    return _result(
-        "create_campaign",
-        {
-            "campaign_id": campaign_id,
-            "display_name": display_name,
-            "character_name": character_name,
-            "setup": setup,
-            "genre": genre,
-            "tone": tone,
-            "description": description,
-            "modules": modules,
-            "narrator_style": narrator_style,
-            "rules": rules,
-            "template_id": template_id,
-            "character_class": character_class,
-            "character_race": character_race,
-            "character_background": character_background,
-        },
+        "wizard_complete",
+        {"campaign_id": campaign_id, "display_name": display_name},
     )
 
 
