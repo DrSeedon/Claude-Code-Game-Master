@@ -1,9 +1,11 @@
 """System prompt and tools for campaign creation wizard."""
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from backend.config import get_project_root
 from backend.campaign_templates import list_campaign_templates
+from backend.campaign_setup import CAMPAIGN_SETUP_SCHEMA
 
 
 def load_wizard_system_prompt() -> str:
@@ -23,7 +25,8 @@ You are a Campaign Setup Assistant. Help the player create a new campaign throug
 - After your text, call the appropriate MCP tool to update the interactive sidebar
 
 ## CRITICAL RULES
-- You have MCP tools: `show_choices`, `clear_choices`, `save_campaign_template`, and `create_campaign`. Use ONLY these.
+- You have MCP tools: `show_choices`, `clear_choices`, `load_creation_rules`,
+  `save_campaign_template`, and `create_campaign`. Use ONLY these.
 - Do NOT use Read, Write, Bash, Edit, ToolSearch, AskUserQuestion, or any other tools.
 - YOU control the sidebar panel. Call show_choices to display options, clear_choices to hide them.
 - When the player submits from sidebar, it auto-clears. Do NOT call clear_choices after a submit — just call show_choices for the next step.
@@ -56,21 +59,81 @@ style (radio). Color-code recommendations. Never claim modules are unavailable
 when the Available Modules section below is non-empty. Preserve all modules the
 player selected in Step 1.
 
-### Step 3: Character
-For EACH field (name, class, background), show a radio control with 3 AI-generated presets PLUS a text_input for custom entry.
-The presets must fit the campaign genre/setting. Color-code: green=fits perfectly, yellow=works, red=unusual but possible.
-Example structure for each field:
-- radio "name" with 3 options (genre-appropriate names) + comment explaining each
-- text_input "custom_name" with placeholder "Свой вариант..."
-- radio "class" with 3 options (genre-appropriate classes/roles)
-- text_input "custom_class" with placeholder "Свой вариант..."
-- radio "background" with 3 options (genre-appropriate backstories)
-- text_input "custom_background" with placeholder "Свой вариант..."
-Player can pick a preset OR type custom. If both filled, custom takes priority.
+### Step 3: Compile creation rules
+As soon as template and module selection are final, call `load_creation_rules`
+with the exact selected module IDs and template ID. This is mandatory even when
+no optional modules are selected. Never create a campaign before this call.
+Treat its result as the authoritative campaign-creation contract:
+- CORE `/new-game` and character creation always apply;
+- only selected modules contribute module-specific creation rules;
+- module rules augment CORE and never replace world/character preparation.
 
-### Step 4: Confirm
-Summarize in chat and show confirmation controls. When the player confirms,
-call create_campaign and pass `template_id` when a template was selected.
+### Step 4: Guided setup
+Ask the remaining setup questions required by the compiled rules. Group related
+questions to keep the flow short, but do not silently skip required decisions.
+At minimum resolve:
+- setting, starting premise, tone, currency, calendar, initial date and time;
+- complete character sheet: name, race, class/role, background, abilities, HP,
+  AC, skills/saves, features, starting equipment and inventory;
+- every selected module's creation choices, configuration, reference entities,
+  and starting resources.
+
+If the player delegates a decision or says "just create it", choose sensible
+defaults, show them in the final summary, and still produce the complete setup.
+For a non-fantasy role, create genre-appropriate equivalents of normal D&D
+character fields rather than leaving the sheet empty.
+
+### Step 5: Build the campaign blueprint
+Before confirmation, prepare one complete `setup` object for `create_campaign`.
+It must contain:
+- a playable player sheet and non-empty starting inventory;
+- starting location plus at least three connected locations;
+- six located NPCs, three quests, three consequences, and `misc:economy`;
+- campaign metadata and Session 0;
+- config and reference nodes required by every selected module.
+
+Use valid WorldGraph IDs (`type:kebab-id`). Put gameplay entities in nodes and
+edges, metadata in overview, and module-private config in module_data. Never put
+config for an unselected module into the blueprint.
+
+#### player.data mandatory fields checklist
+Every single one is validated and will reject creation if missing:
+- `race` (string), `class` (string), `background` (string)
+- `level` (integer >= 1)
+- `hp`: object with `current` and `max` (both positive numbers, current <= max)
+- `ac` (positive number)
+- `stats`: object with keys str, dex, con, int, wis, cha (all positive numbers)
+- `skills`: object with at least one entry (skill name to modifier number)
+- `saves`: object with keys str, dex, con, int, wis, cha (modifier numbers)
+- `save_proficiencies`: array of ability name strings (e.g. ["con", "wis"])
+- `proficiency_bonus` (number, e.g. 2 at level 1)
+- `xp`: object with `current` (>= 0) and `next_level` (> 0)
+- `money` (number in base currency units)
+- `conditions`: array (usually empty at start)
+- `features`: array of strings (at least one class/racial feature)
+- `equipment`: object with at least one entry (e.g. weapons array, armor string)
+
+#### Node data mandatory fields by type
+- **location**: `description` (non-empty string)
+- **npc**: `description`, `attitude` (friendly/neutral/hostile)
+- **quest**: `description`, `status` (active/completed/failed), `objectives` (array of objects with name and completed fields)
+- **consequence**: `description`, `trigger` (what activates it), `status` (pending/triggered/resolved)
+- **misc:economy**: `expenses`, `income`, `production`, `random_events` (all must be present)
+
+### Step 6: Confirm and create
+Summarize the actual generated world, character, and module setup, then show
+confirmation controls. When the player confirms, call `create_campaign` once.
+Pass:
+- `campaign_id`: stable lowercase kebab-case storage ID, preferably the selected
+  template ID when it is unused;
+- `display_name`: human-readable title, which may contain spaces, Unicode, and
+  punctuation;
+- the exact selected module IDs and template ID;
+- the complete `setup` blueprint.
+
+Do not retry with a mutated display title. If creation fails, explain the exact
+validation error, correct only the blueprint or campaign ID, and ask for
+confirmation again when the correction changes player-visible setup.
 
 If the player asks to save, remember, or reuse the current setup as a template,
 call `save_campaign_template` immediately. This does not create a campaign and
@@ -78,7 +141,8 @@ does not require campaign confirmation.
 
 ## IMPORTANT
 - Player might type in chat instead of using sidebar — adapt
-- If player says "just create it" — pick sensible defaults and create_campaign
+- If player says "just create it" — pick sensible defaults, compile the rules,
+  build a complete blueprint, then create it
 - Be flexible — skip steps if player gives all info at once
 - Always use the MCP tools directly; never imitate a tool call in ordinary text
 
@@ -182,6 +246,28 @@ def get_wizard_tool_schemas():
             }
         },
         {
+            "name": "load_creation_rules",
+            "description": (
+                "Compile authoritative CORE and selected-module creation rules "
+                "before asking setup questions or creating a campaign."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "modules": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Exact selected module IDs.",
+                    },
+                    "template_id": {
+                        "type": "string",
+                        "description": "Selected template ID, or empty string.",
+                    },
+                },
+                "required": ["modules"],
+            },
+        },
+        {
             "name": "save_campaign_template",
             "description": "Persist the current wizard configuration as a reusable user campaign template without creating a campaign.",
             "input_schema": {
@@ -215,13 +301,21 @@ def get_wizard_tool_schemas():
         },
         {
             "name": "create_campaign",
-            "description": "Create the campaign with all collected settings. Call this ONLY after the player confirms.",
+            "description": (
+                "Validate and atomically create a ready-to-play campaign. Call "
+                "only after loading creation rules, building the full blueprint, "
+                "and receiving player confirmation."
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "name": {
+                    "campaign_id": {
                         "type": "string",
-                        "description": "Campaign name in kebab-case"
+                        "description": "Stable lowercase kebab-case storage ID."
+                    },
+                    "display_name": {
+                        "type": "string",
+                        "description": "Human-readable campaign title."
                     },
                     "genre": {"type": "string"},
                     "tone": {"type": "string"},
@@ -236,9 +330,16 @@ def get_wizard_tool_schemas():
                     "character_name": {"type": "string"},
                     "character_class": {"type": "string"},
                     "character_race": {"type": "string"},
-                    "character_background": {"type": "string"}
+                    "character_background": {"type": "string"},
+                    "setup": deepcopy(CAMPAIGN_SETUP_SCHEMA),
                 },
-                "required": ["name", "character_name"]
+                "required": [
+                    "campaign_id",
+                    "display_name",
+                    "character_name",
+                    "modules",
+                    "setup"
+                ]
             }
         }
     ]

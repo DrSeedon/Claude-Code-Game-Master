@@ -34,6 +34,64 @@
   "action_routes": {
     "combat.attack.firearm": "bash modules/firearms-combat/tools/dm-combat.sh resolve"
   },
+  "creation_contract": {
+    "requires_module_data": true,
+    "module_data_fields": [
+      "enabled",
+      "fire_modes.single",
+      "fire_modes.burst",
+      "fire_modes.full_auto",
+      "penetration_vs_armor",
+      "range_rules",
+      "combat_style",
+      "combat_rules"
+    ],
+    "player_data_fields": [
+      "equipment.weapons"
+    ],
+    "player_inventory_min_stackable": 1,
+    "required_nodes": [
+      {
+        "label": "firearm weapon",
+        "type": "weapon",
+        "min_count": 1,
+        "data_matches": {
+          "source_module": "firearms-combat"
+        },
+        "data_fields": [
+          "damage",
+          "pen",
+          "rpm",
+          "magazine",
+          "weapon_type"
+        ]
+      },
+      {
+        "label": "firearm armor",
+        "type": "armor",
+        "min_count": 1,
+        "data_matches": {
+          "source_module": "firearms-combat"
+        },
+        "data_fields": [
+          "prot"
+        ]
+      },
+      {
+        "label": "firearm bestiary",
+        "type": "creature",
+        "min_count": 1,
+        "data_matches": {
+          "source_module": "firearms-combat"
+        },
+        "data_fields": [
+          "hp",
+          "ac",
+          "prot"
+        ]
+      }
+    ]
+  },
   "middleware": [],
   "features": [
     "Duration-based single, burst, and full-auto fire modes",

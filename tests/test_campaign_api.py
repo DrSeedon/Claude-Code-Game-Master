@@ -74,11 +74,13 @@ def test_list_campaigns_multiple(temp_project_root):
 
     # Verify campaign data structure
     assert result[0]["name"] == "test-campaign-1"
+    assert result[0]["display_name"] == "test-campaign-1"
     assert result[0]["genre"] == "fantasy"
     assert result[0]["active"] == False
     assert "created_at" in result[0]
 
     assert result[1]["name"] == "test-campaign-2"
+    assert result[1]["display_name"] == "test-campaign-2"
     assert result[1]["genre"] == "sci-fi"
 
 
@@ -125,6 +127,29 @@ def test_create_campaign_duplicate(temp_project_root):
 
     assert result["success"] == False
     assert "already exists" in result["error"]
+
+
+def test_create_campaign_returns_actual_normalized_directory_id(temp_project_root):
+    result = create_campaign(
+        name="Mixed Campaign Name",
+        display_name="Mixed Campaign: Display Title",
+    )
+
+    assert result["success"] is True
+    assert result["id"] == "mixed-campaign-name"
+    assert result["display_name"] == "Mixed Campaign: Display Title"
+    assert (
+        temp_project_root
+        / "world-state"
+        / "campaigns"
+        / "mixed-campaign-name"
+    ).exists()
+    listed = list_campaigns()
+    created = next(
+        campaign for campaign in listed
+        if campaign["name"] == "mixed-campaign-name"
+    )
+    assert created["display_name"] == "Mixed Campaign: Display Title"
 
 
 def test_create_campaign_invalid_name(temp_project_root):

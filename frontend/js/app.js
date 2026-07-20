@@ -1354,7 +1354,7 @@ function handleEvent(data) {
       break;
 
     case 'wizard_complete':
-      onWizardComplete(data.campaign_name);
+      onWizardComplete(data.campaign_id || data.campaign_name, data.display_name);
       break;
 
     case 'template_saved':
@@ -1405,6 +1405,31 @@ async function pollCampaigns() {
   renderCampaignList(list);
 }
 
+async function deleteCampaign(name, displayName) {
+  if (!confirm(ui(
+    `Удалить кампанию «${displayName}»?\n\nВсе данные (мир, персонаж, логи) будут потеряны безвозвратно.`,
+    `Delete campaign "${displayName}"?\n\nAll data (world, character, logs) will be permanently lost.`
+  ))) return;
+  try {
+    const response = await fetch(`/api/campaigns/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || ui('Не удалось удалить', 'Could not delete'));
+    if (state.mode === 'game' && state.campaign === name) {
+      closeWs();
+      state.mode = null;
+      state.campaign = null;
+      hideCharPanel();
+      hideCtxUsage();
+      hideRateLimit();
+      showWelcome();
+      if (isMobile()) showMobileSidebar();
+    }
+    pollCampaigns();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
 function renderCampaignList(list) {
   el.campaignList.innerHTML = '';
   if (list.length === 0) {
@@ -1417,10 +1442,22 @@ function renderCampaignList(list) {
   for (const c of list) {
     const item = document.createElement('div');
     item.className = 'campaign-item' + (state.mode === 'game' && c.name === state.campaign ? ' active' : '');
+    item.dataset.campaignId = c.name;
     const meta = [c.genre, typeof c.tone === 'string' ? c.tone : null].filter(Boolean).join(' · ');
     item.innerHTML =
-      `<div class="campaign-item-name">${escapeHtml(c.name)}${c.active ? '<span class="playing-badge">▶</span>' : ''}</div>` +
+      `<div class="campaign-item-name">${escapeHtml(c.display_name || c.name)}${c.active ? '<span class="playing-badge">▶</span>' : ''}</div>` +
       (meta ? `<div class="campaign-item-meta">${escapeHtml(meta)}</div>` : '');
+    const del = document.createElement('button');
+    del.className = 'campaign-delete-btn';
+    del.type = 'button';
+    del.textContent = '✕';
+    del.title = ui('Удалить кампанию', 'Delete campaign');
+    del.setAttribute('aria-label', `${ui('Удалить', 'Delete')} ${c.display_name || c.name}`);
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteCampaign(c.name, c.display_name || c.name);
+    });
+    item.appendChild(del);
     item.addEventListener('click', () => selectCampaign(c.name));
     el.campaignList.appendChild(item);
   }
@@ -1428,8 +1465,10 @@ function renderCampaignList(list) {
 
 function markActiveInList() {
   el.campaignList.querySelectorAll('.campaign-item').forEach(node => {
-    const name = node.querySelector('.campaign-item-name')?.textContent?.replace('▶', '').trim();
-    node.classList.toggle('active', state.mode === 'game' && name === state.campaign);
+    node.classList.toggle(
+      'active',
+      state.mode === 'game' && node.dataset.campaignId === state.campaign
+    );
   });
 }
 
@@ -2347,13 +2386,13 @@ function sendWizard(text, meta) {
   updateInputEnabled();
 }
 
-function onWizardComplete(campaignName) {
+function onWizardComplete(campaignId, displayName) {
   // Do NOT auto-switch — let the user keep tweaking with the wizard. Offer a button
   // to jump into the game when they're ready; the campaign also appears in the sidebar.
   clearChoices();
   addDmMessage(ui(
-    '✅ Кампания создана! Можешь продолжить настройку или перейти к игре.',
-    '✅ Campaign created! You can keep configuring it or start playing.'
+    `✅ Кампания «${displayName || campaignId}» создана и готова к игре.`,
+    `✅ Campaign “${displayName || campaignId}” is created and ready to play.`
   ));
   const wrap = document.createElement('div');
   wrap.className = 'msg msg-dm';
@@ -2362,7 +2401,7 @@ function onWizardComplete(campaignName) {
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary';
   btn.textContent = ui('▶ Начать играть', '▶ Start playing');
-  btn.addEventListener('click', () => selectCampaign(campaignName));
+  btn.addEventListener('click', () => selectCampaign(campaignId));
   body.appendChild(btn);
   wrap.appendChild(body);
   addBubbleTime(wrap, null);

@@ -31,6 +31,17 @@
   "action_routes": {
     "travel.world": "bash modules/world-travel/tools/dm-navigation.sh"
   },
+  "creation_contract": {
+    "requires_module_data": true,
+    "module_data_fields": [
+      "enabled",
+      "world_scale",
+      "terrain_colors"
+    ],
+    "player_data_fields": [
+      "speed_kmh"
+    ]
+  },
   "middleware": [
     "dm-location.sh",
     "dm-session.sh"

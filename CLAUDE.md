@@ -102,3 +102,68 @@ If `/tmp/dm-rules.md` is missing (hook didn't run), recompile:
 bash .claude/additional/infrastructure/dm-active-modules-rules.sh > /tmp/dm-rules.md 2>/dev/null
 ```
 Then read the file.
+
+## Session notes (2026-07-20 → 2026-07-22)
+
+### What happened (mega-session)
+Full rewrite of DnD Game Master web client from React → vanilla JS, modeled after Orchestra's architecture.
+
+### Key decisions
+- **Killed API provider** — `anthropic_api.py` + `tools_registry.py` deleted (~1200 lines). SDK-only path via `claude-agent-sdk`
+- **React → Vanilla JS** — deleted entire `frontend/src/`, `node_modules/`, `package.json`. Now: `frontend/{index.html, css/style.css, js/app.js}` (~1100 lines total). Zero npm, zero build
+- **FastAPI serves everything** — one process (uvicorn :18083), serves static + API + WS. No separate frontend server
+- **GameSession registry** — turn runs in background asyncio.Task, WS disconnect doesn't kill DM mid-sentence
+- **LiveBroker** — in-memory pub/sub per campaign, multiple WS subscribers possible
+- **EventLog** — append-only JSONL per campaign (`events.jsonl`), monotonic ids, `after_id` replay on reconnect
+- **Wizard = ephemeral** — no session persistence for campaign creation wizard. One-shot, disconnect = lost
+- **Models** — whitelist `[claude-sonnet-5, claude-opus-4-8]`, default `claude-sonnet-5`. Model pill (click-cycle) in header
+- **Auth** — cookie-based login page (`backend/auth.py`), password in `DND_AUTH_PASSWORD` env
+- **Bind 127.0.0.1** — not 0.0.0.0. nginx reverse proxy on VPS
+- **Campaign-addressed WS** — `/ws/game?campaign=X&after_id=N&model=M`, no global active campaign for WS
+
+### Architecture (current)
+```
+Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
+  ├─ /ws/game?campaign=X → GameSession registry → ClaudeSDKProvider → claude CLI subprocess → Anthropic
+  ├─ /ws/wizard → ephemeral provider + in-process WizardMCP (asyncio.Queue)
+  ├─ /api/* → REST endpoints (campaigns, status, models, health)
+  └─ / → frontend/index.html (static)
+```
+
+### Deploy
+- **VPS:** Contabo DE (158.220.127.161), user `kesha`, project at `/home/kesha/projects/dnd-game-master`
+- **Domain:** https://dnd.seedon.ru (DNS in Selectel, SSL via certbot)
+- **Service:** `systemd dnd-game-master.service`
+- **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
+- **Port:** 18083 (registered in `~/ports.md`)
+- **No proxy needed** — Contabo in DE, direct Anthropic access
+- **Deploy command:** `rsync -avz --exclude=... --delete /mnt/data/Projects/Python/Claude-Code-Game-Master/ root@158.220.127.161:/home/kesha/projects/dnd-game-master/ && ssh root@158.220.127.161 "chown -R kesha:kesha ... && systemctl restart dnd-game-master"`
+
+### Important files
+- `backend/server.py` — main FastAPI app, WS handlers, auth middleware
+- `backend/game_session.py` — GameSession registry, turn lifecycle, hibernate
+- `backend/live_broker.py` — pub/sub (43 lines)
+- `backend/event_log.py` — JSONL append-only log
+- `backend/providers/claude_sdk.py` — SDK wrapper, streaming, context usage
+- `backend/claude_dm.py` — system prompt assembly (dm-rules + narrator + campaign context)
+- `backend/wizard_mcp.py` — in-process MCP for wizard (show_choices, create_campaign)
+- `backend/auth.py` — cookie auth with login page
+- `backend/config.py` — env config, default model `claude-sonnet-5`
+- `frontend/js/app.js` — main frontend (~950 lines), streaming typewriter, campaign list, wizard
+- `frontend/css/style.css` — Orchestra-style dark theme
+- `docs/tasks/sdk-comparison-research.md` — deep Orchestra vs DnD comparison
+- `docs/tasks/frontend-migration-blueprint.md` — streaming migration spec
+- `artifacts/architecture.html` — interactive architecture diagram
+
+### Workers
+- `vanilla-frontend` — Opus 4.8, idle, ctx:70%. Long-lived system worker for all frontend+backend work on this project. Has deep context of entire codebase
+
+### Security rules established
+- Campaign names validated: regex blocks path traversal (`../`)
+- Session IDs validated: `^[A-Za-z0-9_-]{1,64}$`
+- `bypassPermissions` on SDK — accepted for local/auth-gated use
+- Auth middleware skips `/auth/*` and static assets
+
+### Known issues
+- Pre-existing pytest collection error: `test_encounter_engine.py` duplicate basename between `tests/` and `.claude/additional/modules/world-travel/tests/`
+- Codex review bg jobs consistently fail to write output files (CWD-bug in Orchestra codex_review tool) — workers self-verify instead

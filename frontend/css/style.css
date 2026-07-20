@@ -81,6 +81,16 @@ code, pre, kbd, samp, .font-mono, .markdown-body code, .markdown-body pre { font
 .campaign-item.active .campaign-item-name { color: #c7d2fe; }
 .campaign-item-meta { font-size: 11px; color: var(--ink-faint); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .playing-badge { font-size: 10px; font-weight: 700; color: var(--ok); flex-shrink: 0; }
+.campaign-item { position: relative; }
+.campaign-delete-btn {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--ink-faintest); font-size: 13px; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity .15s, color .15s, background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.campaign-item:hover .campaign-delete-btn { opacity: 1; }
+.campaign-delete-btn:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
 .campaign-list-empty { padding: 24px 12px; text-align: center; color: var(--ink-faintest); font-size: 13px; font-style: italic; }
 
 /* ─────────────────────────── Main panel ────────────────────────────────── */

@@ -59,6 +59,20 @@ The manifest. Every field explained:
   "middleware": ["dm-player.sh"],
   "post_middleware": ["dm-time.sh.post"],
   "replaces": [],
+  "creation_contract": {
+    "requires_module_data": true,
+    "module_data_fields": ["enabled", "settings.mode"],
+    "player_data_fields": ["my_module_data"],
+    "required_nodes": [
+      {
+        "label": "module reference",
+        "type": "misc",
+        "min_count": 1,
+        "data_matches": {"source_module": "my-module"},
+        "data_fields": ["setting"]
+      }
+    ]
+  },
 
   "features": ["Feature 1", "Feature 2"],
   "use_cases": ["When to use this module"],
@@ -78,6 +92,11 @@ The manifest. Every field explained:
 | `middleware` | CORE tools this module intercepts (pre-hook). Return exit 0 to handle, non-zero to let CORE handle. |
 | `post_middleware` | CORE tools this module hooks after execution. File must be named `<tool>.post`. |
 | `replaces` | DM slot names this module replaces (e.g., `"movement"` replaces `dm-slots/movement.md`). |
+| `creation_contract` | Neutral, backend-enforced requirements for a wizard-created campaign. It may require module config, player fields, inventory, and module-owned reference nodes. |
+
+The creation contract describes only this module. Never name or inspect another
+gameplay module in it. `data_matches.source_module` should therefore equal the
+current module ID.
 
 ---
 
@@ -235,7 +254,19 @@ Instructions for `/new-game` world-building phase. Tells Claude how to set up ca
 ## Step 3: Initialize character data
 ```
 
-Loaded by `dm-active-modules-creation-rules.sh` during campaign creation.
+The CLI loader and web wizard load this file only when the module is selected.
+The web wizard also injects `creation_contract` and refuses to report success
+until the resulting campaign satisfies it.
+
+Supported `creation_contract` checks:
+
+| Field | Meaning |
+|---|---|
+| `requires_module_data` | Require a non-empty `module-data/<id>.json`. |
+| `module_data_fields` | Required dotted paths inside module config. |
+| `player_data_fields` | Required dotted paths inside `player:active.data`. |
+| `player_inventory_min_stackable` | Minimum number of stackable inventory entries. |
+| `required_nodes` | Node queries with `type`, `min_count`, `data_matches`, and required `data_fields`. |
 
 ---
 
@@ -251,11 +282,10 @@ world-state/campaigns/<campaign>/module-data/
   my-module.json
 ```
 
-Use `ModuleDataManager` from infrastructure:
+Use the CORE `ModuleDataManager`:
 
 ```python
-sys.path.insert(0, str(PROJECT_ROOT / ".claude" / "additional" / "infrastructure"))
-from module_data import ModuleDataManager
+from lib.module_data import ModuleDataManager
 
 mdm = ModuleDataManager(campaign_dir)
 config = mdm.load("my-module")

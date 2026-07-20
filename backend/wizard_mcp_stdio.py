@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from backend.wizard_mcp import WizardEvents, encode_wizard_event, run_wizard_tool
 
 mcp = FastMCP("wizard", log_level="ERROR")
+_events = WizardEvents()
 
 
 class WizardOption(BaseModel):
@@ -30,9 +31,10 @@ class WizardControl(BaseModel):
 
 
 def _result(name: str, arguments: dict[str, Any]) -> str:
-    events = WizardEvents()
-    message = run_wizard_tool(events, name, arguments)
-    encoded = "\n".join(encode_wizard_event(event) for event in events.drain())
+    message = run_wizard_tool(_events, name, arguments)
+    encoded = "\n".join(
+        encode_wizard_event(event) for event in _events.drain()
+    )
     return f"{encoded}\n{message}" if encoded else message
 
 
@@ -62,6 +64,21 @@ def show_choices(
 def clear_choices() -> str:
     """Hide the interactive campaign choices."""
     return _result("clear_choices", {})
+
+
+@mcp.tool()
+def load_creation_rules(
+    modules: list[str],
+    template_id: str = "",
+) -> str:
+    """Load CORE and selected-module rules before building the blueprint."""
+    return _result(
+        "load_creation_rules",
+        {
+            "modules": modules,
+            "template_id": template_id,
+        },
+    )
 
 
 @mcp.tool()
@@ -103,12 +120,14 @@ def save_campaign_template(
 
 @mcp.tool()
 def create_campaign(
-    name: str,
+    campaign_id: str,
+    display_name: str,
     character_name: str,
+    modules: list[str],
+    setup: dict[str, Any],
     genre: str = "",
     tone: str = "",
     description: str = "",
-    modules: list[str] | None = None,
     narrator_style: str = "",
     rules: str = "",
     template_id: str = "",
@@ -120,8 +139,10 @@ def create_campaign(
     return _result(
         "create_campaign",
         {
-            "name": name,
+            "campaign_id": campaign_id,
+            "display_name": display_name,
             "character_name": character_name,
+            "setup": setup,
             "genre": genre,
             "tone": tone,
             "description": description,

@@ -213,6 +213,8 @@ class ClaudeSDKProvider:
                     mcp_tool_names.extend([
                         f"mcp__{server_name}__show_choices",
                         f"mcp__{server_name}__clear_choices",
+                        f"mcp__{server_name}__load_creation_rules",
+                        f"mcp__{server_name}__save_campaign_template",
                         f"mcp__{server_name}__create_campaign",
                     ])
                 elif server_name == "cinematic":

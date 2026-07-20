@@ -47,7 +47,7 @@ class TestWizardPrompt:
 class TestWizardToolSchemas:
     def test_schemas_count(self):
         schemas = get_wizard_tool_schemas()
-        assert len(schemas) == 3
+        assert len(schemas) == 4
 
     def test_show_choices_schema(self):
         schemas = get_wizard_tool_schemas()
@@ -60,9 +60,26 @@ class TestWizardToolSchemas:
     def test_create_campaign_schema(self):
         schemas = get_wizard_tool_schemas()
         create = next(s for s in schemas if s["name"] == "create_campaign")
-        assert "name" in create["input_schema"]["properties"]
+        assert "campaign_id" in create["input_schema"]["properties"]
+        assert "display_name" in create["input_schema"]["properties"]
         assert "character_name" in create["input_schema"]["properties"]
-        assert set(create["input_schema"]["required"]) == {"name", "character_name"}
+        assert "setup" in create["input_schema"]["properties"]
+        assert set(create["input_schema"]["required"]) == {
+            "campaign_id",
+            "display_name",
+            "character_name",
+            "modules",
+            "setup",
+        }
+
+    def test_load_creation_rules_schema(self):
+        schemas = get_wizard_tool_schemas()
+        load = next(
+            schema for schema in schemas
+            if schema["name"] == "load_creation_rules"
+        )
+        assert set(load["input_schema"]["required"]) == {"modules"}
+        assert "template_id" in load["input_schema"]["properties"]
 
     def test_save_template_schema(self):
         schemas = get_wizard_tool_schemas()
@@ -346,19 +363,23 @@ class TestWizardMCPTools:
         saved = tmp_path / "world-state" / "campaign-templates" / "saved-setup.json"
         assert saved.exists()
 
-    def test_create_campaign_optional_fields(self, tmp_path):
-        """Only name + character_name are required — the DM must not have to supply
-        all 10 fields (regression: dict-shorthand schema made everything required)."""
+    def test_create_campaign_rejects_missing_blueprint_at_schema(self, tmp_path):
         import asyncio
         from backend.wizard_mcp import WizardEvents, build_wizard_mcp
         with patch("backend.campaign_api.get_project_root", return_value=tmp_path):
             (tmp_path / "world-state" / "campaigns").mkdir(parents=True)
             ev = WizardEvents()
             cfg = build_wizard_mcp(ev)
-            result = asyncio.run(self._invoke(cfg, "create_campaign",
-                                              {"name": "min-args", "character_name": "Aria"}))
+            result = asyncio.run(self._invoke(
+                cfg,
+                "create_campaign",
+                {
+                    "campaign_id": "min-args",
+                    "display_name": "Minimum Arguments",
+                    "character_name": "Aria",
+                    "modules": [],
+                },
+            ))
             cr = result.root if hasattr(result, "root") else result
-            assert cr.isError is False  # not rejected by schema validation
-            out = ev.drain()
-            assert out[0]["type"] == "create_campaign"
-            assert out[0]["success"] is True
+            assert cr.isError is True
+            assert ev.drain() == []

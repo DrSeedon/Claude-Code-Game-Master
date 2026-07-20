@@ -629,6 +629,7 @@ async def wizard_websocket(websocket: WebSocket):
                 "enabled_tools": [
                     "show_choices",
                     "clear_choices",
+                    "load_creation_rules",
                     "save_campaign_template",
                     "create_campaign",
                 ],
@@ -658,7 +659,8 @@ async def wizard_websocket(websocket: WebSocket):
                 if event.get("success"):
                     await send({
                         "type": "wizard_complete",
-                        "campaign_name": event.get("campaign_name"),
+                        "campaign_id": event.get("campaign_id"),
+                        "display_name": event.get("display_name"),
                     })
                 else:
                     await send({
