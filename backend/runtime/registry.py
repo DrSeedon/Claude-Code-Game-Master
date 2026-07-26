@@ -224,7 +224,7 @@ def create_default_registry() -> RuntimeRegistry:
     )
     for model_id, label in (
         ("claude-sonnet-5", "Claude Sonnet 5"),
-        ("claude-opus-4-8", "Claude Opus 4.8"),
+        ("claude-opus-5", "Claude Opus 5"),
     ):
         registry.register_model(
             ModelDefinition(

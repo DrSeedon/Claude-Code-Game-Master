@@ -102,6 +102,7 @@ const state = {
   localEcho: new Set(),  // "role:content" keys to dedup on history replay
   wizardFirstMsgSent: false,   // inject sidebar-preset context on first wizard message
   wizardHandoff: null,   // recent wizard transcript sent once after a model switch
+  pendingWizardMsg: null, // queued sidebar submit while DM was generating
   activeChoices: null,   // current wizard choices payload
   choiceSel: {},         // radio/checkbox selections {controlId: id | id[]}
   choiceText: {},        // text_input values {controlId: value}
@@ -1343,6 +1344,11 @@ function handleEvent(data) {
         loadCharPanel(state.campaign);
         refreshCampaignData();
       }
+      if (state.pendingWizardMsg && state.mode === 'wizard') {
+        const pending = state.pendingWizardMsg;
+        state.pendingWizardMsg = null;
+        sendWizard(pending.text, pending.meta, { skipEcho: true });
+      }
       break;
 
     case 'show_choices':
@@ -2169,6 +2175,7 @@ function selectCampaign(name) {
   state.afterId = 0;
   state.attempt = 0;
   state.generating = false;
+  state.pendingWizardMsg = null;
   state.localEcho = new Set();
   state.campaignViews = null;
   state.dashboardSnapshots = {};
@@ -2206,6 +2213,7 @@ function startWizard() {
   state.campaign = null;
   state.wizardFirstMsgSent = false;
   state.wizardHandoff = null;
+  state.pendingWizardMsg = null;
   state.activeChoices = null;
   state.attempt = 0;
   state.generating = false;
@@ -2335,10 +2343,15 @@ async function showInitialWizardGreeting() {
   }
 }
 
-function sendWizard(text, meta) {
+function sendWizard(text, meta, { skipEcho = false } = {}) {
   const trimmed = (text || '').trim();
-  if (!trimmed || state.connStatus !== 'connected' || state.generating) return;
-  addUserMessage(trimmed);
+  if (!trimmed || state.connStatus !== 'connected') return;
+  if (state.generating) {
+    state.pendingWizardMsg = { text: trimmed, meta };
+    addUserMessage(trimmed);
+    return;
+  }
+  if (!skipEcho) addUserMessage(trimmed);
   setGenerating(true);
 
   let msg = trimmed;

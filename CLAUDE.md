@@ -103,29 +103,28 @@ bash .claude/additional/infrastructure/dm-active-modules-rules.sh > /tmp/dm-rule
 ```
 Then read the file.
 
-## Session notes (2026-07-20 → 2026-07-22)
+## Session notes (2026-07-20)
 
-### What happened (mega-session)
-Full rewrite of DnD Game Master web client from React → vanilla JS, modeled after Orchestra's architecture.
+### What happened (this session)
+Three major changes to the wizard + one frontend feature + one bug fix:
+1. **Wizard schema fix** — added explicit required properties to CAMPAIGN_SETUP_SCHEMA player.data (16 fields) and node type descriptions (consequence needs trigger+status, etc.). This was the FIRST fix attempt before the full rewrite.
+2. **Wizard rewrite** — replaced monolithic `create_campaign` JSON blueprint with incremental CLI tools (dm-campaign.sh, dm-location.sh, dm-npc.sh, etc.). Worker `wizard-rewrite` (Opus 4.8) did this. -1952/+247 lines.
+3. **Campaign delete button** — added ✕ button on each campaign-item in sidebar with confirm dialog.
+4. **Wizard message queue** — fixed bug where sidebar submit during DM generation silently lost the message. Added `pendingWizardMsg` state.
+5. **Deleted `backend/campaign_setup.py`** (814 lines) and `tests/test_campaign_setup.py` (443 lines) — no longer needed after wizard rewrite.
 
 ### Key decisions
-- **Killed API provider** — `anthropic_api.py` + `tools_registry.py` deleted (~1200 lines). SDK-only path via `claude-agent-sdk`
-- **React → Vanilla JS** — deleted entire `frontend/src/`, `node_modules/`, `package.json`. Now: `frontend/{index.html, css/style.css, js/app.js}` (~1100 lines total). Zero npm, zero build
-- **FastAPI serves everything** — one process (uvicorn :18083), serves static + API + WS. No separate frontend server
-- **GameSession registry** — turn runs in background asyncio.Task, WS disconnect doesn't kill DM mid-sentence
-- **LiveBroker** — in-memory pub/sub per campaign, multiple WS subscribers possible
-- **EventLog** — append-only JSONL per campaign (`events.jsonl`), monotonic ids, `after_id` replay on reconnect
-- **Wizard = ephemeral** — no session persistence for campaign creation wizard. One-shot, disconnect = lost
-- **Models** — whitelist `[claude-sonnet-5, claude-opus-4-8]`, default `claude-sonnet-5`. Model pill (click-cycle) in header
-- **Auth** — cookie-based login page (`backend/auth.py`), password in `DND_AUTH_PASSWORD` env
-- **Bind 127.0.0.1** — not 0.0.0.0. nginx reverse proxy on VPS
-- **Campaign-addressed WS** — `/ws/game?campaign=X&after_id=N&model=M`, no global active campaign for WS
+- **Wizard uses CLI tools, not JSON blueprint** — DM now calls dm-campaign.sh, dm-location.sh, dm-npc.sh, dm-plot.sh, dm-player.sh etc. to create campaigns incrementally. No more CAMPAIGN_SETUP_SCHEMA, validate_campaign_setup, apply_campaign_setup.
+- **Wizard MCP = 3 UI-only tools** — show_choices, clear_choices, wizard_complete. Campaign data creation is via bash tools.
+- **SDK allowed_tools removed** — `_make_options()` no longer sets `allowed_tools`. Under bypassPermissions everything is granted; the old allowlist was blocking bash tools for BOTH wizard and game mode.
+- **campaign_api.create_campaign simplified** — dropped `setup`, `require_ready` params. REST endpoint never used them.
+- **Pending wizard message queue** — `state.pendingWizardMsg` stores one message if DM is generating. Sent automatically on `done` event with `skipEcho: true`.
 
 ### Architecture (current)
 ```
 Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   ├─ /ws/game?campaign=X → GameSession registry → ClaudeSDKProvider → claude CLI subprocess → Anthropic
-  ├─ /ws/wizard → ephemeral provider + in-process WizardMCP (asyncio.Queue)
+  ├─ /ws/wizard → ephemeral provider + WizardMCP (3 UI tools) + bash tools (dm-*.sh)
   ├─ /api/* → REST endpoints (campaigns, status, models, health)
   └─ / → frontend/index.html (static)
 ```
@@ -137,26 +136,25 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 - **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
 - **Port:** 18083 (registered in `~/ports.md`)
 - **No proxy needed** — Contabo in DE, direct Anthropic access
-- **Deploy command:** `rsync -avz --exclude=... --delete /mnt/data/Projects/Python/Claude-Code-Game-Master/ root@158.220.127.161:/home/kesha/projects/dnd-game-master/ && ssh root@158.220.127.161 "chown -R kesha:kesha ... && systemctl restart dnd-game-master"`
+- **Deploy command:** `rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='.venv' --exclude='node_modules' --exclude='world-state/campaigns' --exclude='.claude' --exclude='.mypy_cache' --exclude='.pytest_cache' --exclude='*.pyc' --delete /mnt/data/Projects/Python/Claude-Code-Game-Master/ root@158.220.127.161:/home/kesha/projects/dnd-game-master/ && ssh root@158.220.127.161 "chown -R kesha:kesha /home/kesha/projects/dnd-game-master && systemctl restart dnd-game-master"`
 
 ### Important files
 - `backend/server.py` — main FastAPI app, WS handlers, auth middleware
 - `backend/game_session.py` — GameSession registry, turn lifecycle, hibernate
 - `backend/live_broker.py` — pub/sub (43 lines)
 - `backend/event_log.py` — JSONL append-only log
-- `backend/providers/claude_sdk.py` — SDK wrapper, streaming, context usage
+- `backend/providers/claude_sdk.py` — SDK wrapper, streaming, context usage, NO allowed_tools
 - `backend/claude_dm.py` — system prompt assembly (dm-rules + narrator + campaign context)
-- `backend/wizard_mcp.py` — in-process MCP for wizard (show_choices, create_campaign)
+- `backend/wizard_mcp.py` — MCP with 3 UI tools: show_choices, clear_choices, wizard_complete
+- `backend/wizard_prompt.py` — wizard system prompt with bash-tool creation phases
 - `backend/auth.py` — cookie auth with login page
 - `backend/config.py` — env config, default model `claude-sonnet-5`
-- `frontend/js/app.js` — main frontend (~950 lines), streaming typewriter, campaign list, wizard
-- `frontend/css/style.css` — Orchestra-style dark theme
-- `docs/tasks/sdk-comparison-research.md` — deep Orchestra vs DnD comparison
-- `docs/tasks/frontend-migration-blueprint.md` — streaming migration spec
-- `artifacts/architecture.html` — interactive architecture diagram
+- `backend/campaign_api.py` — simplified create_campaign (no setup/require_ready)
+- `frontend/js/app.js` — main frontend, streaming typewriter, campaign list, wizard, pendingWizardMsg queue
+- `frontend/css/style.css` — Orchestra-style dark theme, campaign-delete-btn styles
 
 ### Workers
-- `vanilla-frontend` — Opus 4.8, idle, ctx:70%. Long-lived system worker for all frontend+backend work on this project. Has deep context of entire codebase
+- `vanilla-frontend` — Opus 5, idle, ctx:70%. Long-lived system worker for all frontend+backend work
 
 ### Security rules established
 - Campaign names validated: regex blocks path traversal (`../`)
@@ -166,4 +164,5 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 
 ### Known issues
 - Pre-existing pytest collection error: `test_encounter_engine.py` duplicate basename between `tests/` and `.claude/additional/modules/world-travel/tests/`
-- Codex review bg jobs consistently fail to write output files (CWD-bug in Orchestra codex_review tool) — workers self-verify instead
+- Wizard hasn't been tested end-to-end with the new bash-tool flow yet (deployed, user started testing but hit the pending message bug which is now fixed)
+- Tests: 357 passed as of last run
