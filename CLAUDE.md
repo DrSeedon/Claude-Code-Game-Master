@@ -136,7 +136,13 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 - **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
 - **Port:** 18083 (registered in `~/ports.md`)
 - **No proxy needed** — Contabo in DE, direct Anthropic access
-- **Deploy command:** `rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='.venv' --exclude='node_modules' --exclude='world-state/campaigns' --exclude='.claude' --exclude='.mypy_cache' --exclude='.pytest_cache' --exclude='*.pyc' --delete /mnt/data/Projects/Python/Claude-Code-Game-Master/ root@158.220.127.161:/home/kesha/projects/dnd-game-master/ && ssh root@158.220.127.161 "chown -R kesha:kesha /home/kesha/projects/dnd-game-master && systemctl restart dnd-game-master"`
+- **Deploy = git pull, NOT rsync.** VPS is a real git clone of `origin` (converted 2026-08-03; it used to be an rsync dump with an empty `.git`, which made pull and rollback impossible). Push first — the VPS pulls from GitHub, not from the laptop:
+  ```bash
+  git push origin main
+  ssh root@158.220.127.161 "su -s /bin/bash kesha -c 'cd /home/kesha/projects/dnd-game-master && git pull --ff-only' && systemctl restart dnd-game-master"
+  ```
+- **Run git as `kesha`, never root** — `su -s /bin/bash kesha` (`su - kesha` hangs: no password). Root-owned files under `User=kesha` break `.git` writes mid-deploy. Check: `find /home/kesha/projects/dnd-game-master ! -user kesha | wc -l` → must be 0
+- **Live data is NOT in git** — `world-state/campaigns` (13 campaigns), `world-state/usage` and `.env` are gitignored and exist only on the VPS. Never `git clean` or re-clone over them without a backup
 
 ### Important files
 - `backend/server.py` — main FastAPI app, WS handlers, auth middleware
