@@ -145,6 +145,7 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 - **Live data is NOT in git** — `world-state/campaigns` (13 campaigns), `world-state/usage` and `.env` are gitignored and exist only on the VPS. Never `git clean` or re-clone over them without a backup
 
 ### Orchestrator lives on the VPS (migrated 2026-08-03)
+**Read `docs/vps-handoff.md` first** — full state handoff written before the migration: what was done, what is still open, and the traps. Context does not survive the move; that file does.
 The project is played on https://dnd.seedon.ru, so the orchestrator session runs on the VPS, not the laptop.
 - **Migration tool:** `scripts/migrate_agent.py` in the Orchestra repo — moves the session WITH its transcript, logs, inbox and worktrees (`UPSERT`, so it also works when no session exists on the target). Do NOT hand-write `INSERT`/`UPDATE` into `orchestra.db`; §6 of `docs/vps-orchestrator-onboarding.md` describes the opposite case (resetting an existing stale session).
 - **An orchestrator cannot migrate itself** — `assert_idle` counts the caller as `running`. Someone outside must launch it. The gate only inspects the SOURCE host, so agents running on the VPS do not block it.
