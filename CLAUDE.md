@@ -144,6 +144,16 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 - **Run git as `kesha`, never root** — `su -s /bin/bash kesha` (`su - kesha` hangs: no password). Root-owned files under `User=kesha` break `.git` writes mid-deploy. Check: `find /home/kesha/projects/dnd-game-master ! -user kesha | wc -l` → must be 0
 - **Live data is NOT in git** — `world-state/campaigns` (13 campaigns), `world-state/usage` and `.env` are gitignored and exist only on the VPS. Never `git clean` or re-clone over them without a backup
 
+### Orchestrator lives on the VPS (migrated 2026-08-03)
+The project is played on https://dnd.seedon.ru, so the orchestrator session runs on the VPS, not the laptop.
+- **Migration tool:** `scripts/migrate_agent.py` in the Orchestra repo — moves the session WITH its transcript, logs, inbox and worktrees (`UPSERT`, so it also works when no session exists on the target). Do NOT hand-write `INSERT`/`UPDATE` into `orchestra.db`; §6 of `docs/vps-orchestrator-onboarding.md` describes the opposite case (resetting an existing stale session).
+- **An orchestrator cannot migrate itself** — `assert_idle` counts the caller as `running`. Someone outside must launch it. The gate only inspects the SOURCE host, so agents running on the VPS do not block it.
+- **Never restart Orchestra on the VPS yourself** — it kills the in-flight turns of every agent there, including other projects'. `Orchestra-orchestrator` owns that restart.
+- **MCP servers are per-session**, stored in the `mcp_servers_custom` DB column — NOT in `~/.claude.json` (which is empty for `kesha` and stays that way). `orchestra` MCP is injected automatically. Ask `Orchestra-orchestrator` to provision anything else.
+- **Dashboard port 8888 is firewalled off** — reachable only as https://orchestra.seedon.ru from outside, or `127.0.0.1:8888` from inside the VPS.
+- **Skills copied from the laptop carry hardcoded `/mnt/data/...` paths** and silently break. Grep any copied skill for `/mnt/data` before trusting it. Fix with an env var + default, e.g. `ENV_FILE="${DEEPGRAM_ENV_FILE:-/home/kesha/orchestra/.env}"` — not a second hardcode.
+- **An MCP entry in the config proves nothing** — verify the underlying binary exists (`mcp-pandoc` was configured server-wide while `pandoc` itself was missing). Check the fact, not the config line.
+
 ### Important files
 - `backend/server.py` — main FastAPI app, WS handlers, auth middleware
 - `backend/game_session.py` — GameSession registry, turn lifecycle, hibernate
