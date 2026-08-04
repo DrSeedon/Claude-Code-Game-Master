@@ -30,8 +30,14 @@ def sent():
     return []
 
 
+TEST_PASSWORD = "test-password"
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch, sent):
+    # Auth is ON for every test in this file and the client logs in for real:
+    # prod runs with DND_AUTH_PASSWORD set, so the suite must run that way too.
+    monkeypatch.setenv("DND_AUTH_PASSWORD", TEST_PASSWORD)
     monkeypatch.setattr(server_module, "load_system_prompt", lambda *a, **k: "system prompt")
 
     class FakeConfig:
@@ -53,6 +59,12 @@ def client(tmp_path, monkeypatch, sent):
     monkeypatch.setattr(game_session_module.GameSession, "send", fake_send)
 
     with TestClient(server_module.app) as c:
+        login = c.post(
+            "/auth/login",
+            data={"password": TEST_PASSWORD},
+            follow_redirects=False,
+        )
+        assert login.status_code == 302, "login handshake broke — every test below is meaningless"
         yield c
 
 
@@ -69,11 +81,11 @@ def test_missing_campaign_query_param_closes_with_error(client):
         assert "campaign" in msg["content"].lower()
 
 
-def test_websocket_requires_auth_cookie_when_password_is_enabled(
-    client, tmp_path, monkeypatch
-):
+def test_auth_gates_websockets_and_api_until_login(client, tmp_path):
+    """Prod ran open for months because DND_AUTH_PASSWORD was never set anywhere.
+    With it set, nothing may be reachable without a valid cookie."""
     _campaign_dir(tmp_path, "blood-arena")
-    monkeypatch.setenv("DND_AUTH_PASSWORD", "secret")
+    client.cookies.clear()
 
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect("/ws/game?campaign=blood-arena"):
@@ -84,14 +96,25 @@ def test_websocket_requires_auth_cookie_when_password_is_enabled(
             pass
     assert wizard_exc.value.code == 1008
 
+    # HTTP side of the same gate: the middleware serves the login page, not data.
+    blocked = client.get("/api/campaigns")
+    assert blocked.headers["content-type"].startswith("text/html")
+
+    assert client.post(
+        "/auth/login",
+        data={"password": "wrong"},
+        follow_redirects=False,
+    ).status_code == 401
+
     response = client.post(
         "/auth/login",
-        data={"password": "secret"},
+        data={"password": TEST_PASSWORD},
         follow_redirects=False,
     )
     assert response.status_code == 302
     with client.websocket_connect("/ws/game?campaign=blood-arena"):
         pass
+    assert client.get("/api/campaigns").status_code == 200
 
 
 def test_campaign_from_query_not_global_config(client, tmp_path, sent):
@@ -131,6 +154,7 @@ def test_disconnect_during_initial_history_replay_is_clean(client, tmp_path):
 
     class DisconnectingWebSocket:
         query_params = {"campaign": "blood-arena", "after_id": "0"}
+        cookies = dict(client.cookies)  # the real cookie minted by the fixture's login
         accepted = False
 
         async def accept(self):
