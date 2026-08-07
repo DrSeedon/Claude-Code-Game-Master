@@ -141,6 +141,17 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   The old `dnd.seedon.ru` was dropped on 2026-08-07: seedon.ru belongs to a company that had to
   remove any public "company domain → German server" link (152-ФЗ). Do not resurrect it — the name
   now resolves to their Moscow wildcard.
+- **The DuckDNS token is account-wide, and the account is shared. `dnd-game-master` is the ONLY
+  domain this project may touch.** The same account holds the owner's personal VPN domain
+  (`foghedgehog`); the token cannot tell them apart, so nothing but discipline stops a wrong
+  `domains=` parameter from repointing the VPN. Two agents already did exactly that on 2026-08-07 —
+  once from another project, once here — before anyone realised the token has no per-domain scope.
+  Splitting the accounts was considered and rejected by the owner: one account stays, the boundary
+  is the rule. Always name the domain explicitly, never loop over the account's domains.
+- **A 200 is transport, not meaning.** DuckDNS answers a revoked token with `HTTP 200` and body
+  `KO`, so `curl -f` never fires: compare the RESPONSE BODY against the expected value, and test the
+  failing branch with a deliberately wrong value. Verified 2026-08-07 — the original keep-alive cron
+  would have reported success forever after the token was reissued.
 - **Service:** `systemd dnd-game-master.service`
 - **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
 - **Port:** 18083 (registered in `~/ports.md`)
