@@ -91,3 +91,4 @@ docs/production/
 .worktrees/
 .security-key
 logs/security/
+.duckdns_token
