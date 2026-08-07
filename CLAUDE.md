@@ -87,6 +87,10 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
 - After dm-slots or module rules edits: verify English-only (no Russian text in rules files)
 - After JSON schema changes: run affected tool with `--help` to verify it still parses
 - After module middleware changes: test the intercepted action end-to-end
+- Proving a fix is load-bearing: delete the element ENTIRELY (name together with body) and repair
+  the call sites, mutating each part of the fix separately. Replacing a body with `pass` while the
+  name still exists keeps the dependency alive and reports a false "not exercised" — that is how
+  a fixture was almost dropped as dead while 14 tests still referenced it by name.
 
 ## Slot System
 All dm-slots files are replaceable by modules. Each slot has a `<!-- slot:name -->` marker. Modules declare `"replaces": ["slot-name"]` in module.json to override a slot. The loader (`dm-active-modules-rules.sh`) skips replaced slots and loads module rules instead.
