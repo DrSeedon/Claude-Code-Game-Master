@@ -135,7 +135,12 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 
 ### Deploy
 - **VPS:** Contabo DE (158.220.127.161), user `kesha`, project at `/home/kesha/projects/dnd-game-master`
-- **Domain:** https://dnd.seedon.ru (DNS in Selectel, SSL via certbot)
+- **Domain:** https://dnd-game-master.duckdns.org (DuckDNS, SSL via certbot). Token in
+  `~/.duckdns_token` (0600, not in git); a `*/30` cron re-points the record at the VPS's current
+  public IP, so a hardware move that changes the IP self-heals within 30 min.
+  The old `dnd.seedon.ru` was dropped on 2026-08-07: seedon.ru belongs to a company that had to
+  remove any public "company domain → German server" link (152-ФЗ). Do not resurrect it — the name
+  now resolves to their Moscow wildcard.
 - **Service:** `systemd dnd-game-master.service`
 - **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
 - **Port:** 18083 (registered in `~/ports.md`)
@@ -150,7 +155,7 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 
 ### Orchestrator lives on the VPS (migrated 2026-08-03)
 **Read `docs/vps-handoff.md` first** — full state handoff written before the migration: what was done, what is still open, and the traps. Context does not survive the move; that file does.
-The project is played on https://dnd.seedon.ru, so the orchestrator session runs on the VPS, not the laptop.
+The project is played on https://dnd-game-master.duckdns.org, so the orchestrator session runs on the VPS, not the laptop.
 - **Migration tool:** `scripts/migrate_agent.py` in the Orchestra repo — moves the session WITH its transcript, logs, inbox and worktrees (`UPSERT`, so it also works when no session exists on the target). Do NOT hand-write `INSERT`/`UPDATE` into `orchestra.db`; §6 of `docs/vps-orchestrator-onboarding.md` describes the opposite case (resetting an existing stale session).
 - **An orchestrator cannot migrate itself** — `assert_idle` counts the caller as `running`. Someone outside must launch it. The gate only inspects the SOURCE host, so agents running on the VPS do not block it.
 - **Never restart Orchestra on the VPS yourself** — it kills the in-flight turns of every agent there, including other projects'. `Orchestra-orchestrator` owns that restart.
