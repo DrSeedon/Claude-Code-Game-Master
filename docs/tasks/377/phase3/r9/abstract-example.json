@@ -1,0 +1,560 @@
+{
+  "schema_version": "r9.content.v1",
+  "identity": {
+    "package_id": "abstract.slice.fixture",
+    "revision": 1,
+    "content_hash": "682179e02925034cf255cce41ff7804a01b9e457d2b2889f6911e38c58b30cb6",
+    "locale": "en",
+    "originality_declaration": "original_or_row_level_cleared_only"
+  },
+  "compatibility": {
+    "core_campaign_definition_schema": 2,
+    "ruleset_id": "srd-5.2.1-mvp-1",
+    "rules_engine_version": "rules.fixture.v1",
+    "core_operation_allowlist": [
+      "move_entity",
+      "apply_damage",
+      "apply_healing",
+      "set_condition",
+      "spend_resource",
+      "create_effect",
+      "set_terrain_feature",
+      "spawn_from_template",
+      "despawn_entity",
+      "set_npc_status",
+      "reveal_fact_via_route",
+      "advance_clock",
+      "schedule_consequence",
+      "open_physical_roll",
+      "advance_combat_mode"
+    ],
+    "r5_input_contract": "r5.speech.v1",
+    "r6_audio_contract": "r6.audio.v2"
+  },
+  "timing": {
+    "clock_start": "first_selectable_hero_screen_visible",
+    "target_min": 75,
+    "minimum_min": 60,
+    "maximum_min": 90,
+    "reserve_min": 5,
+    "checkpoints_min": {
+      "investigation_complete": 32,
+      "boss_armed": 50,
+      "boss_started": 60,
+      "epilogue_started": 85,
+      "hard_stop": 90
+    }
+  },
+  "entities": {
+    "location.hub": {"kind": "location", "provenance_id": "prov.story"},
+    "object.record": {"kind": "object", "provenance_id": "prov.story"},
+    "event.aftermath": {"kind": "event", "provenance_id": "prov.story"},
+    "archetype.generic": {"kind": "archetype", "provenance_id": "prov.story"}
+  },
+  "choice_templates": {
+    "choice.hero_and_narrator": {"owner": "party", "allowed_values": [true], "provenance_id": "prov.story"},
+    "choice.social_complete": {"owner": "party", "allowed_values": [true], "provenance_id": "prov.story"},
+    "choice.route": {"owner": "party", "allowed_values": ["npc", "object"], "provenance_id": "prov.story"},
+    "choice.pending_roll_consumed": {"owner": "core", "allowed_values": [true], "provenance_id": "prov.story"},
+    "choice.dispute_resolved": {"owner": "party", "allowed_values": [true], "provenance_id": "prov.story"}
+  },
+  "roll_templates": {
+    "roll.shared_plan": {"kind": "physical_d20", "declaration_required": true, "result_owner": "core_pending_roll", "provenance_id": "prov.story"}
+  },
+  "truth_facts": {
+    "fact.public_premise": {
+      "truth": "ABSTRACT_PUBLIC_PREMISE",
+      "public_fact": "ABSTRACT_PUBLIC_PREMISE",
+      "classification": "public",
+      "mandatory": true,
+      "subject_refs": ["location.hub"],
+      "provenance_id": "prov.story"
+    },
+    "fact.hidden_cause": {
+      "truth": "R9_SECRET_CANARY_HIDDEN_CAUSE",
+      "public_fact": "ABSTRACT_DISCLOSED_CAUSE",
+      "classification": "secret",
+      "mandatory": true,
+      "subject_refs": ["object.record", "npc.guide"],
+      "provenance_id": "prov.story"
+    },
+    "fact.boss_objective": {
+      "truth": "ABSTRACT_BOSS_OBJECTIVE",
+      "public_fact": "ABSTRACT_BOSS_OBJECTIVE",
+      "classification": "public",
+      "mandatory": true,
+      "subject_refs": ["encounter.boss"],
+      "provenance_id": "prov.story"
+    },
+    "fact.continuation": {
+      "truth": "ABSTRACT_CONTINUATION_STATE",
+      "public_fact": "ABSTRACT_CONTINUATION_HOOK",
+      "classification": "secret",
+      "mandatory": true,
+      "subject_refs": ["event.aftermath"],
+      "provenance_id": "prov.story"
+    }
+  },
+  "secrets": {
+    "secret.hidden_cause": {
+      "fact_id": "fact.hidden_cause",
+      "known_by_npc_ids": ["npc.guide"],
+      "adjudicator_scope": ["beat.social", "beat.investigate_npc"],
+      "projection_policy": "never_project_truth_or_secret_id",
+      "synthetic_canary": "R9_SECRET_CANARY_HIDDEN_CAUSE"
+    },
+    "secret.continuation": {
+      "fact_id": "fact.continuation",
+      "known_by_npc_ids": [],
+      "adjudicator_scope": ["beat.aftermath"],
+      "projection_policy": "never_project_truth_or_secret_id",
+      "synthetic_canary": "R9_SECRET_CANARY_CONTINUATION"
+    }
+  },
+  "clues": {
+    "clue.hidden_cause": {
+      "conclusion_fact_id": "fact.hidden_cause",
+      "mandatory": true,
+      "routes": [
+        {
+          "route_id": "route.npc",
+          "carrier": {"kind": "npc", "id": "npc.guide", "durable": false},
+          "preconditions": [[]],
+          "reveal_fact_ids": ["fact.hidden_cause"],
+          "delivery": "npc_pressured",
+          "mechanic_refs": ["rule.social_check"],
+          "time_cost_min": 9
+        },
+        {
+          "route_id": "route.object",
+          "carrier": {"kind": "object", "id": "object.record", "durable": true},
+          "preconditions": [[]],
+          "reveal_fact_ids": ["fact.hidden_cause"],
+          "delivery": "automatic_on_supported_investigation",
+          "mechanic_refs": ["rule.investigation"],
+          "time_cost_min": 10
+        }
+      ]
+    },
+    "clue.continuation": {
+      "conclusion_fact_id": "fact.continuation",
+      "mandatory": false,
+      "routes": [
+        {
+          "route_id": "route.continuation",
+          "carrier": {"kind": "event", "id": "event.aftermath", "durable": true},
+          "preconditions": [[{"kind": "encounter_complete", "ref": "encounter.boss"}]],
+          "reveal_fact_ids": ["fact.continuation"],
+          "delivery": "world_reaction",
+          "mechanic_refs": ["rule.schedule_consequence"],
+          "time_cost_min": 1
+        }
+      ]
+    }
+  },
+  "npcs": {
+    "npc.guide": {
+      "importance": "important",
+      "initial_status": "alive_present",
+      "goals": [
+        {
+          "goal_id": "goal.protect_subject",
+          "priority": 4,
+          "desired_state": "ABSTRACT_DESIRED_STATE",
+          "refusal_boundary": "ABSTRACT_REFUSAL_BOUNDARY",
+          "pressure_response": "ABSTRACT_PRESSURE_RESPONSE"
+        }
+      ],
+      "knows_secret_ids": ["secret.hidden_cause"],
+      "public_facade_fact_id": "fact.public_premise",
+      "voice_key": "npc.important.fixture",
+      "fallback_voice_key": "npc.archetype.fixture",
+      "state_transitions": ["effect.guide_absent"],
+      "provenance_id": "prov.story"
+    }
+  },
+  "obligations": {
+    "ob.hero": {"kind": "hero_selection", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.selection"]},
+    "ob.narrator": {"kind": "narrator_selection", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.selection"]},
+    "ob.social": {"kind": "important_npc_social", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.social"]},
+    "ob.choice": {"kind": "direction_choice", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.choice"]},
+    "ob.investigate": {"kind": "investigation_or_trap", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.investigate_npc", "beat.investigate_object"]},
+    "ob.plan": {"kind": "shared_plan", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.plan_roll"]},
+    "ob.roll": {"kind": "physical_roll", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.plan_roll"]},
+    "ob.fight": {"kind": "tactical_fight", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.skirmish"]},
+    "ob.boss": {"kind": "boss_conflict", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.boss"]},
+    "ob.dispute": {"kind": "rules_dispute", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.dispute"]},
+    "ob.consequence": {"kind": "persistent_consequence", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.aftermath"]},
+    "ob.hook": {"kind": "continuation_hook", "required_on_showcase_trace": true, "satisfied_by_beat_ids": ["beat.aftermath"]}
+  },
+  "beats": {
+    "beat.selection": {
+      "kind": "selection",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.hero", "ob.narrator"],
+      "entry": [[]],
+      "completion": [[{"kind": "choice_equals", "ref": "choice.hero_and_narrator", "value": true}]],
+      "transitions": [{"transition_id": "tr.selection.social", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.social", "effect_template_ids": []}],
+      "target_min": 6,
+      "hard_cap_min": 8,
+      "cut_rule": "never_cut",
+      "mechanic_refs": [],
+      "presentation_cue_ids": ["cue.selection"]
+    },
+    "beat.social": {
+      "kind": "social",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.social"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.selection"}]],
+      "completion": [[{"kind": "choice_equals", "ref": "choice.social_complete", "value": true}]],
+      "transitions": [
+        {"transition_id": "tr.social.choice", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.choice", "effect_template_ids": []},
+        {"transition_id": "tr.social.decline", "when": "decline", "condition": [[]], "trace_class": "refusal", "to": "outcome.loss", "effect_template_ids": ["effect.refusal_committed"]}
+      ],
+      "target_min": 11,
+      "hard_cap_min": 14,
+      "cut_rule": "never_cut",
+      "mechanic_refs": ["rule.social_check"],
+      "presentation_cue_ids": ["cue.social"]
+    },
+    "beat.choice": {
+      "kind": "choice",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.choice"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.social"}]],
+      "completion": [[{"kind": "choice_equals", "ref": "choice.route", "value": "npc"}], [{"kind": "choice_equals", "ref": "choice.route", "value": "object"}]],
+      "transitions": [
+        {"transition_id": "tr.choice.npc", "when": "complete", "condition": [[{"kind": "choice_equals", "ref": "choice.route", "value": "npc"}]], "trace_class": "showcase", "to": "beat.investigate_npc", "effect_template_ids": []},
+        {"transition_id": "tr.choice.object", "when": "complete", "condition": [[{"kind": "choice_equals", "ref": "choice.route", "value": "object"}]], "trace_class": "showcase", "to": "beat.investigate_object", "effect_template_ids": []}
+      ],
+      "target_min": 3,
+      "hard_cap_min": 5,
+      "cut_rule": "never_cut",
+      "mechanic_refs": [],
+      "presentation_cue_ids": ["cue.choice"]
+    },
+    "beat.investigate_npc": {
+      "kind": "investigation",
+      "requirement": "conditional",
+      "satisfies_obligation_ids": ["ob.investigate"],
+      "entry": [[{"kind": "choice_equals", "ref": "choice.route", "value": "npc"}, {"kind": "npc_present", "ref": "npc.guide"}]],
+      "completion": [[{"kind": "fact_revealed", "ref": "fact.hidden_cause"}]],
+      "transitions": [
+        {"transition_id": "tr.npc.plan", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.plan_roll", "effect_template_ids": ["effect.reveal_npc_route"]}
+      ],
+      "target_min": 8,
+      "hard_cap_min": 10,
+      "cut_rule": "compress_to_public_atom",
+      "mechanic_refs": ["rule.social_check"],
+      "presentation_cue_ids": ["cue.investigation"]
+    },
+    "beat.investigate_object": {
+      "kind": "trap",
+      "requirement": "conditional",
+      "satisfies_obligation_ids": ["ob.investigate"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.choice"}]],
+      "completion": [[{"kind": "fact_revealed", "ref": "fact.hidden_cause"}]],
+      "transitions": [{"transition_id": "tr.object.plan", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.plan_roll", "effect_template_ids": ["effect.reveal_object_route"]}],
+      "target_min": 8,
+      "hard_cap_min": 10,
+      "cut_rule": "compress_to_public_atom",
+      "mechanic_refs": ["rule.investigation", "rule.trap_save"],
+      "presentation_cue_ids": ["cue.investigation"]
+    },
+    "beat.plan_roll": {
+      "kind": "physical_roll",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.plan", "ob.roll"],
+      "entry": [[{"kind": "fact_revealed", "ref": "fact.hidden_cause"}]],
+      "completion": [[{"kind": "choice_equals", "ref": "choice.pending_roll_consumed", "value": true}]],
+      "transitions": [{"transition_id": "tr.plan.skirmish", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.skirmish", "effect_template_ids": ["effect.open_roll"]}],
+      "target_min": 7,
+      "hard_cap_min": 9,
+      "cut_rule": "never_cut",
+      "mechanic_refs": ["rule.pending_physical_roll"],
+      "presentation_cue_ids": ["cue.roll"]
+    },
+    "beat.skirmish": {
+      "kind": "combat",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.fight"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.plan_roll"}]],
+      "completion": [[{"kind": "encounter_complete", "ref": "encounter.skirmish"}]],
+      "transitions": [{"transition_id": "tr.skirmish.dispute", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.dispute", "effect_template_ids": ["effect.skirmish_result"]}],
+      "target_min": 16,
+      "hard_cap_min": 20,
+      "cut_rule": "resolve_at_round_boundary",
+      "mechanic_refs": ["rule.side_phases", "rule.attack", "rule.damage"],
+      "presentation_cue_ids": ["cue.combat"]
+    },
+    "beat.dispute": {
+      "kind": "dispute",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.dispute"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.skirmish"}]],
+      "completion": [[{"kind": "choice_equals", "ref": "choice.dispute_resolved", "value": true}]],
+      "transitions": [{"transition_id": "tr.dispute.boss", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.boss", "effect_template_ids": []}],
+      "target_min": 4,
+      "hard_cap_min": 5,
+      "cut_rule": "compress_to_public_atom",
+      "mechanic_refs": ["rule.dispute_correction"],
+      "presentation_cue_ids": ["cue.dispute"]
+    },
+    "beat.boss": {
+      "kind": "boss",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.boss"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.dispute"}]],
+      "completion": [[{"kind": "encounter_complete", "ref": "encounter.boss"}]],
+      "transitions": [
+        {"transition_id": "tr.boss.aftermath", "when": "complete", "condition": [[]], "trace_class": "showcase", "to": "beat.aftermath", "effect_template_ids": ["effect.boss_result"]},
+        {"transition_id": "tr.boss.timeout", "when": "timeout", "condition": [[]], "trace_class": "pressure", "to": "beat.aftermath", "effect_template_ids": ["effect.boss_mixed_timeout"]}
+      ],
+      "target_min": 20,
+      "hard_cap_min": 22,
+      "cut_rule": "resolve_at_round_boundary",
+      "mechanic_refs": ["rule.side_phases", "rule.attack", "rule.damage", "rule.death_saves"],
+      "presentation_cue_ids": ["cue.boss"]
+    },
+    "beat.aftermath": {
+      "kind": "aftermath",
+      "requirement": "mandatory",
+      "satisfies_obligation_ids": ["ob.consequence", "ob.hook"],
+      "entry": [[{"kind": "beat_completed", "ref": "beat.boss"}]],
+      "completion": [[{"kind": "fact_revealed", "ref": "fact.continuation"}]],
+      "transitions": [
+        {"transition_id": "tr.aftermath.success", "when": "complete", "condition": [[{"kind": "encounter_complete", "ref": "encounter.boss", "value": "success"}]], "trace_class": "showcase", "to": "outcome.success", "effect_template_ids": ["effect.reveal_continuation"]},
+        {"transition_id": "tr.aftermath.mixed", "when": "complete", "condition": [[{"kind": "encounter_complete", "ref": "encounter.boss", "value": "timeout_or_partial"}]], "trace_class": "pressure", "to": "outcome.mixed", "effect_template_ids": ["effect.reveal_continuation"]}
+      ],
+      "target_min": 5,
+      "hard_cap_min": 6,
+      "cut_rule": "never_cut",
+      "mechanic_refs": ["rule.schedule_consequence"],
+      "presentation_cue_ids": ["cue.aftermath"]
+    }
+  },
+  "redirects": {
+    "redirect.offrail": {
+      "trigger": "supported_off_rail_action",
+      "kind": "world_reaction",
+      "from_beat_ids": ["beat.social"],
+      "to": "beat.choice",
+      "completes_current": true,
+      "preconditions": [[]],
+      "effect_template_ids": ["effect.clock_pressure"],
+      "reveals_via_route_id": null,
+      "player_choice_preserved": true,
+      "use_limit": 2,
+      "time_cost_min": 7
+    },
+    "redirect.carrier_loss": {
+      "trigger": "carrier_lost",
+      "kind": "environmental_evidence",
+      "from_beat_ids": ["beat.investigate_npc"],
+      "to": "beat.plan_roll",
+      "completes_current": true,
+      "preconditions": [[{"kind": "choice_equals", "ref": "choice.route", "value": "npc"}]],
+      "effect_template_ids": ["effect.guide_absent", "effect.reveal_object_redirect"],
+      "reveals_via_route_id": "route.object",
+      "player_choice_preserved": true,
+      "use_limit": 1,
+      "time_cost_min": 10
+    },
+    "redirect.boss_clock": {
+      "trigger": "elapsed_checkpoint",
+      "kind": "deadline_consequence",
+      "from_beat_ids": ["beat.boss"],
+      "to": "beat.boss",
+      "completes_current": false,
+      "preconditions": [[{"kind": "clock_at_least", "ref": "clock.slice", "value": 50}]],
+      "effect_template_ids": ["effect.boss_pressure"],
+      "reveals_via_route_id": null,
+      "player_choice_preserved": true,
+      "use_limit": 1,
+      "time_cost_min": 1
+    }
+  },
+  "outcomes": {
+    "outcome.success": {
+      "terminal_class": "success",
+      "priority": 30,
+      "when": [[{"kind": "encounter_complete", "ref": "encounter.boss", "value": "success"}, {"kind": "fact_revealed", "ref": "fact.continuation"}]],
+      "persistent_consequence_template_ids": ["consequence.success"],
+      "continuation_hook_fact_id": "fact.continuation",
+      "death_policy": "core_death_saves_and_persist_history"
+    },
+    "outcome.loss": {
+      "terminal_class": "loss",
+      "priority": 20,
+      "when": [[{"kind": "clock_at_least", "ref": "clock.slice", "value": 90}], [{"kind": "effect_active", "ref": "effect.refusal_committed"}]],
+      "persistent_consequence_template_ids": ["consequence.loss"],
+      "continuation_hook_fact_id": "fact.continuation",
+      "death_policy": "core_death_saves_and_persist_history"
+    },
+    "outcome.mixed": {
+      "terminal_class": "mixed",
+      "priority": 25,
+      "when": [[{"kind": "encounter_complete", "ref": "encounter.boss", "value": "timeout_or_partial"}, {"kind": "fact_revealed", "ref": "fact.continuation"}]],
+      "persistent_consequence_template_ids": ["consequence.mixed"],
+      "continuation_hook_fact_id": "fact.continuation",
+      "death_policy": "core_death_saves_and_persist_history"
+    }
+  },
+  "effect_templates": {
+    "effect.clock_pressure": {"template_version": 1, "core_operation": "advance_clock", "subject_kind": "run", "arguments": {"minutes": 2}, "idempotency_scope": "once_per_redirect_use", "mechanic_refs": ["rule.clock"], "provenance_id": "prov.story"},
+    "effect.reveal_npc_route": {"template_version": 1, "core_operation": "reveal_fact_via_route", "subject_kind": "fact", "arguments": {"route_id": "route.npc"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.social_check"], "provenance_id": "prov.story"},
+    "effect.reveal_object_route": {"template_version": 1, "core_operation": "reveal_fact_via_route", "subject_kind": "fact", "arguments": {"route_id": "route.object"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.investigation"], "provenance_id": "prov.story"},
+    "effect.reveal_object_redirect": {"template_version": 1, "core_operation": "reveal_fact_via_route", "subject_kind": "fact", "arguments": {"route_id": "route.object"}, "idempotency_scope": "once_per_redirect_use", "mechanic_refs": ["rule.investigation"], "provenance_id": "prov.story"},
+    "effect.reveal_continuation": {"template_version": 1, "core_operation": "reveal_fact_via_route", "subject_kind": "fact", "arguments": {"route_id": "route.continuation"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.schedule_consequence"], "provenance_id": "prov.story"},
+    "effect.guide_absent": {"template_version": 1, "core_operation": "set_npc_status", "subject_kind": "npc", "arguments": {"npc_id": "npc.guide", "status": "alive_absent"}, "idempotency_scope": "once_per_redirect_use", "mechanic_refs": ["rule.npc_state"], "provenance_id": "prov.story"},
+    "effect.open_roll": {"template_version": 1, "core_operation": "open_physical_roll", "subject_kind": "roll", "arguments": {"roll_id": "roll.shared_plan"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.pending_physical_roll"], "provenance_id": "prov.story"},
+    "effect.skirmish_result": {"template_version": 1, "core_operation": "advance_combat_mode", "subject_kind": "encounter", "arguments": {"encounter_id": "encounter.skirmish", "result": "success"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.side_phases"], "provenance_id": "prov.story"},
+    "effect.boss_result": {"template_version": 1, "core_operation": "advance_combat_mode", "subject_kind": "encounter", "arguments": {"encounter_id": "encounter.boss", "result": "success"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.side_phases"], "provenance_id": "prov.story"},
+    "effect.boss_mixed_timeout": {"template_version": 1, "core_operation": "advance_combat_mode", "subject_kind": "encounter", "arguments": {"encounter_id": "encounter.boss", "result": "timeout_or_partial"}, "idempotency_scope": "once_per_transition", "mechanic_refs": ["rule.side_phases"], "provenance_id": "prov.story"},
+    "effect.boss_pressure": {"template_version": 1, "core_operation": "create_effect", "subject_kind": "encounter", "arguments": {"effect_id": "effect.boss_pressure_active", "subject_id": "encounter.boss"}, "idempotency_scope": "once_per_beat_visit", "mechanic_refs": ["rule.side_phases"], "provenance_id": "prov.story"},
+    "effect.refusal_committed": {"template_version": 1, "core_operation": "create_effect", "subject_kind": "run", "arguments": {"effect_id": "effect.refusal_committed", "subject_id": "run.slice"}, "idempotency_scope": "once_per_run", "mechanic_refs": ["rule.schedule_consequence"], "provenance_id": "prov.story"},
+    "consequence.success": {"template_version": 1, "core_operation": "schedule_consequence", "subject_kind": "consequence", "arguments": {"consequence_id": "consequence.success"}, "idempotency_scope": "once_per_run", "mechanic_refs": ["rule.schedule_consequence"], "provenance_id": "prov.story"},
+    "consequence.loss": {"template_version": 1, "core_operation": "schedule_consequence", "subject_kind": "consequence", "arguments": {"consequence_id": "consequence.loss"}, "idempotency_scope": "once_per_run", "mechanic_refs": ["rule.schedule_consequence"], "provenance_id": "prov.story"},
+    "consequence.mixed": {"template_version": 1, "core_operation": "schedule_consequence", "subject_kind": "consequence", "arguments": {"consequence_id": "consequence.mixed"}, "idempotency_scope": "once_per_run", "mechanic_refs": ["rule.schedule_consequence"], "provenance_id": "prov.story"}
+  },
+  "maps": {
+    "map.skirmish": {
+      "asset_id": "asset.map_skirmish",
+      "width_cells": 20,
+      "height_cells": 16,
+      "feet_per_cell": 5,
+      "collision_layer_ref": "layer.skirmish_collision",
+      "los_layer_ref": "layer.skirmish_los",
+      "light_layer_ref": "layer.skirmish_light",
+      "spawn_anchor_ids": ["spawn.skirmish_party", "spawn.skirmish_world"],
+      "encounter_ids": ["encounter.skirmish"],
+      "topology": {
+        "blocked_cells": [[10, 5], [10, 6], [10, 7]],
+        "opaque_cells": [[10, 5], [10, 6], [10, 7]],
+        "spawn_anchors": {
+          "spawn.skirmish_party": [[1, 1], [1, 2], [1, 3], [2, 1], [2, 2]],
+          "spawn.skirmish_world": [[18, 10], [18, 11], [18, 12], [17, 10], [17, 11]]
+        },
+        "objective_cells": {"objective.skirmish": [[9, 8]]},
+        "light_zones": [{"light": "bright", "min_cell": [0, 0], "max_cell": [19, 15]}]
+      },
+      "provenance_id": "prov.map_skirmish"
+    },
+    "map.boss": {
+      "asset_id": "asset.map_boss",
+      "width_cells": 22,
+      "height_cells": 18,
+      "feet_per_cell": 5,
+      "collision_layer_ref": "layer.boss_collision",
+      "los_layer_ref": "layer.boss_los",
+      "light_layer_ref": "layer.boss_light",
+      "spawn_anchor_ids": ["spawn.boss_party", "spawn.boss_world"],
+      "encounter_ids": ["encounter.boss"],
+      "topology": {
+        "blocked_cells": [[11, 7], [11, 8], [11, 9]],
+        "opaque_cells": [[11, 7], [11, 8], [11, 9]],
+        "spawn_anchors": {
+          "spawn.boss_party": [[1, 1], [1, 2], [1, 3], [2, 1], [2, 2]],
+          "spawn.boss_world": [[20, 12], [20, 13], [20, 14], [19, 12], [19, 13]]
+        },
+        "objective_cells": {"objective.boss": [[10, 9]]},
+        "light_zones": [{"light": "dim", "min_cell": [0, 0], "max_cell": [21, 17]}]
+      },
+      "provenance_id": "prov.map_boss"
+    }
+  },
+  "enemy_templates": {
+    "enemy.skirmisher": {"xp_each": 150, "size_cells": [1, 1], "max_hp": 12, "armor_class": 13, "initiative_modifier": 2, "actions_per_phase": 1, "attack_bonus": 4, "damage_average": 4.5, "mechanic_refs": ["rule.attack", "rule.damage"], "spawn_operation": "spawn_from_template", "provenance_id": "prov.roles"},
+    "enemy.boss": {"xp_each": 450, "size_cells": [1, 1], "max_hp": 54, "armor_class": 14, "initiative_modifier": 2, "actions_per_phase": 2, "attack_bonus": 5, "damage_average": 7.0, "mechanic_refs": ["rule.attack", "rule.damage", "rule.death_saves"], "spawn_operation": "spawn_from_template", "provenance_id": "prov.roles"},
+    "enemy.support": {"xp_each": 225, "size_cells": [1, 1], "max_hp": 12, "armor_class": 13, "initiative_modifier": 1, "actions_per_phase": 1, "attack_bonus": 4, "damage_average": 4.0, "mechanic_refs": ["rule.attack", "rule.damage"], "spawn_operation": "spawn_from_template", "provenance_id": "prov.roles"}
+  },
+  "encounters": {
+    "encounter.skirmish": {
+      "kind": "skirmish",
+      "map_id": "map.skirmish",
+      "objective_fact_id": "fact.hidden_cause",
+      "difficulty": "low",
+      "party_3": {"xp_budget": 450, "enemy_roster": [{"template_id": "enemy.skirmisher", "count": 3}], "spawn_anchor_ids": ["spawn.skirmish_world"]},
+      "party_4": {"xp_budget": 600, "enemy_roster": [{"template_id": "enemy.skirmisher", "count": 4}], "spawn_anchor_ids": ["spawn.skirmish_world"]},
+      "party_5": {"xp_budget": 750, "enemy_roster": [{"template_id": "enemy.skirmisher", "count": 5}], "spawn_anchor_ids": ["spawn.skirmish_world"]},
+      "side_phase": {"first_side": "opposed_public_side_initiative", "party_roll": "one_pending_physical_d20_plus_selected_hero_initiative", "world_roll": "one_server_public_d20_plus_encounter_initiative", "tie_rule": "higher_static_modifier_then_party", "internal_order": "side_chooses_each_eligible_unacted_actor", "once_per_phase": true, "mode_locked_after_first_action": true, "round_boundary": "after_both_sides_complete"},
+      "mechanic_refs": ["rule.side_phases", "rule.attack", "rule.damage"],
+      "time_cap_min": 20,
+      "failure_outcome_id": "outcome.mixed",
+      "provenance_id": "prov.story"
+    },
+    "encounter.boss": {
+      "kind": "boss",
+      "map_id": "map.boss",
+      "objective_fact_id": "fact.boss_objective",
+      "difficulty": "moderate",
+      "party_3": {"xp_budget": 675, "enemy_roster": [{"template_id": "enemy.boss", "count": 1}, {"template_id": "enemy.support", "count": 1}], "spawn_anchor_ids": ["spawn.boss_world"]},
+      "party_4": {"xp_budget": 900, "enemy_roster": [{"template_id": "enemy.boss", "count": 2}], "spawn_anchor_ids": ["spawn.boss_world"]},
+      "party_5": {"xp_budget": 1125, "enemy_roster": [{"template_id": "enemy.boss", "count": 2}, {"template_id": "enemy.support", "count": 1}], "spawn_anchor_ids": ["spawn.boss_world"]},
+      "side_phase": {"first_side": "opposed_public_side_initiative", "party_roll": "one_pending_physical_d20_plus_selected_hero_initiative", "world_roll": "one_server_public_d20_plus_encounter_initiative", "tie_rule": "higher_static_modifier_then_party", "internal_order": "side_chooses_each_eligible_unacted_actor", "once_per_phase": true, "mode_locked_after_first_action": true, "round_boundary": "after_both_sides_complete"},
+      "mechanic_refs": ["rule.side_phases", "rule.attack", "rule.damage", "rule.death_saves"],
+      "time_cap_min": 22,
+      "failure_outcome_id": "outcome.loss",
+      "provenance_id": "prov.story"
+    }
+  },
+  "starter_roles": {
+    "hero.guardian": {"level": 3, "role": "guardian", "strengths": ["ABSTRACT_DURABILITY", "ABSTRACT_BURST"], "weaknesses": ["ABSTRACT_RANGE_LIMIT"], "tactical_hooks": ["ABSTRACT_PROTECT_ALLY"], "social_hooks": ["ABSTRACT_DUTY_HOOK"], "rules_refs": ["rule.attack", "rule.healing", "rule.resource"], "onboarding": {"complexity": "low", "always_visible_choices": 3, "conditional_choices": 1, "first_turn_prompt_id": "prompt.guardian"}, "provenance_id": "prov.roles"},
+    "hero.fury": {"level": 3, "role": "fury", "strengths": ["ABSTRACT_MELEE_DAMAGE", "ABSTRACT_RESILIENCE"], "weaknesses": ["ABSTRACT_EXPOSURE"], "tactical_hooks": ["ABSTRACT_RISK_REWARD"], "social_hooks": ["ABSTRACT_INSTINCT_HOOK"], "rules_refs": ["rule.attack", "rule.resistance", "rule.resource"], "onboarding": {"complexity": "low", "always_visible_choices": 3, "conditional_choices": 2, "first_turn_prompt_id": "prompt.fury"}, "provenance_id": "prov.roles"},
+    "hero.shadow": {"level": 3, "role": "shadow", "strengths": ["ABSTRACT_SKILL", "ABSTRACT_MOBILITY"], "weaknesses": ["ABSTRACT_FRAGILITY"], "tactical_hooks": ["ABSTRACT_POSITIONAL_DAMAGE"], "social_hooks": ["ABSTRACT_SUSPICION_HOOK"], "rules_refs": ["rule.skill", "rule.bonus_action", "rule.attack"], "onboarding": {"complexity": "medium", "always_visible_choices": 4, "conditional_choices": 2, "first_turn_prompt_id": "prompt.shadow"}, "provenance_id": "prov.roles"},
+    "hero.beacon": {"level": 3, "role": "beacon", "strengths": ["ABSTRACT_HEALING", "ABSTRACT_SUPPORT"], "weaknesses": ["ABSTRACT_RESOURCE_PRESSURE"], "tactical_hooks": ["ABSTRACT_CONCENTRATION_CHOICE"], "social_hooks": ["ABSTRACT_EMPATHY_HOOK"], "rules_refs": ["rule.spell", "rule.healing", "rule.concentration"], "onboarding": {"complexity": "medium", "always_visible_choices": 4, "conditional_choices": 3, "first_turn_prompt_id": "prompt.beacon"}, "provenance_id": "prov.roles"},
+    "hero.arcanist": {"level": 3, "role": "arcanist", "strengths": ["ABSTRACT_AREA_CONTROL", "ABSTRACT_RANGE"], "weaknesses": ["ABSTRACT_LOW_HP"], "tactical_hooks": ["ABSTRACT_TEMPLATE_PLACEMENT"], "social_hooks": ["ABSTRACT_KNOWLEDGE_HOOK"], "rules_refs": ["rule.spell", "rule.area", "rule.concentration"], "onboarding": {"complexity": "medium", "always_visible_choices": 5, "conditional_choices": 3, "first_turn_prompt_id": "prompt.arcanist"}, "provenance_id": "prov.roles"},
+    "hero.voice": {"level": 3, "role": "voice", "strengths": ["ABSTRACT_SOCIAL", "ABSTRACT_SUPPORT"], "weaknesses": ["ABSTRACT_LOW_DIRECT_DAMAGE"], "tactical_hooks": ["ABSTRACT_REACTION_SUPPORT"], "social_hooks": ["ABSTRACT_NEGOTIATION_HOOK"], "rules_refs": ["rule.skill", "rule.inspiration", "rule.reaction"], "onboarding": {"complexity": "medium", "always_visible_choices": 4, "conditional_choices": 3, "first_turn_prompt_id": "prompt.voice"}, "provenance_id": "prov.roles"}
+  },
+  "presentation": {
+    "narrator_entity_id": "narrator:severin",
+    "narrator_voice_key": "narrator.severin",
+    "voice_routes": {
+      "voice.narrator": {"entity_id": "narrator:severin", "voice_key": "narrator.severin", "fallback_voice_key": "text_only", "provenance_id": "prov.voice_narrator"},
+      "voice.guide": {"entity_id": "npc.guide", "voice_key": "npc.important.fixture", "fallback_voice_key": "npc.archetype.fixture", "provenance_id": "prov.voice_npc"},
+      "voice.archetype": {"entity_id": "archetype.generic", "voice_key": "npc.archetype.fixture", "fallback_voice_key": "text_only", "provenance_id": "prov.voice_npc"}
+    },
+    "asset_pools": {
+      "pool.combat_phase": ["asset.combat_line", "asset.music_combat", "asset.sfx_hit"]
+    },
+    "audio_cues": {
+      "cue.selection": {"event_key": "ui.selection", "audio_policy": "text_only", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "exploration", "safe_text_fact_ids": ["fact.public_premise"]},
+      "cue.social": {"event_key": "scene.social", "audio_policy": "dynamic_allowed", "speaker_entity_id": "npc.guide", "asset_pool_ids": [], "music_state": "conversation", "safe_text_fact_ids": ["fact.public_premise"]},
+      "cue.choice": {"event_key": "scene.choice", "audio_policy": "dynamic_allowed", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "danger", "safe_text_fact_ids": ["fact.public_premise"]},
+      "cue.investigation": {"event_key": "scene.investigation", "audio_policy": "dynamic_allowed", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "danger", "safe_text_fact_ids": ["fact.hidden_cause"]},
+      "cue.roll": {"event_key": "roll.pending", "audio_policy": "text_only", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "danger", "safe_text_fact_ids": []},
+      "cue.combat": {"event_key": "combat.phase", "audio_policy": "cache_only", "speaker_entity_id": "narrator:severin", "asset_pool_ids": ["pool.combat_phase"], "music_state": "combat", "safe_text_fact_ids": []},
+      "cue.dispute": {"event_key": "rule.dispute", "audio_policy": "dynamic_allowed", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "danger", "safe_text_fact_ids": []},
+      "cue.boss": {"event_key": "combat.boss", "audio_policy": "dynamic_allowed", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "boss", "safe_text_fact_ids": ["fact.boss_objective"]},
+      "cue.aftermath": {"event_key": "scene.aftermath", "audio_policy": "dynamic_allowed", "speaker_entity_id": "narrator:severin", "asset_pool_ids": [], "music_state": "victory", "safe_text_fact_ids": ["fact.continuation"]}
+    }
+  },
+  "assets": {
+    "asset.map_skirmish": {"kind": "map", "path": "assets/maps/abstract-skirmish.placeholder", "sha256": "1111111111111111111111111111111111111111111111111111111111111111", "provenance_id": "prov.map_skirmish", "status": "blocked_pending_rights"},
+    "asset.map_boss": {"kind": "map", "path": "assets/maps/abstract-boss.placeholder", "sha256": "2222222222222222222222222222222222222222222222222222222222222222", "provenance_id": "prov.map_boss", "status": "blocked_pending_rights"},
+    "asset.combat_line": {"kind": "cached_speech", "path": "assets/audio/abstract-combat-line.placeholder", "sha256": "7777777777777777777777777777777777777777777777777777777777777777", "provenance_id": "prov.combat_recording", "status": "blocked_pending_rights"},
+    "asset.music_combat": {"kind": "music", "path": "assets/audio/abstract-combat-music.placeholder", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "provenance_id": "prov.music_master", "status": "blocked_pending_rights"},
+    "asset.sfx_hit": {"kind": "sfx", "path": "assets/audio/abstract-hit-sfx.placeholder", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "provenance_id": "prov.sfx", "status": "blocked_pending_rights"}
+  },
+  "provenance_policy": {
+    "evaluation_date": "2026-08-16",
+    "qualified_reviewer_ids": ["rights.reviewer.qualified"]
+  },
+  "provenance": {
+    "prov.story": {"material_type": "story", "source_kind": "original", "title": "ABSTRACT_FIXTURE_ONLY", "author_or_provider": "R9_RESEARCH_FIXTURE", "source_uri": "docs/tasks/377/phase3/r9/abstract-example.json", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "3333333333333333333333333333333333333333333333333333333333333333", "rights_owner_evidence": "RESEARCH_FIXTURE_NOT_FOR_PRODUCT", "license_expression": "LicenseRef-Research-Fixture-Only", "terms_snapshot": "RESEARCH_FIXTURE_NOT_FOR_PRODUCT", "input_refs": [], "allowed_uses": ["hosted_runtime"], "territories": ["not_applicable_fixture"], "term_end": "unassigned_fixture", "attribution": "RESEARCH_FIXTURE_NOT_FOR_PRODUCT", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.roles": {"material_type": "rules", "source_kind": "srd_5_2_1", "title": "ABSTRACT_ROLE_COVERAGE_FIXTURE", "author_or_provider": "Wizards of the Coast LLC", "source_uri": "https://www.dndbeyond.com/srd", "source_version": "SRD-5.2.1", "creation_date": "2025-05-01", "source_hash": "4444444444444444444444444444444444444444444444444444444444444444", "rights_owner_evidence": "OFFICIAL_CC_BY_NOTICE_REQUIRES_FUTURE_EXACT_HASH", "license_expression": "CC-BY-4.0", "terms_snapshot": "https://creativecommons.org/licenses/by/4.0/legalcode", "input_refs": [], "allowed_uses": ["modify", "hosted_runtime", "distribution"], "territories": ["worldwide"], "term_end": "per_license", "attribution": "USE_EXACT_SRD_5_2_1_ATTRIBUTION_IN_DESTINATION", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.map_skirmish": {"material_type": "map", "source_kind": "original", "title": "ABSTRACT_MAP_PLACEHOLDER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "1111111111111111111111111111111111111111111111111111111111111111", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["hosted_runtime"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.map_boss": {"material_type": "map", "source_kind": "original", "title": "ABSTRACT_MAP_PLACEHOLDER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "2222222222222222222222222222222222222222222222222222222222222222", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["hosted_runtime"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.voice_narrator": {"material_type": "voice", "source_kind": "commissioned", "title": "ABSTRACT_NARRATOR_VOICE_PLACEHOLDER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "5555555555555555555555555555555555555555555555555555555555555555", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["voice_model_creation", "synthetic_generation", "cache", "hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.voice_npc": {"material_type": "voice", "source_kind": "commissioned", "title": "ABSTRACT_NPC_VOICE_PLACEHOLDER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "6666666666666666666666666666666666666666666666666666666666666666", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["voice_model_creation", "synthetic_generation", "cache", "hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.combat_recording": {"material_type": "recording", "source_kind": "commissioned", "title": "ABSTRACT_COMBAT_LINE_MASTER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "7777777777777777777777777777777777777777777777777777777777777777", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": ["prov.story", "prov.voice_narrator"], "allowed_uses": ["cache", "hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.music_work": {"material_type": "music_work", "source_kind": "commissioned", "title": "ABSTRACT_COMBAT_MUSIC_WORK", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.music_master": {"material_type": "music_master", "source_kind": "commissioned", "title": "ABSTRACT_COMBAT_MUSIC_MASTER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "8888888888888888888888888888888888888888888888888888888888888888", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": ["prov.music_work"], "allowed_uses": ["cache", "hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"},
+    "prov.sfx": {"material_type": "sfx", "source_kind": "commissioned", "title": "ABSTRACT_HIT_SFX_MASTER", "author_or_provider": "UNASSIGNED", "source_uri": "NONE_FIXTURE", "source_version": "fixture-v1", "creation_date": "2026-08-16", "source_hash": "9999999999999999999999999999999999999999999999999999999999999999", "rights_owner_evidence": "MISSING", "license_expression": "LicenseRef-Pending", "terms_snapshot": "MISSING", "input_refs": [], "allowed_uses": ["cache", "hosted_runtime", "distribution", "public_performance"], "territories": ["unassigned"], "term_end": "unassigned_fixture", "attribution": "UNASSIGNED", "reviewer": "review.unassigned", "decision": "blocked_pending_review"}
+  },
+  "provenance_relationships": [
+    {"relationship_id": "rel.combat_script", "subject_provenance_id": "prov.combat_recording", "predicate": "performance_of_script", "object_provenance_id": "prov.story"},
+    {"relationship_id": "rel.combat_voice", "subject_provenance_id": "prov.combat_recording", "predicate": "uses_voice", "object_provenance_id": "prov.voice_narrator"},
+    {"relationship_id": "rel.music_work", "subject_provenance_id": "prov.music_master", "predicate": "master_of_work", "object_provenance_id": "prov.music_work"}
+  ]
+}

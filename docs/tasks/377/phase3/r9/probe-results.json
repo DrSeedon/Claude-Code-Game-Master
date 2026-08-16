@@ -1,0 +1,2239 @@
+{
+  "combat": {
+    "bridge_assumption": "one rules-supported 6 HP recovery use per non-dead hero; I9 must instantiate it or rerun",
+    "cells": {
+      "hard": {
+        "focus_lowest": {
+          "3": {
+            "any_downed_rate": 0.7843,
+            "best_composition_win_rate": 0.966,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 50.85,
+            "combat_minutes_p90": 64.2,
+            "compositions": 20,
+            "death_rate": 0.3366,
+            "tpk_rate": 0.1508,
+            "trials": 10000,
+            "win_rate": 0.7332,
+            "world_first_down_rate": 0.0821,
+            "worst_composition_win_rate": 0.442
+          },
+          "4": {
+            "any_downed_rate": 0.9563,
+            "best_composition_win_rate": 0.82,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 74.77,
+            "combat_minutes_p90": 86.5,
+            "compositions": 15,
+            "death_rate": 0.5584,
+            "tpk_rate": 0.2517,
+            "trials": 7500,
+            "win_rate": 0.568,
+            "world_first_down_rate": 0.2379,
+            "worst_composition_win_rate": 0.336
+          },
+          "5": {
+            "any_downed_rate": 0.9857,
+            "best_composition_win_rate": 0.714,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 87.58,
+            "combat_minutes_p90": 101.75,
+            "compositions": 6,
+            "death_rate": 0.654,
+            "tpk_rate": 0.293,
+            "trials": 3000,
+            "win_rate": 0.5433,
+            "world_first_down_rate": 0.363,
+            "worst_composition_win_rate": 0.414
+          }
+        },
+        "random": {
+          "3": {
+            "any_downed_rate": 0.2521,
+            "best_composition_win_rate": 0.984,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 46.2,
+            "combat_minutes_p90": 59.25,
+            "compositions": 20,
+            "death_rate": 0.0475,
+            "tpk_rate": 0.0415,
+            "trials": 10000,
+            "win_rate": 0.9326,
+            "world_first_down_rate": 0.0044,
+            "worst_composition_win_rate": 0.846
+          },
+          "4": {
+            "any_downed_rate": 0.4241,
+            "best_composition_win_rate": 0.97,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 58.67,
+            "combat_minutes_p90": 75.37,
+            "compositions": 15,
+            "death_rate": 0.0849,
+            "tpk_rate": 0.0683,
+            "trials": 7500,
+            "win_rate": 0.9033,
+            "world_first_down_rate": 0.0099,
+            "worst_composition_win_rate": 0.79
+          },
+          "5": {
+            "any_downed_rate": 0.4917,
+            "best_composition_win_rate": 0.976,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 68.73,
+            "combat_minutes_p90": 87.58,
+            "compositions": 6,
+            "death_rate": 0.0883,
+            "tpk_rate": 0.051,
+            "trials": 3000,
+            "win_rate": 0.932,
+            "world_first_down_rate": 0.0127,
+            "worst_composition_win_rate": 0.874
+          }
+        }
+      },
+      "normal": {
+        "focus_lowest": {
+          "3": {
+            "any_downed_rate": 0.5737,
+            "best_composition_win_rate": 0.998,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 41.55,
+            "combat_minutes_p90": 55.2,
+            "compositions": 20,
+            "death_rate": 0.1468,
+            "tpk_rate": 0.0395,
+            "trials": 10000,
+            "win_rate": 0.9341,
+            "world_first_down_rate": 0.0488,
+            "worst_composition_win_rate": 0.806
+          },
+          "4": {
+            "any_downed_rate": 0.5995,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 52.8,
+            "combat_minutes_p90": 69.8,
+            "compositions": 15,
+            "death_rate": 0.1411,
+            "tpk_rate": 0.0043,
+            "trials": 7500,
+            "win_rate": 0.9737,
+            "world_first_down_rate": 0.0993,
+            "worst_composition_win_rate": 0.942
+          },
+          "5": {
+            "any_downed_rate": 0.801,
+            "best_composition_win_rate": 0.986,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 62.25,
+            "combat_minutes_p90": 81.7,
+            "compositions": 6,
+            "death_rate": 0.1887,
+            "tpk_rate": 0.0047,
+            "trials": 3000,
+            "win_rate": 0.974,
+            "world_first_down_rate": 0.2453,
+            "worst_composition_win_rate": 0.954
+          }
+        },
+        "random": {
+          "3": {
+            "any_downed_rate": 0.1034,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 37.5,
+            "combat_minutes_p90": 50.55,
+            "compositions": 20,
+            "death_rate": 0.0133,
+            "tpk_rate": 0.0069,
+            "trials": 10000,
+            "win_rate": 0.9905,
+            "world_first_down_rate": 0.0021,
+            "worst_composition_win_rate": 0.972
+          },
+          "4": {
+            "any_downed_rate": 0.0465,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 49.87,
+            "combat_minutes_p90": 58.97,
+            "compositions": 15,
+            "death_rate": 0.0031,
+            "tpk_rate": 0.0,
+            "trials": 7500,
+            "win_rate": 0.9996,
+            "world_first_down_rate": 0.0015,
+            "worst_composition_win_rate": 0.998
+          },
+          "5": {
+            "any_downed_rate": 0.0687,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 55.77,
+            "combat_minutes_p90": 68.73,
+            "compositions": 6,
+            "death_rate": 0.0043,
+            "tpk_rate": 0.0003,
+            "trials": 3000,
+            "win_rate": 0.9997,
+            "world_first_down_rate": 0.0037,
+            "worst_composition_win_rate": 0.998
+          }
+        }
+      },
+      "story": {
+        "focus_lowest": {
+          "3": {
+            "any_downed_rate": 0.1846,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 27.6,
+            "combat_minutes_p90": 36.3,
+            "compositions": 20,
+            "death_rate": 0.0155,
+            "tpk_rate": 0.0008,
+            "trials": 10000,
+            "win_rate": 0.9987,
+            "world_first_down_rate": 0.0081,
+            "worst_composition_win_rate": 0.996
+          },
+          "4": {
+            "any_downed_rate": 0.1112,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 33.7,
+            "combat_minutes_p90": 44.23,
+            "compositions": 15,
+            "death_rate": 0.0016,
+            "tpk_rate": 0.0,
+            "trials": 7500,
+            "win_rate": 1.0,
+            "world_first_down_rate": 0.0109,
+            "worst_composition_win_rate": 1.0
+          },
+          "5": {
+            "any_downed_rate": 0.274,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 39.8,
+            "combat_minutes_p90": 52.77,
+            "compositions": 6,
+            "death_rate": 0.0043,
+            "tpk_rate": 0.0,
+            "trials": 3000,
+            "win_rate": 1.0,
+            "world_first_down_rate": 0.0837,
+            "worst_composition_win_rate": 1.0
+          }
+        },
+        "random": {
+          "3": {
+            "any_downed_rate": 0.0127,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 27.6,
+            "combat_minutes_p90": 36.3,
+            "compositions": 20,
+            "death_rate": 0.0003,
+            "tpk_rate": 0.0,
+            "trials": 10000,
+            "win_rate": 0.9999,
+            "world_first_down_rate": 0.0004,
+            "worst_composition_win_rate": 0.998
+          },
+          "4": {
+            "any_downed_rate": 0.0016,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 33.7,
+            "combat_minutes_p90": 39.27,
+            "compositions": 15,
+            "death_rate": 0.0,
+            "tpk_rate": 0.0,
+            "trials": 7500,
+            "win_rate": 1.0,
+            "world_first_down_rate": 0.0001,
+            "worst_composition_win_rate": 1.0
+          },
+          "5": {
+            "any_downed_rate": 0.006,
+            "best_composition_win_rate": 1.0,
+            "boss_alpha_kill_rate": 0.0,
+            "combat_minutes_median": 39.8,
+            "combat_minutes_p90": 46.58,
+            "compositions": 6,
+            "death_rate": 0.0,
+            "tpk_rate": 0.0,
+            "trials": 3000,
+            "win_rate": 1.0,
+            "world_first_down_rate": 0.0007,
+            "worst_composition_win_rate": 1.0
+          }
+        }
+      }
+    },
+    "iterations_per_composition_tactic": 500,
+    "model": "abstract_side_phase_attrition_v1",
+    "normal_band_checks": {
+      "boss_alpha": true,
+      "downed_rate": false,
+      "timing": false,
+      "tpk_rate": true,
+      "win_rate": false,
+      "world_first_down": false
+    },
+    "normal_synthetic_verdict": "FAIL",
+    "predeclared_pass_bands": {
+      "boss_alpha_kill_rate_max": 0.05,
+      "combat_minutes_median_min": 18.0,
+      "combat_minutes_p90_max": 43.0,
+      "normal_any_downed_rate": [
+        0.1,
+        0.7
+      ],
+      "normal_tpk_rate_max": 0.05,
+      "normal_win_rate": [
+        0.7,
+        0.98
+      ],
+      "world_first_down_rate_max": 0.15
+    },
+    "scope_warning": "Synthetic attrition calibrates candidate envelopes only; it does not prove fun, player tactics, rules completeness, map quality, or real duration.",
+    "seed_scheme": "377090000 + envelope/tactic/party/composition/iteration offsets"
+  },
+  "contract": {
+    "canonical_hash": "PASS_WITH_AUTHORITATIVE_MUTATION_REJECTED",
+    "carrier_loss_cases": 2,
+    "effect_semantics": {
+      "cross_run_reapplications": 15,
+      "dangling_reference_mutations_rejected": 15,
+      "distinct_scope_reapplications": 11,
+      "duplicate_same_scope_rejections": 15,
+      "idempotency_scopes_checked": [
+        "once_per_beat_visit",
+        "once_per_redirect_use",
+        "once_per_run",
+        "once_per_transition"
+      ],
+      "outcome_consequence_mutation": "REJECTED",
+      "subject_kind_mutation": "REJECTED",
+      "templates_checked": 15
+    },
+    "map_encounter_closure": {
+      "los_symmetry_pairs": 110,
+      "reachable_cells": 710,
+      "roster_bands": 6
+    },
+    "mechanics_checked": [
+      "rule.area",
+      "rule.attack",
+      "rule.bonus_action",
+      "rule.clock",
+      "rule.concentration",
+      "rule.damage",
+      "rule.death_saves",
+      "rule.dispute_correction",
+      "rule.healing",
+      "rule.inspiration",
+      "rule.investigation",
+      "rule.npc_state",
+      "rule.pending_physical_roll",
+      "rule.reaction",
+      "rule.resistance",
+      "rule.resource",
+      "rule.schedule_consequence",
+      "rule.side_phases",
+      "rule.skill",
+      "rule.social_check",
+      "rule.spell",
+      "rule.trap_save"
+    ],
+    "predicate_atoms_checked": 34,
+    "provenance_admission": "EXPECTED_FAIL_ABSTRACT_FIXTURE",
+    "provenance_controls": {
+      "expiry_mutation": "REJECTED",
+      "synthetic_positive_control": "PASS_NOT_LEGAL_CLEARANCE",
+      "withdrawal_mutation": "REJECTED"
+    },
+    "provenance_failure_count": 49,
+    "provenance_failure_examples": [
+      "asset_status:asset.combat_line",
+      "asset_status:asset.map_boss",
+      "asset_status:asset.map_skirmish",
+      "asset_status:asset.music_combat",
+      "asset_status:asset.sfx_hit",
+      "asset_use:asset.map_boss",
+      "asset_use:asset.map_skirmish",
+      "decision:prov.combat_recording",
+      "decision:prov.map_boss",
+      "decision:prov.map_skirmish",
+      "decision:prov.music_master",
+      "decision:prov.music_work"
+    ],
+    "reachability": {
+      "completed_trace_minutes": [
+        79,
+        80,
+        80,
+        80,
+        81,
+        81,
+        81,
+        81,
+        82,
+        82,
+        82,
+        82,
+        82,
+        82,
+        83,
+        83,
+        83,
+        83,
+        83,
+        84,
+        84,
+        84,
+        85,
+        85
+      ],
+      "infeasible_edges": 28,
+      "infeasible_examples": [
+        "tr.aftermath.mixed: condition false",
+        "tr.aftermath.success: condition false",
+        "tr.choice.npc: condition false",
+        "tr.choice.object: condition false"
+      ],
+      "reachable_states": 62,
+      "terminal_states": 25,
+      "terminal_traces": [
+        {
+          "consequences": [
+            "consequence.loss"
+          ],
+          "minutes": 17,
+          "outcome_id": "outcome.loss",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.decline",
+            "outcome.loss"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.decline",
+              "minutes": 17
+            }
+          ],
+          "type": "refusal_loss"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 79,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 27
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 34
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 50
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 54
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 74
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 79
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 80,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 75
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 80
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 80,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 27
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 34
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 50
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 54
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 75
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 80
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 80,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 18
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 75
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 80
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 81,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 27
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 34
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 50
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 54
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 76
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 81
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 81,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 76
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 81
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 81,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 18
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 76
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 81
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 81,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 29
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 36
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 52
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 76
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 81
+            }
+          ],
+          "type": "showcase_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 29
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 36
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 52
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 56
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 82
+            }
+          ],
+          "type": "pressure_success"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 82
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 27
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 34
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 50
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 54
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 82
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 18
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 82
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 82
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 82,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 20
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 77
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 82
+            }
+          ],
+          "type": "showcase_success"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 83,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 29
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 36
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 52
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 78
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 83
+            }
+          ],
+          "type": "pressure_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 83,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 20
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 58
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 78
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 83
+            }
+          ],
+          "type": "pressure_success"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 83,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 18
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 78
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 83
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 83,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "redirect.offrail",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "redirect.offrail",
+              "minutes": 15
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 18
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 28
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 35
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 51
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 55
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 56
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 78
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 83
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.success"
+          ],
+          "minutes": 83,
+          "outcome_id": "outcome.success",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.aftermath",
+            "beat.aftermath",
+            "tr.aftermath.success",
+            "outcome.success"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 58
+            },
+            {
+              "event": "tr.boss.aftermath",
+              "minutes": 78
+            },
+            {
+              "event": "tr.aftermath.success",
+              "minutes": 83
+            }
+          ],
+          "type": "recovery_success"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 84,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "tr.npc.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "tr.npc.plan",
+              "minutes": 29
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 36
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 52
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 56
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 79
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 84
+            }
+          ],
+          "type": "pressure_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 84,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 20
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 79
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 84
+            }
+          ],
+          "type": "pressure_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 84,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 79
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 84
+            }
+          ],
+          "type": "recovery_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 85,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.object",
+            "beat.investigate_object",
+            "tr.object.plan",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.object",
+              "minutes": 20
+            },
+            {
+              "event": "tr.object.plan",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 58
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 80
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 85
+            }
+          ],
+          "type": "pressure_mixed"
+        },
+        {
+          "consequences": [
+            "consequence.mixed"
+          ],
+          "minutes": 85,
+          "outcome_id": "outcome.mixed",
+          "path": [
+            "beat.selection",
+            "tr.selection.social",
+            "beat.social",
+            "tr.social.choice",
+            "beat.choice",
+            "tr.choice.npc",
+            "beat.investigate_npc",
+            "redirect.carrier_loss",
+            "beat.plan_roll",
+            "tr.plan.skirmish",
+            "beat.skirmish",
+            "tr.skirmish.dispute",
+            "beat.dispute",
+            "tr.dispute.boss",
+            "beat.boss",
+            "redirect.boss_clock",
+            "beat.boss",
+            "tr.boss.timeout",
+            "beat.aftermath",
+            "tr.aftermath.mixed",
+            "outcome.mixed"
+          ],
+          "timeline": [
+            {
+              "event": "start",
+              "minutes": 0
+            },
+            {
+              "event": "tr.selection.social",
+              "minutes": 6
+            },
+            {
+              "event": "tr.social.choice",
+              "minutes": 17
+            },
+            {
+              "event": "tr.choice.npc",
+              "minutes": 20
+            },
+            {
+              "event": "redirect.carrier_loss",
+              "minutes": 30
+            },
+            {
+              "event": "tr.plan.skirmish",
+              "minutes": 37
+            },
+            {
+              "event": "tr.skirmish.dispute",
+              "minutes": 53
+            },
+            {
+              "event": "tr.dispute.boss",
+              "minutes": 57
+            },
+            {
+              "event": "redirect.boss_clock",
+              "minutes": 58
+            },
+            {
+              "event": "tr.boss.timeout",
+              "minutes": 80
+            },
+            {
+              "event": "tr.aftermath.mixed",
+              "minutes": 85
+            }
+          ],
+          "type": "recovery_mixed"
+        }
+      ],
+      "trace_classes": {
+        "pressure_mixed": 4,
+        "pressure_success": 2,
+        "recovery_mixed": 8,
+        "recovery_success": 8,
+        "refusal_loss": 1,
+        "showcase_success": 2
+      },
+      "unique_resolution_checks": 25
+    },
+    "reference_effect_route_mechanic_lint": "PASS",
+    "schema_and_formats": "PASS",
+    "secret_projection": {
+      "nonprojected_metadata_mutations_contained": 7,
+      "post_reveal_bytes": 2235,
+      "pre_reveal_bytes": 1764,
+      "private_needles_checked": 7,
+      "private_scope_checks": 10,
+      "public_source_mutations_rejected": 21,
+      "status": "PASS"
+    }
+  }
+}

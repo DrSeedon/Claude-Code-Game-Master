@@ -1,0 +1,711 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-table/r9-content-contract.schema.json",
+  "title": "R9 authored MVP slice package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "identity",
+    "compatibility",
+    "timing",
+    "entities",
+    "choice_templates",
+    "roll_templates",
+    "truth_facts",
+    "secrets",
+    "clues",
+    "npcs",
+    "obligations",
+    "beats",
+    "redirects",
+    "outcomes",
+    "effect_templates",
+    "maps",
+    "enemy_templates",
+    "encounters",
+    "starter_roles",
+    "presentation",
+    "assets",
+    "provenance_policy",
+    "provenance",
+    "provenance_relationships"
+  ],
+  "properties": {
+    "schema_version": {"const": "r9.content.v1"},
+    "identity": {"$ref": "#/$defs/Identity"},
+    "compatibility": {"$ref": "#/$defs/Compatibility"},
+    "timing": {"$ref": "#/$defs/Timing"},
+    "entities": {"$ref": "#/$defs/EntityRefMap"},
+    "choice_templates": {"$ref": "#/$defs/ChoiceTemplateMap"},
+    "roll_templates": {"$ref": "#/$defs/RollTemplateMap"},
+    "truth_facts": {"$ref": "#/$defs/TruthMap"},
+    "secrets": {"$ref": "#/$defs/SecretMap"},
+    "clues": {"$ref": "#/$defs/ClueMap"},
+    "npcs": {"$ref": "#/$defs/NpcMap"},
+    "obligations": {"$ref": "#/$defs/ObligationMap"},
+    "beats": {"$ref": "#/$defs/BeatMap"},
+    "redirects": {"$ref": "#/$defs/RedirectMap"},
+    "outcomes": {"$ref": "#/$defs/OutcomeMap"},
+    "effect_templates": {"$ref": "#/$defs/EffectTemplateMap"},
+    "maps": {"$ref": "#/$defs/MapMap"},
+    "enemy_templates": {"$ref": "#/$defs/EnemyTemplateMap"},
+    "encounters": {"$ref": "#/$defs/EncounterMap"},
+    "starter_roles": {"$ref": "#/$defs/StarterRoleMap"},
+    "presentation": {"$ref": "#/$defs/Presentation"},
+    "assets": {"$ref": "#/$defs/AssetMap"},
+    "provenance_policy": {"$ref": "#/$defs/ProvenancePolicy"},
+    "provenance": {"$ref": "#/$defs/ProvenanceMap"},
+    "provenance_relationships": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/ProvenanceRelationship"}}
+  },
+  "$defs": {
+    "Id": {"type": "string", "pattern": "^[a-z][a-z0-9_.:-]{2,95}$"},
+    "Hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "IdList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/Id"}
+    },
+    "Identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_id", "revision", "content_hash", "locale", "originality_declaration"],
+      "properties": {
+        "package_id": {"$ref": "#/$defs/Id"},
+        "revision": {"type": "integer", "minimum": 1},
+        "content_hash": {"$ref": "#/$defs/Hash"},
+        "locale": {"type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$"},
+        "originality_declaration": {"const": "original_or_row_level_cleared_only"}
+      }
+    },
+    "Compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "core_campaign_definition_schema",
+        "ruleset_id",
+        "rules_engine_version",
+        "core_operation_allowlist",
+        "r5_input_contract",
+        "r6_audio_contract"
+      ],
+      "properties": {
+        "core_campaign_definition_schema": {"const": 2},
+        "ruleset_id": {"const": "srd-5.2.1-mvp-1"},
+        "rules_engine_version": {"$ref": "#/$defs/Id"},
+        "core_operation_allowlist": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "move_entity", "apply_damage", "apply_healing", "set_condition",
+              "spend_resource", "create_effect", "set_terrain_feature",
+              "spawn_from_template", "despawn_entity", "set_npc_status",
+              "reveal_fact_via_route", "advance_clock", "schedule_consequence",
+              "open_physical_roll", "advance_combat_mode"
+            ]
+          }
+        },
+        "r5_input_contract": {"const": "r5.speech.v1"},
+        "r6_audio_contract": {"const": "r6.audio.v2"}
+      }
+    },
+    "Timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clock_start", "target_min", "minimum_min", "maximum_min", "reserve_min", "checkpoints_min"],
+      "properties": {
+        "clock_start": {"const": "first_selectable_hero_screen_visible"},
+        "target_min": {"const": 75},
+        "minimum_min": {"const": 60},
+        "maximum_min": {"const": 90},
+        "reserve_min": {"type": "integer", "minimum": 5, "maximum": 15},
+        "checkpoints_min": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["investigation_complete", "boss_armed", "boss_started", "epilogue_started", "hard_stop"],
+          "properties": {
+            "investigation_complete": {"const": 32},
+            "boss_armed": {"const": 50},
+            "boss_started": {"const": 60},
+            "epilogue_started": {"const": 85},
+            "hard_stop": {"const": 90}
+          }
+        }
+      }
+    },
+    "EntityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "provenance_id"],
+      "properties": {
+        "kind": {"enum": ["location", "object", "event", "archetype"]},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "EntityRefMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/EntityRef"}
+    },
+    "ChoiceTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "allowed_values", "provenance_id"],
+      "properties": {
+        "owner": {"enum": ["player", "party", "core"]},
+        "allowed_values": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": ["string", "integer", "boolean"]}},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "ChoiceTemplateMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/ChoiceTemplate"}
+    },
+    "RollTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "declaration_required", "result_owner", "provenance_id"],
+      "properties": {
+        "kind": {"const": "physical_d20"},
+        "declaration_required": {"const": true},
+        "result_owner": {"const": "core_pending_roll"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "RollTemplateMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/RollTemplate"}
+    },
+    "Truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truth", "public_fact", "classification", "mandatory", "subject_refs", "provenance_id"],
+      "properties": {
+        "truth": {"type": "string", "minLength": 1, "maxLength": 8000},
+        "public_fact": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "classification": {"enum": ["public", "secret"]},
+        "mandatory": {"type": "boolean"},
+        "subject_refs": {"$ref": "#/$defs/IdList"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "TruthMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Truth"}
+    },
+    "Secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_id", "known_by_npc_ids", "adjudicator_scope", "projection_policy", "synthetic_canary"],
+      "properties": {
+        "fact_id": {"$ref": "#/$defs/Id"},
+        "known_by_npc_ids": {"$ref": "#/$defs/IdList"},
+        "adjudicator_scope": {"$ref": "#/$defs/IdList"},
+        "projection_policy": {"const": "never_project_truth_or_secret_id"},
+        "synthetic_canary": {"type": "string", "pattern": "^R9_SECRET_CANARY_[A-Z0-9_]+$"}
+      }
+    },
+    "SecretMap": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Secret"}
+    },
+    "Carrier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "durable"],
+      "properties": {
+        "kind": {"enum": ["npc", "location", "object", "event"]},
+        "id": {"$ref": "#/$defs/Id"},
+        "durable": {"type": "boolean"}
+      }
+    },
+    "Atom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {"enum": ["fact_revealed", "beat_completed", "npc_present", "npc_absent", "npc_dead", "clock_at_least", "encounter_complete", "choice_equals", "effect_active", "consequence_scheduled"]},
+        "ref": {"$ref": "#/$defs/Id"},
+        "value": {"type": ["string", "integer", "boolean"]}
+      }
+    },
+    "PredicateDNF": {
+      "description": "OR of AND branches. Exactly `[[]]` means always; an empty outer array is invalid.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "array",
+        "items": {"$ref": "#/$defs/Atom"}
+      }
+    },
+    "ClueRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_id", "carrier", "preconditions", "reveal_fact_ids", "delivery", "mechanic_refs", "time_cost_min"],
+      "properties": {
+        "route_id": {"$ref": "#/$defs/Id"},
+        "carrier": {"$ref": "#/$defs/Carrier"},
+        "preconditions": {"$ref": "#/$defs/PredicateDNF"},
+        "reveal_fact_ids": {"$ref": "#/$defs/IdList"},
+        "delivery": {"enum": ["automatic_on_supported_investigation", "physical_roll_adds_advantage", "npc_voluntary", "npc_pressured", "world_reaction"]},
+        "mechanic_refs": {"$ref": "#/$defs/IdList"},
+        "time_cost_min": {"type": "integer", "minimum": 1, "maximum": 15}
+      }
+    },
+    "Clue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conclusion_fact_id", "mandatory", "routes"],
+      "properties": {
+        "conclusion_fact_id": {"$ref": "#/$defs/Id"},
+        "mandatory": {"type": "boolean"},
+        "routes": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"$ref": "#/$defs/ClueRoute"}}
+      }
+    },
+    "ClueMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Clue"}
+    },
+    "NpcGoal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "priority", "desired_state", "refusal_boundary", "pressure_response"],
+      "properties": {
+        "goal_id": {"$ref": "#/$defs/Id"},
+        "priority": {"type": "integer", "minimum": 1, "maximum": 5},
+        "desired_state": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "refusal_boundary": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "pressure_response": {"type": "string", "minLength": 1, "maxLength": 1000}
+      }
+    },
+    "Npc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["importance", "initial_status", "goals", "knows_secret_ids", "public_facade_fact_id", "voice_key", "fallback_voice_key", "state_transitions", "provenance_id"],
+      "properties": {
+        "importance": {"enum": ["important", "generic"]},
+        "initial_status": {"enum": ["alive_present", "alive_absent", "dead"]},
+        "goals": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"$ref": "#/$defs/NpcGoal"}},
+        "knows_secret_ids": {"$ref": "#/$defs/IdList"},
+        "public_facade_fact_id": {"$ref": "#/$defs/Id"},
+        "voice_key": {"$ref": "#/$defs/Id"},
+        "fallback_voice_key": {"anyOf": [{"$ref": "#/$defs/Id"}, {"const": "text_only"}]},
+        "state_transitions": {"$ref": "#/$defs/IdList"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "NpcMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Npc"}
+    },
+    "Obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "required_on_showcase_trace", "satisfied_by_beat_ids"],
+      "properties": {
+        "kind": {"enum": ["hero_selection", "narrator_selection", "important_npc_social", "direction_choice", "investigation_or_trap", "shared_plan", "physical_roll", "tactical_fight", "boss_conflict", "rules_dispute", "persistent_consequence", "continuation_hook"]},
+        "required_on_showcase_trace": {"type": "boolean"},
+        "satisfied_by_beat_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "ObligationMap": {
+      "type": "object",
+      "minProperties": 12,
+      "maxProperties": 12,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Obligation"}
+    },
+    "Transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transition_id", "when", "condition", "trace_class", "to", "effect_template_ids"],
+      "properties": {
+        "transition_id": {"$ref": "#/$defs/Id"},
+        "when": {"enum": ["complete", "fail", "decline", "timeout", "supported_off_rail_action"]},
+        "condition": {"$ref": "#/$defs/PredicateDNF"},
+        "trace_class": {"enum": ["showcase", "recovery", "refusal", "pressure"]},
+        "to": {"$ref": "#/$defs/Id"},
+        "effect_template_ids": {"$ref": "#/$defs/IdList"}
+      }
+    },
+    "Beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "requirement", "satisfies_obligation_ids", "entry", "completion", "transitions", "target_min", "hard_cap_min", "cut_rule", "mechanic_refs", "presentation_cue_ids"],
+      "properties": {
+        "kind": {"enum": ["selection", "social", "choice", "investigation", "trap", "physical_roll", "combat", "boss", "dispute", "aftermath", "bridge"]},
+        "requirement": {"enum": ["mandatory", "optional", "conditional"]},
+        "satisfies_obligation_ids": {"$ref": "#/$defs/IdList"},
+        "entry": {"$ref": "#/$defs/PredicateDNF"},
+        "completion": {"$ref": "#/$defs/PredicateDNF"},
+        "transitions": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/Transition"}},
+        "target_min": {"type": "integer", "minimum": 1, "maximum": 30},
+        "hard_cap_min": {"type": "integer", "minimum": 1, "maximum": 35},
+        "cut_rule": {"enum": ["never_cut", "cut_if_late", "compress_to_public_atom", "resolve_at_round_boundary"]},
+        "mechanic_refs": {"$ref": "#/$defs/IdList"},
+        "presentation_cue_ids": {"$ref": "#/$defs/IdList"}
+      }
+    },
+    "BeatMap": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 18,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Beat"}
+    },
+    "Redirect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger", "kind", "from_beat_ids", "to", "completes_current", "preconditions", "effect_template_ids", "reveals_via_route_id", "player_choice_preserved", "use_limit", "time_cost_min"],
+      "properties": {
+        "trigger": {"enum": ["elapsed_checkpoint", "no_progress", "carrier_lost", "supported_off_rail_action"]},
+        "kind": {"enum": ["world_reaction", "mobile_carrier", "environmental_evidence", "deadline_consequence"]},
+        "from_beat_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "to": {"$ref": "#/$defs/Id"},
+        "completes_current": {"type": "boolean"},
+        "preconditions": {"$ref": "#/$defs/PredicateDNF"},
+        "effect_template_ids": {"$ref": "#/$defs/IdList"},
+        "reveals_via_route_id": {"anyOf": [{"$ref": "#/$defs/Id"}, {"type": "null"}]},
+        "player_choice_preserved": {"const": true},
+        "use_limit": {"type": "integer", "minimum": 1, "maximum": 2},
+        "time_cost_min": {"type": "integer", "minimum": 1, "maximum": 10}
+      }
+    },
+    "RedirectMap": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 8,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Redirect"}
+    },
+    "Outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terminal_class", "priority", "when", "persistent_consequence_template_ids", "continuation_hook_fact_id", "death_policy"],
+      "properties": {
+        "terminal_class": {"enum": ["success", "loss", "mixed"]},
+        "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
+        "when": {"$ref": "#/$defs/PredicateDNF"},
+        "persistent_consequence_template_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "continuation_hook_fact_id": {"$ref": "#/$defs/Id"},
+        "death_policy": {"enum": ["core_death_saves_and_persist_history", "no_death_possible"]}
+      }
+    },
+    "OutcomeMap": {
+      "type": "object",
+      "minProperties": 3,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Outcome"}
+    },
+    "EffectTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_version", "core_operation", "subject_kind", "arguments", "idempotency_scope", "mechanic_refs", "provenance_id"],
+      "properties": {
+        "template_version": {"const": 1},
+        "core_operation": {"enum": ["move_entity", "apply_damage", "apply_healing", "set_condition", "spend_resource", "create_effect", "set_terrain_feature", "spawn_from_template", "despawn_entity", "set_npc_status", "reveal_fact_via_route", "advance_clock", "schedule_consequence", "open_physical_roll", "advance_combat_mode"]},
+        "subject_kind": {"enum": ["run", "fact", "npc", "encounter", "consequence", "roll", "terrain", "entity"]},
+        "arguments": {"type": "object", "minProperties": 1, "additionalProperties": {"type": ["string", "integer", "boolean"]}},
+        "idempotency_scope": {"enum": ["once_per_run", "once_per_beat_visit", "once_per_transition", "once_per_redirect_use"]},
+        "mechanic_refs": {"$ref": "#/$defs/IdList"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "EffectTemplateMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/EffectTemplate"}
+    },
+    "Cell": {
+      "type": "array",
+      "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "CellList": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/Cell"}},
+    "LightZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "min_cell", "max_cell"],
+      "properties": {
+        "light": {"enum": ["bright", "dim", "dark"]},
+        "min_cell": {"$ref": "#/$defs/Cell"},
+        "max_cell": {"$ref": "#/$defs/Cell"}
+      }
+    },
+    "Topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blocked_cells", "opaque_cells", "spawn_anchors", "objective_cells", "light_zones"],
+      "properties": {
+        "blocked_cells": {"$ref": "#/$defs/CellList"},
+        "opaque_cells": {"$ref": "#/$defs/CellList"},
+        "spawn_anchors": {"type": "object", "minProperties": 2, "propertyNames": {"$ref": "#/$defs/Id"}, "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Cell"}}},
+        "objective_cells": {"type": "object", "minProperties": 1, "propertyNames": {"$ref": "#/$defs/Id"}, "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Cell"}}},
+        "light_zones": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/LightZone"}}
+      }
+    },
+    "Map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "width_cells", "height_cells", "feet_per_cell", "collision_layer_ref", "los_layer_ref", "light_layer_ref", "spawn_anchor_ids", "encounter_ids", "topology", "provenance_id"],
+      "properties": {
+        "asset_id": {"$ref": "#/$defs/Id"},
+        "width_cells": {"type": "integer", "minimum": 8, "maximum": 64},
+        "height_cells": {"type": "integer", "minimum": 8, "maximum": 64},
+        "feet_per_cell": {"const": 5},
+        "collision_layer_ref": {"$ref": "#/$defs/Id"},
+        "los_layer_ref": {"$ref": "#/$defs/Id"},
+        "light_layer_ref": {"$ref": "#/$defs/Id"},
+        "spawn_anchor_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "encounter_ids": {"$ref": "#/$defs/IdList"},
+        "topology": {"$ref": "#/$defs/Topology"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "MapMap": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Map"}
+    },
+    "PartyBand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xp_budget", "enemy_roster", "spawn_anchor_ids"],
+      "properties": {
+        "xp_budget": {"type": "integer", "minimum": 1},
+        "enemy_roster": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"$ref": "#/$defs/EnemyRosterItem"}},
+        "spawn_anchor_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "EnemyRosterItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_id", "count"],
+      "properties": {
+        "template_id": {"$ref": "#/$defs/Id"},
+        "count": {"type": "integer", "minimum": 1, "maximum": 10}
+      }
+    },
+    "EnemyTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xp_each", "size_cells", "max_hp", "armor_class", "initiative_modifier", "actions_per_phase", "attack_bonus", "damage_average", "mechanic_refs", "spawn_operation", "provenance_id"],
+      "properties": {
+        "xp_each": {"type": "integer", "minimum": 1},
+        "size_cells": {"$ref": "#/$defs/Cell"},
+        "max_hp": {"type": "integer", "minimum": 1, "maximum": 500},
+        "armor_class": {"type": "integer", "minimum": 1, "maximum": 30},
+        "initiative_modifier": {"type": "integer", "minimum": -10, "maximum": 20},
+        "actions_per_phase": {"type": "integer", "minimum": 1, "maximum": 5},
+        "attack_bonus": {"type": "integer", "minimum": -5, "maximum": 20},
+        "damage_average": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "mechanic_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "spawn_operation": {"const": "spawn_from_template"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "EnemyTemplateMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/EnemyTemplate"}
+    },
+    "Encounter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "map_id", "objective_fact_id", "difficulty", "party_3", "party_4", "party_5", "side_phase", "mechanic_refs", "time_cap_min", "failure_outcome_id", "provenance_id"],
+      "properties": {
+        "kind": {"enum": ["skirmish", "boss"]},
+        "map_id": {"$ref": "#/$defs/Id"},
+        "objective_fact_id": {"$ref": "#/$defs/Id"},
+        "difficulty": {"enum": ["low", "moderate", "high"]},
+        "party_3": {"$ref": "#/$defs/PartyBand"},
+        "party_4": {"$ref": "#/$defs/PartyBand"},
+        "party_5": {"$ref": "#/$defs/PartyBand"},
+        "side_phase": {"$ref": "#/$defs/SidePhase"},
+        "mechanic_refs": {"$ref": "#/$defs/IdList"},
+        "time_cap_min": {"type": "integer", "minimum": 10, "maximum": 30},
+        "failure_outcome_id": {"$ref": "#/$defs/Id"},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "SidePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_side", "party_roll", "world_roll", "tie_rule", "internal_order", "once_per_phase", "mode_locked_after_first_action", "round_boundary"],
+      "properties": {
+        "first_side": {"const": "opposed_public_side_initiative"},
+        "party_roll": {"const": "one_pending_physical_d20_plus_selected_hero_initiative"},
+        "world_roll": {"const": "one_server_public_d20_plus_encounter_initiative"},
+        "tie_rule": {"const": "higher_static_modifier_then_party"},
+        "internal_order": {"const": "side_chooses_each_eligible_unacted_actor"},
+        "once_per_phase": {"const": true},
+        "mode_locked_after_first_action": {"const": true},
+        "round_boundary": {"const": "after_both_sides_complete"}
+      }
+    },
+    "EncounterMap": {
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 2,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Encounter"}
+    },
+    "StarterRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "role", "strengths", "weaknesses", "tactical_hooks", "social_hooks", "rules_refs", "onboarding", "provenance_id"],
+      "properties": {
+        "level": {"const": 3},
+        "role": {"enum": ["guardian", "fury", "shadow", "beacon", "arcanist", "voice"]},
+        "strengths": {"type": "array", "minItems": 2, "maxItems": 4, "items": {"type": "string", "minLength": 1, "maxLength": 240}},
+        "weaknesses": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 1, "maxLength": 240}},
+        "tactical_hooks": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 1, "maxLength": 240}},
+        "social_hooks": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 1, "maxLength": 240}},
+        "rules_refs": {"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}},
+        "onboarding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complexity", "always_visible_choices", "conditional_choices", "first_turn_prompt_id"],
+          "properties": {
+            "complexity": {"enum": ["low", "medium"]},
+            "always_visible_choices": {"type": "integer", "minimum": 2, "maximum": 5},
+            "conditional_choices": {"type": "integer", "minimum": 0, "maximum": 4},
+            "first_turn_prompt_id": {"$ref": "#/$defs/Id"}
+          }
+        },
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "StarterRoleMap": {
+      "type": "object",
+      "minProperties": 6,
+      "maxProperties": 6,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/StarterRole"}
+    },
+    "VoiceRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity_id", "voice_key", "fallback_voice_key", "provenance_id"],
+      "properties": {
+        "entity_id": {"$ref": "#/$defs/Id"},
+        "voice_key": {"$ref": "#/$defs/Id"},
+        "fallback_voice_key": {"anyOf": [{"$ref": "#/$defs/Id"}, {"const": "text_only"}]},
+        "provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    },
+    "AudioCue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_key", "audio_policy", "speaker_entity_id", "asset_pool_ids", "music_state", "safe_text_fact_ids"],
+      "properties": {
+        "event_key": {"$ref": "#/$defs/Id"},
+        "audio_policy": {"enum": ["cache_only", "dynamic_allowed", "text_only"]},
+        "speaker_entity_id": {"$ref": "#/$defs/Id"},
+        "asset_pool_ids": {"$ref": "#/$defs/IdList"},
+        "music_state": {"enum": ["silence", "exploration", "danger", "conversation", "combat", "boss", "victory", "loss"]},
+        "safe_text_fact_ids": {"$ref": "#/$defs/IdList"}
+      }
+    },
+    "Presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narrator_entity_id", "narrator_voice_key", "voice_routes", "asset_pools", "audio_cues"],
+      "properties": {
+        "narrator_entity_id": {"const": "narrator:severin"},
+        "narrator_voice_key": {"const": "narrator.severin"},
+        "voice_routes": {"type": "object", "propertyNames": {"$ref": "#/$defs/Id"}, "additionalProperties": {"$ref": "#/$defs/VoiceRoute"}},
+        "asset_pools": {"type": "object", "propertyNames": {"$ref": "#/$defs/Id"}, "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}},
+        "audio_cues": {"type": "object", "propertyNames": {"$ref": "#/$defs/Id"}, "additionalProperties": {"$ref": "#/$defs/AudioCue"}}
+      }
+    },
+    "Asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "sha256", "provenance_id", "status"],
+      "properties": {
+        "kind": {"enum": ["map", "portrait", "scene", "token", "cached_speech", "music", "sfx", "font", "rules_excerpt", "text"]},
+        "path": {"type": "string", "pattern": "^(campaigns|assets|docs)/[A-Za-z0-9_./-]+$"},
+        "sha256": {"$ref": "#/$defs/Hash"},
+        "provenance_id": {"$ref": "#/$defs/Id"},
+        "status": {"enum": ["blocked_pending_rights", "approved", "withdrawn", "expired"]}
+      }
+    },
+    "AssetMap": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Asset"}
+    },
+    "Provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material_type", "source_kind", "title", "author_or_provider", "source_uri", "source_version", "creation_date", "source_hash", "rights_owner_evidence", "license_expression", "terms_snapshot", "input_refs", "allowed_uses", "territories", "term_end", "attribution", "reviewer", "decision"],
+      "properties": {
+        "material_type": {"enum": ["story", "rules", "map", "image", "voice", "recording", "music_work", "music_master", "sfx", "font", "generated_output"]},
+        "source_kind": {"enum": ["original", "commissioned", "cc0", "cc_by", "stock", "generated", "srd_5_2_1"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 500},
+        "author_or_provider": {"type": "string", "minLength": 1, "maxLength": 500},
+        "source_uri": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "source_version": {"type": "string", "minLength": 1, "maxLength": 500},
+        "creation_date": {"type": "string", "format": "date"},
+        "source_hash": {"$ref": "#/$defs/Hash"},
+        "rights_owner_evidence": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "license_expression": {"type": "string", "minLength": 1, "maxLength": 500},
+        "terms_snapshot": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "input_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        "allowed_uses": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["modify", "hosted_runtime", "distribution", "public_performance", "voice_model_creation", "synthetic_generation", "cache", "marketing"]}},
+        "territories": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+        "term_end": {"anyOf": [{"type": "string", "format": "date"}, {"enum": ["perpetual", "per_license", "unassigned_fixture"]}]},
+        "attribution": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "reviewer": {"type": "string", "minLength": 1, "maxLength": 500},
+        "decision": {"enum": ["blocked_pending_review", "approved", "avoid_literal", "withdrawn", "expired"]}
+      }
+    },
+    "ProvenanceMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/Id"},
+      "additionalProperties": {"$ref": "#/$defs/Provenance"}
+    },
+    "ProvenancePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluation_date", "qualified_reviewer_ids"],
+      "properties": {
+        "evaluation_date": {"type": "string", "format": "date"},
+        "qualified_reviewer_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/Id"}}
+      }
+    },
+    "ProvenanceRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relationship_id", "subject_provenance_id", "predicate", "object_provenance_id"],
+      "properties": {
+        "relationship_id": {"$ref": "#/$defs/Id"},
+        "subject_provenance_id": {"$ref": "#/$defs/Id"},
+        "predicate": {"enum": ["derived_from", "performance_of_script", "uses_voice", "master_of_work"]},
+        "object_provenance_id": {"$ref": "#/$defs/Id"}
+      }
+    }
+  }
+}
