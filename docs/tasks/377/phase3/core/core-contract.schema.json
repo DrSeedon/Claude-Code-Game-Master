@@ -1,0 +1,1112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-table/core-contract-v1.schema.json",
+  "title": "Unified AI-table core research contract v1",
+  "description": "Research schema, not a deployed protocol. Cross-reference, reachability, LOS, resource, reveal-dominance, and transaction invariants in core-adr.md additionally apply.",
+  "oneOf": [
+    { "$ref": "#/$defs/CampaignDefinition" },
+    { "$ref": "#/$defs/RoomAggregate" },
+    { "$ref": "#/$defs/CommandEnvelope" },
+    { "$ref": "#/$defs/ResolutionPlan" },
+    { "$ref": "#/$defs/CommandResult" },
+    { "$ref": "#/$defs/ProjectionFamily" }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "Hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "Version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Cell": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "integer", "minimum": 0, "maximum": 1023 },
+        { "type": "integer", "minimum": 0, "maximum": 1023 }
+      ],
+      "items": false
+    },
+    "Fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truth", "public_fact", "classification", "mandatory"],
+      "properties": {
+        "truth": { "type": "string", "minLength": 1, "maxLength": 8000 },
+        "public_fact": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "classification": { "enum": ["public", "secret"] },
+        "mandatory": { "type": "boolean" }
+      }
+    },
+    "Carrier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["npc", "location", "object", "event"] },
+        "id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "Route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_id", "carrier", "reveal_fact_ids", "requires"],
+      "properties": {
+        "fact_id": { "$ref": "#/$defs/Id" },
+        "carrier": { "$ref": "#/$defs/Carrier" },
+        "reveal_fact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        },
+        "requires": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "npc_status": {
+              "type": "array",
+              "prefixItems": [
+                { "$ref": "#/$defs/Id" },
+                { "enum": ["alive_present", "alive_absent", "dead"] }
+              ],
+              "items": false
+            },
+            "location_available": { "$ref": "#/$defs/Id" }
+          }
+        },
+        "priority": { "type": "integer", "minimum": -1000, "maximum": 1000 },
+        "once": { "type": "boolean" }
+      }
+    },
+    "Threat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum", "thresholds"],
+      "properties": {
+        "maximum": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "thresholds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      }
+    },
+    "Ending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terminal_class", "priority", "when"],
+      "properties": {
+        "terminal_class": { "enum": ["success", "loss", "mixed"] },
+        "priority": { "type": "integer", "minimum": -1000, "maximum": 1000 },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "clock_at_least": {
+              "type": "array",
+              "prefixItems": [
+                { "$ref": "#/$defs/Id" },
+                { "type": "integer", "minimum": 1, "maximum": 100 }
+              ],
+              "items": false
+            },
+            "fact_revealed": { "$ref": "#/$defs/Id" },
+            "boss_defeated": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "EntityTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "hp", "ac", "speed"],
+      "properties": {
+        "kind": { "enum": ["enemy", "npc", "object"] },
+        "hp": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "ac": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "speed": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "TerrainTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_id", "from_state", "to_state", "cells", "kind", "movement_cost", "blocks_los"],
+      "properties": {
+        "feature_id": { "$ref": "#/$defs/Id" },
+        "from_state": { "$ref": "#/$defs/Id" },
+        "to_state": { "$ref": "#/$defs/Id" },
+        "cells": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/Cell" } },
+        "kind": { "enum": ["normal", "difficult", "debris", "fire", "ice", "water", "wall"] },
+        "movement_cost": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "blocks_los": { "type": "boolean" }
+      }
+    },
+    "ConsequenceTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clock_id", "public_cue"],
+      "properties": {
+        "clock_id": { "$ref": "#/$defs/Id" },
+        "public_cue": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "CampaignDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "campaign_id",
+        "definition_hash",
+        "facts",
+        "routes",
+        "threats",
+        "endings",
+        "templates",
+        "terrain_transitions",
+        "consequence_templates",
+        "locations"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "campaign_id": { "$ref": "#/$defs/Id" },
+        "definition_hash": { "$ref": "#/$defs/Hash" },
+        "facts": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/Fact" }
+        },
+        "routes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/Route" }
+        },
+        "threats": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/Threat" }
+        },
+        "endings": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/Ending" }
+        },
+        "templates": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/EntityTemplate" }
+        },
+        "terrain_transitions": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/TerrainTransition" }
+        },
+        "consequence_templates": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/Id" },
+          "additionalProperties": { "$ref": "#/$defs/ConsequenceTemplate" }
+        },
+        "locations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Id" }
+        },
+        "gm_note": { "type": "string", "maxLength": 8000 }
+      }
+    },
+    "Entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "position", "lifecycle"],
+      "properties": {
+        "kind": { "enum": ["hero", "enemy", "npc", "object"] },
+        "position": { "oneOf": [{ "$ref": "#/$defs/Cell" }, { "type": "null" }] },
+        "lifecycle": { "enum": ["alive", "downed", "stable", "defeated", "dead", "removed"] },
+        "status": { "enum": ["alive_present", "alive_absent", "dead"] },
+        "hp": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "hp_max": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "ac": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "speed": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "conditions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["prone", "grappled", "restrained", "poisoned", "unconscious"] }
+        },
+        "death_saves": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["successes", "failures"],
+          "properties": {
+            "successes": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "failures": { "type": "integer", "minimum": 0, "maximum": 3 }
+          }
+        },
+        "class": { "enum": ["barbarian", "bard", "cleric", "fighter", "rogue", "wizard"] },
+        "level": { "const": 3 },
+        "role": { "enum": ["defender", "striker", "scout", "healer", "controller", "support"] }
+      }
+    },
+    "ApprovalCard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["turn_id", "draft_version", "plan_digest", "approval_nonce", "status", "intent_summary", "declared_costs", "declared_check", "declared_stakes", "visible_effects"],
+      "properties": {
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "#/$defs/Hash" },
+        "approval_nonce": { "oneOf": [{ "type": "string", "minLength": 32, "maxLength": 256 }, { "type": "null" }] },
+        "status": { "enum": ["awaiting_approval", "approved"] },
+        "intent_summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "declared_costs": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 100 } },
+        "declared_check": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "die", "modifier", "target"],
+              "properties": {
+                "kind": { "enum": ["ability", "save", "attack", "death_save"] },
+                "die": { "type": "string", "pattern": "^d(4|6|8|10|12|20|100)$" },
+                "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+                "target": { "type": "integer", "minimum": 1, "maximum": 40 }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "declared_stakes": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 1000 } },
+        "visible_effects": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 1000 } }
+      }
+    },
+    "CoordinatorTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turn_id",
+        "stage",
+        "draft_version",
+        "plan_id",
+        "plan_digest",
+        "plan",
+        "approval_nonce",
+        "approved",
+        "provider_attempt_id",
+        "provider_attempt_status",
+        "execution_attempt_id",
+        "recovery_action",
+        "intent_summary",
+        "approval_card"
+      ],
+      "properties": {
+        "turn_id": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] },
+        "stage": { "enum": ["listening", "drafting", "awaiting_approval", "executing", "awaiting_roll", "presenting", "committed", "error"] },
+        "draft_version": { "$ref": "#/$defs/Version" },
+        "plan_id": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] },
+        "plan_digest": { "oneOf": [{ "$ref": "#/$defs/Hash" }, { "type": "null" }] },
+        "plan": { "oneOf": [{ "$ref": "#/$defs/ResolutionPlan" }, { "type": "null" }] },
+        "approval_nonce": { "oneOf": [{ "type": "string", "minLength": 32, "maxLength": 256 }, { "type": "null" }] },
+        "approved": { "type": "boolean" },
+        "provider_attempt_id": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] },
+        "provider_attempt_status": { "enum": ["running", "completed", "cancelled", null] },
+        "execution_attempt_id": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] },
+        "recovery_action": { "enum": ["none", "retry_provider", "wait_for_approval", "start_execution", "retry_uncommitted_execution", "wait_for_roll", "resume_projection", "publish_projection", "repair_projection_schema", "enqueue_audio"] },
+        "intent_summary": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 1000 }, { "type": "null" }] },
+        "approval_card": { "oneOf": [{ "$ref": "#/$defs/ApprovalCard" }, { "type": "null" }] }
+      }
+    },
+    "RevealRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_id", "audience", "command_id", "world_revision"],
+      "properties": {
+        "route_id": { "$ref": "#/$defs/Id" },
+        "audience": { "const": "room_players" },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "world_revision": { "$ref": "#/$defs/Version" }
+      }
+    },
+    "PendingRoll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roll_id", "actor_id", "kind", "sides", "modifier", "target", "target_id", "status"],
+      "properties": {
+        "roll_id": { "$ref": "#/$defs/Id" },
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "kind": { "enum": ["ability", "save", "attack", "death_save"] },
+        "sides": { "enum": [4, 6, 8, 10, 12, 20, 100] },
+        "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+        "target": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "damage": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "status": { "enum": ["awaiting_confirmation", "consumed", "cancelled"] }
+      }
+    },
+    "RollRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roll_id", "actor_id", "raw", "modifier", "total", "status", "authorized_effects", "consumed_effect_ids"],
+      "properties": {
+        "roll_id": { "$ref": "#/$defs/Id" },
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "raw": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+        "total": { "type": "integer", "minimum": -20, "maximum": 130 },
+        "visibility": { "const": "public" },
+        "status": { "enum": ["confirmed", "resolved"] },
+        "kind": { "enum": ["ability", "save", "attack", "death_save"] },
+        "sides": { "enum": [4, 6, 8, 10, 12, 20, 100] },
+        "target": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "damage": { "type": "integer", "minimum": 0, "maximum": 1000 }
+        ,"authorized_effects": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/AuthorizedEffect" }
+        },
+        "consumed_effect_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/Id" }
+        }
+      }
+    },
+    "AuthorizedEffect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect_id", "op", "target_id", "amount", "damage_type"],
+          "properties": {
+            "effect_id": { "$ref": "#/$defs/Id" },
+            "op": { "const": "apply_damage" },
+            "target_id": { "$ref": "#/$defs/Id" },
+            "amount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "damage_type": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect_id", "op", "target_id", "amount"],
+          "properties": {
+            "effect_id": { "$ref": "#/$defs/Id" },
+            "op": { "const": "apply_healing" },
+            "target_id": { "$ref": "#/$defs/Id" },
+            "amount": { "type": "integer", "minimum": 1, "maximum": 1000 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect_id", "op", "target_id", "condition", "active"],
+          "properties": {
+            "effect_id": { "$ref": "#/$defs/Id" },
+            "op": { "const": "set_condition" },
+            "target_id": { "$ref": "#/$defs/Id" },
+            "condition": { "type": "string" },
+            "active": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "RoomAggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "campaign_definition_id",
+        "campaign_definition_hash",
+        "ruleset_id",
+        "rules_engine_version",
+        "ruleset_bundle_hash",
+        "aggregate_version",
+        "world_revision",
+        "control_revision",
+        "run_state",
+        "turn",
+        "narrative",
+        "tactical",
+        "presentation"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "campaign_definition_id": { "$ref": "#/$defs/Id" },
+        "campaign_definition_hash": { "$ref": "#/$defs/Hash" },
+        "ruleset_id": { "const": "srd-5.2.1-mvp-1" },
+        "rules_engine_version": { "type": "integer", "minimum": 1 },
+        "ruleset_bundle_hash": { "$ref": "#/$defs/Hash" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "control_revision": { "$ref": "#/$defs/Version" },
+        "run_state": { "enum": ["stopped", "running", "paused", "ending", "ended"] },
+        "turn": { "$ref": "#/$defs/CoordinatorTurn" },
+        "narrative": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reveals", "engaged_routes", "npc_status", "clocks", "consequence_ledger", "terminal_ending"],
+          "properties": {
+            "reveals": { "type": "object", "additionalProperties": { "$ref": "#/$defs/RevealRecord" } },
+            "engaged_routes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "npc_status": { "type": "object", "additionalProperties": { "enum": ["alive_present", "alive_absent", "dead"] } },
+            "clocks": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 100 } },
+            "consequence_ledger": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+            "terminal_ending": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] }
+          }
+        },
+        "tactical": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["board_id", "width", "height", "walls", "terrain", "terrain_feature_state", "entities", "effects", "combat", "resources", "pending_rolls", "roll_ledger"],
+          "properties": {
+            "board_id": { "$ref": "#/$defs/Id" },
+            "width": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "walls": { "type": "array", "items": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/Cell" } } },
+            "terrain": { "type": "object", "additionalProperties": { "type": "object" } },
+            "terrain_feature_state": { "type": "object", "additionalProperties": { "$ref": "#/$defs/Id" } },
+            "entities": { "type": "object", "additionalProperties": { "$ref": "#/$defs/Entity" } },
+            "effects": { "type": "object", "additionalProperties": { "type": "object" } },
+            "combat": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["active", "mode", "round", "phase", "acted", "classic_order", "classic_index"],
+              "properties": {
+                "active": { "type": "boolean" },
+                "mode": { "enum": ["side_phases", "classic_initiative"] },
+                "round": { "type": "integer", "minimum": 0 },
+                "phase": { "enum": ["players", "world"] },
+                "acted": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+                "classic_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+                "classic_index": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "resources": { "type": "object", "additionalProperties": { "type": "object" } },
+            "pending_rolls": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PendingRoll" } },
+            "roll_ledger": { "type": "object", "additionalProperties": { "$ref": "#/$defs/RollRecord" } }
+          }
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["public_atoms", "last_result"],
+          "properties": {
+            "public_atoms": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 1000 } },
+            "last_result": { "oneOf": [{ "type": "string", "maxLength": 1000 }, { "type": "null" }] }
+          }
+        }
+      }
+    },
+    "MoveEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entity_id", "destination"],
+      "properties": {
+        "op": { "const": "move_entity" },
+        "entity_id": { "$ref": "#/$defs/Id" },
+        "destination": { "$ref": "#/$defs/Cell" }
+      }
+    },
+    "ApplyDamage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target_id", "amount", "damage_type", "resolution_id", "resolution_effect_id"],
+      "properties": {
+        "op": { "const": "apply_damage" },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "amount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "damage_type": { "type": "string", "enum": ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"] },
+        "resolution_id": { "$ref": "#/$defs/Id" }
+        ,"resolution_effect_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "ApplyHealing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target_id", "amount", "resolution_id", "resolution_effect_id"],
+      "properties": {
+        "op": { "const": "apply_healing" },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "amount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "resolution_id": { "$ref": "#/$defs/Id" }
+        ,"resolution_effect_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "SetCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target_id", "condition", "active", "resolution_id", "resolution_effect_id"],
+      "properties": {
+        "op": { "const": "set_condition" },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "condition": { "enum": ["prone", "grappled", "restrained", "poisoned", "unconscious"] },
+        "active": { "type": "boolean" },
+        "resolution_id": { "$ref": "#/$defs/Id" }
+        ,"resolution_effect_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "SpendResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "actor_id", "resource", "amount"],
+      "properties": {
+        "op": { "const": "spend_resource" },
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "resource": { "enum": ["action", "bonus_action", "reaction", "movement", "spell_slot_1", "spell_slot_2", "class_use"] },
+        "amount": { "type": "integer", "minimum": 1, "maximum": 20 }
+      }
+    },
+    "CreateEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "effect_id", "template_id", "cells"],
+      "properties": {
+        "op": { "const": "create_effect" },
+        "effect_id": { "$ref": "#/$defs/Id" },
+        "template_id": { "$ref": "#/$defs/Id" },
+        "cells": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/Cell" } }
+      }
+    },
+    "SetTerrainFeature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "transition_id"],
+      "properties": {
+        "op": { "const": "set_terrain_feature" },
+        "transition_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "SpawnFromTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entity_id", "template_id", "position"],
+      "properties": {
+        "op": { "const": "spawn_from_template" },
+        "entity_id": { "$ref": "#/$defs/Id" },
+        "template_id": { "$ref": "#/$defs/Id" },
+        "position": { "$ref": "#/$defs/Cell" }
+      }
+    },
+    "DespawnEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entity_id", "reason"],
+      "properties": {
+        "op": { "const": "despawn_entity" },
+        "entity_id": { "$ref": "#/$defs/Id" },
+        "reason": { "enum": ["departed", "expired", "consumed", "destroyed"] }
+      }
+    },
+    "SetNpcStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "npc_id", "status"],
+      "properties": {
+        "op": { "const": "set_npc_status" },
+        "npc_id": { "$ref": "#/$defs/Id" },
+        "status": { "enum": ["alive_present", "alive_absent", "dead"] }
+      }
+    },
+    "RevealFactViaRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "route_id"],
+      "properties": {
+        "op": { "const": "reveal_fact_via_route" },
+        "route_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "AdvanceClock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "clock_id", "amount"],
+      "properties": {
+        "op": { "const": "advance_clock" },
+        "clock_id": { "$ref": "#/$defs/Id" },
+        "amount": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "ScheduleConsequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "template_id"],
+      "properties": {
+        "op": { "const": "schedule_consequence" },
+        "template_id": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "OpenPhysicalRoll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "roll_id", "actor_id", "kind", "sides", "modifier", "target", "target_id"],
+      "properties": {
+        "op": { "const": "open_physical_roll" },
+        "roll_id": { "$ref": "#/$defs/Id" },
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "kind": { "enum": ["ability", "save", "attack", "death_save"] },
+        "sides": { "enum": [20] },
+        "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+        "target": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "target_id": { "$ref": "#/$defs/Id" },
+        "damage": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "AdvanceCombatMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "mode"],
+      "properties": {
+        "op": { "const": "advance_combat_mode" },
+        "mode": { "enum": ["side_phases", "classic_initiative"] },
+        "order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } }
+      }
+    },
+    "Operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/MoveEntity" },
+        { "$ref": "#/$defs/ApplyDamage" },
+        { "$ref": "#/$defs/ApplyHealing" },
+        { "$ref": "#/$defs/SetCondition" },
+        { "$ref": "#/$defs/SpendResource" },
+        { "$ref": "#/$defs/CreateEffect" },
+        { "$ref": "#/$defs/SetTerrainFeature" },
+        { "$ref": "#/$defs/SpawnFromTemplate" },
+        { "$ref": "#/$defs/DespawnEntity" },
+        { "$ref": "#/$defs/SetNpcStatus" },
+        { "$ref": "#/$defs/RevealFactViaRoute" },
+        { "$ref": "#/$defs/AdvanceClock" },
+        { "$ref": "#/$defs/ScheduleConsequence" },
+        { "$ref": "#/$defs/OpenPhysicalRoll" },
+        { "$ref": "#/$defs/AdvanceCombatMode" }
+      ]
+    },
+    "ResolutionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id",
+        "kind",
+        "campaign_definition_hash",
+        "ruleset_id",
+        "rules_engine_version",
+        "ruleset_bundle_hash",
+        "turn_id",
+        "draft_version",
+        "expected_aggregate_version",
+        "provider_attempt_id",
+        "operations"
+      ],
+      "properties": {
+        "plan_id": { "$ref": "#/$defs/Id" },
+        "kind": { "enum": ["standard", "unusual"] },
+        "campaign_definition_hash": { "$ref": "#/$defs/Hash" },
+        "ruleset_id": { "const": "srd-5.2.1-mvp-1" },
+        "rules_engine_version": { "type": "integer", "minimum": 1 },
+        "ruleset_bundle_hash": { "$ref": "#/$defs/Hash" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "provider_attempt_id": {
+          "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }]
+        },
+        "operations": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/Operation" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "unusual" } }, "required": ["kind"] },
+          "then": { "properties": { "provider_attempt_id": { "$ref": "#/$defs/Id" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "standard" } }, "required": ["kind"] },
+          "then": { "properties": { "provider_attempt_id": { "type": "null" } } }
+        }
+      ]
+    },
+    "PrepareCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "turn_id", "draft_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "turn.prepare" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plan", "approval_nonce", "safe_intent"],
+          "properties": {
+            "plan": { "$ref": "#/$defs/ResolutionPlan" },
+            "approval_nonce": { "type": "string", "minLength": 32, "maxLength": 256 },
+            "safe_intent": { "type": "string", "minLength": 1, "maxLength": 1000 }
+          }
+        }
+      }
+    },
+    "BeginAdjudicationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "turn_id", "draft_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "turn.begin_adjudication" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_attempt_id", "safe_intent"],
+          "properties": {
+            "provider_attempt_id": { "$ref": "#/$defs/Id" },
+            "safe_intent": { "type": "string", "minLength": 1, "maxLength": 1000 }
+          }
+        }
+      }
+    },
+    "CancelAdjudicationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "turn_id", "draft_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "turn.cancel_adjudication" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_attempt_id"],
+          "properties": { "provider_attempt_id": { "$ref": "#/$defs/Id" } }
+        }
+      }
+    },
+    "ApproveCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "turn_id", "draft_version", "approval_nonce", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "turn.approve" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "approval_nonce": { "type": "string", "minLength": 32, "maxLength": 256 },
+        "args": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    "ExecuteCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "turn_id", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "turn.execute" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "turn_id": { "$ref": "#/$defs/Id" },
+        "args": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    "StandardMoveCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "action.standard_move" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["destination"],
+          "properties": { "destination": { "$ref": "#/$defs/Cell" } }
+        }
+      }
+    },
+    "RollConfirmCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "roll.confirm" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["roll_id", "raw"],
+          "properties": {
+            "roll_id": { "$ref": "#/$defs/Id" },
+            "raw": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        }
+      }
+    },
+    "EmptyPhaseCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "enum": ["phase.end_players", "phase.execute_world"] },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "args": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    "ProjectionAckCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command_id", "kind", "expected_aggregate_version", "args"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "kind": { "const": "projection.ack" },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["batch_id", "consumer_id"],
+          "properties": {
+            "batch_id": { "$ref": "#/$defs/Id" },
+            "consumer_id": { "$ref": "#/$defs/Id" }
+          }
+        }
+      }
+    },
+    "CommandEnvelope": {
+      "oneOf": [
+        { "$ref": "#/$defs/BeginAdjudicationCommand" },
+        { "$ref": "#/$defs/CancelAdjudicationCommand" },
+        { "$ref": "#/$defs/PrepareCommand" },
+        { "$ref": "#/$defs/ApproveCommand" },
+        { "$ref": "#/$defs/ExecuteCommand" },
+        { "$ref": "#/$defs/StandardMoveCommand" },
+        { "$ref": "#/$defs/RollConfirmCommand" },
+        { "$ref": "#/$defs/EmptyPhaseCommand" },
+        { "$ref": "#/$defs/ProjectionAckCommand" }
+      ]
+    },
+    "CommandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "code", "command_id", "world_mutation_count", "events"],
+      "properties": {
+        "status": { "enum": ["committed", "rejected"] },
+        "code": { "type": "string" },
+        "command_id": { "$ref": "#/$defs/Id" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "world_mutation_count": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/Id" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "rejected" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "world_mutation_count": { "const": 0 },
+              "events": { "maxItems": 0 }
+            },
+            "not": { "properties": { "code": { "const": "ok" } } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "committed" } }, "required": ["status"] },
+          "then": {
+            "properties": { "code": { "const": "ok" } },
+            "required": ["aggregate_version", "world_revision"]
+          }
+        }
+      ]
+    },
+    "PublicEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "position", "lifecycle"],
+      "properties": {
+        "kind": { "enum": ["hero", "enemy", "npc", "object"] },
+        "position": { "oneOf": [{ "$ref": "#/$defs/Cell" }, { "type": "null" }] },
+        "hp": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "hp_max": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "conditions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "maxLength": 64 } },
+        "lifecycle": { "enum": ["alive", "downed", "stable", "defeated", "dead", "removed"] },
+        "status": { "enum": ["alive_present", "alive_absent", "dead"] },
+        "role": { "enum": ["defender", "striker", "scout", "healer", "controller", "support"] }
+      }
+    },
+    "PublicTerrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "movement_cost", "blocks_los"],
+      "properties": {
+        "kind": { "enum": ["normal", "difficult", "debris", "fire", "ice", "water", "wall"] },
+        "movement_cost": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "blocks_los": { "type": "boolean" }
+      }
+    },
+    "PublicEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "cells", "duration_rounds", "active"],
+      "properties": {
+        "kind": { "enum": ["hazard", "zone", "light"] },
+        "cells": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/Cell" } },
+        "duration_rounds": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "active": { "type": "boolean" }
+      }
+    },
+    "CombatProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active", "mode", "round", "phase", "acted", "classic_order", "classic_index"],
+      "properties": {
+        "active": { "type": "boolean" },
+        "mode": { "enum": ["side_phases", "classic_initiative"] },
+        "round": { "type": "integer", "minimum": 0 },
+        "phase": { "enum": ["players", "world"] },
+        "acted": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "classic_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Id" } },
+        "classic_index": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "PendingRollProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roll_id", "actor_id", "kind", "sides", "modifier", "target", "status"],
+      "properties": {
+        "roll_id": { "$ref": "#/$defs/Id" },
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "kind": { "enum": ["ability", "save", "attack", "death_save"] },
+        "sides": { "enum": [4, 6, 8, 10, 12, 20, 100] },
+        "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+        "target": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "status": { "const": "awaiting_confirmation" }
+      }
+    },
+    "PublicRollProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "raw", "modifier", "total"],
+      "properties": {
+        "actor_id": { "$ref": "#/$defs/Id" },
+        "raw": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "modifier": { "type": "integer", "minimum": -20, "maximum": 30 },
+        "total": { "type": "integer", "minimum": -20, "maximum": 130 }
+      }
+    },
+    "TableProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "aggregate_version", "world_revision", "board", "combat", "pending_rolls", "public_rolls", "revealed_facts", "last_result", "approval_card", "legal_action_hints", "resources", "public_events"],
+      "properties": {
+        "schema": { "const": "table.v1" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "board": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["board_id", "width", "height", "terrain", "entities", "effects"],
+          "properties": {
+            "board_id": { "$ref": "#/$defs/Id" },
+            "width": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "terrain": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PublicTerrain" } },
+            "entities": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PublicEntity" } },
+            "effects": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PublicEffect" } }
+          }
+        },
+        "combat": { "$ref": "#/$defs/CombatProjection" },
+        "pending_rolls": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PendingRollProjection" } },
+        "public_rolls": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PublicRollProjection" } },
+        "revealed_facts": { "type": "object", "additionalProperties": { "type": "string", "maxLength": 1000 } },
+        "last_result": { "oneOf": [{ "type": "string", "maxLength": 1000 }, { "type": "null" }] },
+        "approval_card": { "oneOf": [{ "$ref": "#/$defs/ApprovalCard" }, { "type": "null" }] },
+        "legal_action_hints": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["approve", "redraft", "move", "action", "master"] }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": { "type": "integer", "minimum": 0 },
+              "bonus_action": { "type": "integer", "minimum": 0 },
+              "reaction": { "type": "integer", "minimum": 0 },
+              "movement": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "public_events": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 1000 } }
+      }
+    },
+    "SceneProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "aggregate_version", "world_revision", "public_atoms", "revealed_facts", "public_rolls"],
+      "properties": {
+        "schema": { "const": "scene.v1" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "public_atoms": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 1000 } },
+        "revealed_facts": { "type": "object", "additionalProperties": { "type": "string", "maxLength": 1000 } },
+        "public_rolls": { "type": "object", "additionalProperties": { "$ref": "#/$defs/PublicRollProjection" } }
+      }
+    },
+    "AdminProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "aggregate_version", "world_revision", "run_state", "coordinator", "projection_health"],
+      "properties": {
+        "schema": { "const": "admin.v1" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "run_state": { "enum": ["stopped", "running", "paused", "ending", "ended"] },
+        "coordinator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage", "recovery_action", "turn_id"],
+          "properties": {
+            "stage": { "enum": ["listening", "drafting", "awaiting_approval", "executing", "awaiting_roll", "presenting", "committed", "error"] },
+            "recovery_action": { "enum": ["none", "retry_provider", "wait_for_approval", "start_execution", "retry_uncommitted_execution", "wait_for_roll", "resume_projection", "publish_projection", "repair_projection_schema", "enqueue_audio"] },
+            "turn_id": { "oneOf": [{ "$ref": "#/$defs/Id" }, { "type": "null" }] }
+          }
+        },
+        "projection_health": { "enum": ["ok", "degraded", "error"] }
+      }
+    },
+    "ProjectionFamily": {
+      "type": "object",
+      "description": "Closed family shape. The normative cross-field validator must also require every nested aggregate_version/world_revision to equal the outer values; JSON Schema shape validation alone cannot express that equality.",
+      "additionalProperties": false,
+      "required": ["projection_batch_id", "aggregate_version", "world_revision", "table", "scene", "admin"],
+      "properties": {
+        "projection_batch_id": { "$ref": "#/$defs/Id" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "table": { "$ref": "#/$defs/TableProjection" },
+        "scene": { "$ref": "#/$defs/SceneProjection" },
+        "admin": { "$ref": "#/$defs/AdminProjection" }
+      }
+    }
+  }
+}
