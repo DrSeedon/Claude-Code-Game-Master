@@ -1,0 +1,100 @@
+{
+  "all_audible_lanes": {
+    "future_sfx_accepted": true,
+    "generations": [
+      1,
+      2
+    ],
+    "new_leader_music_snapshot": "danger",
+    "new_leader_sfx_before_future": 0,
+    "old_leader_music_after_loss": "silence",
+    "old_leader_sfx_after_loss": 0,
+    "stale_music_accepted": false,
+    "stale_sfx_accepted": false
+  },
+  "cache": {
+    "first_cycle_unique": true,
+    "provider_calls_for_normal_combat": 0,
+    "retry_asset_stable": true,
+    "selected_assets": [
+      "combat.hit.1",
+      "combat.hit.2"
+    ]
+  },
+  "cancel": {
+    "audio_fence": 1,
+    "buffered_after_ms": 0,
+    "buffered_before_ms": 120,
+    "late_provider_chunks_dropped": 1,
+    "provider_context_closed": true,
+    "stop_observed_in_same_call": true
+  },
+  "control_barrier": {
+    "applied_control_fence": 1,
+    "future_media_buffered_before_control": 3,
+    "new_media_admitted_after_control": true,
+    "new_media_started_before_control": false,
+    "old_cleared_before_drain": true,
+    "old_media_absent_after_control": true,
+    "old_media_preserved_before_control": true,
+    "overflow_gap_requests": 1,
+    "overflow_old_music_preserved": "danger",
+    "overflow_pending_after_gap": 0,
+    "pending_after_control": 0
+  },
+  "leader_replay": {
+    "current_leader": "scene-b",
+    "duplicate_play_accepted": false,
+    "first_play_accepted": true,
+    "generations": [
+      1,
+      2
+    ],
+    "new_document_auto_replays": 0,
+    "stale_play_accepted": false
+  },
+  "mixer": {
+    "ducked_gains": [
+      0.25,
+      0.5
+    ],
+    "music_state": "danger",
+    "priority": {
+      "control": 100,
+      "critical_sfx": 70,
+      "music": 10,
+      "sfx": 50,
+      "speech": 80
+    },
+    "restored_gains": [
+      1.0,
+      1.0
+    ]
+  },
+  "oracle": "PASS",
+  "privacy_observability": {
+    "cost_policy_selected": false,
+    "metrics_rows": 4,
+    "metrics_schema_valid": true,
+    "secret_canary_absent": true,
+    "text_absent": true,
+    "undisclosed_rejected": true
+  },
+  "provider_failure_after_audio": {
+    "buffered_after_ms": 0,
+    "buffered_before_ms": 90,
+    "status": "interrupted"
+  },
+  "retry_failure": {
+    "attempt": 2,
+    "kernel_calls": 0,
+    "status": "failed_text_only",
+    "world_revision_after": 7,
+    "world_revision_before": 7
+  },
+  "routing": {
+    "blocked_entity_explicit_fallback": "npc.guard",
+    "missing_voice": "text_only",
+    "severin_voice": "narrator.severin"
+  }
+}
