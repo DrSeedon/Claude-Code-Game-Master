@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contracts/r7/projection-schemas-v1.json",
+  "title": "R7 browser-safe projection envelopes",
+  "description": "Closed browser projection schemas. Composite mode consumes one table envelope and one scene envelope; it is not a fourth authority role or projection shape.",
+  "oneOf": [
+    { "$ref": "#/$defs/TableProjectionEnvelope" },
+    { "$ref": "#/$defs/SceneProjectionEnvelope" },
+    { "$ref": "#/$defs/AdminProjectionEnvelope" }
+  ],
+  "x-contract": {
+    "unknown_field_policy": "reject_projection_before_publication",
+    "canonical_source_policy": "project on the server from committed state; never filter a full world object in the browser",
+    "composite_policy": "subscribe to the exact table and scene schemas and swap both only after the same projection_batch_id is staged",
+    "secret_policy": "unrevealed world fields, typed plans, provider prompts, raw errors, raw audit identities, and credentials have no schema path"
+  },
+  "x-surface-allowlists": {
+    "table": [
+      "board",
+      "phase",
+      "draft_card",
+      "public_events",
+      "activity"
+    ],
+    "scene": [
+      "scene",
+      "speaker",
+      "subtitle",
+      "public_result",
+      "activity"
+    ],
+    "admin": [
+      "run_state",
+      "coordinator",
+      "projection_health",
+      "audio_health",
+      "input_health",
+      "safe_error",
+      "allowed_recovery_actions",
+      "last_operation"
+    ]
+  },
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "ShortText": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "Version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "terrain", "movement_cost", "blocked", "visible"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "terrain": { "enum": ["floor", "wall", "water", "rough", "hazard", "unknown"] },
+        "movement_cost": { "type": "integer", "minimum": 1, "maximum": 99 },
+        "blocked": { "type": "boolean" },
+        "visible": { "const": true }
+      }
+    },
+    "Token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_id", "kind", "display_name", "x", "y", "hp", "hp_max", "conditions", "acted"],
+      "properties": {
+        "public_id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "enum": ["hero", "enemy", "ally", "object"] },
+        "display_name": { "$ref": "#/$defs/ShortText" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "hp": { "type": "integer" },
+        "hp_max": { "type": "integer", "minimum": 0 },
+        "conditions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "acted": { "type": "boolean" }
+      }
+    },
+    "Board": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["board_id", "width", "height", "cells", "tokens", "legal_cells", "public_rolls"],
+      "properties": {
+        "board_id": { "$ref": "#/$defs/Identifier" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "cells": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": { "$ref": "#/$defs/Cell" }
+        },
+        "tokens": {
+          "type": "array",
+          "maxItems": 512,
+          "items": { "$ref": "#/$defs/Token" }
+        },
+        "legal_cells": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "integer", "minimum": 0 },
+              "y": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "public_rolls": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["roll_id", "label", "formula", "total"],
+            "properties": {
+              "roll_id": { "$ref": "#/$defs/Identifier" },
+              "label": { "$ref": "#/$defs/ShortText" },
+              "formula": { "$ref": "#/$defs/ShortText" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "Phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "round", "side", "acted_actor_ids"],
+      "properties": {
+        "mode": { "enum": ["exploration", "conversation", "combat", "resolution"] },
+        "round": { "type": "integer", "minimum": 0 },
+        "side": { "enum": ["none", "players", "world"] },
+        "acted_actor_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/Identifier" }
+        }
+      }
+    },
+    "DraftCard": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["turn_id", "draft_version", "selected_actor_id", "summary", "approval_state", "approval_nonce"],
+      "properties": {
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "selected_actor_id": { "$ref": "#/$defs/Identifier" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "approval_state": { "enum": ["awaiting_approval", "approved", "rejected", "stale"] },
+        "approval_nonce": { "type": ["string", "null"], "minLength": 32, "maxLength": 256 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "approval_state": { "const": "awaiting_approval" } } },
+          "then": { "properties": { "approval_nonce": { "type": "string", "minLength": 32, "maxLength": 256 } } },
+          "else": { "properties": { "approval_nonce": { "type": "null" } } }
+        }
+      ]
+    },
+    "PublicEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_event_id", "kind", "text"],
+      "properties": {
+        "public_event_id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "enum": ["narration", "roll", "result", "phase", "notice"] },
+        "text": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "TablePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["board", "phase", "draft_card", "public_events", "activity"],
+      "properties": {
+        "board": { "$ref": "#/$defs/Board" },
+        "phase": { "$ref": "#/$defs/Phase" },
+        "draft_card": { "$ref": "#/$defs/DraftCard" },
+        "public_events": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/PublicEvent" }
+        },
+        "activity": { "enum": ["idle", "listening", "thinking", "speaking", "paused", "degraded"] }
+      }
+    },
+    "ScenePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scene", "speaker", "subtitle", "public_result", "activity"],
+      "properties": {
+        "scene": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["public_scene_id", "title", "image_asset_ref", "transition"],
+          "properties": {
+            "public_scene_id": { "$ref": "#/$defs/Identifier" },
+            "title": { "$ref": "#/$defs/ShortText" },
+            "image_asset_ref": { "$ref": "#/$defs/Identifier" },
+            "transition": { "enum": ["none", "cut", "fade", "dissolve"] }
+          }
+        },
+        "speaker": {
+          "type": ["object", "null"],
+          "unevaluatedProperties": false,
+          "required": ["public_actor_id", "display_name", "portrait_asset_ref"],
+          "properties": {
+            "public_actor_id": { "$ref": "#/$defs/Identifier" },
+            "display_name": { "$ref": "#/$defs/ShortText" },
+            "portrait_asset_ref": { "$ref": "#/$defs/Identifier" }
+          }
+        },
+        "subtitle": { "type": "string", "maxLength": 4000 },
+        "public_result": { "type": ["string", "null"], "maxLength": 4000 },
+        "activity": { "enum": ["idle", "listening", "thinking", "speaking", "paused", "degraded"] }
+      }
+    },
+    "ProjectionHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "status", "projected_aggregate_version", "last_ack_age_bucket"],
+      "properties": {
+        "surface": { "enum": ["table", "scene", "admin"] },
+        "status": { "enum": ["current", "lagging", "disconnected", "projection_failed"] },
+        "projected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "last_ack_age_bucket": { "enum": ["lt_5s", "lt_30s", "lt_5m", "gte_5m", "never"] }
+      }
+    },
+    "AdminPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_state",
+        "coordinator",
+        "projection_health",
+        "audio_health",
+        "input_health",
+        "safe_error",
+        "allowed_recovery_actions",
+        "last_operation"
+      ],
+      "properties": {
+        "run_state": { "enum": ["stopped", "running", "paused", "ending", "ended"] },
+        "coordinator": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["stage", "recovery_action", "aggregate_version", "world_revision", "control_revision"],
+          "properties": {
+            "stage": { "enum": ["listening", "drafting", "awaiting_approval", "executing", "presenting", "committed", "error"] },
+            "recovery_action": { "enum": ["none", "retry_draft", "wait_for_approval", "start_execution", "retry_uncommitted_execution", "resume_projection", "publish_projection", "repair_projection_schema", "enqueue_audio"] },
+            "aggregate_version": { "$ref": "#/$defs/Version" },
+            "world_revision": { "$ref": "#/$defs/Version" },
+            "control_revision": { "$ref": "#/$defs/Version" }
+          }
+        },
+        "projection_health": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "allOf": [{ "$ref": "#/$defs/ProjectionHealth" }, { "properties": { "surface": { "const": "table" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/ProjectionHealth" }, { "properties": { "surface": { "const": "scene" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/ProjectionHealth" }, { "properties": { "surface": { "const": "admin" } } }] }
+          ],
+          "items": false
+        },
+        "audio_health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "leader_present", "generation", "buffer_bucket", "current_line_ref"],
+          "properties": {
+            "status": { "enum": ["idle", "generating", "ready", "playing", "cancelled", "failed", "degraded"] },
+            "leader_present": { "type": "boolean" },
+            "generation": { "$ref": "#/$defs/Version" },
+            "buffer_bucket": { "enum": ["empty", "lt_250ms", "gte_250ms"] },
+            "current_line_ref": { "type": ["string", "null"], "pattern": "^[A-Fa-f0-9]{12}$" }
+          }
+        },
+        "input_health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["microphone", "websocket", "stt", "model", "tts"],
+          "properties": {
+            "microphone": { "enum": ["unknown", "ok", "muted", "denied", "missing", "degraded"] },
+            "websocket": { "enum": ["ok", "degraded", "offline"] },
+            "stt": { "enum": ["unknown", "ok", "degraded", "offline"] },
+            "model": { "enum": ["unknown", "ok", "degraded", "offline"] },
+            "tts": { "enum": ["unknown", "ok", "degraded", "offline"] }
+          }
+        },
+        "safe_error": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["code", "stage", "correlation_ref", "retryable"],
+          "properties": {
+            "code": { "enum": ["provider_timeout", "provider_unavailable", "connection_lost", "projection_schema_mismatch", "audio_delivery_failed", "invariant_failure"] },
+            "stage": { "enum": ["drafting", "executing", "presenting", "audio", "transport", "unknown"] },
+            "correlation_ref": { "type": "string", "pattern": "^[A-Fa-f0-9]{12}$" },
+            "retryable": { "type": "boolean" }
+          }
+        },
+        "allowed_recovery_actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 4,
+          "items": { "enum": ["retry_unfinished_stage", "reproject_last_safe", "cancel_generation", "cancel_audio"] }
+        },
+        "last_operation": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["operation_id", "kind", "outcome", "operator_ref"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/Identifier" },
+            "kind": { "enum": ["start", "pause", "end", "diagnostics", "set_volume", "cancel_generation", "cancel_audio", "reproject_last_safe", "retry_unfinished_stage"] },
+            "outcome": { "enum": ["accepted", "rejected", "completed", "failed"] },
+            "operator_ref": { "type": "string", "pattern": "^[A-Fa-f0-9]{12}$" }
+          }
+        }
+      }
+    },
+    "EnvelopeBase": {
+      "type": "object",
+      "required": ["protocol_version", "kind", "event_id", "projection_batch_id", "room_id", "surface", "stream_seq", "aggregate_version", "world_revision", "projection_schema", "payload"],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "enum": ["projection.snapshot", "projection.event"] },
+        "event_id": { "$ref": "#/$defs/Identifier" },
+        "projection_batch_id": { "$ref": "#/$defs/Identifier" },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "surface": { "enum": ["table", "scene", "admin"] },
+        "stream_seq": { "$ref": "#/$defs/Version" },
+        "aggregate_version": { "$ref": "#/$defs/Version" },
+        "world_revision": { "$ref": "#/$defs/Version" },
+        "projection_schema": { "enum": ["table.v1", "scene.v1", "admin.v1"] },
+        "payload": { "type": "object" }
+      }
+    },
+    "TableProjectionEnvelope": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "surface": { "const": "table" },
+            "projection_schema": { "const": "table.v1" },
+            "payload": { "$ref": "#/$defs/TablePayload" }
+          }
+        }
+      ]
+    },
+    "SceneProjectionEnvelope": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "surface": { "const": "scene" },
+            "projection_schema": { "const": "scene.v1" },
+            "payload": { "$ref": "#/$defs/ScenePayload" }
+          }
+        }
+      ]
+    },
+    "AdminProjectionEnvelope": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/EnvelopeBase" },
+        {
+          "type": "object",
+          "properties": {
+            "surface": { "const": "admin" },
+            "projection_schema": { "const": "admin.v1" },
+            "payload": { "$ref": "#/$defs/AdminPayload" }
+          }
+        }
+      ]
+    }
+  }
+}
