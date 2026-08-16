@@ -1,0 +1,450 @@
+{
+  "all_pass": true,
+  "cases": [
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "drafting",
+      "recovery_action": "retry_draft",
+      "scenario": "crash_after_receive"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "awaiting_approval",
+      "recovery_action": "wait_for_approval",
+      "scenario": "crash_after_draft_persist"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "executing",
+      "recovery_action": "start_execution",
+      "scenario": "crash_after_approval"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "executing",
+      "recovery_action": "retry_uncommitted_execution",
+      "scenario": "crash_after_execution_start"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "presenting",
+      "recovery_action": "resume_projection",
+      "scenario": "crash_after_world_commit"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "presenting",
+      "recovery_action": "publish_projection",
+      "scenario": "crash_after_outbox_publish"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "committed",
+      "recovery_action": "enqueue_audio",
+      "scenario": "crash_after_projection_ack"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "event_log_checkpoints",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "committed",
+      "recovery_action": "none",
+      "scenario": "crash_after_audio_enqueue"
+    },
+    {
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "out_of_order_approval",
+      "stored_code": "invalid_stage"
+    },
+    {
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "runtime_rejected": true,
+      "scenario": "actor_capability_boundary",
+      "schema_rejected": true
+    },
+    {
+      "current_draft_version": 2,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "stale_draft",
+      "stored_code": "stale_draft"
+    },
+    {
+      "conflict_detected": true,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "command_id_payload_conflict"
+    },
+    {
+      "first_room_code": "TurnReceived",
+      "model": "event_log_checkpoints",
+      "other_room_code": "wrong_aggregate",
+      "pass": true,
+      "scenario": "room_scoped_command_dedupe"
+    },
+    {
+      "audio_job_schema_valid": true,
+      "canary_in_audio_or_image_prompt": false,
+      "late_code": "late_provider_event",
+      "model": "event_log_checkpoints",
+      "mutation_count": 1,
+      "pass": true,
+      "scenario": "duplicate_world_and_late_provider_event"
+    },
+    {
+      "client_apply_count": 1,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "same_event_id": true,
+      "scenario": "replay_live_overlap"
+    },
+    {
+      "client_apply_count": 1,
+      "cursor_advanced_on_failure": false,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "projection_reducer_failure"
+    },
+    {
+      "canary_in_player_or_result": false,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "projection_error": "unknown_world_field",
+      "published": false,
+      "scenario": "secret_projection_failure",
+      "world_committed": true
+    },
+    {
+      "corruption_detected": true,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "canonical_corruption"
+    },
+    {
+      "corruption_detected": true,
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "scenario": "recovery_pointer_corruption"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "drafting",
+      "recovery_action": "retry_draft",
+      "scenario": "crash_after_receive"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "awaiting_approval",
+      "recovery_action": "wait_for_approval",
+      "scenario": "crash_after_draft_persist"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "executing",
+      "recovery_action": "start_execution",
+      "scenario": "crash_after_approval"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 0,
+      "pass": true,
+      "recovered_stage": "executing",
+      "recovery_action": "retry_uncommitted_execution",
+      "scenario": "crash_after_execution_start"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "presenting",
+      "recovery_action": "resume_projection",
+      "scenario": "crash_after_world_commit"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "presenting",
+      "recovery_action": "publish_projection",
+      "scenario": "crash_after_outbox_publish"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "committed",
+      "recovery_action": "enqueue_audio",
+      "scenario": "crash_after_projection_ack"
+    },
+    {
+      "client_apply_count": 1,
+      "duplicate_returned_stored_result": true,
+      "final_mutation_count": 1,
+      "final_projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "final_world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count_at_reload": 1,
+      "pass": true,
+      "recovered_stage": "committed",
+      "recovery_action": "none",
+      "scenario": "crash_after_audio_enqueue"
+    },
+    {
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "out_of_order_approval",
+      "stored_code": "invalid_stage"
+    },
+    {
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "runtime_rejected": true,
+      "scenario": "actor_capability_boundary",
+      "schema_rejected": true
+    },
+    {
+      "current_draft_version": 2,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "stale_draft",
+      "stored_code": "stale_draft"
+    },
+    {
+      "conflict_detected": true,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "command_id_payload_conflict"
+    },
+    {
+      "first_room_code": "TurnReceived",
+      "model": "transactional_state_dedupe_outbox",
+      "other_room_code": "wrong_aggregate",
+      "pass": true,
+      "scenario": "room_scoped_command_dedupe"
+    },
+    {
+      "audio_job_schema_valid": true,
+      "canary_in_audio_or_image_prompt": false,
+      "late_code": "late_provider_event",
+      "model": "transactional_state_dedupe_outbox",
+      "mutation_count": 1,
+      "pass": true,
+      "scenario": "duplicate_world_and_late_provider_event"
+    },
+    {
+      "client_apply_count": 1,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "same_event_id": true,
+      "scenario": "replay_live_overlap"
+    },
+    {
+      "client_apply_count": 1,
+      "cursor_advanced_on_failure": false,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "projection_reducer_failure"
+    },
+    {
+      "canary_in_player_or_result": false,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "projection_error": "unknown_world_field",
+      "published": false,
+      "scenario": "secret_projection_failure",
+      "world_committed": true
+    },
+    {
+      "corruption_detected": true,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "canonical_corruption"
+    },
+    {
+      "corruption_detected": true,
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "scenario": "recovery_pointer_corruption"
+    }
+  ],
+  "fault_stages": [
+    "receive",
+    "draft_persist",
+    "approval",
+    "execution_start",
+    "world_commit",
+    "outbox_publish",
+    "projection_ack",
+    "audio_enqueue"
+  ],
+  "golden_path": [
+    {
+      "model": "event_log_checkpoints",
+      "pass": true,
+      "projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "stats": {
+        "audio_jobs": 1,
+        "checkpoints": 1,
+        "command_results": 8,
+        "database_bytes": 4096,
+        "delivery_attempts": 1,
+        "events": 8,
+        "integrity_rows": 8,
+        "replayed_rows": 0
+      },
+      "stored_world_result": {
+        "aggregate_version": 5,
+        "code": "WorldCommitted",
+        "command_id": "cmd-world",
+        "request_digest": "91b10415d63ec97a83f9a4b727b1d54b06f1c6381fcf6327ed506837059e9df7",
+        "room_id": "room-synthetic",
+        "schema_version": 1,
+        "stage": "presenting",
+        "status": "accepted",
+        "turn_id": "turn-0001",
+        "world_mutation_count": 1,
+        "world_revision": 1
+      },
+      "world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c"
+    },
+    {
+      "model": "transactional_state_dedupe_outbox",
+      "pass": true,
+      "projection_digest": "f79f7cecfe1c3b19631cbd9af14c7d9972b7dffc0c538ed08082786a241935ce",
+      "stats": {
+        "aggregate_state": 1,
+        "audio_jobs": 1,
+        "audit_events": 8,
+        "command_results": 8,
+        "database_bytes": 4096,
+        "delivery_acks": 1,
+        "integrity_rows": 1,
+        "outbox": 3,
+        "replayed_rows": 0
+      },
+      "stored_world_result": {
+        "aggregate_version": 5,
+        "code": "WorldCommitted",
+        "command_id": "cmd-world",
+        "request_digest": "91b10415d63ec97a83f9a4b727b1d54b06f1c6381fcf6327ed506837059e9df7",
+        "room_id": "room-synthetic",
+        "schema_version": 1,
+        "stage": "presenting",
+        "status": "accepted",
+        "turn_id": "turn-0001",
+        "world_mutation_count": 1,
+        "world_revision": 1
+      },
+      "world_digest": "d4990f6b92655c1484c3d50b53f5b5382b4af7872be091f246cfc9a54f36cc2c"
+    }
+  ],
+  "schema_version": 1,
+  "selection_rule_predeclared": "Reject a candidate on any common-oracle failure. If both pass, prefer the candidate whose cold recovery reads canonical current state directly and does not require semantic event replay on the availability path.",
+  "summary": {
+    "event_log_checkpoints": {
+      "passed": 19,
+      "total": 19
+    },
+    "transactional_state_dedupe_outbox": {
+      "passed": 19,
+      "total": 19
+    }
+  }
+}

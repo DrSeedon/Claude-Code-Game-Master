@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-table/r4-command-event-schemas-v1.json",
+  "title": "R4 durable coordinator command, result, event, and projection contracts",
+  "description": "Research contract. Endpoint names and transport framing remain implementation choices.",
+  "schema_version": 1,
+  "x-contract": {
+    "authority": "Only the remote authoritative coordinator accepts commands. Model/provider/browser payloads never directly mutate the world.",
+    "idempotency": "command_id is unique within room_id. Exact replay returns the byte-equivalent stored CommandResult before expected_aggregate_version is checked. Reuse with a different request_digest is idempotency_conflict and has zero mutation.",
+    "optimistic_concurrency": "A new command whose expected_aggregate_version differs from current state is stored as aggregate_version_conflict with zero mutation.",
+    "world_commit": "The approved typed kernel command, world mutation, result row, coordinator stage, and projection task are one authoritative database transaction.",
+    "delivery": "Outbox delivery is at-least-once. Consumers reduce event_id at most once. A durable cursor/ack advances only after a successful reducer commit.",
+    "audio": "line_id and context_id deduplicate audio work. Audio retry or cancellation never calls the game kernel.",
+    "projection": "Player and scene payloads are constructed from an allowlist. Unknown fields fail closed and cannot enter browser-visible replay, audio text, or image prompts. Admin receives operational state, not world secrets."
+  },
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "surface", "role"],
+      "properties": {
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "surface": { "enum": ["table", "scene", "admin", "server"] },
+        "role": { "enum": ["player", "admin", "provider", "coordinator"] }
+      }
+    },
+    "CommandEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "command_id",
+        "request_digest",
+        "room_id",
+        "turn_id",
+        "actor",
+        "expected_aggregate_version",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 of the canonical full command excluding transport metadata."
+        },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "expected_aggregate_version": { "type": "integer", "minimum": 0 },
+        "type": {
+          "enum": [
+            "receive",
+            "persist_draft",
+            "redraft",
+            "approve",
+            "start_execution",
+            "commit_world",
+            "prepare_projection",
+            "ack_projection",
+            "enqueue_audio",
+            "provider_event",
+            "retry_audio",
+            "cancel_audio"
+          ]
+        },
+        "payload": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "receive" } } },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["final_transcript_id", "text"],
+                "properties": {
+                  "final_transcript_id": { "$ref": "#/$defs/Identifier" },
+                  "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["persist_draft", "redraft"] } } },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["draft_version", "draft_text"],
+                "properties": {
+                  "draft_version": { "type": "integer", "minimum": 1 },
+                  "draft_text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "approve" } } },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["draft_version"],
+                "properties": {
+                  "draft_version": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "ack_projection" } } },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["event_id", "surface", "reducer_version"],
+                "properties": {
+                  "event_id": { "$ref": "#/$defs/Identifier" },
+                  "surface": { "enum": ["table", "scene", "admin"] },
+                  "reducer_version": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "provider_event" } } },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["provider_event_id", "execution_attempt_id", "provider_type"],
+                "properties": {
+                  "provider_event_id": { "$ref": "#/$defs/Identifier" },
+                  "execution_attempt_id": { "$ref": "#/$defs/Identifier" },
+                  "provider_type": { "enum": ["stt", "model", "tts"] },
+                  "data": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["start_execution", "commit_world", "prepare_projection", "enqueue_audio"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "actor": {
+                "properties": {
+                  "surface": { "const": "server" },
+                  "role": { "const": "coordinator" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "provider_event" } } },
+          "then": {
+            "properties": {
+              "actor": {
+                "properties": {
+                  "surface": { "const": "server" },
+                  "role": { "const": "provider" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["receive", "persist_draft", "redraft", "approve"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "actor": {
+                "properties": {
+                  "surface": { "const": "table" },
+                  "role": { "const": "player" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "ack_projection" } } },
+          "then": {
+            "properties": {
+              "actor": {
+                "properties": {
+                  "surface": { "enum": ["table", "scene", "admin"] },
+                  "role": { "enum": ["player", "admin"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["retry_audio", "cancel_audio"] } } },
+          "then": {
+            "properties": {
+              "actor": {
+                "properties": {
+                  "surface": { "enum": ["admin", "server"] },
+                  "role": { "enum": ["admin", "coordinator"] }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "CommandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "command_id",
+        "request_digest",
+        "room_id",
+        "status",
+        "code",
+        "turn_id",
+        "aggregate_version",
+        "stage",
+        "world_revision",
+        "world_mutation_count"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "request_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "status": { "enum": ["accepted", "rejected", "ignored"] },
+        "code": {
+          "enum": [
+            "TurnReceived",
+            "DraftPersisted",
+            "DraftRevised",
+            "ApprovalAccepted",
+            "ExecutionStarted",
+            "WorldCommitted",
+            "ProjectionReady",
+            "ProjectionFailed",
+            "ProjectionAcknowledged",
+            "AudioEnqueued",
+            "invalid_stage",
+            "stale_draft",
+            "draft_version_conflict",
+            "aggregate_version_conflict",
+            "cursor_conflict",
+            "wrong_aggregate",
+            "unsupported_schema",
+            "unknown_command",
+            "late_provider_event",
+            "provider_observation_only",
+            "unauthorized",
+            "idempotency_conflict"
+          ]
+        },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "aggregate_version": { "type": "integer", "minimum": 0 },
+        "stage": {
+          "enum": ["listening", "drafting", "awaiting_approval", "executing", "presenting", "committed", "error"]
+        },
+        "world_revision": { "type": "integer", "minimum": 0 },
+        "world_mutation_count": { "type": "integer", "minimum": 0 },
+        "current_draft_version": { "type": "integer", "minimum": 1 },
+        "details": { "type": "object" },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "retryable_stage"],
+          "properties": {
+            "code": { "type": "string" },
+            "retryable_stage": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "DurableEventEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "event_id",
+        "causation_command_id",
+        "room_id",
+        "turn_id",
+        "aggregate_version",
+        "world_revision",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event_id": { "$ref": "#/$defs/Identifier" },
+        "causation_command_id": { "$ref": "#/$defs/Identifier" },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "aggregate_version": { "type": "integer", "minimum": 1 },
+        "world_revision": { "type": "integer", "minimum": 0 },
+        "type": {
+          "enum": [
+            "TurnReceived",
+            "DraftPersisted",
+            "DraftRevised",
+            "ApprovalAccepted",
+            "ExecutionStarted",
+            "WorldCommitted",
+            "ProjectionReady",
+            "ProjectionFailed",
+            "ProjectionAcknowledged",
+            "AudioEnqueued"
+          ]
+        },
+        "payload": { "type": "object" }
+      }
+    },
+    "PlayerProjectionEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "event_id",
+        "room_id",
+        "turn_id",
+        "aggregate_version",
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event_id": { "$ref": "#/$defs/Identifier" },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "aggregate_version": { "type": "integer", "minimum": 1 },
+        "type": { "const": "player_projection" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["revision", "hero_hp", "public_facts", "narration_text", "image_prompt"],
+          "properties": {
+            "revision": { "type": "integer", "minimum": 0 },
+            "hero_hp": { "type": "integer" },
+            "public_facts": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 512 }
+            },
+            "narration_text": { "type": "string", "maxLength": 4000 },
+            "image_prompt": { "type": "string", "maxLength": 4000 }
+          }
+        }
+      }
+    },
+    "AudioJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "line_id", "context_id", "turn_id", "text_event_id", "text", "status"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "line_id": { "$ref": "#/$defs/Identifier" },
+        "context_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "text_event_id": { "$ref": "#/$defs/Identifier" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "status": { "enum": ["pending", "generating", "ready", "playing", "cancelled", "failed"] }
+      }
+    }
+  }
+}
