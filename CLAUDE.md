@@ -207,3 +207,12 @@ The project is played on https://dnd-game-master.duckdns.org, so the orchestrato
 - Pre-existing pytest collection error: `test_encounter_engine.py` duplicate basename between `tests/` and `.claude/additional/modules/world-travel/tests/`
 - Wizard hasn't been tested end-to-end with the new bash-tool flow yet (deployed, user started testing but hit the pending message bug which is now fixed)
 - Tests: 357 passed as of last run
+
+## Session notes (2026-08-17) — AI-table MVP execution topology
+
+- `ai-table-lead` is the single persistent Sol architecture and continuity lead for I0–I12 and R10. Do not replace this lead per ticket.
+- The lead delegates closed/mechanical work and immutable independent RED oracles to subordinate Luna workers. Open research, architecture, or genuinely complex implementation may use full-cycle Sol children.
+- Execute exactly one implementation ticket at a time: independent RED oracle, implementation, tests, canonical review, merge, then an owner checkpoint.
+- Every ticket hard-stops at its owner checkpoint. Do not start the next ticket until the owner explicitly approves it.
+- I0 has no product deployment. By the owner's explicit 2026-08-17 decision, I0 is local-only in `/home/kesha/projects/ai-table-mvp` with `kesha`-only filesystem permissions and no GitHub login, remote, organization, or external access. Remote visibility, organization ownership, branch protection, off-provider mirror, and remote-principal proof are deferred fail-closed gates that must pass before any external sharing or access; this is an explicit deviation from the canonical organization-owned remote checkpoint, not evidence that those controls passed. I1 remains the first browser checkpoint and must expose actual `/table`, `/scene`, and `/admin` surfaces.
+- I0 local checkpoint completed at standalone repository commit `78df176da76378b9542e371165da76243acd2fa4`. The immutable oracle, focused gate suite, standalone uv lock check, strict local CLI, hash ledgers, full Git-object scan, zero-remotes check, and `kesha`-only permissions passed. The review route is explicitly not approved: `cross-family verdict unavailable`; the parent accepted temporary review risk for local I0 only. HARD STOP before I1 until explicit owner approval.
