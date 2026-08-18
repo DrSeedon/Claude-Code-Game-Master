@@ -140,14 +140,18 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 ### Deploy
 - **VPS:** Contabo DE (158.220.127.161), user `kesha`, project at `/home/kesha/projects/dnd-game-master`
 - **Domain:** https://dnd-game-master.duckdns.org (DuckDNS, SSL via certbot). Token in
-  `~/.duckdns_token` (0600, not in git); a `*/30` cron re-points the record at the VPS's current
-  public IP, so a hardware move that changes the IP self-heals within 30 min.
+  `/home/kesha/projects/dnd-game-master/.duckdns_token` (0600, gitignored) — NOT `~/.duckdns_token`,
+  which was the original location and no longer exists; a keep-alive cron re-points the record at
+  the VPS's current public IP, so a hardware move that changes the IP self-heals.
+  `crontab -l` is denied under `NoNewPrivileges`, so cron state reads as UNKNOWN, never as absent.
   The old `dnd.seedon.ru` was dropped on 2026-08-07: seedon.ru belongs to a company that had to
   remove any public "company domain → German server" link (152-ФЗ). Do not resurrect it — the name
   now resolves to their Moscow wildcard.
 - **The DuckDNS token is account-wide, and the account is shared. `dnd-game-master` is the ONLY
-  domain this project may touch.** The same account holds the owner's personal VPN domain
-  (`foghedgehog`); the token cannot tell them apart, so nothing but discipline stops a wrong
+  domain this project may touch; `dnd-table` (added 2026-08-18) belongs to the separate AI-table
+  MVP and is the only other name any agent here may name.** The same account holds the owner's
+  personal VPN domain (`foghedgehog`); the token cannot tell them apart, so nothing but discipline
+  stops a wrong
   `domains=` parameter from repointing the VPN. Two agents already did exactly that on 2026-08-07 —
   once from another project, once here — before anyone realised the token has no per-domain scope.
   Splitting the accounts was considered and rejected by the owner: one account stays, the boundary
