@@ -91,6 +91,11 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   the call sites, mutating each part of the fix separately. Replacing a body with `pass` while the
   name still exists keeps the dependency alive and reports a false "not exercised" — that is how
   a fixture was almost dropped as dead while 14 tests still referenced it by name.
+- **A test that re-implements the check it verifies stays green while the real path is broken.**
+  Measured 2026-08-18: breaking the surface→capability mapping left the probe-double suite passing
+  and was caught only by the test driving a real server over a real socket. Cover authorization and
+  authority seams through the ACTUAL entry path; a helper that duplicates the logic answers the
+  same on success and on failure, which is the same defect class as a `200` that means nothing.
 
 ## Product decision interviews
 - Ask the owner only about scope-defining, expensive, or hard-to-reverse choices. Decide reversible
