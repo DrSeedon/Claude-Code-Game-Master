@@ -156,6 +156,11 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   once from another project, once here — before anyone realised the token has no per-domain scope.
   Splitting the accounts was considered and rejected by the owner: one account stays, the boundary
   is the rule. Always name the domain explicitly, never loop over the account's domains.
+- **A wildcard answers for names you never configured — probe with a name that cannot exist.**
+  Verified 2026-08-18: `orchestra.seedon.ru` returned `404`, and so did `zzz-no-such-name.seedon.ru`,
+  because `*.seedon.ru` catches both; the live dashboard was on `orc.seedon.ru` (`302`) the whole
+  time. An identical response to a deliberately absent name means you are reading the wildcard,
+  not your vhost — so a `404`/`200` there proves nothing about your own deployment either way.
 - **A 200 is transport, not meaning.** DuckDNS answers a revoked token with `HTTP 200` and body
   `KO`, so `curl -f` never fires: compare the RESPONSE BODY against the expected value, and test the
   failing branch with a deliberately wrong value. Verified 2026-08-07 — the original keep-alive cron
@@ -177,9 +182,12 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   unit: `/proc/self/status` shows `NoNewPrivs: 0` and `kesha`'s NOPASSWD sudo applies normally.
   Verified 2026-08-18 while installing the AI-table checkpoint. Requires `kesha`'s own pubkey in
   `~/.ssh/authorized_keys` (added that day; the file previously held only `parsehub-timeweb`).
-  Use it for owner-authorized installs — `ssh kesha@localhost 'sudo bash -s' <<'EOF' … EOF`.
-  It is a privilege path, not a licence: it does not authorize a deploy, and it must never touch
-  the Orchestra runtime/venv/service.
+  Install with it directly — `ssh kesha@localhost 'sudo bash -s' <<'EOF' … EOF`. Per the owner's
+  2026-08-18 decision agents have full privileged access and do NOT ask permission per install.
+  Nothing but discipline holds the line now that the kernel no longer does: destructive removal
+  via `trash`, never other projects' dirs or dotfiles, show-and-ask before anything irreversible,
+  never restart another service's unit. Still tell the owner before a production install — he is
+  the only one who sees every contour and will catch an overlap you cannot.
 
 ### Orchestrator lives on the VPS (migrated 2026-08-03)
 **Read `docs/vps-handoff.md` first** — full state handoff written before the migration: what was done, what is still open, and the traps. Context does not survive the move; that file does.
