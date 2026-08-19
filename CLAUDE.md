@@ -102,6 +102,12 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   three blank pages because the live room still held a projection written by the previous version,
   and every test had passed on a new database. This repo is exactly that shape — `world-state/campaigns`
   holds live campaigns that exist only on the VPS and never in git.
+- **A comparison of two failures passes and proves nothing.** Before comparing two values, assert
+  each is present and not its failure default — otherwise the assertion is vacuous exactly when the
+  thing under test is broken. Measured 2026-08-19: 4 such assertions in one suite, two of them
+  comparing `{"code":"unauthorized"}` against itself for weeks because a browser cannot send the
+  `Origin` header the endpoint demanded. Same family as the re-implemented check above: ask what
+  each assertion compares when the code is broken, not when it works.
 
 ## Product decision interviews
 - Ask the owner only about scope-defining, expensive, or hard-to-reverse choices. Decide reversible
