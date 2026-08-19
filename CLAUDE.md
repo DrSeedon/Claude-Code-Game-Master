@@ -106,6 +106,10 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   three blank pages because the live room still held a projection written by the previous version,
   and every test had passed on a new database. This repo is exactly that shape — `world-state/campaigns`
   holds live campaigns that exist only on the VPS and never in git.
+  A stored record can also go stale in MEANING rather than in presence, and a presence check cannot
+  see it: compare the stored value against a freshly computed one. Measured 2026-08-19 — deleting a
+  feature deployed clean while the live projection, written under the old rules, still hid an entity
+  the validator was refusing moves onto; the repair only fired on a MISSING payload, never a wrong one.
   The mirror image: when a comment names an EVENT but the predicate beside it tests a STANDING
   property of state, attack it from the BOOT state, where the predicate is already true and the
   event never happened. Measured 2026-08-19 — an exemption documented as "furniture toppled onto
