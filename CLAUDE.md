@@ -95,6 +95,11 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   assertion under test. Measured 2026-08-19 — deleting a field from a round-trip made a strict
   decoder raise `KeyError` (red, but the comparison never ran), while making that decoder silently
   DISAGREE with its source passed green. Mutate toward a wrong value, not toward a missing one.
+  Restore the file from a `trap ... EXIT`, never from a later command in the same run: a tool-level
+  timeout kills the run without executing the restore, leaving the MUTANT on disk where the next
+  reader takes it for shipped code. Measured 2026-08-19 — a 120s default killed a 128s suite
+  mid-mutation. Also name which test each mutant reddened: N mutants reddening one catch-all test
+  prove one property N times, not N properties.
 - **A test that re-implements the check it verifies stays green while the real path is broken.**
   Measured 2026-08-18: breaking the surface→capability mapping left the probe-double suite passing
   and was caught only by the test driving a real server over a real socket. Cover authorization and
