@@ -91,6 +91,10 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   the call sites, mutating each part of the fix separately. Replacing a body with `pass` while the
   name still exists keeps the dependency alive and reports a false "not exercised" — that is how
   a fixture was almost dropped as dead while 14 tests still referenced it by name.
+  Check WHERE the mutant went red: a mutation that trips a guard upstream proves the guard, not the
+  assertion under test. Measured 2026-08-19 — deleting a field from a round-trip made a strict
+  decoder raise `KeyError` (red, but the comparison never ran), while making that decoder silently
+  DISAGREE with its source passed green. Mutate toward a wrong value, not toward a missing one.
 - **A test that re-implements the check it verifies stays green while the real path is broken.**
   Measured 2026-08-18: breaking the surface→capability mapping left the probe-double suite passing
   and was caught only by the test driving a real server over a real socket. Cover authorization and
