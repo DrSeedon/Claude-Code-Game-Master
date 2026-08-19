@@ -120,6 +120,12 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   event never happened. Measured 2026-08-19 — an exemption documented as "furniture toppled onto
   it" served a concealed creature to every client at revision 0, because the event path makes the
   predicate true as a side effect and cannot distinguish the two.
+- **A fix's own regression is invisible when you only test the fixed code**, because the new
+  behaviour reads as a deliberate design choice. Run the same attack against a rig built at the
+  PRE-fix commit and compare; the branch a fix newly DISABLES is the one nobody has an oracle for.
+  Measured 2026-08-19 — a guard added to stop a maintenance boot revoking sessions turned a
+  never-authenticated session into a permanent one, and the trade only became visible against the
+  older binary.
 - **A comparison of two failures passes and proves nothing.** Before comparing two values, assert
   each is present and not its failure default — otherwise the assertion is vacuous exactly when the
   thing under test is broken. Measured 2026-08-19: 4 such assertions in one suite, two of them
