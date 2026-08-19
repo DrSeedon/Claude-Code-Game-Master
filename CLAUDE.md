@@ -106,6 +106,11 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   three blank pages because the live room still held a projection written by the previous version,
   and every test had passed on a new database. This repo is exactly that shape — `world-state/campaigns`
   holds live campaigns that exist only on the VPS and never in git.
+  The mirror image: when a comment names an EVENT but the predicate beside it tests a STANDING
+  property of state, attack it from the BOOT state, where the predicate is already true and the
+  event never happened. Measured 2026-08-19 — an exemption documented as "furniture toppled onto
+  it" served a concealed creature to every client at revision 0, because the event path makes the
+  predicate true as a side effect and cannot distinguish the two.
 - **A comparison of two failures passes and proves nothing.** Before comparing two values, assert
   each is present and not its failure default — otherwise the assertion is vacuous exactly when the
   thing under test is broken. Measured 2026-08-19: 4 such assertions in one suite, two of them
