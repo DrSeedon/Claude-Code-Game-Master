@@ -121,6 +121,16 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
 ## Product decision interviews
 - Ask the owner only about scope-defining, expensive, or hard-to-reverse choices. Decide reversible
   UI mechanics (for example drag versus tap or token presentation) within the implementation team.
+- **Fixing the same defect shape twice is a signal to escalate, not to fix it a third time.** Tell
+  the owner what keeps breaking, what it costs, and the options — including deleting the feature.
+  Measured 2026-08-19: four review rounds and five blocking defects went into securing concealed
+  tokens on the tactical map; the owner's first question on hearing about it was "why are we hiding
+  anything at all", and the feature was cut in one message. Every one of those rounds was avoidable
+  by reporting the pattern after round two. A repeated defect class is usually a wrong requirement
+  wearing a bug costume, and the requirement is the owner's to keep or cut, not ours to defend.
+- **Report problems as they happen, not at the finish line.** Silence reads as progress. When work
+  stalls, repeats, or hits a decision that is not ours, say so in the same turn — with the concrete
+  options and a recommendation, so answering costs one word.
 
 ## Slot System
 All dm-slots files are replaceable by modules. Each slot has a `<!-- slot:name -->` marker. Modules declare `"replaces": ["slot-name"]` in module.json to override a slot. The loader (`dm-active-modules-rules.sh`) skips replaced slots and loads module rules instead.
