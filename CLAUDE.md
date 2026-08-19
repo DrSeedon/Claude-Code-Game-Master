@@ -96,6 +96,12 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
   and was caught only by the test driving a real server over a real socket. Cover authorization and
   authority seams through the ACTUAL entry path; a helper that duplicates the logic answers the
   same on success and on failure, which is the same defect class as a `200` that means nothing.
+- **Every test passes on an empty store; the upgrade path is what breaks.** A change shipping to an
+  environment that already holds data needs one acceptance check against a forged PRE-CHANGE stored
+  record, not only against a fresh one. Measured 2026-08-19: the first tactical-map deploy served
+  three blank pages because the live room still held a projection written by the previous version,
+  and every test had passed on a new database. This repo is exactly that shape — `world-state/campaigns`
+  holds live campaigns that exist only on the VPS and never in git.
 
 ## Product decision interviews
 - Ask the owner only about scope-defining, expensive, or hard-to-reverse choices. Decide reversible
