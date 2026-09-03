@@ -92,3 +92,6 @@ docs/production/
 .security-key
 logs/security/
 .duckdns_token
+# Orchestra project state is canonical Git data.
+!.orchestra/
+!.orchestra/**
