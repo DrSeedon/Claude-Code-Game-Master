@@ -1,5 +1,17 @@
 # TODO — DM System
 
+## Generated files tracked in git break `git pull --ff-only` on the VPS (found 2026-08-03)
+Deploy on the VPS is `git pull --ff-only`, and it aborts on a dirty tree. Two tracked files are
+rewritten by simply RUNNING the project, so the tree is never clean for long:
+- `uv.lock` — every `uv run` (including the service's own `ExecStart`, so every `systemctl restart`)
+  rewrites it: VPS uv 0.11.28 logs `Resolving despite existing lockfile due to removal of global
+  exclude newer` and drops the `[options] exclude-newer` block plus all `sys_platform` markers.
+- `modules/registry.json` — even the read-only `dm-module.sh list` reorders and rewrites it.
+
+Fix direction: stop tracking `modules/registry.json` (regenerate it on demand), and pin/align the
+uv version — or accept the lock churn and commit it once from the VPS. Until then a deploy can die
+mid-way with "Your local changes would be overwritten".
+
 ## Unified Inventory Storage (Refactor)
 Move inventory data INTO entity files instead of separate module-data JSONs:
 - Player inventory → `character.json` (instead of `module-data/inventory-system.json`)

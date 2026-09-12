@@ -1,0 +1,50 @@
+{
+  "admin_browser_field_set": [
+    "allowed_recovery_actions",
+    "audio_health",
+    "coordinator",
+    "input_health",
+    "last_operation",
+    "projection_health",
+    "run_state",
+    "safe_error"
+  ],
+  "admin_control_revision": 7,
+  "admin_operation_count": 8,
+  "admin_world_state_unchanged": true,
+  "aggregate_version": 3,
+  "audio_leader_generations": [
+    1,
+    2
+  ],
+  "audit_denial_count": 8,
+  "client_versions": {
+    "admin": [
+      3
+    ],
+    "composite": [
+      3
+    ],
+    "scene": [
+      3
+    ],
+    "table": [
+      3
+    ]
+  },
+  "composite_visible_batch_id": "batch:3",
+  "duplicate_event_render_count": 1,
+  "failed_render_cursor_after_retry": 1,
+  "failed_render_cursor_before_retry": 0,
+  "final_audio_leader_count": 1,
+  "oracle": "PASS",
+  "overlay_canonical_state_unchanged": true,
+  "overlay_expired": true,
+  "overlay_visible_on_reconnect_within_ttl": true,
+  "pointer_mouse_touch_equivalent": true,
+  "secret_canary_absent": true,
+  "unauthorized_case_count": 8,
+  "unauthorized_protected_state_unchanged": true,
+  "world_mutation_count": 3,
+  "world_revision": 3
+}

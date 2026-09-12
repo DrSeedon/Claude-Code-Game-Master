@@ -87,6 +87,65 @@ All gameplay rules (combat, movement, narration, loot, social, time management, 
 - After dm-slots or module rules edits: verify English-only (no Russian text in rules files)
 - After JSON schema changes: run affected tool with `--help` to verify it still parses
 - After module middleware changes: test the intercepted action end-to-end
+- Proving a fix is load-bearing: delete the element ENTIRELY (name together with body) and repair
+  the call sites, mutating each part of the fix separately. Replacing a body with `pass` while the
+  name still exists keeps the dependency alive and reports a false "not exercised" — that is how
+  a fixture was almost dropped as dead while 14 tests still referenced it by name.
+  Check WHERE the mutant went red: a mutation that trips a guard upstream proves the guard, not the
+  assertion under test. Measured 2026-08-19 — deleting a field from a round-trip made a strict
+  decoder raise `KeyError` (red, but the comparison never ran), while making that decoder silently
+  DISAGREE with its source passed green. Mutate toward a wrong value, not toward a missing one.
+  Restore the file from a `trap ... EXIT`, never from a later command in the same run: a tool-level
+  timeout kills the run without executing the restore, leaving the MUTANT on disk where the next
+  reader takes it for shipped code. Measured 2026-08-19 — a 120s default killed a 128s suite
+  mid-mutation. Also name which test each mutant reddened: N mutants reddening one catch-all test
+  prove one property N times, not N properties.
+- **A test that re-implements the check it verifies stays green while the real path is broken.**
+  Measured 2026-08-18: breaking the surface→capability mapping left the probe-double suite passing
+  and was caught only by the test driving a real server over a real socket. Cover authorization and
+  authority seams through the ACTUAL entry path; a helper that duplicates the logic answers the
+  same on success and on failure, which is the same defect class as a `200` that means nothing.
+- **Every test passes on an empty store; the upgrade path is what breaks.** A change shipping to an
+  environment that already holds data needs one acceptance check against a forged PRE-CHANGE stored
+  record, not only against a fresh one. Measured 2026-08-19: the first tactical-map deploy served
+  three blank pages because the live room still held a projection written by the previous version,
+  and every test had passed on a new database. This repo is exactly that shape — `world-state/campaigns`
+  holds live campaigns that exist only on the VPS and never in git.
+  A stored record can also go stale in MEANING rather than in presence, and a presence check cannot
+  see it: compare the stored value against a freshly computed one. Measured 2026-08-19 — deleting a
+  feature deployed clean while the live projection, written under the old rules, still hid an entity
+  the validator was refusing moves onto; the repair only fired on a MISSING payload, never a wrong one.
+  The mirror image: when a comment names an EVENT but the predicate beside it tests a STANDING
+  property of state, attack it from the BOOT state, where the predicate is already true and the
+  event never happened. Measured 2026-08-19 — an exemption documented as "furniture toppled onto
+  it" served a concealed creature to every client at revision 0, because the event path makes the
+  predicate true as a side effect and cannot distinguish the two.
+- **A fix's own regression is invisible when you only test the fixed code**, because the new
+  behaviour reads as a deliberate design choice. Run the same attack against a rig built at the
+  PRE-fix commit and compare; the branch a fix newly DISABLES is the one nobody has an oracle for.
+  Measured 2026-08-19 — a guard added to stop a maintenance boot revoking sessions turned a
+  never-authenticated session into a permanent one, and the trade only became visible against the
+  older binary.
+- **A comparison of two failures passes and proves nothing.** Before comparing two values, assert
+  each is present and not its failure default — otherwise the assertion is vacuous exactly when the
+  thing under test is broken. Measured 2026-08-19: 4 such assertions in one suite, two of them
+  comparing `{"code":"unauthorized"}` against itself for weeks because a browser cannot send the
+  `Origin` header the endpoint demanded. Same family as the re-implemented check above: ask what
+  each assertion compares when the code is broken, not when it works.
+
+## Product decision interviews
+- Ask the owner only about scope-defining, expensive, or hard-to-reverse choices. Decide reversible
+  UI mechanics (for example drag versus tap or token presentation) within the implementation team.
+- **Fixing the same defect shape twice is a signal to escalate, not to fix it a third time.** Tell
+  the owner what keeps breaking, what it costs, and the options — including deleting the feature.
+  Measured 2026-08-19: four review rounds and five blocking defects went into securing concealed
+  tokens on the tactical map; the owner's first question on hearing about it was "why are we hiding
+  anything at all", and the feature was cut in one message. Every one of those rounds was avoidable
+  by reporting the pattern after round two. A repeated defect class is usually a wrong requirement
+  wearing a bug costume, and the requirement is the owner's to keep or cut, not ours to defend.
+- **Report problems as they happen, not at the finish line.** Silence reads as progress. When work
+  stalls, repeats, or hits a decision that is not ours, say so in the same turn — with the concrete
+  options and a recommendation, so answering costs one word.
 
 ## Slot System
 All dm-slots files are replaceable by modules. Each slot has a `<!-- slot:name -->` marker. Modules declare `"replaces": ["slot-name"]` in module.json to override a slot. The loader (`dm-active-modules-rules.sh`) skips replaced slots and loads module rules instead.
@@ -131,7 +190,32 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
 
 ### Deploy
 - **VPS:** Contabo DE (158.220.127.161), user `kesha`, project at `/home/kesha/projects/dnd-game-master`
-- **Domain:** https://dnd.seedon.ru (DNS in Selectel, SSL via certbot)
+- **Domain:** https://dnd-game-master.duckdns.org (DuckDNS, SSL via certbot). Token in
+  `/home/kesha/projects/dnd-game-master/.duckdns_token` (0600, gitignored) — NOT `~/.duckdns_token`,
+  which was the original location and no longer exists; a keep-alive cron re-points the record at
+  the VPS's current public IP, so a hardware move that changes the IP self-heals.
+  `crontab -l` is denied under `NoNewPrivileges`, so cron state reads as UNKNOWN, never as absent.
+  The old `dnd.seedon.ru` was dropped on 2026-08-07: seedon.ru belongs to a company that had to
+  remove any public "company domain → German server" link (152-ФЗ). Do not resurrect it — the name
+  now resolves to their Moscow wildcard.
+- **The DuckDNS token is account-wide, and the account is shared. `dnd-game-master` is the ONLY
+  domain this project may touch; `dnd-table` (added 2026-08-18) belongs to the separate AI-table
+  MVP and is the only other name any agent here may name.** The same account holds the owner's
+  personal VPN domain (`foghedgehog`); the token cannot tell them apart, so nothing but discipline
+  stops a wrong
+  `domains=` parameter from repointing the VPN. Two agents already did exactly that on 2026-08-07 —
+  once from another project, once here — before anyone realised the token has no per-domain scope.
+  Splitting the accounts was considered and rejected by the owner: one account stays, the boundary
+  is the rule. Always name the domain explicitly, never loop over the account's domains.
+- **A wildcard answers for names you never configured — probe with a name that cannot exist.**
+  Verified 2026-08-18: `orchestra.seedon.ru` returned `404`, and so did `zzz-no-such-name.seedon.ru`,
+  because `*.seedon.ru` catches both; the live dashboard was on `orc.seedon.ru` (`302`) the whole
+  time. An identical response to a deliberately absent name means you are reading the wildcard,
+  not your vhost — so a `404`/`200` there proves nothing about your own deployment either way.
+- **A 200 is transport, not meaning.** DuckDNS answers a revoked token with `HTTP 200` and body
+  `KO`, so `curl -f` never fires: compare the RESPONSE BODY against the expected value, and test the
+  failing branch with a deliberately wrong value. Verified 2026-08-07 — the original keep-alive cron
+  would have reported success forever after the token was reissued.
 - **Service:** `systemd dnd-game-master.service`
 - **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
 - **Port:** 18083 (registered in `~/ports.md`)
@@ -143,10 +227,22 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   ```
 - **Run git as `kesha`, never root** — `su -s /bin/bash kesha` (`su - kesha` hangs: no password). Root-owned files under `User=kesha` break `.git` writes mid-deploy. Check: `find /home/kesha/projects/dnd-game-master ! -user kesha | wc -l` → must be 0
 - **Live data is NOT in git** — `world-state/campaigns` (13 campaigns), `world-state/usage` and `.env` are gitignored and exist only on the VPS. Never `git clean` or re-clone over them without a backup
+- **`sudo` works over `ssh kesha@localhost`, not from an agent's own process.** `NoNewPrivileges=yes`
+  on `orchestra.service` is inherited by every agent process, so direct `sudo` dies with
+  `the "no new privileges" flag is set`. A hop through sshd creates a fresh process outside that
+  unit: `/proc/self/status` shows `NoNewPrivs: 0` and `kesha`'s NOPASSWD sudo applies normally.
+  Verified 2026-08-18 while installing the AI-table checkpoint. Requires `kesha`'s own pubkey in
+  `~/.ssh/authorized_keys` (added that day; the file previously held only `parsehub-timeweb`).
+  Install with it directly — `ssh kesha@localhost 'sudo bash -s' <<'EOF' … EOF`. Per the owner's
+  2026-08-18 decision agents have full privileged access and do NOT ask permission per install.
+  Nothing but discipline holds the line now that the kernel no longer does: destructive removal
+  via `trash`, never other projects' dirs or dotfiles, show-and-ask before anything irreversible,
+  never restart another service's unit. Still tell the owner before a production install — he is
+  the only one who sees every contour and will catch an overlap you cannot.
 
 ### Orchestrator lives on the VPS (migrated 2026-08-03)
 **Read `docs/vps-handoff.md` first** — full state handoff written before the migration: what was done, what is still open, and the traps. Context does not survive the move; that file does.
-The project is played on https://dnd.seedon.ru, so the orchestrator session runs on the VPS, not the laptop.
+The project is played on https://dnd-game-master.duckdns.org, so the orchestrator session runs on the VPS, not the laptop.
 - **Migration tool:** `scripts/migrate_agent.py` in the Orchestra repo — moves the session WITH its transcript, logs, inbox and worktrees (`UPSERT`, so it also works when no session exists on the target). Do NOT hand-write `INSERT`/`UPDATE` into `orchestra.db`; §6 of `docs/vps-orchestrator-onboarding.md` describes the opposite case (resetting an existing stale session).
 - **An orchestrator cannot migrate itself** — `assert_idle` counts the caller as `running`. Someone outside must launch it. The gate only inspects the SOURCE host, so agents running on the VPS do not block it.
 - **Never restart Orchestra on the VPS yourself** — it kills the in-flight turns of every agent there, including other projects'. `Orchestra-orchestrator` owns that restart.
@@ -183,3 +279,12 @@ The project is played on https://dnd.seedon.ru, so the orchestrator session runs
 - Pre-existing pytest collection error: `test_encounter_engine.py` duplicate basename between `tests/` and `.claude/additional/modules/world-travel/tests/`
 - Wizard hasn't been tested end-to-end with the new bash-tool flow yet (deployed, user started testing but hit the pending message bug which is now fixed)
 - Tests: 357 passed as of last run
+
+## Session notes (2026-08-17) — AI-table MVP execution topology
+
+- `ai-table-lead` is the single persistent Sol architecture and continuity lead for I0–I12 and R10. Do not replace this lead per ticket.
+- The lead delegates closed/mechanical work and immutable independent RED oracles to subordinate Luna workers. Open research, architecture, or genuinely complex implementation may use full-cycle Sol children.
+- Execute exactly one implementation ticket at a time: independent RED oracle, implementation, tests, canonical review, merge, then an owner checkpoint.
+- Every ticket hard-stops at its owner checkpoint. Do not start the next ticket until the owner explicitly approves it.
+- I0 has no product deployment. By the owner's explicit 2026-08-17 decision, I0 is local-only in `/home/kesha/projects/ai-table-mvp` with `kesha`-only filesystem permissions and no GitHub login, remote, organization, or external access. Remote visibility, organization ownership, branch protection, off-provider mirror, and remote-principal proof are deferred fail-closed gates that must pass before any external sharing or access; this is an explicit deviation from the canonical organization-owned remote checkpoint, not evidence that those controls passed. I1 remains the first browser checkpoint and must expose actual `/table`, `/scene`, and `/admin` surfaces.
+- I0 local checkpoint completed at standalone repository commit `78df176da76378b9542e371165da76243acd2fa4`. The immutable oracle, focused gate suite, standalone uv lock check, strict local CLI, hash ledgers, full Git-object scan, zero-remotes check, and `kesha`-only permissions passed. The review route is explicitly not approved: `cross-family verdict unavailable`; the parent accepted temporary review risk for local I0 only. HARD STOP before I1 until explicit owner approval.

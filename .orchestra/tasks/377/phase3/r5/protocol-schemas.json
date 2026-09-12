@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contracts/r5/speech-input-v1.json",
+  "title": "R5 room speech-input control and durable records",
+  "description": "Closed JSON messages around the binary audio stream. Client messages are authorized from the R7/R8 server session; client-supplied actor_id is a requested logical selection, never identity or authority.",
+  "oneOf": [
+    { "$ref": "#/$defs/CaptureStart" },
+    { "$ref": "#/$defs/CaptureRejected" },
+    { "$ref": "#/$defs/CaptureAccepted" },
+    { "$ref": "#/$defs/AudioEnd" },
+    { "$ref": "#/$defs/CaptureCancelled" },
+    { "$ref": "#/$defs/CaptureFailed" },
+    { "$ref": "#/$defs/SpeechFinalized" },
+    { "$ref": "#/$defs/DraftCorrect" },
+    { "$ref": "#/$defs/DeclaredRollCorrect" },
+    { "$ref": "#/$defs/DeclaredRollCandidate" }
+  ],
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "CaptureId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "Version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ShortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "FailureCode": {
+      "enum": [
+        "permission_denied",
+        "device_missing",
+        "device_unreadable",
+        "unsupported_audio_profile",
+        "audio_ticket_expired",
+        "capture_timeout",
+        "frame_gap",
+        "audio_backpressure",
+        "control_disconnected",
+        "audio_stream_lost",
+        "provider_unavailable",
+        "provider_protocol_error",
+        "provider_terminal_missing",
+        "server_restart",
+        "conflicting_final_segment",
+        "no_speech",
+        "unrecognized_roll_declaration",
+        "stale_pending_roll"
+      ]
+    },
+    "PurposeBinding": {
+      "oneOf": [
+        {
+          "required": ["purpose", "pending_roll_id"],
+          "properties": {
+            "purpose": { "const": "action" },
+            "pending_roll_id": { "type": "null" }
+          }
+        },
+        {
+          "required": ["purpose", "pending_roll_id"],
+          "properties": {
+            "purpose": { "const": "declared_roll" },
+            "pending_roll_id": { "$ref": "#/$defs/Identifier" }
+          }
+        }
+      ]
+    },
+    "AudioProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "encoding",
+        "sample_rate_hz",
+        "channels",
+        "sample_endianness",
+        "frame_duration_ms"
+      ],
+      "properties": {
+        "encoding": { "const": "linear16" },
+        "sample_rate_hz": { "const": 16000 },
+        "channels": { "const": 1 },
+        "sample_endianness": { "const": "little" },
+        "frame_duration_ms": { "const": 20 }
+      }
+    },
+    "BargeInResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "local_playback_stopped", "server_audio_fenced"],
+      "properties": {
+        "requested": { "type": "boolean" },
+        "local_playback_stopped": { "type": "boolean" },
+        "server_audio_fenced": { "type": "boolean" }
+      }
+    },
+    "CaptureStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "command_id",
+        "actor_id",
+        "activation_source",
+        "expected_aggregate_version"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.capture.start" },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "activation_source": { "enum": ["ptt", "wake_word"] },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" }
+      }
+    },
+    "CaptureRejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "command_id",
+        "error_code",
+        "retryable"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.capture.rejected" },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "error_code": {
+          "enum": [
+            "actor_not_allowed",
+            "stage_not_eligible",
+            "stale_version",
+            "capture_already_active",
+            "activation_not_enabled",
+            "server_unavailable"
+          ]
+        },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "CaptureAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/PurposeBinding" }],
+      "required": [
+        "protocol_version",
+        "kind",
+        "capture_id",
+        "turn_id",
+        "actor_id",
+        "route",
+        "purpose",
+        "pending_roll_id",
+        "stream_generation",
+        "audio_profile",
+        "audio_ticket_expires_at",
+        "barge_in"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.capture.accepted" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "route": { "const": "server_proxy" },
+        "purpose": { "enum": ["action", "declared_roll"] },
+        "pending_roll_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "stream_generation": { "type": "integer", "minimum": 1 },
+        "audio_profile": { "$ref": "#/$defs/AudioProfile" },
+        "audio_ticket_expires_at": { "type": "string", "format": "date-time" },
+        "barge_in": { "$ref": "#/$defs/BargeInResult" }
+      }
+    },
+    "AudioEnd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "capture_id",
+        "stream_generation",
+        "last_frame_seq",
+        "reason"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.audio.end" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "stream_generation": { "type": "integer", "minimum": 1 },
+        "last_frame_seq": { "type": "integer", "minimum": 0 },
+        "reason": { "enum": ["released", "cancelled"] }
+      }
+    },
+    "CaptureCancelled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "capture_id",
+        "partial_discarded"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.capture.cancelled" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "partial_discarded": { "const": true }
+      }
+    },
+    "CaptureFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "capture_id",
+        "error_code",
+        "retryable",
+        "partial_discarded"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "input.capture.failed" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "error_code": { "$ref": "#/$defs/FailureCode" },
+        "retryable": { "type": "boolean" },
+        "partial_discarded": { "const": true }
+      }
+    },
+    "SpeechFinalized": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Internal server event. It is never accepted from a public browser message.",
+      "allOf": [{ "$ref": "#/$defs/PurposeBinding" }],
+      "required": [
+        "protocol_version",
+        "kind",
+        "event_id",
+        "room_id",
+        "capture_id",
+        "turn_id",
+        "actor_id",
+        "purpose",
+        "pending_roll_id",
+        "final_transcript_id",
+        "text",
+        "provider_request_id",
+        "segment_ids",
+        "expected_aggregate_version"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "speech.finalized" },
+        "event_id": { "$ref": "#/$defs/Identifier" },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "purpose": { "enum": ["action", "declared_roll"] },
+        "pending_roll_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "final_transcript_id": { "$ref": "#/$defs/Identifier" },
+        "text": { "$ref": "#/$defs/ShortText" },
+        "provider_request_id": { "$ref": "#/$defs/Identifier" },
+        "segment_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" }
+      }
+    },
+    "DraftCorrect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "kind",
+        "command_id",
+        "turn_id",
+        "expected_draft_version",
+        "replacement_text"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "draft.correct" },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "expected_draft_version": { "type": "integer", "minimum": 1 },
+        "replacement_text": { "$ref": "#/$defs/ShortText" }
+      }
+    },
+    "DeclaredRollCorrect": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Structured correction of the numeric total on the current declared-roll draft. Server session owns room and actor; the pending-roll identity must match the current draft.",
+      "required": [
+        "protocol_version",
+        "kind",
+        "command_id",
+        "turn_id",
+        "expected_draft_version",
+        "pending_roll_id",
+        "declared_total"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "roll.declared_correct" },
+        "command_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "expected_draft_version": { "type": "integer", "minimum": 1 },
+        "pending_roll_id": { "$ref": "#/$defs/Identifier" },
+        "declared_total": { "type": "integer" }
+      }
+    },
+    "DeclaredRollCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Server-built R4 draft input after an explicit roll declaration. Approval and consumption remain R4/core operations.",
+      "required": [
+        "protocol_version",
+        "kind",
+        "event_id",
+        "turn_id",
+        "pending_roll_id",
+        "actor_id",
+        "declared_total",
+        "draft_version",
+        "source_final_transcript_id"
+      ],
+      "properties": {
+        "protocol_version": { "const": 1 },
+        "kind": { "const": "roll.declared_candidate" },
+        "event_id": { "$ref": "#/$defs/Identifier" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "pending_roll_id": { "$ref": "#/$defs/Identifier" },
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "declared_total": { "type": "integer" },
+        "draft_version": { "type": "integer", "minimum": 1 },
+        "source_final_transcript_id": { "$ref": "#/$defs/Identifier" }
+      }
+    },
+    "InputAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Durable server metadata. Raw audio and interim transcript have no fields and therefore cannot be persisted in this record.",
+      "allOf": [
+        { "$ref": "#/$defs/PurposeBinding" },
+        {
+          "if": {
+            "properties": { "state": { "const": "failed" } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "failure_code": { "$ref": "#/$defs/FailureCode" },
+              "final_transcript_id": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": { "failure_code": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "state": { "enum": ["ready", "submitted"] } },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "final_transcript_id": { "$ref": "#/$defs/Identifier" },
+              "provider_request_id": { "$ref": "#/$defs/Identifier" },
+              "candidate_event_id": { "$ref": "#/$defs/Identifier" }
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": ["armed", "capturing", "finalizing", "cancelled", "failed"]
+                }
+              },
+              "required": ["state"]
+            },
+            "then": {
+              "properties": {
+                "final_transcript_id": { "type": "null" },
+                "candidate_event_id": { "type": "null" }
+              }
+            }
+          }
+        }
+      ],
+      "required": [
+        "schema_version",
+        "room_id",
+        "capture_id",
+        "turn_id",
+        "actor_id",
+        "activation_source",
+        "route",
+        "purpose",
+        "pending_roll_id",
+        "state",
+        "stream_generation",
+        "expected_aggregate_version",
+        "frame_count",
+        "provider_request_id",
+        "final_transcript_id",
+        "candidate_event_id",
+        "failure_code"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "room_id": { "$ref": "#/$defs/Identifier" },
+        "capture_id": { "$ref": "#/$defs/CaptureId" },
+        "turn_id": { "$ref": "#/$defs/Identifier" },
+        "actor_id": { "$ref": "#/$defs/Identifier" },
+        "activation_source": { "enum": ["ptt", "wake_word"] },
+        "route": { "const": "server_proxy" },
+        "purpose": { "enum": ["action", "declared_roll"] },
+        "pending_roll_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "state": {
+          "enum": [
+            "armed",
+            "capturing",
+            "finalizing",
+            "ready",
+            "submitted",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "stream_generation": { "type": "integer", "minimum": 1 },
+        "expected_aggregate_version": { "$ref": "#/$defs/Version" },
+        "frame_count": { "type": "integer", "minimum": 0 },
+        "provider_request_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "final_transcript_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "candidate_event_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "failure_code": {
+          "anyOf": [
+            { "$ref": "#/$defs/FailureCode" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "x-binary-audio-frame": {
+    "transport": "room-input.v1 WebSocket binary message",
+    "header_bytes": 36,
+    "layout": [
+      "bytes 0..3: ASCII R5A1",
+      "bytes 4..19: capture UUID, 16 raw bytes",
+      "bytes 20..23: stream_generation, unsigned 32-bit big-endian",
+      "bytes 24..27: frame_seq, unsigned 32-bit big-endian",
+      "bytes 28..35: captured_monotonic_us, unsigned 64-bit big-endian",
+      "bytes 36..: mono linear16 samples, signed 16-bit little-endian"
+    ],
+    "normal_frame_payload_bytes": 640,
+    "normal_frame_duration_ms": 20,
+    "notes": "The server rejects wrong capture/generation, gaps, empty payloads, odd payload lengths, and frames after input.audio.end. The 20 ms frame is a protocol choice to be measured, not a user latency target."
+  }
+}
