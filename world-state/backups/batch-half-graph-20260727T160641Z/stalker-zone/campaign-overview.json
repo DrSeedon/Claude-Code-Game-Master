@@ -1,0 +1,148 @@
+{
+  "campaign_name": "S.T.A.L.K.E.R. — Зона",
+  "genre": "Fantasy",
+  "tone": {
+    "horror": 30,
+    "comedy": 30,
+    "drama": 40
+  },
+  "current_date": "15 марта 2012",
+  "time_of_day": "Поздний вечер",
+  "player_position": {
+    "current_location": "Бар 100 Рентген",
+    "previous_location": "Ангар 3 (Свалка)",
+    "arrival_time": "2026-03-15 06:13:21 UTC"
+  },
+  "current_character": "Меченый",
+  "session_count": 0,
+  "advanced_mode": true,
+  "modules": {
+    "mass-combat": true,
+    "custom-stats": true,
+    "enhanced-dice": true,
+    "world-travel": false,
+    "inventory-system": true,
+    "firearms-combat": true
+  },
+  "narrator_style": {
+    "id": "sarcastic-puns",
+    "name": "Sarcastic with Puns",
+    "description": "A drunk stand-up comedian who loves their characters but is constantly baffled by their decisions. Terry Pratchett at a tavern.",
+    "voice": "A sarcastic narrator who LOVES the characters but is constantly baffled by their decisions. Like Terry Pratchett crossed with a drunk stand-up comedian at a tavern.",
+    "genres": [
+      "fantasy",
+      "sci-fi",
+      "modern",
+      "survival",
+      "horror",
+      "any"
+    ],
+    "recommended_for": "When you want to laugh at yourself. Light campaigns, roguelikes, absurdist settings.",
+    "rules_raw": "### Tone\n- **Sarcasm** — the baseline. Not mean, but loving. You laugh WITH the player, not AT them.\n- **Irony** — everything serious is delivered with a wink.\n- **Dark humor** — moderate. NPC deaths can be absurd, bodies in funny poses. No gratuitous grimness.\n- **Profanity** — natural and contextual, not every other word. NPCs swear when the situation demands it.\n\n### Puns (MANDATORY)\n- Minimum 1-2 puns per scene. The worse the pun, the better.\n- NPCs make puns and suffer for it.\n- Meta-humor is fine: \"You rolled a nat 1. The dice hate you personally.\"\n\n### Physical Comedy\nRicochets, chain reactions (chair→table→porridge→cat), landing in the worst possible spots.\n\n### NPCs\nEvery NPC is a real person with a signature bit/catchphrase running gag. They react to chaos like real humans — baffled, angry, crying. Monsters too — give them bureaucracy, fatigue, corporate culture.\n\n### Serious Moments\nWork ONLY through contrast. No more than 1-2 per session. After a serious beat — snap back to comedy fast.\n\n### Dice & Mechanics\n- Nat 20 — cinematic and epic.\n- Nat 1 — ALWAYS funny consequences, never boring ones. Failures create new situations, not dead ends.",
+    "forbidden": [
+      "Sterile, \"safe\" narration without personality",
+      "Long descriptions without humor",
+      "NPC quest-dispensers with no character",
+      "Boring failures (\"you couldn't open the door\")",
+      "Predictability"
+    ]
+  },
+  "campaign_rules_template": {
+    "id": "roguelike-missions",
+    "name": "Roguelike: Base & Missions",
+    "description": "XCOM/Darkest Dungeon/FTL universal template: a home base where you heal, upgrade, and recruit — then deploy on missions with clear objectives, loot, and consequences. Death is real. Every mission is a story. Configurable for any setting.",
+    "genres": [
+      "roguelike",
+      "tactical",
+      "missions",
+      "base-management",
+      "squad",
+      "progression",
+      "permadeath"
+    ],
+    "recommended_for": "Any setting where gameplay loops between a safe hub and dangerous deployments. Works for: military sci-fi (XCOM), post-apocalyptic (STALKER), dark fantasy (Darkest Dungeon), cyberpunk, medieval mercenary company, space exploration, zombie survival — anything with a base and field ops."
+  },
+  "campaign_rules": {
+    "roguelike_config": {
+      "setting": "STALKER Zone (Чернобыль, 2012+)",
+      "base_name": "Бар \"100 Рентген\"",
+      "currency": "Рубли (₽)",
+      "squad_mode": "flexible (solo / duo / squad 3-4)",
+      "permadeath": "legacy",
+      "difficulty": "hard",
+      "meta_tree": "Тайники, контакты с торговцами, репутация фракций, апгрейд снаряги",
+      "threat_name": "Расширение Зоны",
+      "threat_escalation": true,
+      "threat_level": 1,
+      "mission_types": [
+        {
+          "id": "artifact_hunt",
+          "name": "Артефакт-хант",
+          "desc": "Найти артефакт в аномальном поле"
+        },
+        {
+          "id": "exterminate",
+          "name": "Зачистка",
+          "desc": "Вычистить мутантов/бандитов из точки"
+        },
+        {
+          "id": "recon",
+          "name": "Разведка",
+          "desc": "Проникнуть, собрать инфу, выйти живым"
+        },
+        {
+          "id": "escort",
+          "name": "Проводка",
+          "desc": "Довести учёного/новичка через Зону"
+        },
+        {
+          "id": "rescue",
+          "name": "Спасение",
+          "desc": "Вытащить раненого сталкера"
+        },
+        {
+          "id": "sabotage",
+          "name": "Диверсия",
+          "desc": "Взорвать/отключить объект фракции"
+        },
+        {
+          "id": "defend",
+          "name": "Оборона",
+          "desc": "Удержать точку от волн мутантов/выброса"
+        },
+        {
+          "id": "delivery",
+          "name": "Доставка",
+          "desc": "Перенести груз из точки А в Б"
+        },
+        {
+          "id": "bounty",
+          "name": "Охота за головой",
+          "desc": "Найти и ликвидировать цель"
+        },
+        {
+          "id": "lab_raid",
+          "name": "Лаб-рейд",
+          "desc": "Зачистить подземную лабораторию"
+        },
+        {
+          "id": "negotiation",
+          "name": "Переговоры",
+          "desc": "Встреча с фракцией (может стать боем)"
+        },
+        {
+          "id": "stash",
+          "name": "Тайник",
+          "desc": "Найти схрон по координатам с ПДА"
+        },
+        {
+          "id": "boss",
+          "name": "Босс-рейд",
+          "desc": "Уникальный мутант / аномальная тварь"
+        }
+      ]
+    }
+  },
+  "schema_version": 2,
+  "name": "stalker-zone"
+}

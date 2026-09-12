@@ -13,6 +13,7 @@ from dice import (
     _load_spell,
     _resolve_initiative_combatant,
     _resolve_attack,
+    _resolve_skill,
     _resolve_spell_attack,
     main,
 )
@@ -40,6 +41,14 @@ def sample_char():
 
 
 class TestResolveAttack:
+    def test_explicit_attack_bonus_is_authoritative(self, sample_char):
+        sample_char["equipment"]["weapons"][0]["attack_bonus"] = 8
+        sample_char["equipment"]["weapons"][0].pop("proficient")
+
+        mod, *_ = _resolve_attack(sample_char, "Longsword")
+
+        assert mod == 8
+
     def test_equipped_weapon(self, sample_char):
         mod, name, damage, ammo, rn, rl = _resolve_attack(sample_char)
         assert name == "Longsword"
@@ -69,6 +78,17 @@ class TestResolveAttack:
         char = {"name": "Unarmed", "level": 1, "stats": {"str": 10}, "equipment": {"weapons": []}, "skills": {}}
         mod, name, damage, ammo, rn, rl = _resolve_attack(char)
         assert ammo is None
+
+
+class TestResolveSkill:
+    def test_stored_skill_total_takes_precedence(self, sample_char):
+        assert _resolve_skill(sample_char, "Perception") == (3, 0, "perception")
+
+    def test_untrained_standard_skill_uses_ability_modifier(self, sample_char):
+        assert _resolve_skill(sample_char, "Persuasion") == (-1, 0, "Persuasion")
+
+    def test_unknown_skill_is_rejected(self, sample_char):
+        assert _resolve_skill(sample_char, "Dragon Accounting") == (None, None, None)
 
 
 class TestResolveSpellAttack:
@@ -187,6 +207,54 @@ class TestLoadCreature:
 
 
 class TestAutomaticDamage:
+    def test_player_kill_awards_creature_xp_once(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        _write_world(
+            tmp_path,
+            {
+                "player:active": {
+                    "type": "player",
+                    "name": "Hero",
+                    "data": {
+                        "level": 1,
+                        "xp": {"current": 0, "next_level": 300},
+                        "stats": {"str": 16},
+                        "equipment": {
+                            "weapons": [{
+                                "name": "Sword",
+                                "attack_bonus": 5,
+                                "damage": "1d6+3",
+                                "equipped": True,
+                            }],
+                        },
+                    },
+                },
+                "creature:vermin": {
+                    "type": "creature",
+                    "name": "Vermin",
+                    "data": {"hp": 5, "ac": 10, "xp": 50},
+                },
+            },
+        )
+        rolls = iter([15, 3, 15, 3])
+        monkeypatch.setattr("dice.random.randint", lambda _a, _b: next(rolls))
+        monkeypatch.setattr(sys, "argv", ["dice.py", "--target", "vermin"])
+
+        with patch("dice._get_campaign_path", return_value=tmp_path):
+            main()
+            main()
+
+        world = json.loads((tmp_path / "world.json").read_text())
+        player = world["nodes"]["player:active"]
+        creature = world["nodes"]["creature:vermin"]
+        assert player["data"]["xp"]["current"] == 50
+        assert creature["data"]["xp_awarded"] is True
+        assert capsys.readouterr().out.count("+50 XP") == 1
+
     def test_specialized_weapon_is_redirected_to_active_route(
         self,
         tmp_path,

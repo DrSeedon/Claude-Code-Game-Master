@@ -64,15 +64,7 @@ case "$ACTION" in
             echo "Usage: dm-location.sh describe <name> <description>"
             exit 1
         fi
-        LOC_ID=$($PYTHON_CMD -c "
-import sys; sys.path.insert(0,'$LIB_DIR')
-from world_graph import WorldGraph
-g = WorldGraph()
-nid = g._resolve_id('$1', 'location')
-print(nid or '')
-" 2>/dev/null)
-        if [ -z "$LOC_ID" ]; then echo "Error: Location '$1' not found"; exit 1; fi
-        $WG update-node "$LOC_ID" --data "{\"description\": \"$2\"}"
+        $WG location-describe "$1" "$2"
         ;;
 
     get|show)

@@ -88,11 +88,14 @@ bash tools/dm-inventory.sh loot "[char]" \
 
 Format: `Name:Qty` or `Name:Qty:WeightKg`
 
-### 2. Record & Advance
+### 2. Advance Time
 ```bash
-bash tools/dm-note.sh "combat" "[Character] defeated [X] [enemies] at [location]"
 bash tools/dm-time.sh "_" "[date]" --elapsed 0.5
 ```
+
+Include the combat result in the summary passed to `dm-session.sh end`.
+Use `dm-note.sh` only when the battle establishes a durable world fact that
+belongs to an allowed fact category.
 
 ---
 

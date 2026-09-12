@@ -24,7 +24,7 @@
 | Party NPC HP | `bash tools/dm-npc.sh hp "[name]" [+/-amount]` |
 | NPC joins party | `bash tools/dm-npc.sh promote "[name]"` |
 | NPC moved | `bash tools/dm-npc.sh locate "[name]" "[location]"` |
-| **Quest created** | `bash tools/dm-plot.sh add "[name]" --type [type] --desc "[description]"` |
+| **Quest created** | `bash tools/dm-plot.sh add "[name]" --type [type] --desc "[description]" --xp [reward]` |
 | **Quest goal added** | `bash tools/dm-plot.sh objective "[name]" add "[objective]"` |
 | **Quest objective done** | `bash tools/dm-plot.sh objective "[name]" complete [index]` |
 | **Quest completed** | `bash tools/dm-plot.sh complete "[name]"` |
@@ -42,12 +42,13 @@ Use `dm-scene.sh` when one narrative beat changes two or more of location, party
 
 ### Quest Rules (MANDATORY)
 
-- **New storyline emerges** (NPC gives task, player discovers mystery, threat appears) → `dm-plot.sh add` with type and description, then add at least one objective.
+- **New storyline emerges** (NPC gives task, player discovers mystery, threat appears) → `dm-plot.sh add` with type, description, and explicit `--xp` reward, then add at least one objective.
 - **Player makes progress** (finds clue, reaches location, talks to NPC about quest) → complete the relevant objective or add the newly discovered goal.
 - **Objective fulfilled** (specific goal achieved) → `dm-plot.sh objective "Quest" complete N`.
 - **New goal discovered mid-quest** → `dm-plot.sh objective "Quest" add "New goal"`.
-- **Quest resolved** → `dm-plot.sh complete "Quest"` or `dm-plot.sh fail "Quest"`.
+- **Quest resolved** → `dm-plot.sh complete "Quest"` or `dm-plot.sh fail "Quest"`. Completion automatically awards the stored XP once.
 - **Every quest MUST have at least one objective.** A quest without objectives has no trackable progress.
+- **Every quest MUST have an explicit non-negative `xp_reward`.** Use `--xp 0` only when no XP is intentionally awarded.
 - **Use `dm-plot.sh list --status active`** at session start to review active storylines and catch stale quests.
 - Quests live in `world.json (quest nodes)`. Do NOT store quest/plot data in fact nodes via `dm-note.sh`.
 

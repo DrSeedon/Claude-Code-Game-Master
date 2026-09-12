@@ -1,0 +1,22 @@
+{
+  "terrain_colors": {
+    "jungle": [50, 130, 70],
+    "fortification": [100, 90, 80],
+    "ruins": [140, 120, 100],
+    "river": [60, 120, 200],
+    "clearing": [160, 200, 100],
+    "road": [180, 170, 140]
+  },
+  "encounter_system": {
+    "enabled": true,
+    "base_dc": 14,
+    "distance_modifier": 2,
+    "stat_to_use": "stealth",
+    "time_dc_modifiers": {
+      "Morning": 0,
+      "Day": 0,
+      "Evening": 2,
+      "Night": 4
+    }
+  }
+}

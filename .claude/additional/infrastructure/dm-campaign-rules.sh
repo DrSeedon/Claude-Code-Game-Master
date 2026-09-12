@@ -136,21 +136,22 @@ PYEOF
 
 _recommend() {
     local genre="${2:-}"
+    genre="${genre,,}"
     case "$genre" in
-        horror|investigation|coc|scp|delta-green|lovecraft)
+        *horror*|*investigation*|*coc*|*scp*|*delta-green*|*lovecraft*)
             echo "horror-investigation" ;;
-        survival|stalker|fallout|metro|post-apocalyptic|zone)
+        *survival*|*stalker*|*fallout*|*metro*|*post-apocalyptic*|*zone*)
             echo "survival-zone" ;;
-        space|sci-fi|scifi|ftl|expanse|mass-effect)
+        *space*|*sci-fi*|*scifi*|*ftl*|*expanse*|*mass-effect*)
             echo "space-travel" ;;
-        political|intrigue|court|noble|vampire|masquerade|thrones)
+        *political*|*intrigue*|*court*|*noble*|*vampire*|*masquerade*|*thrones*)
             echo "political-intrigue" ;;
-        civilization|tribal|empire|4x|strategy)
+        *civilization*|*tribal*|*empire*|*4x*|*strategy*)
             echo "civilization" ;;
-        gladiator|arena|battle-royale|pvp|combat|colosseum|fighting)
+        *gladiator*|*arena*|*battle-royale*|*pvp*|*colosseum*|*fighting*)
             echo "gladiator-arena" ;;
         *)
-            echo "survival-zone" ;;
+            echo "none" ;;
     esac
 }
 

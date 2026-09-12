@@ -2,6 +2,21 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.5.0] - 2026-07-27
+
+### Added
+- 🔧 **Half-graph campaign migrator** — `tools/migrate_half_graph_campaign.py`
+  - Embeds `module-data/inventory-system.json` / `inventory-party.json` into WorldGraph nodes
+  - Creates `weapon:*` / `armor:*` / creature templates, `money` from `gold`, party `at` fix, overview defaults
+  - Upgrades incomplete firearms `fire_modes` to duration/salvo schema
+- 📘 **Grok skill** `.grok/skills/dm-migrate-campaign/` + post-mortem `docs/migration/half-graph-postmortem.md`
+- 🎮 **Grok Build DM adapter** — `.grok/skills/dm/`, cinematic-scene mapping, multi-client `AGENTS.md` section
+
+### Fixed
+- ⚔️ **clone-wars** playability on modern CORE (backup under `world-state/backups/clone-wars-pre-migrate-*`)
+  - Gold 0, empty inventory, missing weapons, party stuck at landing zone, weak fire_modes
+  - Triggered case: engine WorldGraph embed era left SW campaign half-migrated
+
 ## [4.4.1] - 2026-07-12
 
 ### Changed

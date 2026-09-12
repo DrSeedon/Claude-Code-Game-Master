@@ -1,0 +1,1041 @@
+{
+  "meta": {
+    "version": 2,
+    "schema": "graph",
+    "revision": 1
+  },
+  "nodes": {
+    "player:active": {
+      "type": "player",
+      "name": "Меченый",
+      "data": {
+        "id": "меченый",
+        "race": "Human",
+        "class": "Fighter",
+        "level": 2,
+        "hp": {
+          "current": 23,
+          "max": 23
+        },
+        "ac": 12,
+        "stats": {
+          "str": 13,
+          "dex": 18,
+          "con": 15,
+          "int": 14,
+          "wis": 14,
+          "cha": 12
+        },
+        "saves": {
+          "str": 3,
+          "dex": 4,
+          "con": 4,
+          "int": 2,
+          "wis": 2,
+          "cha": 1
+        },
+        "skills": {
+          "athletics": 3,
+          "intimidation": 3,
+          "perception": 4,
+          "survival": 4
+        },
+        "equipment": [
+          "ПМ (2d4, PEN 1, mag 8)",
+          "Нож",
+          "Кожаная куртка (AC 11, PROT 1)",
+          "Фляга с водой"
+        ],
+        "features": [
+          "Fighting Style: Archery (+2 ranged)",
+          "Second Wind (1d10+1 HP, 1/short rest)",
+          "Субкласс: Стрелок (burst/auto -2 вместо -3)",
+          "Action Surge (1/short rest)"
+        ],
+        "background": "Soldier",
+        "alignment": "Chaotic Good",
+        "bonds": "Шрам на лице — единственная зацепка к прошлому",
+        "flaws": "Лезет помогать когда не просят. В Зоне это диагноз.",
+        "ideals": "Каждый заслуживает шанс — даже в Зоне",
+        "traits": "Молчаливый, настороженный. Спит вполглаза.",
+        "notes": [],
+        "gold": 3,
+        "xp": {
+          "current": 0,
+          "next_level": 900
+        },
+        "current_location": "Бар 100 Рентген"
+      }
+    },
+    "location:bar-100-rentgen": {
+      "type": "location",
+      "name": "Бар 100 Рентген",
+      "data": {
+        "position": "Нейтральная территория в сердце Зоны. Бетонные стены, тусклый свет, запах перегара и оружейной смазки. Единственное место где Долг, Свобода и одиночки не стреляют друг в друга — по крайней мере внутри. Бармен Сидорович — хозяин, информатор и единственный закон. На стенах — карты Зоны, объявления о работе, фото пропавших сталкеров. В углу — радио с помехами. За барной стойкой — водка, тушёнка, и патроны по завышенным ценам. Подвал — оружейная и склад. Второй этаж — комнаты для отдыха. На крыше — наблюдательный пост Долга.",
+        "description": "",
+        "discovered": "2026-03-13T14:59:23.541790+00:00"
+      }
+    },
+    "location:svalka": {
+      "type": "location",
+      "name": "Свалка",
+      "data": {
+        "position": "Километры ржавой техники под серым небом. Остовы грузовиков, раздавленные автобусы, горы металлолома. Бандиты контролируют северную часть. Слепые псы бродят стаями. Между обломками — гравитационные аномалии. Иногда в развалинах находят тайники первых сталкеров.",
+        "description": "",
+        "discovered": "2026-03-13T14:59:23.675316+00:00"
+      }
+    },
+    "location:kordon": {
+      "type": "location",
+      "name": "Кордон",
+      "data": {
+        "position": "Пограничная зона. Военные блокпосты на главной дороге, но дыр в периметре больше чем солдат. Новички стекаются сюда — и многие дальше не уходят. Деревня Новички — пара домов с протекающими крышами. Отсюда видно Зону, но ещё можно повернуть назад.",
+        "description": "",
+        "discovered": "2026-03-13T14:59:23.823814+00:00"
+      }
+    },
+    "location:agroprom": {
+      "type": "location",
+      "name": "Агропром",
+      "data": {
+        "position": "Заброшенный НИИ в низине. Сверху — разрушенные корпуса и ржавые цистерны. Снизу — лабиринт подземных лабораторий, где проводились эксперименты до Второго Взрыва. Мутанты обожают подвалы. Слухи о секретных документах не утихают.",
+        "description": "",
+        "discovered": "2026-03-13T14:59:23.970159+00:00"
+      }
+    },
+    "location:tyomnaya-dolina": {
+      "type": "location",
+      "name": "Тёмная долина",
+      "data": {
+        "position": "Глубокий овраг между холмами. База бандитов на заброшенной фабрике. Подземные ходы, мрачные леса, туман по утрам. Свобода периодически пытается выбить бандитов — безуспешно. В глубине долины — вход в лабораторию X-18.",
+        "description": "",
+        "discovered": "2026-03-13T14:59:24.104607+00:00"
+      }
+    },
+    "location:angar-1-svalka": {
+      "type": "location",
+      "name": "Ангар 1 (Свалка)",
+      "data": {
+        "position": "unknown",
+        "description": "",
+        "discovered": "2026-03-14 17:07:08 UTC"
+      }
+    },
+    "location:angar-2-svalka": {
+      "type": "location",
+      "name": "Ангар 2 (Свалка)",
+      "data": {
+        "position": "unknown",
+        "description": "",
+        "discovered": "2026-03-15 04:26:33 UTC"
+      }
+    },
+    "location:angar-3-svalka": {
+      "type": "location",
+      "name": "Ангар 3 (Свалка)",
+      "data": {
+        "position": "unknown",
+        "description": "",
+        "discovered": "2026-03-15 05:11:53 UTC"
+      }
+    },
+    "npc:sidorovich": {
+      "type": "npc",
+      "name": "Сидорович",
+      "data": {
+        "description": "Бармен, торговец, информатор. Лысый мужик за 50 с хитрыми глазами и золотым зубом. Знает всё и всех. Продаёт втридорога, покупает за копейки. Но если нужна работа или информация — он единственный адрес.",
+        "attitude": "neutral",
+        "created": "2026-03-13T14:59:51.377063+00:00",
+        "events": [
+          {
+            "event": "Повесил объявление о пропавшем караване. Поговорил с Меченым — оценил как новичка, предложил работу",
+            "timestamp": "2026-03-14T16:08:20.018448+00:00"
+          },
+          {
+            "event": "Меченый вернул груз каравана (3 ящика, частично разграблены). Узнал про Жеку Бритву. Заплатил 500₽ — 300 за инфо + 200 за груз. Отношение улучшилось",
+            "timestamp": "2026-03-15T06:16:16.782233+00:00"
+          }
+        ],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:volk": {
+      "type": "npc",
+      "name": "Волк",
+      "data": {
+        "description": "Опытный сталкер-одиночка. Шрам через всё лицо, камуфляж выцветший до серости. Молчаливый, пьёт мало. Ходил до Припяти и вернулся — дважды. Знает тропы, которых нет на карте.",
+        "attitude": "friendly",
+        "created": "2026-03-13T14:59:51.505983+00:00",
+        "events": [
+          {
+            "event": "Поговорил с Меченым в баре. Дал советы по Свалке и Зоне. Отнёсся нормально — новичок, но не дурак",
+            "timestamp": "2026-03-14T16:27:43.068305+00:00"
+          },
+          {
+            "event": "Раскрыл тайные тропы Меченому. Попросил достать синюю флешку из тайника под НИИ Агропром",
+            "timestamp": "2026-03-15T06:59:11.627639+00:00"
+          }
+        ],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:zheka-britva": {
+      "type": "npc",
+      "name": "Жека Бритва",
+      "data": {
+        "description": "Главарь бандитов Свалки. Кожанка, золотая цепь, ПМ за поясом. Хитрый как лиса — предпочитает крышевать и обирать новичков, чем лезть в аномалии. Но если загнать в угол — стреляет первым.",
+        "attitude": "hostile",
+        "created": "2026-03-13T14:59:51.622297+00:00",
+        "events": [
+          {
+            "event": "Наводчик бандитов Филина — сливал маршруты караванов за долю. Серый выдал под давлением",
+            "timestamp": "2026-03-15T05:58:24.788974+00:00"
+          }
+        ],
+        "tags": {
+          "locations": [
+            "Свалка"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:professor-kruglov": {
+      "type": "npc",
+      "name": "Профессор Круглов",
+      "data": {
+        "description": "Учёный из бункера на Агропроме. Седой, в очках, нервный. Отчаянно нуждается в образцах аномалий и артефактах для исследований. Платит хорошо, но его задания — чистый суицид.",
+        "attitude": "friendly",
+        "created": "2026-03-13T14:59:51.736824+00:00",
+        "events": [
+          {
+            "event": "Повесил объявление — ищет проводника до Янтаря. 3 учёных, выход послезавтра. 800₽ + бесплатный анализ артефактов",
+            "timestamp": "2026-03-15T06:59:32.647623+00:00"
+          }
+        ],
+        "tags": {
+          "locations": [
+            "Агропром"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:chyornyy": {
+      "type": "npc",
+      "name": "Чёрный",
+      "data": {
+        "description": "Наёмник. Никто не знает настоящего имени. Чёрная тактика, чёрный шлем, чёрная душа. Появляется в Баре раз в неделю, берёт заказы и исчезает. Говорят, выполняет работу для кого-то снаружи Зоны.",
+        "attitude": "neutral",
+        "created": "2026-03-13T14:59:51.851194+00:00",
+        "events": [
+          {
+            "event": "Меченый подошёл в баре — отшил. Не разговаривает с незнакомыми новичками",
+            "timestamp": "2026-03-14T16:27:43.140557+00:00"
+          },
+          {
+            "event": "Меченый продал артефакт Огненный шар за 400₽. Первый контакт — деловой, без лишних слов",
+            "timestamp": "2026-03-15T06:20:11.597840+00:00"
+          }
+        ],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:fanatik": {
+      "type": "npc",
+      "name": "Фанатик",
+      "data": {
+        "description": "Бывший монолитовец, каким-то чудом вырвавшийся из-под контроля. Трясётся, бормочет, глаза бегают. Знает о центре Зоны то, что другие не хотят знать. Сидорович держит его в подвале — на всякий случай.",
+        "attitude": "friendly",
+        "created": "2026-03-13T14:59:51.962026+00:00",
+        "events": [],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": []
+        }
+      }
+    },
+    "npc:zhilistyy": {
+      "type": "npc",
+      "name": "Жилистый",
+      "data": {
+        "description": "Опытный сталкер-одиночка. Обожжённое ухо — след аномалии. Спокойный, расчётливый.",
+        "attitude": "neutral",
+        "created": "2026-03-14T16:13:44.536848+00:00",
+        "events": [],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": [
+            "Пропавший караван"
+          ]
+        },
+        "is_party_member": true,
+        "character_sheet": {
+          "race": "Unknown",
+          "class": "Commoner",
+          "level": 1,
+          "hp": {
+            "current": 22,
+            "max": 22
+          },
+          "ac": 15,
+          "stats": {
+            "str": 12,
+            "dex": 14,
+            "con": 14,
+            "int": 10,
+            "wis": 12,
+            "cha": 8
+          },
+          "saves": {
+            "str": 0,
+            "dex": 0,
+            "con": 0,
+            "int": 0,
+            "wis": 0,
+            "cha": 0
+          },
+          "skills": {},
+          "attack_bonus": 5,
+          "damage": "2d6+2",
+          "equipment": [
+            "AKM (2d6+2, PEN 3, mag 30)",
+            "Нож",
+            "Армейский бронежилет (AC 13, PROT 3)"
+          ],
+          "features": [],
+          "conditions": [],
+          "xp": 0,
+          "gold": 450
+        }
+      }
+    },
+    "npc:lyokha": {
+      "type": "npc",
+      "name": "Лёха",
+      "data": {
+        "description": "Молодой сталкер-новичок. Нервный, руки дрожат. Ходит с Жилистым.",
+        "attitude": "friendly",
+        "created": "2026-03-14T16:13:44.882032+00:00",
+        "events": [],
+        "tags": {
+          "locations": [
+            "Бар 100 Рентген"
+          ],
+          "quests": [
+            "Пропавший караван"
+          ]
+        },
+        "is_party_member": true,
+        "character_sheet": {
+          "race": "Unknown",
+          "class": "Commoner",
+          "level": 1,
+          "hp": {
+            "current": 9,
+            "max": 10
+          },
+          "ac": 12,
+          "stats": {
+            "str": 10,
+            "dex": 12,
+            "con": 10,
+            "int": 10,
+            "wis": 8,
+            "cha": 10
+          },
+          "saves": {
+            "str": 0,
+            "dex": 0,
+            "con": 0,
+            "int": 0,
+            "wis": 0,
+            "cha": 0
+          },
+          "skills": {},
+          "attack_bonus": 3,
+          "damage": "2d8+1",
+          "equipment": [
+            "ТОЗ-34 (2d8+1, PEN 1, mag 2)",
+            "Бандитский жилет (AC 12, PROT 2)"
+          ],
+          "features": [],
+          "conditions": [],
+          "xp": 0,
+          "gold": 380
+        }
+      }
+    },
+    "fact:legacy-d88c7e828f44": {
+      "type": "fact",
+      "name": "[session_events] Меченый осмотрел бар 100 Рентген. Nat 20",
+      "data": {
+        "timestamp": "2026-03-14T16:08:19.911101+00:00",
+        "category": "session_events",
+        "text": "Меченый осмотрел бар 100 Рентген. Nat 20 Perception — заметил всё: щели в стенах, тайник Сидоровича под стойкой, нервного сталкера у входа"
+      }
+    },
+    "fact:legacy-762041561e96": {
+      "type": "fact",
+      "name": "[session_events] Долговец у входа предупредил: на Свалке ",
+      "data": {
+        "timestamp": "2026-03-14T16:14:38.908175+00:00",
+        "category": "session_events",
+        "text": "Долговец у входа предупредил: на Свалке за ангарами засекли вооружённых людей (не мутанты). Агропром закрыт — Долг потерял троих за неделю после выброса"
+      }
+    },
+    "fact:legacy-0b5fdad4646c": {
+      "type": "fact",
+      "name": "[session_events] Волк дал тактические советы по Свалке: п",
+      "data": {
+        "timestamp": "2026-03-14T16:28:24.797786+00:00",
+        "category": "session_events",
+        "text": "Волк дал тактические советы по Свалке: подход с юга, псы по звуку, аномалии на востоке. Намекнул на крики из-под земли на Агропроме. Чёрный отшил — не говорит с незнакомцами, но купит артефакты"
+      }
+    },
+    "fact:legacy-b9a1889e8c67": {
+      "type": "fact",
+      "name": "[session_events] Тренировка стрельбы за баром — неудачно.",
+      "data": {
+        "timestamp": "2026-03-14T16:37:47.827977+00:00",
+        "category": "session_events",
+        "text": "Тренировка стрельбы за баром — неудачно. Патроны потрачены, навык не закреплён. Сидорович ворчал из-за шума"
+      }
+    },
+    "fact:legacy-1941694a49fd": {
+      "type": "fact",
+      "name": "[session_events] Long rest в баре. Утром съел консервы и ",
+      "data": {
+        "timestamp": "2026-03-14T16:40:15.615672+00:00",
+        "category": "session_events",
+        "text": "Long rest в баре. Утром съел консервы и выпил воду. Выход на Свалку с Жилистым и Лёхой на рассвете 15 марта"
+      }
+    },
+    "fact:legacy-9df13ce6a3e3": {
+      "type": "fact",
+      "name": "[session_events] Ангар 1: найдена растяжка у бочек (обезв",
+      "data": {
+        "timestamp": "2026-03-14T17:09:39.193299+00:00",
+        "category": "session_events",
+        "text": "Ангар 1: найдена растяжка у бочек (обезврежена). Стеллажи — патроны 9x18 (8 шт), бинт, болты на верёвках (5 шт). Грузовик — следы крови на полу кабины, старые. Под сиденьем — тайник."
+      }
+    },
+    "fact:legacy-3bdf3ec0a217": {
+      "type": "fact",
+      "name": "[session_events] Ангар 2: достал артефакт Огненный шар из",
+      "data": {
+        "timestamp": "2026-03-15T05:09:12.836964+00:00",
+        "category": "session_events",
+        "text": "Ангар 2: достал артефакт Огненный шар из жарки арматурой. Провалил тайминг (nat 1 INT) но DEX 17 хватило"
+      }
+    },
+    "fact:legacy-7e0e25a89be8": {
+      "type": "fact",
+      "name": "[session_events] Подслушал бандитов в подвале ангара 3: Ф",
+      "data": {
+        "timestamp": "2026-03-15T05:16:51.607611+00:00",
+        "category": "session_events",
+        "text": "Подслушал бандитов в подвале ангара 3: Филин — главарь, приедет завтра утром с машиной забрать груз. Двоих караванщиков убили, третий сбежал с пулей в ноге. 4 бандита, у одного мало патронов"
+      }
+    },
+    "fact:legacy-e4e36ee478f7": {
+      "type": "fact",
+      "name": "[session_events] Ангар 3: Тихий убит при вылазке (surpris",
+      "data": {
+        "timestamp": "2026-03-15T05:49:25.621283+00:00",
+        "category": "session_events",
+        "text": "Ангар 3: Тихий убит при вылазке (surprise). Дымовая атака — трое сдались: Серый (главный), Молодой (обрез за поясом), Спокойный. Оружие изъято. Серый угрожает Филином"
+      }
+    },
+    "fact:legacy-a93b4926fe83": {
+      "type": "fact",
+      "name": "[session_events] Вернулись в Бар. Груз сдан Сидоровичу — ",
+      "data": {
+        "timestamp": "2026-03-15T06:16:40.321927+00:00",
+        "category": "session_events",
+        "text": "Вернулись в Бар. Груз сдан Сидоровичу — 500₽. Пленные сданы Долгу. Инфо про Жеку Бритву шепнули Долговцу. Квест Пропавший караван — ВЫПОЛНЕН"
+      }
+    },
+    "fact:legacy-d455006e0f6e": {
+      "type": "fact",
+      "name": "[session_events] Отдых в баре: поел, попил, поспал 6 часо",
+      "data": {
+        "timestamp": "2026-03-15T06:42:19.882110+00:00",
+        "category": "session_events",
+        "text": "Отдых в баре: поел, попил, поспал 6 часов. HP восстановлены до максимума. Полная готовность к вечеру"
+      }
+    },
+    "fact:legacy-dcdbaa1f6862": {
+      "type": "fact",
+      "name": "[combat] Стычка на Свалке: 2 слепых пса убиты меж",
+      "data": {
+        "timestamp": "2026-03-14T17:05:24.522337+00:00",
+        "category": "combat",
+        "text": "Стычка на Свалке: 2 слепых пса убиты между контейнерами. Меченый — 2 убийства из ПМ (+ фамбл на 3-м раунде). Жилистый добил второго ножом (nat 20). Лёха — приклад из засады. 2 пса на западе слышали выстрелы"
+      }
+    },
+    "fact:legacy-296878557219": {
+      "type": "fact",
+      "name": "[combat] Дорога обратно: 4 слепых пса напали на к",
+      "data": {
+        "timestamp": "2026-03-15T06:10:51.895178+00:00",
+        "category": "combat",
+        "text": "Дорога обратно: 4 слепых пса напали на колонну. Молодой бандит загрызен. Остальные псы убиты за 2 раунда. Меченый -1HP (крит пса, жилет спас), Лёха -1HP"
+      }
+    },
+    "fact:legacy-ff11c30dac10": {
+      "type": "fact",
+      "name": "[test] testing action tracker",
+      "data": {
+        "timestamp": "2026-03-15T04:39:29.389012+00:00",
+        "category": "test",
+        "text": "testing action tracker"
+      }
+    },
+    "fact:legacy-ebc3a46bc7dc": {
+      "type": "fact",
+      "name": "[test] tracker test note",
+      "data": {
+        "timestamp": "2026-03-15T04:40:15.859607+00:00",
+        "category": "test",
+        "text": "tracker test note"
+      }
+    },
+    "fact:legacy-8f7c0b8143d9": {
+      "type": "fact",
+      "name": "[test] action tracker works",
+      "data": {
+        "timestamp": "2026-03-15T04:42:40.198467+00:00",
+        "category": "test",
+        "text": "action tracker works"
+      }
+    },
+    "fact:legacy-d966d2b551ac": {
+      "type": "fact",
+      "name": "[test] test action 3",
+      "data": {
+        "timestamp": "2026-03-15T04:44:26.585917+00:00",
+        "category": "test",
+        "text": "test action 3"
+      }
+    },
+    "fact:legacy-3c29fd50bfef": {
+      "type": "fact",
+      "name": "[npc_relations] Серый (бандит) — под давлением выдал нав",
+      "data": {
+        "timestamp": "2026-03-15T05:58:18.156261+00:00",
+        "category": "npc_relations",
+        "text": "Серый (бандит) — под давлением выдал наводчика: Жека Бритва из Бара. Жека сливал информацию о караванах Филину за долю"
+      }
+    },
+    "fact:legacy-2c202db74601": {
+      "type": "fact",
+      "name": "[world_lore] Волк раскрыл: 1) Тропа через Жёлтый лес ",
+      "data": {
+        "timestamp": "2026-03-15T06:59:11.350057+00:00",
+        "category": "world_lore",
+        "text": "Волк раскрыл: 1) Тропа через Жёлтый лес к Агропрому (мало аномалий, обход Долга). 2) Старый коллектор от ручья за Свалкой до Тёмной долины (2ч, выход за лагерем Филина). 3) Тайник Волка под НИИ Агропром — вход через вентшахту на крыше. Синяя флешка для Круглова"
+      }
+    },
+    "consequence:legacy-891f0b76": {
+      "type": "consequence",
+      "name": "Волк упоминает странные звуки со стороны",
+      "data": {
+        "trigger": "2 days",
+        "trigger_hours": 48.0,
+        "hours_elapsed": 24.299999999999997,
+        "created": "2026-03-13T15:00:17.857015+00:00",
+        "description": "Волк упоминает странные звуки со стороны Агропрома — будто кто-то кричит под землёй",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-7bd4d94f": {
+      "type": "consequence",
+      "name": "Фанатик в подвале начинает кричать среди",
+      "data": {
+        "trigger": "1 week",
+        "trigger_hours": 168.0,
+        "hours_elapsed": 24.299999999999997,
+        "created": "2026-03-13T15:00:17.995750+00:00",
+        "description": "Фанатик в подвале начинает кричать среди ночи — зов усиливается",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-fad4f5b9": {
+      "type": "consequence",
+      "name": "Долг отправит разведгруппу на Свалку есл",
+      "data": {
+        "trigger": "3 дня",
+        "trigger_hours": 72.0,
+        "hours_elapsed": 23.299999999999997,
+        "created": "2026-03-14T16:14:39.035094+00:00",
+        "description": "Долг отправит разведгруппу на Свалку если Меченый не вернётся с инфой за 3 дня",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-ee125bb2": {
+      "type": "consequence",
+      "name": "Долг проверяет Жеку Бритву — если подтве",
+      "data": {
+        "trigger": "1-2 дня",
+        "trigger_hours": 24.0,
+        "hours_elapsed": 8.3,
+        "created": "2026-03-15T06:16:32.384605+00:00",
+        "description": "Долг проверяет Жеку Бритву — если подтвердится, возьмут его",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-9ca64ed1": {
+      "type": "consequence",
+      "name": "Филин не получит груз завтра — пришлёт р",
+      "data": {
+        "trigger": "завтра вечер",
+        "trigger_hours": 30.0,
+        "hours_elapsed": 8.3,
+        "created": "2026-03-15T06:16:32.505980+00:00",
+        "description": "Филин не получит груз завтра — пришлёт разведку на Свалку",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-790148fa": {
+      "type": "consequence",
+      "name": "Сидорович вывешивает объявление о пропав",
+      "data": {
+        "trigger": "next session",
+        "trigger_hours": 1.0,
+        "hours_elapsed": 1.0,
+        "created": "2026-03-13T15:00:17.711304+00:00",
+        "resolution": "Auto-triggered after 1.0 hours",
+        "description": "Сидорович вывешивает объявление о пропавшем караване на доску в баре",
+        "status": "resolved"
+      }
+    },
+    "quest:propavshiy-karavan": {
+      "type": "quest",
+      "name": "Пропавший караван",
+      "data": {
+        "status": "completed",
+        "description": "Караван торговцев исчез по дороге со Свалки. Сидорович нанимает найти груз — или хотя бы узнать, что случилось. Бандиты? Мутанты? Аномалия?",
+        "objectives": [
+          {
+            "text": "Найти следы каравана на Свалке",
+            "done": false
+          },
+          {
+            "text": "Выяснить судьбу торговцев",
+            "done": false
+          },
+          {
+            "text": "Вернуть груз (или доказательства)",
+            "done": false
+          },
+          {
+            "text": "Добраться до Свалки и найти следы каравана",
+            "done": false
+          },
+          {
+            "text": "Выяснить судьбу каравана",
+            "done": true
+          },
+          {
+            "text": "Вернуть груз Сидоровичу",
+            "done": true
+          },
+          {
+            "text": "Найти выжившего караванщика",
+            "done": true
+          }
+        ],
+        "events": [
+          {
+            "event": "Меченый принял задание от Сидоровича. Награда: 300₽ за инфо, больше за груз. Два сталкера (Жилистый + Лёха) тоже идут на Свалку утром",
+            "timestamp": "2026-03-14T16:12:59.919561+00:00"
+          },
+          {
+            "event": "Ангар 1: найден труп караванщика (жетон армейский, обобран). Записка: груз в ангаре 3, подвал. Подпись 'Ф.' — бандиты перехватили караван. Растяжка бандитская у входа",
+            "timestamp": "2026-03-14T17:10:17.552540+00:00"
+          },
+          {
+            "event": "Караван — засада бандитов по наводке. Двое убиты, один сбежал (ранен в ногу). Груз в подвале ангара 3. Филин заберёт завтра утром",
+            "timestamp": "2026-03-15T05:16:51.875364+00:00"
+          },
+          {
+            "event": "Груз найден в подвале ангара 3, частично разграблен. Бандиты связаны. Спокойный дал показания о Филине",
+            "timestamp": "2026-03-15T05:52:55.939314+00:00"
+          },
+          {
+            "event": "Наводчик — Жека Бритва из Бара. Сливал маршруты Филину",
+            "timestamp": "2026-03-15T05:58:25.054731+00:00"
+          },
+          {
+            "event": "Рыжий караванщик найден мёртвым в овраге — кровопотеря от пули в бедро. Молодой бандит загрызен слепыми псами. Итого: 2 пленных (Серый, Гриша), 2 мёртвых бандита, 3 мёртвых караванщика",
+            "timestamp": "2026-03-15T06:11:16.799096+00:00"
+          },
+          {
+            "event": "COMPLETED: Груз возвращён Сидоровичу. Караванщики мертвы (3 из 5). Бандиты: 2 убиты, 2 сданы Долгу. Наводчик — Жека Бритва, инфа передана Долгу. Филин — Тёмная долина, ~15 бандитов, ждал груз завтра",
+            "timestamp": "2026-03-15T06:16:23.822426+00:00"
+          }
+        ],
+        "created_at": "2026-03-13T15:00:10.610439+00:00",
+        "completed_at": "2026-03-15T06:16:23.822409+00:00",
+        "quest_type": "side"
+      }
+    },
+    "quest:dannye-x-18": {
+      "type": "quest",
+      "name": "Данные X-18",
+      "data": {
+        "status": "active",
+        "description": "Профессор Круглов уверен, что в лаборатории X-18 под Тёмной долиной хранятся данные о происхождении аномалий. Он готов заплатить состояние — но туда никто не ходит и не возвращается.",
+        "objectives": [
+          {
+            "text": "Получить задание от Круглова",
+            "done": false
+          },
+          {
+            "text": "Найти вход в X-18 в Тёмной долине",
+            "done": false
+          },
+          {
+            "text": "Пройти лабораторию и извлечь данные",
+            "done": false
+          },
+          {
+            "text": "Вернуться живым",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-13T15:00:10.691656+00:00",
+        "quest_type": "mystery"
+      }
+    },
+    "quest:zov-monolita": {
+      "type": "quest",
+      "name": "Зов Монолита",
+      "data": {
+        "status": "active",
+        "description": "Фанатик бормочет о 'зове' — сигнале из центра Зоны, который становится сильнее. Сталкеры пропадают. Новые монолитовцы появляются из ниоткуда. Что-то в Зоне меняется.",
+        "objectives": [
+          {
+            "text": "Понять что происходит с Фанатиком",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-13T15:00:10.765255+00:00",
+        "quest_type": "threat"
+      }
+    },
+    "quest:fleshka-volka": {
+      "type": "quest",
+      "name": "Флешка Волка",
+      "data": {
+        "status": "active",
+        "description": "Волк просит достать синюю флешку из тайника под НИИ Агропром. Вход через вентшахту на крыше. Данные для Круглова — он заплатит. Волку — информацию, Меченому — деньги",
+        "objectives": [
+          {
+            "text": "Добраться до НИИ Агропром",
+            "done": false
+          },
+          {
+            "text": "Найти вентшахту на крыше",
+            "done": false
+          },
+          {
+            "text": "Забрать синюю флешку из тайника",
+            "done": false
+          },
+          {
+            "text": "Вернуть флешку Волку",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-15T06:59:11.898418+00:00",
+        "quest_type": "side"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "location:bar-100-rentgen",
+      "to": "location:svalka",
+      "type": "connected",
+      "data": {
+        "path": "Грунтовка на север, 2 часа пешком. Аномалии у обочины.",
+        "path_type": "Грунтовка на север, 2 часа пешком. Аномалии у обочины."
+      }
+    },
+    {
+      "from": "location:svalka",
+      "to": "location:bar-100-rentgen",
+      "type": "connected",
+      "data": {
+        "path": "Грунтовка на север, 2 часа пешком. Аномалии у обочины.",
+        "path_type": "Грунтовка на север, 2 часа пешком. Аномалии у обочины."
+      }
+    },
+    {
+      "from": "location:bar-100-rentgen",
+      "to": "location:agroprom",
+      "type": "connected",
+      "data": {
+        "path": "Тропа на восток через поле. 3 часа. Снорки в высокой траве.",
+        "path_type": "Тропа на восток через поле. 3 часа. Снорки в высокой траве."
+      }
+    },
+    {
+      "from": "location:agroprom",
+      "to": "location:bar-100-rentgen",
+      "type": "connected",
+      "data": {
+        "path": "Тропа на восток через поле. 3 часа. Снорки в высокой траве.",
+        "path_type": "Тропа на восток через поле. 3 часа. Снорки в высокой траве."
+      }
+    },
+    {
+      "from": "location:bar-100-rentgen",
+      "to": "location:tyomnaya-dolina",
+      "type": "connected",
+      "data": {
+        "path": "Обход через овраги, 4 часа. Длинно, но тише.",
+        "path_type": "Обход через овраги, 4 часа. Длинно, но тише."
+      }
+    },
+    {
+      "from": "location:tyomnaya-dolina",
+      "to": "location:bar-100-rentgen",
+      "type": "connected",
+      "data": {
+        "path": "Обход через овраги, 4 часа. Длинно, но тише.",
+        "path_type": "Обход через овраги, 4 часа. Длинно, но тише."
+      }
+    },
+    {
+      "from": "location:bar-100-rentgen",
+      "to": "location:angar-3-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-3-svalka",
+      "to": "location:bar-100-rentgen",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:svalka",
+      "to": "location:kordon",
+      "type": "connected",
+      "data": {
+        "path": "Дорога на юг, 1.5 часа. Военные патрули.",
+        "path_type": "Дорога на юг, 1.5 часа. Военные патрули."
+      }
+    },
+    {
+      "from": "location:kordon",
+      "to": "location:svalka",
+      "type": "connected",
+      "data": {
+        "path": "Дорога на юг, 1.5 часа. Военные патрули.",
+        "path_type": "Дорога на юг, 1.5 часа. Военные патрули."
+      }
+    },
+    {
+      "from": "location:svalka",
+      "to": "location:tyomnaya-dolina",
+      "type": "connected",
+      "data": {
+        "path": "Просёлок на запад, 2.5 часа. Бандитские засады.",
+        "path_type": "Просёлок на запад, 2.5 часа. Бандитские засады."
+      }
+    },
+    {
+      "from": "location:tyomnaya-dolina",
+      "to": "location:svalka",
+      "type": "connected",
+      "data": {
+        "path": "Просёлок на запад, 2.5 часа. Бандитские засады.",
+        "path_type": "Просёлок на запад, 2.5 часа. Бандитские засады."
+      }
+    },
+    {
+      "from": "location:svalka",
+      "to": "location:svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:svalka",
+      "to": "location:angar-1-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-1-svalka",
+      "to": "location:svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-1-svalka",
+      "to": "location:angar-2-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-2-svalka",
+      "to": "location:angar-1-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-2-svalka",
+      "to": "location:angar-2-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-2-svalka",
+      "to": "location:angar-3-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:angar-3-svalka",
+      "to": "location:angar-2-svalka",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "npc:sidorovich",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "npc:volk",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "npc:zheka-britva",
+      "to": "location:svalka",
+      "type": "at"
+    },
+    {
+      "from": "npc:professor-kruglov",
+      "to": "location:agroprom",
+      "type": "at"
+    },
+    {
+      "from": "npc:chyornyy",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "npc:fanatik",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "npc:zhilistyy",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "npc:lyokha",
+      "to": "location:bar-100-rentgen",
+      "type": "at"
+    },
+    {
+      "from": "quest:propavshiy-karavan",
+      "to": "npc:sidorovich",
+      "type": "involves"
+    },
+    {
+      "from": "quest:propavshiy-karavan",
+      "to": "location:svalka",
+      "type": "involves"
+    },
+    {
+      "from": "quest:dannye-x-18",
+      "to": "npc:professor-kruglov",
+      "type": "involves"
+    },
+    {
+      "from": "quest:dannye-x-18",
+      "to": "location:agroprom",
+      "type": "involves"
+    },
+    {
+      "from": "quest:dannye-x-18",
+      "to": "location:tyomnaya-dolina",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zov-monolita",
+      "to": "npc:fanatik",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zov-monolita",
+      "to": "npc:chyornyy",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zov-monolita",
+      "to": "location:bar-100-rentgen",
+      "type": "involves"
+    }
+  ]
+}

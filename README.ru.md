@@ -72,7 +72,7 @@ bash tools/dm-consequence.sh tick 4
 `add_plot()` перенесён из модуля `quest-system` в ванильный CORE. Никакой модуль не нужен — `dm-plot.sh add` работает в любой кампании.
 
 ```bash
-bash tools/dm-plot.sh add "Потерянная реликвия" --type side --description "..."
+bash tools/dm-plot.sh add "Потерянная реликвия" --type side --description "..." --xp 100
 ```
 
 ### 🎯 Единый менеджер инвентаря

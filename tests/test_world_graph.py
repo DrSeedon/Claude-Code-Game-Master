@@ -153,6 +153,67 @@ class TestUpdateNode:
         assert "Closed the shop" in populated_graph.format_node("npc:merchant")
 
 
+class TestLocationDescription:
+    def test_location_describe_updates_nested_data(self, graph):
+        graph.add_node(
+            "location:bridge",
+            "location",
+            "Old Bridge",
+            data={"description": "Short description", "danger": "flood"},
+        )
+
+        assert graph.location_describe("location:bridge", "Detailed description")
+
+        node = graph.get_node("location:bridge")
+        assert node["data"]["description"] == "Detailed description"
+        assert node["data"]["danger"] == "flood"
+        assert "description" not in {key for key in node if key != "data"}
+
+    def test_location_describe_rejects_non_location(self, graph):
+        graph.add_node("npc:guide", "npc", "Guide")
+
+        assert graph.location_describe("npc:guide", "Wrong target") is False
+
+
+class TestQuestRewards:
+    def test_quest_completion_awards_configured_xp_once(self, graph):
+        graph.add_node(
+            "player:active",
+            "player",
+            "Hero",
+            data={"xp": {"current": 0, "next_level": 300}},
+        )
+        quest_id = graph.quest_create(
+            "Clear the Mine",
+            "side",
+            "Remove the threat",
+            xp_reward=125,
+        )
+
+        first = graph.quest_complete(quest_id)
+        second = graph.quest_complete(quest_id)
+
+        quest = graph.get_node(quest_id)
+        player = graph.get_node("player:active")
+        assert quest["data"]["xp_reward"] == 125
+        assert quest["data"]["xp_awarded"] is True
+        assert first["xp_awarded"] == 125
+        assert first["already_completed"] is False
+        assert second["xp_awarded"] == 0
+        assert second["already_completed"] is True
+        assert player["data"]["xp"]["current"] == 125
+
+    def test_quest_reward_can_be_set_before_completion(self, graph):
+        graph.add_node("player:active", "player", "Hero", data={"xp": 0})
+        quest_id = graph.quest_create("Old Debt")
+
+        assert graph.quest_set_reward(quest_id, 80)
+        result = graph.quest_complete(quest_id)
+
+        assert result["xp_awarded"] == 80
+        assert graph.get_node("player:active")["data"]["xp"] == 80
+
+
 class TestRemoveNode:
     def test_remove_node_deletes_entry(self, populated_graph):
         result = populated_graph.remove_node("item:sword")
@@ -467,12 +528,37 @@ class TestIntegration:
         assert creature["hp"] == 8
         assert creature["hp_current"] == 3
 
+    def test_combat_damage_awards_creature_xp_once(self, graph):
+        graph.add_node(
+            "player:active",
+            "player",
+            "Hero",
+            data={"xp": {"current": 0, "next_level": 300}},
+        )
+        graph.add_node(
+            "creature:target",
+            "creature",
+            "Target",
+            data={"hp": 5, "ac": 10, "xp": 40},
+        )
+
+        first = graph.apply_combat_damage("creature:target", 6)
+        second = graph.apply_combat_damage("creature:target", 6)
+
+        assert first["xp_awarded"] == 40
+        assert second["xp_awarded"] == 0
+        assert graph.get_node("player:active")["data"]["xp"]["current"] == 40
+
     def test_inventory_loot_commits_once(self, graph):
         graph.add_node(
             "player:active",
             "player",
             "Hero",
-            data={"money": 10, "xp": 0},
+            data={
+                "money": 10,
+                "xp": 0,
+                "hp": {"current": 9, "max": 12},
+            },
         )
         before = graph.repository.revision(graph.repository.load())
 
@@ -481,6 +567,8 @@ class TestIntegration:
             [("Ammo", 5, 0.02), ("Medkit", 1, 0.5)],
             gold=20,
             xp=30,
+            hp=-3,
+            reason="test transaction",
         )
 
         saved = graph.repository.load()
@@ -492,6 +580,7 @@ class TestIntegration:
         }
         assert player["data"]["money"] == 30
         assert player["data"]["xp"] == 30
+        assert player["data"]["hp"]["current"] == 6
 
     def test_inventory_transfer_is_atomic_and_preserves_weight(self, graph):
         graph.add_node("player:active", "player", "Hero")

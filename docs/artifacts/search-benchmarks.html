@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2327180a'/><path d='M8 22V10h3v12H8zm6 0V14h3v8h-3zm6 0v-5h3v5h-3z' fill='%23e8944a'/></svg>"/>
+  <title>Поиск: бенчи и куда класть доллар</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0c0b09;
+      --surface: #16130f;
+      --surface-2: #1e1a14;
+      --border: #2e281f;
+      --ink: #f4efe6;
+      --ink-soft: #9a9082;
+      --accent: #e8944a;
+      --accent-soft: #e8944a28;
+      --ok: #6ee7b7;
+      --warn: #f5c16c;
+      --danger: #f07167;
+      --info: #7dd3c7;
+      --serif: Charter, "Iowan Old Style", ui-serif, Georgia, serif;
+      --sans: system-ui, -apple-system, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f3ec; --surface: #fffdf8; --surface-2: #efe8dc;
+        --border: #ddd4c4; --ink: #1c1812; --ink-soft: #6a6256;
+      }
+    }
+    @media print {
+      :root { --bg:#fff; --surface:#fff; --ink:#000; --ink-soft:#444; }
+      .no-print, button { display:none !important; }
+      * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+    html { background: var(--bg); color: var(--ink); }
+    body { font: 15px/1.5 var(--sans); padding: 1.5rem 1.25rem 4rem; max-width: 1180px; margin: 0 auto; }
+    .crumb { font: 12px/1 var(--mono); color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+    h1 { font: 700 2rem/1.15 var(--serif); margin: .4rem 0 .75rem; max-width: 22ch; }
+    .tldr { font: 17px/1.5 var(--serif); color: var(--ink-soft); max-width: 68ch; margin-bottom: 1.75rem; }
+    .tldr strong { color: var(--ink); font-weight: 600; }
+    .grid-2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 1.25rem; }
+    @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+    section { margin: 2rem 0; }
+    h2 { font: 600 1.15rem/1.3 var(--serif); margin-bottom: .75rem; }
+    h3 { font: 600 13px/1.3 var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); margin: 1rem 0 .5rem; }
+    .panel { background: var(--surface); border: 1px solid var(--border); padding: 1rem 1.1rem 1.15rem; }
+    .note { font-size: 13px; color: var(--ink-soft); }
+    .note em { color: var(--warn); font-style: normal; }
+    .verdict { border-left: 3px solid var(--accent); padding: .85rem 1rem; background: var(--accent-soft); }
+    .tl { display: grid; gap: 0; }
+    .tl-row { display: grid; grid-template-columns: 7.5rem 1fr; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--border); }
+    .tl-row:last-child { border-bottom: 0; }
+    .tl-when { font: 12px/1.3 var(--mono); color: var(--accent); }
+    .tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .85rem; }
+    .tabs button {
+      font: 13px/1 var(--sans); border: 1px solid var(--border); background: transparent;
+      color: var(--ink-soft); padding: .45rem .7rem; cursor: pointer;
+    }
+    .tabs button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    canvas { width: 100% !important; max-height: 380px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: .4rem .45rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--ink-soft); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .good { color: var(--ok); }
+    .meh { color: var(--warn); }
+    .bad { color: var(--danger); }
+    .ours { outline: 1px solid var(--accent); outline-offset: -1px; }
+    .copy { margin-top: 1rem; font: 13px/1 var(--sans); border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); padding: .5rem .75rem; cursor: pointer; }
+    .legend { display: flex; flex-wrap: wrap; gap: .7rem 1.1rem; font-size: 12px; color: var(--ink-soft); margin: .4rem 0 .8rem; }
+    .dot { display: inline-block; width: 8px; height: 8px; margin-right: .35rem; }
+    .src { font-size: 12px; color: var(--ink-soft); margin-top: .6rem; }
+  </style>
+</head>
+<body>
+  <p class="crumb">OpenRouter · Perplexity · 15 авг 2026</p>
+  <h1>Где живёт Agent API и кому верить на бенчах</h1>
+  <p class="tldr">
+    <strong>Agent API на OpenRouter нет и даты релиза нет.</strong>
+    Это чужой рантайм на <code>api.perplexity.ai</code>, конкурент OR, не модель в каталоге.
+    Ближайший кусок Perplexity на OR — Search API как <em>движок</em> и старые Sonar-id (их режут 27 сен).
+    Ниже два разных мира: вендорский Agent-vs-Sonar и BrowseComp самого OpenRouter. Цифры несравнимы в лоб.
+  </p>
+
+  <div class="grid-2">
+    <section class="panel verdict">
+      <h2>Вердикт для нас</h2>
+      <p>Деньги оставить на OpenRouter. MCP: <code>sonar</code> → при фейле <code>sonar-pro-search</code>. Agent API не ждать и не заводить второй кошелёк «на всякий».</p>
+      <p style="margin-top:.7rem">$1 ≈ 180 обычных sonar или 33 pro-search. Один Opus×25 ходов съедает тот же доллар целиком.</p>
+    </section>
+    <section class="panel">
+      <h2>Будет ли на OpenRouter</h2>
+      <div class="tl">
+        <div class="tl-row"><div class="tl-when">мар 2026</div><div>Perplexity запускает Agent API у себя.</div></div>
+        <div class="tl-row"><div class="tl-when">13 авг 2026</div><div>Официально: Sonar chat → legacy, всё новое в Agent API.</div></div>
+        <div class="tl-row"><div class="tl-when">14 авг 2026</div><div>OR публикует BrowseComp движков. Agent API в каталоге нет.</div></div>
+        <div class="tl-row"><div class="tl-when">27 сен 2026</div><div>Sonar API режут. OR может оставить обёртки — никто не обещал.</div></div>
+        <div class="tl-row"><div class="tl-when">дата?</div><div>Анонса «Agent API на OpenRouter» нет. X пустой. Не ждать.</div></div>
+      </div>
+      <p class="note" style="margin-top:.8rem">Почему маловероятно как drop-in: Agent API сам мультипровайдер + тулы + пресеты. OR уже продаёт то же (модель + engine). Заворачивать конкурента целиком им незачем. Реалистичный исход — OR оставит <code>engine: perplexity</code> и, может, пару slug'ов.</p>
+    </section>
+  </div>
+
+  <section>
+    <h2>1. Perplexity: Agent vs Sonar (их замер)</h2>
+    <p class="note">Источник: docs.perplexity.ai / migrate-from-sonar / benchmarks. Полный агент с их пресетами. <em>Не путать с OR.</em> Ось X — логарифм цены.</p>
+    <div class="tabs no-print" id="px-tabs">
+      <button class="on" data-k="browseComp">BrowseComp</button>
+      <button data-k="dsqa">DeepSearchQA</button>
+      <button data-k="wide">WideSearch</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#9a9082"></i>Sonar (legacy)</span>
+      <span><i class="dot" style="background:#e8944a"></i>Agent API</span>
+    </div>
+    <div class="panel"><canvas id="pxChart" height="320"></canvas></div>
+    <p class="src">BrowseComp: Sonar 7% / $0.007 → Agent high 80% / $0.78. Deep Research 29% за $0.61 проигрывает Agent low 40% за $0.07 — вот где они продают миграцию.</p>
+  </section>
+
+  <section>
+    <h2>2. OpenRouter BrowseComp (их замер, 11 авг)</h2>
+    <p class="note">Модель читает только сниппеты. Без fetch страниц и кода — абсолютные % ниже «агентных продуктов». Сравнивай строки между собой.</p>
+    <div class="legend">
+      <span><i class="dot" style="background:#e8944a"></i>Perplexity engine</span>
+      <span><i class="dot" style="background:#7dd3c7"></i>Exa</span>
+      <span><i class="dot" style="background:#c4b5a5"></i>Parallel</span>
+      <span><i class="dot" style="background:#6b8cae"></i>OpenAI native</span>
+    </div>
+    <div class="panel"><canvas id="orChart" height="340"></canvas></div>
+    <p class="src">Победитель качества: Opus 5 + Perplexity × 25 = 89% / $0.99 / 1.9 мин. Победитель цены: Flash + Perplexity × 25 = 77% / $0.076. Plugin (1 поиск до ответа) = 11% — мусор.</p>
+  </section>
+
+  <section>
+    <h2>3. Сколько вопросов с доллара</h2>
+    <div class="panel" style="overflow:auto">
+      <table>
+        <thead>
+          <tr><th>Конфиг</th><th>Мир</th><th>Сложность</th><th class="num">$/шт</th><th class="num">шт / $1</th><th class="num">Качество*</th></tr>
+        </thead>
+        <tbody>
+          <tr class="ours"><td>MCP sonar</td><td>наш OR</td><td>факт / доки</td><td class="num">0.0055</td><td class="num good">~180</td><td class="num">не BrowseComp</td></tr>
+          <tr class="ours"><td>MCP sonar-pro-search</td><td>наш OR</td><td>после фейла sonar</td><td class="num">0.03</td><td class="num">~33</td><td class="num">не BrowseComp</td></tr>
+          <tr><td>Sonar (vendor)</td><td>Pplx</td><td>1 хоп</td><td class="num">0.007</td><td class="num good">~140</td><td class="num bad">7%</td></tr>
+          <tr><td>Agent fast</td><td>Pplx</td><td>чуть умнее sonar</td><td class="num">0.012</td><td class="num">~80</td><td class="num meh">14%</td></tr>
+          <tr><td>Luna × 1 ход + Pplx</td><td>OR</td><td>быстрый lookup</td><td class="num">0.017</td><td class="num">~59</td><td class="num meh">34%</td></tr>
+          <tr><td>Luna × 5</td><td>OR</td><td>средний</td><td class="num">0.037</td><td class="num">~27</td><td class="num">57%</td></tr>
+          <tr><td>Agent low</td><td>Pplx</td><td>нормальный ресёрч</td><td class="num">0.068</td><td class="num">~15</td><td class="num">40%</td></tr>
+          <tr><td>Flash × 25 + Pplx</td><td>OR</td><td>тяжёлый мультишаг</td><td class="num">0.076</td><td class="num">~13</td><td class="num good">77%</td></tr>
+          <tr><td>Agent medium</td><td>Pplx</td><td>обзор</td><td class="num">0.21</td><td class="num">~5</td><td class="num">63%</td></tr>
+          <tr><td>Sol × 25 + Pplx</td><td>OR</td><td>дорогой хороший</td><td class="num">0.50</td><td class="num">2</td><td class="num good">82%</td></tr>
+          <tr><td>Agent high</td><td>Pplx</td><td>диссертация</td><td class="num">0.78</td><td class="num">1</td><td class="num good">80%</td></tr>
+          <tr><td>Opus × 25 + Pplx</td><td>OR</td><td>потолок OR</td><td class="num">0.99</td><td class="num bad">1</td><td class="num good">89%</td></tr>
+        </tbody>
+      </table>
+      <p class="note" style="margin-top:.6rem">*Колонка «качество» — BrowseComp той же строки, если есть. MCP sonar туда не влезает: это другой продукт (готовый ответ, не 25 ходов агента).</p>
+    </div>
+    <button class="copy no-print" id="copyMd">Скопировать выжимку в markdown</button>
+  </section>
+
+  <section class="panel">
+    <h2>Что из этого переносится на прод</h2>
+    <ul style="padding-left:1.15rem;color:var(--ink-soft)">
+      <li>Бюджет ходов двигает скор сильнее, чем бренд движка. 1→25 ≈ ×2 качество при ×2.5–7 цене.</li>
+      <li>Движок Perplexity на OR дешевле Parallel при почти том же Opus (89% / $0.99 vs 88.8% / $2.42).</li>
+      <li>Plugin-режим (один поиск заранее) на BrowseComp мёртв: 11–12%.</li>
+      <li>Vendor Agent «в 2 раза лучше Sonar» — их маркетинг на своих пресетах. На OR тот же индекс как engine уже даёт Flash 77% без Agent API.</li>
+    </ul>
+  </section>
+
+<script>
+const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+const soft = getComputedStyle(document.documentElement).getPropertyValue('--ink-soft').trim();
+const grid = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+
+const PX = {
+  browseComp: {
+    sonar: [
+      {x:0.007, y:7, l:'Sonar'},
+      {x:0.0156, y:7.33, l:'Pro'},
+      {x:0.0163, y:16.33, l:'Reasoning Pro'},
+      {x:0.611, y:29.1, l:'Deep Research'},
+    ],
+    agent: [
+      {x:0.0117, y:14, l:'fast'},
+      {x:0.0679, y:40, l:'low'},
+      {x:0.2061, y:62.88, l:'medium'},
+      {x:0.7776, y:79.67, l:'high'},
+    ]
+  },
+  dsqa: {
+    sonar: [
+      {x:0.0059, y:27.26, l:'Sonar'},
+      {x:0.0209, y:30.11, l:'Pro'},
+      {x:0.026, y:38.41, l:'Reasoning Pro'},
+      {x:0.5656, y:48.94, l:'Deep Research'},
+    ],
+    agent: [
+      {x:0.0119, y:37.49, l:'fast'},
+      {x:0.057, y:75.61, l:'low'},
+      {x:0.1687, y:82.58, l:'medium'},
+      {x:0.5278, y:85.86, l:'high'},
+    ]
+  },
+  wide: {
+    sonar: [
+      {x:0.0064, y:8.01, l:'Sonar'},
+      {x:0.0285, y:17.92, l:'Pro'},
+      {x:0.032, y:18.9, l:'Reasoning Pro'},
+      {x:0.5815, y:19.42, l:'Deep Research'},
+    ],
+    agent: [
+      {x:0.0179, y:19.41, l:'fast'},
+      {x:0.0542, y:47.28, l:'low'},
+      {x:0.1795, y:53.05, l:'medium'},
+      {x:0.939, y:63.86, l:'high'},
+    ]
+  }
+};
+
+function scatterDs(points, color, label) {
+  return {
+    label,
+    data: points.map(p => ({x:p.x, y:p.y, l:p.l})),
+    backgroundColor: color,
+    borderColor: color,
+    pointRadius: 6,
+    pointHoverRadius: 8,
+  };
+}
+
+const pxCtx = document.getElementById('pxChart');
+let pxChart = makePx('browseComp');
+
+function makePx(key) {
+  const d = PX[key];
+  return new Chart(pxCtx, {
+    type: 'scatter',
+    data: { datasets: [
+      scatterDs(d.sonar, '#9a9082', 'Sonar'),
+      scatterDs(d.agent, '#e8944a', 'Agent API'),
+    ]},
+    options: {
+      parsing: false,
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: soft } },
+        tooltip: { callbacks: {
+          label: (c) => `${c.raw.l}: ${c.raw.y}% · $${c.raw.x}`
+        }}
+      },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          title: { display: true, text: '$ / запрос', color: soft },
+          ticks: { color: soft, callback: (v) => '$'+v },
+          grid: { color: grid }
+        },
+        y: {
+          min: 0, max: 100,
+          title: { display: true, text: 'Score %', color: soft },
+          ticks: { color: soft },
+          grid: { color: grid }
+        }
+      }
+    }
+  });
+}
+
+document.querySelectorAll('#px-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#px-tabs button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    pxChart.destroy();
+    pxChart = makePx(btn.dataset.k);
+  });
+});
+
+const OR = [
+  {e:'Perplexity', c:'#e8944a', pts:[
+    {x:0.017, y:33.7, l:'Luna 1'},
+    {x:0.037, y:57, l:'Luna 5'},
+    {x:0.099, y:74, l:'Luna 25'},
+    {x:0.14, y:35.8, l:'Opus 1'},
+    {x:0.51, y:66.5, l:'Opus 5'},
+    {x:0.99, y:89, l:'Opus 25'},
+    {x:0.20, y:46.3, l:'Sol 1'},
+    {x:0.29, y:65.2, l:'Sol 5'},
+    {x:0.50, y:82.4, l:'Sol 25'},
+    {x:0.076, y:77, l:'Flash 25'},
+    {x:0.42, y:11, l:'Opus plugin'},
+  ]},
+  {e:'Exa', c:'#7dd3c7', pts:[
+    {x:0.019, y:33, l:'Luna 1'},
+    {x:0.049, y:48, l:'Luna 5'},
+    {x:0.14, y:68.4, l:'Luna 25'},
+    {x:0.14, y:29.4, l:'Opus 1'},
+    {x:0.54, y:52.5, l:'Opus 5'},
+    {x:1.29, y:82.2, l:'Opus 25'},
+    {x:0.20, y:46.7, l:'Sol 1'},
+    {x:0.30, y:60.1, l:'Sol 5'},
+    {x:0.54, y:77.8, l:'Sol 25'},
+    {x:0.12, y:67.4, l:'Flash 25'},
+    {x:0.44, y:12, l:'Opus plugin'},
+  ]},
+  {e:'Parallel', c:'#c4b5a5', pts:[
+    {x:0.019, y:24.5, l:'Luna 1'},
+    {x:0.042, y:42, l:'Luna 5'},
+    {x:0.11, y:58, l:'Luna 25'},
+    {x:0.18, y:29.8, l:'Opus 1'},
+    {x:1.05, y:56.2, l:'Opus 5'},
+    {x:2.42, y:88.8, l:'Opus 25'},
+    {x:0.23, y:44.1, l:'Sol 1'},
+    {x:0.54, y:58.6, l:'Sol 5'},
+    {x:1.26, y:76.6, l:'Sol 25'},
+    {x:0.097, y:64.6, l:'Flash 25'},
+  ]},
+  {e:'OpenAI native', c:'#6b8cae', pts:[
+    {x:0.26, y:41.8, l:'Sol 1'},
+    {x:0.35, y:59, l:'Sol 5'},
+    {x:0.68, y:77.8, l:'Sol 25'},
+  ]},
+];
+
+new Chart(document.getElementById('orChart'), {
+  type: 'scatter',
+  data: { datasets: OR.map(g => scatterDs(g.pts, g.c, g.e)) },
+  options: {
+    parsing: false,
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: soft } },
+      tooltip: { callbacks: { label: (c) => `${c.dataset.label} ${c.raw.l}: ${c.raw.y}% · $${c.raw.x}` } }
+    },
+    scales: {
+      x: {
+        type: 'logarithmic',
+        title: { display: true, text: '$ / вопрос', color: soft },
+        ticks: { color: soft, callback: (v) => '$'+v },
+        grid: { color: grid }
+      },
+      y: {
+        min: 0, max: 100,
+        title: { display: true, text: 'BrowseComp %', color: soft },
+        ticks: { color: soft },
+        grid: { color: grid }
+      }
+    }
+  }
+});
+
+document.getElementById('copyMd').onclick = () => {
+  const md = `# Поиск / бенчи (15 авг 2026)
+
+Agent API на OpenRouter **нет**, даты нет. Sonar API режут 27 сен 2026.
+
+**Нам:** доллары на OpenRouter. MCP sonar → sonar-pro-search после фейла.
+
+$1 ≈ 180 sonar / 33 pro-search / 13 Flash×25 / 1 Opus×25.
+
+Vendor BrowseComp: Sonar 7%/$0.007; Agent low 40%/$0.07; Agent high 80%/$0.78.
+OR BrowseComp: Opus+Pplx×25 = 89%/$0.99; Flash+Pplx×25 = 77%/$0.076; plugin = 11%.
+`;
+  navigator.clipboard.writeText(md).then(() => {
+    const b = document.getElementById('copyMd');
+    b.textContent = 'Скопировано';
+    setTimeout(() => b.textContent = 'Скопировать выжимку в markdown', 1600);
+  });
+};
+</script>
+</body>
+</html>

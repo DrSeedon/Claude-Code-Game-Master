@@ -1,0 +1,60 @@
+{
+  "weapons": {
+    "DC-15A": {
+      "damage": "2d6+2",
+      "pen": 3,
+      "rpm": 600,
+      "magazine": 50,
+      "type": "assault_rifle"
+    },
+    "DC-15S": {
+      "damage": "2d6",
+      "pen": 2,
+      "rpm": 500,
+      "magazine": 30,
+      "type": "assault_rifle"
+    },
+    "DC-17": {
+      "damage": "2d4+1",
+      "pen": 1,
+      "rpm": 60,
+      "magazine": 16,
+      "type": "pistol"
+    },
+    "Z-6": {
+      "damage": "2d8+3",
+      "pen": 4,
+      "rpm": 1200,
+      "magazine": 200,
+      "type": "heavy"
+    },
+    "E-5": {
+      "damage": "2d6",
+      "pen": 2,
+      "rpm": 500,
+      "magazine": 30,
+      "type": "assault_rifle"
+    },
+    "E-60R": {
+      "damage": "4d10",
+      "pen": 8,
+      "rpm": 6,
+      "magazine": 1,
+      "type": "launcher"
+    }
+  },
+  "armor": {
+    "Без брони": {"ac": 10, "prot": 0},
+    "Лёгкая ткань": {"ac": 11, "prot": 1},
+    "Фаза I (клон)": {"ac": 14, "prot": 4},
+    "Фаза II (клон)": {"ac": 15, "prot": 5},
+    "Дроидека щит": {"ac": 17, "prot": 7},
+    "Суперброня B2": {"ac": 16, "prot": 6}
+  },
+  "fire_modes": {
+    "full_auto": {
+      "penalty_per_shot": -2,
+      "penalty_per_shot_sharpshooter": -1
+    }
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "unit_templates": {
+    "B1": {
+      "name": "B1 Battle Droid",
+      "ac": 13,
+      "hp": 7,
+      "atk": 3,
+      "dmg": "1d6",
+      "targeting": "random",
+      "notes": "Cheap, inaccurate, dies fast"
+    },
+    "B2": {
+      "name": "B2 Super Battle Droid",
+      "ac": 16,
+      "hp": 22,
+      "atk": 5,
+      "dmg": "2d6",
+      "targeting": "random",
+      "notes": "Wrist blaster, armored"
+    },
+    "BX": {
+      "name": "BX Commando Droid",
+      "ac": 15,
+      "hp": 18,
+      "atk": 6,
+      "dmg": "1d8+2",
+      "range": "both",
+      "targeting": "aimed",
+      "notes": "Elite, melee or ranged"
+    },
+    "TactDroid": {
+      "name": "Tactical Droid",
+      "ac": 15,
+      "hp": 40,
+      "atk": 5,
+      "dmg": "2d6",
+      "targeting": "aimed",
+      "notes": "Commander, adapts tactics"
+    },
+    "J1": {
+      "name": "J-1 Proton Cannon",
+      "ac": 18,
+      "hp": 50,
+      "atk": 6,
+      "dmg": "3d10",
+      "weight": 3,
+      "targeting": "aoe",
+      "aoe_mode": "blast",
+      "crewed": true,
+      "aoe_save_type": "DEX",
+      "aoe_save_dc": 14,
+      "aoe_targets": 3,
+      "notes": "Proton blast — unique targets, no repeats. Needs crew."
+    },
+    "AAT": {
+      "name": "AAT Tank",
+      "ac": 19,
+      "hp": 80,
+      "atk": 7,
+      "dmg": "4d10",
+      "weight": 5,
+      "targeting": "aoe",
+      "aoe_mode": "blast",
+      "crewed": true,
+      "aoe_save_type": "DEX",
+      "aoe_save_dc": 16,
+      "aoe_targets": 4,
+      "notes": "Heavy cannon blast — unique targets, no repeats. Needs crew."
+    },
+    "Clone": {
+      "name": "Clone Trooper",
+      "ac": 14,
+      "hp": 20,
+      "atk": 5,
+      "dmg": "2d6",
+      "targeting": "aimed",
+      "notes": "DC-15S, trained soldier"
+    },
+    "CloneHeavy": {
+      "name": "Clone Heavy Gunner",
+      "ac": 14,
+      "hp": 25,
+      "atk": 4,
+      "dmg": "2d8+3",
+      "targeting": "aoe",
+      "aoe_mode": "spray",
+      "aoe_save_type": "DEX",
+      "aoe_save_dc": 13,
+      "aoe_targets": 3,
+      "notes": "Z-6 rotary cannon — spray fire, targets by weight with repeats."
+    },
+    "CloneMedic": {
+      "name": "Clone Medic",
+      "ac": 14,
+      "hp": 18,
+      "atk": 3,
+      "dmg": "2d4+1",
+      "targeting": "aimed",
+      "notes": "DC-17, can heal 2d6+3 as action"
+    },
+    "Twilek": {
+      "name": "Tvi'lek Resistance Fighter",
+      "ac": 12,
+      "hp": 10,
+      "atk": 3,
+      "dmg": "1d6",
+      "targeting": "random",
+      "notes": "Light blaster, partisan"
+    },
+    "TwilekVet": {
+      "name": "Tvi'lek Veteran",
+      "ac": 13,
+      "hp": 15,
+      "atk": 4,
+      "dmg": "1d8",
+      "targeting": "aimed",
+      "notes": "Experienced fighter, squad leader"
+    }
+  },
+  "targeting_rules": {
+    "random": "Use 'round' command — unit fires at random enemy from opposing faction. For dumb/untrained units (B1, militia, beasts).",
+    "aimed": "Use 'attack' command — unit picks specific target. For trained soldiers, commanders, heroes, snipers.",
+    "aoe": "Use 'aoe'/'turret' command — splash damage with DEX/STR save. Two modes: blast (unique targets, no repeats — explosions, cannons) and spray (weighted with repeats — rotary guns, auto-fire). Default is blast."
+  },
+  "combat_rules": {
+    "cover": "+2 AC while in cover. Whole group enters/leaves cover together.",
+    "surprise_round": "Ambushing side gets one free round before initiative.",
+    "morale": "When group loses 50%+ units, remaining may flee (DM discretion, WIS DC 12).",
+    "crewed_units": "Units with 'crewed: true' in template need at least 1 non-crewed unit alive in their group to fire. Kill all crew = weapon offline but alive (can be recaptured). J1 and AAT are crewed.",
+    "zone_grouping": "Units in the same physical area share a group. Incoming fire randomly hits any unit in the zone. AC regulates hit chance naturally — turret AC 18 gets hit less than crew AC 13 by same attacker.",
+    "reinforcements": "Can add units mid-battle with 'add' command.",
+    "attack_range": "Units have range: 'ranged' (default, any group), 'melee' (same group only), 'both' (either). Melee units must move to target group first. Custom units set range via --range flag on add."
+  }
+}

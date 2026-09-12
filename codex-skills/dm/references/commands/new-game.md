@@ -458,6 +458,35 @@ Use the selected primary scenario and active complications to shape secret facts
 
 ---
 
+## CAMPAIGN DESIGN PRINCIPLES
+
+Apply these principles throughout world and character creation:
+
+1. **Use setup as Session Zero.** Establish the campaign premise, player roles,
+   expectations, boundaries, and a possible end condition before detailed prep.
+2. **Start small and build outward.** Create the smallest playable area that
+   supports immediate decisions. Expand the world when player choices reveal
+   which people, places, and conflicts matter.
+3. **Prepare situations, not predetermined plots.** Give factions and important
+   NPCs goals, resources, pressures, relationships, and a next action if the
+   players do nothing. Never assume a required sequence of player actions.
+4. **Let content follow function.** Create NPCs, quests, locations, and
+   consequences in quantities justified by the starting situation. A
+   ready-to-play campaign must include NPCs, active quests, and scheduled
+   consequences, but never add filler to satisfy an entity count.
+5. **Build player investment.** Tie hooks to declared player roles and, after
+   character creation, connect or revise world entities around character
+   backgrounds, relationships, and goals.
+6. **Provide multiple paths to essential discoveries.** Mysteries should
+   normally provide three independent clues for each conclusion that play
+   depends on. This is redundancy for player choice, not a quota for quests,
+   locations, or NPCs.
+7. **Plan an ending without scripting the route.** Define what victory, defeat,
+   or campaign closure could mean, while allowing play to determine how the
+   campaign reaches that state.
+
+---
+
 ## PHASE 5: WORLD GENERATION
 
 Display progress:
@@ -482,7 +511,7 @@ Building your world...
 
 Based on the setting type, create the starting location with full detail:
 - 100+ word description with sensory details
-- 3+ named NPCs with personalities
+- The named NPCs immediately required by the starting situation
 - Connections to adjacent areas
 - Local secrets and current events
 
@@ -493,10 +522,14 @@ bash tools/dm-location.sh describe "[Starting Location Name]" "[detailed descrip
 
 ### Generate Supporting Locations
 
-Create 3-4 connected locations with moderate detail (50-80 words each):
-- A place for services/commerce
-- A place for authority/knowledge
-- A place representing danger or mystery
+Create only the connected locations needed to support immediate choices and one
+or more clear directions for later expansion. A useful supporting location
+provides at least one concrete function, such as:
+- Services or commerce
+- Authority or knowledge
+- Danger or mystery
+- A faction presence
+- A route into the next situation
 
 ```bash
 bash tools/dm-location.sh add "[Location Name]" "[position relative to start]"
@@ -505,49 +538,53 @@ bash tools/dm-location.sh connect "[Start]" "[Location]" "[path description]"
 
 ### Generate NPCs
 
-Create 6 interconnected NPCs:
-1. **Quest Giver A** - Has a problem to solve
-2. **Quest Giver B** - Rival with conflicting goals
-3. **Service Provider** - Merchant or craftsperson
-4. **Information Source** - Knows local secrets
-5. **Mysterious Figure** - Hints at larger plots
-6. **Local Character** - Adds flavor and humor
+Create the interconnected NPCs required to make the starting situation
+playable. Do not target a fixed count. Every created NPC must have:
+- A current goal and something they can do to pursue it
+- A relationship, dependency, or conflict with another world entity
+- Information, authority, resources, danger, or emotional relevance
+- A reason the players may choose to engage with them
+
+Possible functions include a conflicting patron, service provider, source of
+information, faction representative, antagonist, ally, or local personality.
+Combine functions when one strong NPC can do the work of several shallow ones.
 
 ```bash
 bash tools/dm-npc.sh create "[Name]" "[description]" "[attitude]"
-bash tools/dm-npc.sh tag-location "[Name]" "[location]"
+bash tools/dm-npc.sh locate "[Name]" "[location]"
 ```
 
 ### Generate Plot Hooks
 
-Create three interconnected storylines as proper quests:
+Create the actionable quests that emerge from the starting conflicts. Do not
+target a fixed number or require local, regional, and campaign-long tiers when
+the premise does not need them. A campaign can begin with one sharp problem or
+several competing missions.
 
-**Local Conflict** (1-3 sessions)
-- Affects starting location directly
-- Can be partially resolved quickly
+Every quest must define:
+- The situation and relevant actors, without prescribing the solution
+- Concrete stakes and what changes if the players ignore it
+- At least one trackable objective
+- An explicit XP reward proportional to the complete quest, not each objective
+- A connection to a player role, background, relationship, or declared goal
 
-**Regional Mystery** (4-8 sessions)
-- Spans multiple locations
-- Requires investigation
-
-**World Event** (campaign-long)
-- Background threat building
-- Only hints initially
+For mysteries, record each essential conclusion and provide multiple
+independent discovery paths, normally three clues per required conclusion.
 
 ```bash
-bash tools/dm-plot.sh add "[Local conflict name]" --type side --description "[description]" --objectives "[obj1],[obj2]" --npcs "[npc1]" --locations "[loc1]"
-bash tools/dm-plot.sh add "[Regional mystery name]" --type mystery --description "[description]" --objectives "[obj1],[obj2]" --npcs "[npc1]" --locations "[loc1],[loc2]"
-bash tools/dm-plot.sh add "[World event name]" --type threat --description "[description]" --objectives "[obj1]"
+bash tools/dm-plot.sh add "[Quest name]" --type side --desc "[situation, stakes, and ignored outcome]" --xp 100
+bash tools/dm-plot.sh objective "[Quest name]" add "[objective]"
 ```
 
 ### Schedule Consequences
 
-Plant future events:
+Schedule consequences for independent actors, threats, or opportunities that
+can advance without player intervention. Do not target a fixed count. Each
+consequence must follow from the prepared situation and change future choices
+instead of merely adding unrelated activity.
 
 ```bash
-bash tools/dm-consequence.sh add "[Hook to draw players in]" "next session"
-bash tools/dm-consequence.sh add "[Strange event occurs]" "2 days"
-bash tools/dm-consequence.sh add "[Rumor arrives from afar]" "1 week"
+bash tools/dm-consequence.sh add "[Actor advances a goal]" "next session" --hours 8
 ```
 
 ### Initialize Player Node
@@ -585,8 +622,8 @@ bash tools/dm-world.sh custom-stat-define dark_power --value 0 --max 100 --min 0
 As each element completes:
 ```
   ├─ Creating starting location.... done
-  ├─ Populating with NPCs.......... done (6 characters)
-  ├─ Weaving plot threads.......... done (3 storylines)
+  ├─ Populating with NPCs.......... done (situation-driven roster)
+  ├─ Weaving plot threads.......... done (active conflicts)
   └─ Establishing connections...... done
 ```
 
@@ -643,8 +680,8 @@ cat > "$CAMPAIGN_DIR/session-log.md" << EOF
 
 ### World Summary
 - **Starting Location**: [Location name]
-- **Initial NPCs**: [List the 6 NPC names]
-- **Plot Hooks**: [List the 3 quest names]
+- **Initial NPCs**: [List the NPCs created for the starting situation]
+- **Active Quests**: [List the quests created from active conflicts]
 
 Ready for character creation.
 
@@ -670,15 +707,11 @@ Starting Location: [Location Name]
 Key NPCs:
    • [NPC 1] - [role]
    • [NPC 2] - [role]
-   • [NPC 3] - [role]
-   • [NPC 4] - [role]
-   • [NPC 5] - [role]
-   • [NPC 6] - [role]
+   • [...] - [include only NPCs currently relevant to play]
 
 Active Plot Hooks:
-   • LOCAL: [One line summary]
-   • REGIONAL: [One line summary]
-   • WORLD: [One line summary]
+   • [Quest]: [One-line situation and stakes]
+   • [...] [include every active starting quest]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -716,11 +749,14 @@ Before transitioning to character creation, verify:
 - [ ] world.json exists with player node, locations, NPCs, quests
 - [ ] Player node in world.json (player:active)
 - [ ] Economy node in world.json (`misc:economy`)
-- [ ] Starting location + 3-4 connected locations
+- [ ] Starting location plus only the supporting locations needed for play
 - [ ] All locations connected via paths
-- [ ] 6 NPCs with descriptions and locations
-- [ ] 3 plot hooks (via dm-plot.sh add)
-- [ ] 3+ consequences scheduled
+- [ ] Starting NPCs have goals, relationships, relevance, and locations
+- [ ] Active conflicts are tracked as quests with objectives
+- [ ] Relevant independent actors and threats have scheduled consequences
+- [ ] No filler entities were created to satisfy a numeric quota
+- [ ] Essential discoveries have multiple independent paths
+- [ ] Character backgrounds and goals are connected to world entities
 - [ ] Custom stats defined (if campaign template requires them)
 - [ ] Session log initialized
 - [ ] Campaign overview updated with settings

@@ -50,7 +50,7 @@ For bare `/dm`:
 
 For continuing an existing campaign:
 
-1. Run `scripts/prepare_session.sh` once.
+1. Run `bash codex-skills/dm/scripts/prepare_session.sh` once from the project root.
 2. Read `/tmp/dm-rules.md` completely before narrating.
 3. Internalize the script output: location, time, player, party, active quests, consequences, last session, and handoff.
 4. If the handoff location conflicts with current state, treat the handoff as truth and persist the corrected location.
@@ -78,7 +78,7 @@ For every player action:
 6. Award XP or progression when the compiled rules require it.
 7. End according to the compiled `player-agency` mode: ask for the next action in interactive mode; continue to a key decision or chapter break in narrative mode.
 
-After context compaction, reread `/tmp/dm-rules.md`. If it is missing, rerun `scripts/prepare_session.sh`.
+After context compaction, reread `/tmp/dm-rules.md`. If it is missing, rerun `bash codex-skills/dm/scripts/prepare_session.sh` from the project root.
 
 ## New campaign
 

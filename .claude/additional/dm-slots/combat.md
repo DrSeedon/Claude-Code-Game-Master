@@ -32,10 +32,11 @@ echo "Enemy: [Name] | HP: [X] | AC: [Y] | Attack: +[Z] | Damage: [dice]"
 | Veteran | 58 | 17 | +5 | 1d8+3 |
 | Mage | 40 | 12 | +5 | 1d4+2 |
 
-#### Step 2: Record Combat Start
-```bash
-bash tools/dm-note.sh "combat" "Combat: [party] vs [enemies] at [location]"
-```
+#### Step 2: Track Combat in the Active Session
+
+Keep the encounter in the current session summary. Do not create a permanent
+fact for a routine combat start; persist only mechanical changes and durable
+world consequences as they occur.
 
 #### Module Routing
 
@@ -93,14 +94,39 @@ bash tools/dm-roll.sh "1d6+1" --label "Goblin Damage"
 
 **Party NPC Combat:**
 ```bash
-bash tools/dm-npc.sh hp "Grimjaw" -4    # Damage
-bash tools/dm-npc.sh hp "Silara" +2     # Heal
+bash tools/dm-roll.sh "1d20+4" --label "Attack (Grimjaw)" --ac 13
+bash tools/dm-roll.sh "1d8+2" --label "Damage (Grimjaw)"
+bash tools/dm-world.sh combat-damage "creature:target" 7
+bash tools/dm-npc.sh hp "Silara" +2     # Heal a party NPC
 bash tools/dm-npc.sh party              # Check party status
 ```
 
+Use `combat-damage` after a successful manual ally attack. It persists HP and
+awards a defeated creature's configured XP to the active player exactly once.
+
+### Narrative Combat Beat [MANDATORY]
+
+Tool output is the mechanical audit trail, not the player-facing scene. After
+the rolls and state writes, narrate the exchange before asking for another
+action.
+
+For each round or complete short fight, include:
+- What appeared or changed in the environment and how combatants reacted
+- How the attacks, misses, wounds, movement, and defenses looked in the fiction
+- One brief ally or enemy reaction when a speaking combatant is present
+- The immediate outcome and new tactical situation
+
+Compress a one-round fight into one to three lively paragraphs: reveal,
+exchange, result, reaction. Embed only the numbers that clarify stakes. Never
+substitute a status table, bullet ledger, or raw tool transcript for narration
+unless the player explicitly asks for a mechanical breakdown.
+
 ### Phase 4: Resolution
 
-See [XP & Rewards](#xp--rewards) for XP awards, and [Loot & Rewards](#loot--rewards) for loot handling and post-combat recording.
+Auto-combat awards the defeated creature's configured `xp` exactly once when
+its HP first reaches zero. Never add the same combat XP manually. See
+[XP & Rewards](#xp--rewards) for non-combat awards and [Loot & Rewards](#loot--rewards)
+for loot handling and post-combat recording.
 
 ### Combat Modifiers Quick Reference
 

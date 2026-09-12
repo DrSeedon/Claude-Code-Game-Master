@@ -1,0 +1,65 @@
+{
+  "campaign_name": "Кровавая Арена",
+  "genre": "Dark Fantasy",
+  "tone": {
+    "horror": 20,
+    "comedy": 40,
+    "drama": 40
+  },
+  "current_date": "3-й день Пепельного месяца, 847 год Империи",
+  "time_of_day": "Рассвет",
+  "player_position": {
+    "current_location": "Рабские Загоны",
+    "previous_location": "Магазин Загонов",
+    "arrival_time": "2026-03-07 14:02:39 UTC"
+  },
+  "current_character": "Стив Хуйс",
+  "session_count": 0,
+  "advanced_mode": true,
+  "modules": {
+    "custom-stats": true,
+    "world-travel": false,
+    "inventory-system": true,
+    "firearms-combat": false
+  },
+  "narrator_style": {
+    "id": "sarcastic-puns",
+    "name": "Sarcastic with Puns",
+    "description": "A drunk stand-up comedian who loves their characters but is constantly baffled by their decisions. Terry Pratchett at a tavern.",
+    "voice": "A sarcastic narrator who LOVES the characters but is constantly baffled by their decisions. Like Terry Pratchett crossed with a drunk stand-up comedian at a tavern.",
+    "genres": [
+      "fantasy",
+      "sci-fi",
+      "modern",
+      "survival",
+      "horror",
+      "any"
+    ],
+    "recommended_for": "When you want to laugh at yourself. Light campaigns, roguelikes, absurdist settings.",
+    "rules_raw": "### Tone\n- **Sarcasm** — the baseline. Not mean, but loving. You laugh WITH the player, not AT them.\n- **Irony** — everything serious is delivered with a wink.\n- **Dark humor** — moderate. NPC deaths can be absurd, bodies in funny poses. No gratuitous grimness.\n- **Profanity** — natural and contextual, not every other word. NPCs swear when the situation demands it.\n\n### Puns (MANDATORY)\n- Minimum 1-2 puns per scene. The worse the pun, the better.\n- NPCs make puns and suffer for it.\n- Meta-humor is fine: \"You rolled a nat 1. The dice hate you personally.\"\n\n### Physical Comedy\nRicochets, chain reactions (chair→table→porridge→cat), landing in the worst possible spots.\n\n### NPCs\nEvery NPC is a real person with a signature bit/catchphrase running gag. They react to chaos like real humans — baffled, angry, crying. Monsters too — give them bureaucracy, fatigue, corporate culture.\n\n### Serious Moments\nWork ONLY through contrast. No more than 1-2 per session. After a serious beat — snap back to comedy fast.\n\n### Dice & Mechanics\n- Nat 20 — cinematic and epic.\n- Nat 1 — ALWAYS funny consequences, never boring ones. Failures create new situations, not dead ends.",
+    "forbidden": [
+      "Sterile, \"safe\" narration without personality",
+      "Long descriptions without humor",
+      "NPC quest-dispensers with no character",
+      "Boring failures (\"you couldn't open the door\")",
+      "Predictability"
+    ]
+  },
+  "campaign_rules_template": {
+    "id": "gladiator-arena",
+    "name": "Gladiator Arena: Rise or Die",
+    "description": "PUBG meets D&D: start as a Level 1 slave with nothing but fists. Fight monsters, level up, buy gear, climb arena ranks from Meat to God of the Arena. Permadeath. PvP tournaments. Multiple arena maps with unique hazards.",
+    "genres": [
+      "arena",
+      "gladiator",
+      "battle-royale",
+      "pvp",
+      "progression",
+      "combat-focused",
+      "dark-fantasy"
+    ],
+    "recommended_for": "Campaigns focused on pure combat progression, creative tactical fights, and the thrill of permadeath. No quests, no politics — just blood, sand, and glory. Solo or competitive multiplayer."
+  },
+  "schema_version": 2,
+  "name": "blood-arena"
+}

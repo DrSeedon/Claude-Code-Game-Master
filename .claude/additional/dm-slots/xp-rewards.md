@@ -1,6 +1,30 @@
 ## XP & Rewards <!-- slot:xp-rewards -->
 
-### Award XP [MANDATORY]
+### Automatic Combat XP [MANDATORY]
+
+Every combat creature must define an integer `xp` reward. Player auto-combat
+awards that XP in the same transaction as the killing blow and marks the
+creature reward as paid. Repeated attacks, repeated narration, and repeated
+status checks never award it again.
+
+Do not call `dm-player.sh xp` after an auto-combat kill.
+
+### Automatic Quest XP [MANDATORY]
+
+Every quest must be created with an explicit non-negative reward:
+
+```bash
+bash tools/dm-plot.sh add "[quest]" --type side --desc "[situation and stakes]" --xp 100
+```
+
+`dm-plot.sh complete "[quest]"` awards the stored reward exactly once. Repeating
+the completion command reports that XP was already awarded.
+
+### Manual Non-Combat XP
+
+Use manual XP only for an ad hoc achievement or milestone that is not already
+represented by a creature or completed quest:
+
 ```bash
 bash tools/dm-player.sh xp "[character]" +[amount]
 ```
@@ -15,7 +39,8 @@ bash tools/dm-player.sh xp "[character]" +[amount]
 | 1 | 200 | | | 11 | 7,200 | 20 | 25,000 |
 | 2 | 450 | | | 12 | 8,400 | | |
 
-**Bonus XP:** Clever tactics (+25%), Creative environment use (+10-25%), Social victory (+50%)
+Apply clever tactics, creative solutions, and social victories as manual
+non-combat awards only when they are not already included in a quest reward.
 
 **Non-Combat XP Awards (DM Discretion):**
 | Category | XP Range | Examples |

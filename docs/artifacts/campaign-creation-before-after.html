@@ -1,0 +1,1380 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Наглядное сравнение правил создания D&D-кампаний до и после ревизии.">
+  <title>Ревизия правил создания кампании — до и после</title>
+  <style>
+    :root {
+      --paper: #e8e0cf;
+      --paper-bright: #f4eedf;
+      --paper-dark: #d4cab7;
+      --ink: #182126;
+      --ink-soft: #4c5659;
+      --night: #101a20;
+      --red: #c63f31;
+      --red-dark: #7e231d;
+      --blue: #167f94;
+      --blue-dark: #0b5261;
+      --gold: #c48d2f;
+      --line: rgba(24, 33, 38, .23);
+      --display: "DejaVu Sans Condensed", "Liberation Sans Narrow", sans-serif;
+      --body: "DejaVu Serif", "Liberation Serif", serif;
+      --mono: "DejaVu Sans Mono", "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--night);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      overflow-x: hidden;
+      color: var(--ink);
+      font-family: var(--body);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(255, 255, 255, .52), transparent 24rem),
+        radial-gradient(circle at 84% 68%, rgba(118, 79, 38, .11), transparent 28rem),
+        repeating-linear-gradient(0deg, rgba(32, 24, 15, .018) 0 1px, transparent 1px 4px),
+        var(--paper);
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      content: "";
+      opacity: .24;
+      mix-blend-mode: multiply;
+      background-image:
+        repeating-radial-gradient(circle at 13% 17%, transparent 0 2px, rgba(57, 43, 31, .06) 3px 4px);
+      background-size: 11px 11px;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .classification {
+      position: relative;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 8px max(18px, calc((100vw - 1460px) / 2));
+      color: #f7ead3;
+      background: var(--night);
+      font: 700 10px/1.4 var(--mono);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .classification strong {
+      color: #ff745f;
+    }
+
+    .classification .spacer {
+      flex: 1;
+    }
+
+    .shell {
+      width: min(1460px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 34px 0 88px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: center;
+      padding: 11px 0 17px;
+      border-top: 4px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      font: 700 10px/1.4 var(--mono);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .masthead .revision {
+      color: var(--red);
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(290px, .75fr);
+      gap: 5vw;
+      align-items: end;
+      min-height: 620px;
+      padding: 76px 0 62px;
+      overflow: hidden;
+      border-bottom: 7px solid var(--ink);
+    }
+
+    .hero::after {
+      position: absolute;
+      right: 2%;
+      top: 13%;
+      width: 28vw;
+      height: 28vw;
+      max-width: 430px;
+      max-height: 430px;
+      border: 1px solid rgba(24, 33, 38, .14);
+      border-radius: 50%;
+      box-shadow:
+        0 0 0 28px rgba(24, 33, 38, .025),
+        0 0 0 82px rgba(24, 33, 38, .018);
+      content: "";
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+    }
+
+    .kicker {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 0 0 22px;
+      color: var(--red);
+      font: 700 11px/1.2 var(--mono);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .kicker::before {
+      width: 48px;
+      height: 3px;
+      background: var(--red);
+      content: "";
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 930px;
+      margin-bottom: 28px;
+      font-family: var(--display);
+      font-size: clamp(60px, 9vw, 148px);
+      font-weight: 900;
+      line-height: .79;
+      letter-spacing: -.075em;
+      text-transform: uppercase;
+    }
+
+    h1 .thin {
+      display: block;
+      color: transparent;
+      -webkit-text-stroke: 1.5px var(--ink);
+    }
+
+    .lede {
+      max-width: 760px;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: clamp(17px, 1.5vw, 23px);
+      line-height: 1.5;
+    }
+
+    .lede strong {
+      color: var(--ink);
+    }
+
+    .stamp-wrap {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      gap: 24px;
+      justify-items: center;
+      padding-bottom: 20px;
+    }
+
+    .stamp {
+      width: min(290px, 80vw);
+      padding: 24px 15px 20px;
+      transform: rotate(-7deg);
+      border: 6px double var(--red);
+      color: var(--red);
+      font: 900 35px/.88 var(--display);
+      letter-spacing: .04em;
+      text-align: center;
+      text-transform: uppercase;
+      text-shadow: 1px 1px 0 rgba(198, 63, 49, .12);
+      box-shadow: inset 0 0 0 2px var(--red);
+      animation: stamp-in .72s cubic-bezier(.18, .9, .3, 1.2) both;
+    }
+
+    .stamp small {
+      display: block;
+      margin-top: 10px;
+      font: 700 10px/1.3 var(--mono);
+      letter-spacing: .13em;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      width: min(390px, 100%);
+      border: 1px solid var(--ink);
+      background: rgba(244, 238, 223, .72);
+    }
+
+    .metric {
+      padding: 15px 12px;
+      text-align: center;
+    }
+
+    .metric + .metric {
+      border-left: 1px solid var(--ink);
+    }
+
+    .metric b {
+      display: block;
+      margin-bottom: 5px;
+      font: 900 25px/1 var(--display);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--ink-soft);
+      font: 700 8px/1.35 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .view-controls {
+      position: sticky;
+      top: 12px;
+      z-index: 15;
+      display: flex;
+      gap: 8px;
+      width: fit-content;
+      margin: 25px auto 50px;
+      padding: 6px;
+      border: 1px solid var(--ink);
+      background: rgba(244, 238, 223, .94);
+      box-shadow: 5px 6px 0 rgba(24, 33, 38, .15);
+      backdrop-filter: blur(10px);
+    }
+
+    .view-button {
+      border: 0;
+      padding: 10px 17px;
+      color: var(--ink-soft);
+      background: transparent;
+      cursor: pointer;
+      font: 700 10px/1 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      transition: .18s ease;
+    }
+
+    .view-button:hover {
+      color: var(--ink);
+      background: rgba(24, 33, 38, .07);
+    }
+
+    .view-button.active {
+      color: var(--paper-bright);
+      background: var(--ink);
+    }
+
+    .section {
+      margin-top: 74px;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 66px minmax(0, 1fr) minmax(260px, 520px);
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--ink);
+    }
+
+    .section-number {
+      padding-top: 8px;
+      color: var(--red);
+      font: 700 11px/1 var(--mono);
+    }
+
+    h2 {
+      margin-bottom: 0;
+      font-family: var(--display);
+      font-size: clamp(35px, 4.5vw, 70px);
+      font-weight: 900;
+      line-height: .9;
+      letter-spacing: -.045em;
+      text-transform: uppercase;
+    }
+
+    .section-intro {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--ink);
+      box-shadow: 12px 14px 0 rgba(24, 33, 38, .11);
+    }
+
+    .column {
+      position: relative;
+      overflow: hidden;
+      background: rgba(244, 238, 223, .62);
+      transition: opacity .3s ease, filter .3s ease;
+    }
+
+    .column + .column {
+      border-left: 1px solid var(--ink);
+    }
+
+    .column-head {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: center;
+      min-height: 120px;
+      padding: 24px 28px;
+      color: var(--paper-bright);
+      background: var(--red-dark);
+    }
+
+    .column.after .column-head {
+      background: var(--blue-dark);
+    }
+
+    .column-mark {
+      font: 900 62px/.8 var(--display);
+      letter-spacing: -.08em;
+    }
+
+    .column-title {
+      margin-bottom: 4px;
+      font: 900 24px/1 var(--display);
+      text-transform: uppercase;
+    }
+
+    .column-subtitle {
+      color: rgba(255, 255, 255, .7);
+      font: 10px/1.4 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .rule-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .rule {
+      position: relative;
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      gap: 21px;
+      min-height: 151px;
+      padding: 27px 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rule:last-child {
+      border-bottom: 0;
+    }
+
+    .rule-code {
+      padding-top: 3px;
+      color: var(--red);
+      font: 900 30px/1 var(--display);
+      letter-spacing: -.04em;
+    }
+
+    .after .rule-code {
+      color: var(--blue);
+    }
+
+    .rule h3 {
+      margin-bottom: 9px;
+      font: 900 19px/1.08 var(--display);
+      text-transform: uppercase;
+    }
+
+    .rule p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .before .rule::after {
+      position: absolute;
+      right: 18px;
+      top: 22px;
+      width: 34px;
+      height: 34px;
+      border-top: 2px solid rgba(198, 63, 49, .42);
+      transform: rotate(45deg);
+      content: "";
+    }
+
+    body[data-view="before"] .column.after,
+    body[data-view="after"] .column.before {
+      display: none;
+    }
+
+    body[data-view="before"] .comparison,
+    body[data-view="after"] .comparison {
+      grid-template-columns: minmax(0, 920px);
+      justify-content: center;
+    }
+
+    body[data-view="before"] .column,
+    body[data-view="after"] .column {
+      border-left: 0;
+    }
+
+    .mandatory-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--ink);
+    }
+
+    .mandatory {
+      position: relative;
+      min-height: 250px;
+      padding: 28px;
+      background: rgba(244, 238, 223, .66);
+    }
+
+    .mandatory + .mandatory {
+      border-left: 1px solid var(--ink);
+    }
+
+    .mandatory::before {
+      display: block;
+      width: 11px;
+      height: 11px;
+      margin-bottom: 46px;
+      border: 3px solid var(--blue);
+      border-radius: 50%;
+      content: "";
+      box-shadow: 0 0 0 5px rgba(22, 127, 148, .12);
+    }
+
+    .mandatory .index {
+      position: absolute;
+      right: 22px;
+      top: 22px;
+      color: var(--ink-soft);
+      font: 700 10px/1 var(--mono);
+    }
+
+    .mandatory h3 {
+      margin-bottom: 10px;
+      font: 900 21px/1 var(--display);
+      text-transform: uppercase;
+    }
+
+    .mandatory p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      align-items: stretch;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 270px;
+      padding: 27px 23px;
+      background: rgba(244, 238, 223, .45);
+    }
+
+    .flow-step + .flow-step {
+      border-left: 1px solid var(--ink);
+    }
+
+    .flow-step:not(:last-child)::after {
+      position: absolute;
+      z-index: 2;
+      right: -11px;
+      top: 48%;
+      width: 20px;
+      height: 20px;
+      transform: rotate(45deg);
+      border-top: 1px solid var(--ink);
+      border-right: 1px solid var(--ink);
+      background: var(--paper);
+      content: "";
+    }
+
+    .flow-number {
+      display: block;
+      margin-bottom: 42px;
+      color: var(--blue);
+      font: 900 35px/1 var(--display);
+    }
+
+    .flow-step h3 {
+      margin-bottom: 12px;
+      font: 900 17px/1.1 var(--display);
+      text-transform: uppercase;
+    }
+
+    .flow-step p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .principles {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+    }
+
+    .principle {
+      position: relative;
+      min-height: 245px;
+      padding: 28px;
+      border: 1px solid var(--ink);
+      background: var(--paper-bright);
+      box-shadow: 6px 7px 0 rgba(24, 33, 38, .09);
+    }
+
+    .principle:nth-child(1),
+    .principle:nth-child(4),
+    .principle:nth-child(7) {
+      grid-column: span 5;
+    }
+
+    .principle:nth-child(2),
+    .principle:nth-child(5) {
+      grid-column: span 4;
+    }
+
+    .principle:nth-child(3),
+    .principle:nth-child(6) {
+      grid-column: span 3;
+    }
+
+    .principle .tag {
+      display: inline-block;
+      margin-bottom: 38px;
+      padding: 6px 8px;
+      color: var(--paper-bright);
+      background: var(--ink);
+      font: 700 9px/1 var(--mono);
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .principle:nth-child(even) .tag {
+      background: var(--blue);
+    }
+
+    .principle:nth-child(3n) .tag {
+      background: var(--red);
+    }
+
+    .principle h3 {
+      margin-bottom: 13px;
+      font: 900 24px/1 var(--display);
+      letter-spacing: -.02em;
+      text-transform: uppercase;
+    }
+
+    .principle p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .code-compare {
+      display: grid;
+      grid-template-columns: .78fr 1.22fr;
+      border: 1px solid var(--ink);
+      background: var(--night);
+      box-shadow: 11px 12px 0 rgba(24, 33, 38, .13);
+    }
+
+    .code-block {
+      min-width: 0;
+      padding: 26px;
+      color: #dce6df;
+    }
+
+    .code-block + .code-block {
+      border-left: 1px solid rgba(255, 255, 255, .22);
+    }
+
+    .code-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+      color: #9db0aa;
+      font: 700 9px/1 var(--mono);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .code-label::before {
+      width: 8px;
+      height: 8px;
+      background: var(--red);
+      content: "";
+    }
+
+    .code-block.fixed .code-label::before {
+      background: #5dd6c5;
+    }
+
+    pre {
+      margin: 0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      color: #f0e8d9;
+      font: 12px/1.75 var(--mono);
+    }
+
+    .bad {
+      color: #ff806f;
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+    }
+
+    .good {
+      color: #6ee7d5;
+    }
+
+    .verification {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      min-height: 350px;
+      border: 1px solid var(--ink);
+      background: var(--paper-bright);
+    }
+
+    .verification-copy {
+      padding: 38px;
+    }
+
+    .verification-copy h3 {
+      max-width: 680px;
+      margin-bottom: 21px;
+      font: 900 clamp(32px, 4vw, 64px)/.94 var(--display);
+      letter-spacing: -.04em;
+      text-transform: uppercase;
+    }
+
+    .verification-copy p {
+      max-width: 680px;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .verification-console {
+      display: grid;
+      align-content: center;
+      padding: 38px;
+      color: #deeadf;
+      background:
+        linear-gradient(rgba(16, 26, 32, .9), rgba(16, 26, 32, .9)),
+        repeating-linear-gradient(0deg, transparent 0 20px, rgba(110, 231, 213, .08) 21px);
+      font: 12px/1.8 var(--mono);
+    }
+
+    .verification-console .ok {
+      color: #6ee7d5;
+    }
+
+    .verification-console .muted {
+      color: #8da19b;
+    }
+
+    .file-list {
+      display: grid;
+      gap: 9px;
+      margin-top: 20px;
+    }
+
+    .file {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .file::before {
+      color: var(--gold);
+      content: "↳";
+    }
+
+    footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 22px;
+      align-items: end;
+      margin-top: 76px;
+      padding: 24px 0;
+      border-top: 7px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .footer-mark {
+      font: 900 clamp(28px, 4vw, 60px)/.9 var(--display);
+      letter-spacing: -.04em;
+      text-transform: uppercase;
+    }
+
+    .footer-note {
+      max-width: 410px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.6;
+      text-align: right;
+    }
+
+    .reveal {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @keyframes stamp-in {
+      0% {
+        opacity: 0;
+        transform: scale(1.55) rotate(-2deg);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) rotate(-7deg);
+      }
+    }
+
+    @media (max-width: 1050px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+
+      .stamp-wrap {
+        grid-template-columns: auto 1fr;
+        justify-items: start;
+      }
+
+      .comparison,
+      .code-compare,
+      .verification {
+        grid-template-columns: 1fr;
+      }
+
+      .column + .column,
+      .code-block + .code-block {
+        border-left: 0;
+        border-top: 1px solid var(--ink);
+      }
+
+      .mandatory-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .mandatory:nth-child(3) {
+        border-left: 0;
+        border-top: 1px solid var(--ink);
+      }
+
+      .mandatory:nth-child(4) {
+        border-top: 1px solid var(--ink);
+      }
+
+      .flow {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .flow-step:nth-child(4) {
+        border-left: 0;
+      }
+
+      .flow-step:nth-child(n + 4) {
+        border-top: 1px solid var(--ink);
+      }
+
+      .principle {
+        grid-column: span 6 !important;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .classification {
+        letter-spacing: .08em;
+      }
+
+      .classification span:last-child,
+      .masthead .revision {
+        display: none;
+      }
+
+      .classification .optional,
+      .masthead .optional {
+        display: none;
+      }
+
+      .shell {
+        width: min(100% - 22px, 1460px);
+        padding-top: 18px;
+      }
+
+      .hero {
+        padding: 56px 0 40px;
+      }
+
+      h1 {
+        font-size: clamp(48px, 17vw, 68px);
+      }
+
+      .lede {
+        max-width: 100%;
+        font-size: 16px;
+        overflow-wrap: anywhere;
+      }
+
+      .stamp-wrap {
+        grid-template-columns: 1fr;
+      }
+
+      .section {
+        margin-top: 56px;
+      }
+
+      .section-head {
+        grid-template-columns: 42px 1fr;
+      }
+
+      .section-intro {
+        grid-column: 2;
+      }
+
+      .view-controls {
+        top: 7px;
+        width: 100%;
+      }
+
+      .view-button {
+        flex: 1;
+        padding-inline: 8px;
+        font-size: 8px;
+        white-space: nowrap;
+      }
+
+      .rule {
+        grid-template-columns: 58px 1fr;
+        padding: 22px 18px;
+      }
+
+      .mandatory-grid,
+      .flow,
+      .principles {
+        grid-template-columns: 1fr;
+      }
+
+      .mandatory,
+      .flow-step,
+      .principle {
+        grid-column: 1 !important;
+        border-left: 0 !important;
+      }
+
+      .mandatory + .mandatory,
+      .flow-step + .flow-step {
+        border-top: 1px solid var(--ink);
+      }
+
+      .flow-step::after {
+        display: none;
+      }
+
+      .verification-console,
+      .verification-copy,
+      .code-block {
+        padding: 24px 19px;
+      }
+
+      footer {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-note {
+        text-align: left;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      .stamp {
+        animation: none;
+      }
+
+      .reveal { transition: none; }
+    }
+  </style>
+</head>
+<body data-view="both">
+  <div class="classification">
+    <strong>Директива 07</strong>
+    <span class="optional">&nbsp; // внутренний отчёт о правилах кампании</span>
+    <span class="spacer"></span>
+    <span>статус: принято</span>
+  </div>
+
+  <main class="shell">
+    <header class="masthead">
+      <span>Система мастера игры · ревизия создания кампании</span>
+      <span class="revision">редакция 26.07.2026</span>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="kicker">Отчёт об изменениях</p>
+        <h1>Меньше квот.<span class="thin">Больше причин.</span></h1>
+        <p class="lede">
+          Визард по-прежнему создаёт <strong>неигровых персонажей (NPC), активные квесты,
+          последствия и стартовый мир</strong>. Но теперь содержание рождается
+          из ситуации и выбора игроков, а не из требования заполнить таблицу
+          заранее заданным количеством сущностей.
+        </p>
+      </div>
+
+      <aside class="stamp-wrap" aria-label="Статус ревизии">
+        <div class="stamp">
+          Ревизия<br>принята
+          <small>Без наполнителей · без рельсов</small>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <b>3</b>
+            <span>источника правил</span>
+          </div>
+          <div class="metric">
+            <b>33</b>
+            <span>теста пройдено</span>
+          </div>
+          <div class="metric">
+            <b>0</b>
+            <span>фиксированных квот</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <nav class="view-controls" aria-label="Режим сравнения">
+      <button class="view-button" type="button" data-view-choice="before">Только до</button>
+      <button class="view-button active" type="button" data-view-choice="both">Сравнить</button>
+      <button class="view-button" type="button" data-view-choice="after">Только после</button>
+    </nav>
+
+    <section class="section reveal" id="comparison">
+      <div class="section-head">
+        <span class="section-number">01 / 05</span>
+        <h2>Что именно изменилось</h2>
+        <p class="section-intro">
+          Слева — прежняя механическая норма. Справа — новое правило,
+          определяющее не количество, а назначение каждого элемента мира.
+        </p>
+      </div>
+
+      <div class="comparison">
+        <article class="column before">
+          <header class="column-head">
+            <span class="column-mark">ДО</span>
+            <div>
+              <div class="column-title">Производственный план</div>
+              <div class="column-subtitle">Количество важнее функции</div>
+            </div>
+          </header>
+          <ol class="rule-list">
+            <li class="rule">
+              <span class="rule-code">6×</span>
+              <div>
+                <h3>Шесть NPC</h3>
+                <p>
+                  Заранее заданные роли: два квестодателя, торговец, источник
+                  информации, загадочная фигура и местный колорит.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">3×</span>
+              <div>
+                <h3>Три сюжетные линии</h3>
+                <p>
+                  Обязательно локальная, региональная и глобальная — даже если
+                  исходная задумка кампании не нуждается в такой лестнице.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">3+</span>
+              <div>
+                <h3>Последствия по норме</h3>
+                <p>
+                  Три будущих события добавлялись ради заполнения списка, а не
+                  потому, что конкретная фракция действительно действует.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">3–4</span>
+              <div>
+                <h3>Поддерживающие места</h3>
+                <p>
+                  Карта расширялась заранее, до появления у игроков причин
+                  интересоваться этими местами.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </article>
+
+        <article class="column after">
+          <header class="column-head">
+            <span class="column-mark">ПОСЛЕ</span>
+            <div>
+              <div class="column-title">Ситуационный дизайн</div>
+              <div class="column-subtitle">Функция определяет количество</div>
+            </div>
+          </header>
+          <ol class="rule-list">
+            <li class="rule">
+              <span class="rule-code">↗</span>
+              <div>
+                <h3>NPC по необходимости</h3>
+                <p>
+                  Каждый персонаж получает цель, возможность действовать,
+                  связь или конфликт и понятную причину быть важным игрокам.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">!</span>
+              <div>
+                <h3>Квесты из конфликтов</h3>
+                <p>
+                  Создаются реальные стартовые проблемы: со ставками,
+                  участниками, целью и изменением мира при бездействии игроков.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">⏱</span>
+              <div>
+                <h3>Последствия из действий мира</h3>
+                <p>
+                  Таймер появляется там, где фракция, угроза или возможность
+                  способны развиваться независимо от персонажей.
+                </p>
+              </div>
+            </li>
+            <li class="rule">
+              <span class="rule-code">◎</span>
+              <div>
+                <h3>Мир растёт по спирали</h3>
+                <p>
+                  Сначала создаётся минимальная игровая зона. Новые места и
+                  детали появляются вслед за решениями и интересом игроков.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="section reveal" id="mandatory">
+      <div class="section-head">
+        <span class="section-number">02 / 05</span>
+        <h2>Что осталось обязательным</h2>
+        <p class="section-intro">
+          Свобода от квот не означает пустой мир. Готовая кампания всё ещё
+          обязана предоставить действующих лиц, задачи, движение мира и место
+          для первого решения.
+        </p>
+      </div>
+
+      <div class="mandatory-grid">
+        <article class="mandatory">
+          <span class="index">M-01</span>
+          <h3>NPC</h3>
+          <p>
+            Не декорации, а участники ситуации: хотят, рискуют, договариваются,
+            мешают и меняют состояние мира.
+          </p>
+        </article>
+        <article class="mandatory">
+          <span class="index">M-02</span>
+          <h3>Активные квесты</h3>
+          <p>
+            Конкретные конфликты с отслеживаемыми целями и несколькими
+            допустимыми решениями.
+          </p>
+        </article>
+        <article class="mandatory">
+          <span class="index">M-03</span>
+          <h3>Последствия</h3>
+          <p>
+            События с рабочими таймерами, которые показывают: мир не ждёт,
+            пока игроки освободят календарь.
+          </p>
+        </article>
+        <article class="mandatory">
+          <span class="index">M-04</span>
+          <h3>Стартовая зона</h3>
+          <p>
+            Достаточно подробная для первой игры и достаточно компактная,
+            чтобы не тратить подготовку на невидимые континенты.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section reveal" id="flow">
+      <div class="section-head">
+        <span class="section-number">03 / 05</span>
+        <h2>Новый порядок подготовки</h2>
+        <p class="section-intro">
+          Кампания получает направление, но не заранее написанный маршрут.
+          Каждый следующий слой строится на фактических решениях группы.
+        </p>
+      </div>
+
+      <div class="flow">
+        <article class="flow-step">
+          <span class="flow-number">01</span>
+          <h3>Ясная завязка</h3>
+          <p>Одна фраза о роли игроков, конфликте и возможной конечной цели.</p>
+        </article>
+        <article class="flow-step">
+          <span class="flow-number">02</span>
+          <h3>Нулевая сессия</h3>
+          <p>Роли, ожидания, границы, тон и причины действовать вместе.</p>
+        </article>
+        <article class="flow-step">
+          <span class="flow-number">03</span>
+          <h3>Стартовая ситуация</h3>
+          <p>Кто чего хочет, чем располагает и что произойдёт без вмешательства.</p>
+        </article>
+        <article class="flow-step">
+          <span class="flow-number">04</span>
+          <h3>Минимальный мир</h3>
+          <p>Только нужные сейчас NPC, места, квесты и последствия.</p>
+        </article>
+        <article class="flow-step">
+          <span class="flow-number">05</span>
+          <h3>Связь с героями</h3>
+          <p>Фон, отношения и цели персонажей встраиваются в созданные конфликты.</p>
+        </article>
+        <article class="flow-step">
+          <span class="flow-number">06</span>
+          <h3>Рост по игре</h3>
+          <p>Мир расширяется туда, куда действительно направились игроки.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section reveal" id="principles">
+      <div class="section-head">
+        <span class="section-number">04 / 05</span>
+        <h2>Семь принятых принципов</h2>
+        <p class="section-intro">
+          Практические рекомендации встроены и в подробные MD-правила, и в
+          системную инструкцию веб-визарда.
+        </p>
+      </div>
+
+      <div class="principles">
+        <article class="principle">
+          <span class="tag">Контракт</span>
+          <h3>Настройка как нулевая сессия</h3>
+          <p>
+            До детальной подготовки фиксируются завязка, роли игроков,
+            ожидания, границы и возможное условие завершения кампании.
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Масштаб</span>
+          <h3>Начинать с малого</h3>
+          <p>
+            Подробно создаётся ближайшее игровое пространство; дальний мир
+            остаётся эскизом до появления реального интереса.
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Свобода</span>
+          <h3>Ситуации, не сюжет</h3>
+          <p>
+            Готовятся силы и их намерения, но не обязательная цепочка действий
+            игроков «А → Б → В».
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Экономия</span>
+          <h3>Функция вместо наполнителя</h3>
+          <p>
+            Сущность создаётся только тогда, когда даёт выбор, ресурс, угрозу,
+            связь, информацию или пространство для действия.
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Вовлечение</span>
+          <h3>Связь с персонажами</h3>
+          <p>
+            После создания героев мир уточняется: стартовые конфликты цепляются
+            за их прошлое, отношения и заявленные цели.
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Надёжность</span>
+          <h3>Несколько путей</h3>
+          <p>
+            Для обязательного открытия предусмотрены независимые способы.
+            В тайнах обычно используются три улики на важный вывод.
+          </p>
+        </article>
+        <article class="principle">
+          <span class="tag">Финал</span>
+          <h3>Конец без рельсов</h3>
+          <p>
+            Победа, поражение и завершение имеют смысл заранее, но конкретный
+            путь и итог определяются решениями за столом.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section reveal" id="technical">
+      <div class="section-head">
+        <span class="section-number">05 / 05</span>
+        <h2>Техническая поправка</h2>
+        <p class="section-intro">
+          Заодно исправлены команды, которые выглядели правдоподобно, но не
+          сохраняли цель квеста и могли оставить последствие без рабочего таймера.
+        </p>
+      </div>
+
+      <div class="code-compare">
+        <article class="code-block">
+          <div class="code-label">Раньше · аргумент цели игнорировался</div>
+          <pre>bash tools/dm-plot.sh add "Квест" \
+  --type side \
+  --description "Описание" \
+  <span class="bad">--objectives "Цель"</span>
+
+bash tools/dm-consequence.sh add \
+  "Событие" "следующая сессия"</pre>
+        </article>
+        <article class="code-block fixed">
+          <div class="code-label">Теперь · поддерживаемые команды</div>
+          <pre>bash tools/dm-plot.sh add "Квест" \
+  --type side \
+  --desc "Ситуация, ставки и исход бездействия"
+
+<span class="good">bash tools/dm-plot.sh objective \
+  "Квест" add "Отслеживаемая цель"</span>
+
+<span class="good">bash tools/dm-consequence.sh add \
+  "Фракция продвигает план" \
+  "следующая сессия" --hours 8</span></pre>
+        </article>
+      </div>
+
+      <div class="verification" style="margin-top: 24px;">
+        <div class="verification-copy">
+          <h3>Правила синхронизированы</h3>
+          <p>
+            Одинаковая модель поведения закреплена в общем сценарии создания,
+            Codex-адаптации и системной инструкции веб-визарда. Регрессионный тест
+            запрещает вернуть жёсткие нормы «6 NPC» и «3 квеста».
+          </p>
+        </div>
+        <div class="verification-console" aria-label="Результаты проверки">
+          <div><span class="muted">$</span> uv run pytest tests/test_wizard.py</div>
+          <div class="ok">33 passed in 0.69s</div>
+          <div><span class="muted">$</span> git diff --check</div>
+          <div class="ok">ошибок форматирования нет</div>
+          <div><span class="muted">$</span> проверка English-only для rules</div>
+          <div class="ok">нарушений нет</div>
+          <div class="file-list">
+            <div class="file">backend/wizard_prompt.py</div>
+            <div class="file">.claude/commands/new-game.md</div>
+            <div class="file">codex-skills/dm/references/commands/new-game.md</div>
+            <div class="file">tests/test_wizard.py</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="footer-mark">Готовый мир — да.<br>Контент ради отчёта — нет.</div>
+      <div class="footer-note">
+        Русскоязычная визуальная выжимка. Рабочие системные правила сохранены
+        на английском согласно обязательной языковой политике проекта.
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    const buttons = document.querySelectorAll("[data-view-choice]");
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const view = button.dataset.viewChoice;
+        document.body.dataset.view = view;
+        buttons.forEach((candidate) => {
+          const active = candidate === button;
+          candidate.classList.toggle("active", active);
+          candidate.setAttribute("aria-pressed", String(active));
+        });
+      });
+    });
+  </script>
+</body>
+</html>

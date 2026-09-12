@@ -1,0 +1,14 @@
+{
+  "name": "star-wars-roguelike",
+  "genre": "sci-fi, space-opera",
+  "tone": "serious, cinematic",
+  "description": "Звёздные войны — рогалик в стиле XCOM. База повстанцев, тактические миссии, крупные сражения. Контрабандист Хан Хуйс и его команда против Империи.",
+  "modules": [
+    "mass-combat",
+    "firearms-combat"
+  ],
+  "narrator_style": "serious-cinematic",
+  "created_at": "2026-04-02T11:02:22Z",
+  "calendar": {},
+  "currency": {}
+}

@@ -608,6 +608,37 @@ class WorldGraph:
             "killed": old_hp > 0 and new_hp == 0,
         }
 
+    def apply_combat_damage(
+        self,
+        name_or_id: str,
+        amount: int,
+    ) -> Optional[dict]:
+        """Apply combat damage and award a defeated creature's XP once."""
+        if self._transaction_data is None:
+            with self.transaction():
+                return self.apply_combat_damage(name_or_id, amount)
+
+        transition = self.apply_damage(name_or_id, amount)
+        if not transition:
+            return None
+
+        xp_awarded = 0
+        target = self.get_node(transition["id"])
+        if transition["killed"] and target.get("type") == "creature":
+            target_data = target.setdefault("data", {})
+            mechanics = node_mechanics(target)
+            xp_reward = max(0, int(mechanics.get("xp", 0) or 0))
+            if xp_reward and not target_data.get("xp_awarded"):
+                if not self.player_update_stat("xp", xp_reward):
+                    return None
+                target_data["xp_awarded"] = True
+                target_data["xp_awarded_at"] = self._now()
+                target_data["xp_awarded_amount"] = xp_reward
+                xp_awarded = xp_reward
+
+        transition["xp_awarded"] = xp_awarded
+        return transition
+
     def _fact_next_id(self, category: str) -> str:
         slug = self._slug(category)
         prefix = f"fact:{slug}-"
@@ -768,6 +799,15 @@ class WorldGraph:
         self.add_node(node_id, "location", name, {"description": description})
         return node_id
 
+    def location_describe(self, node_id: str, description: str) -> bool:
+        w = self._load()
+        node = w["nodes"].get(node_id)
+        if not node or node.get("type") != "location":
+            print(f"  Location '{node_id}' not found", file=sys.stderr)
+            return False
+        node.setdefault("data", {})["description"] = description
+        return self._save(w)
+
     def location_connect(self, from_id: str, to_id: str, path_type: str = "traveled") -> bool:
         w = self._load()
         for nid in (from_id, to_id):
@@ -804,7 +844,15 @@ class WorldGraph:
     # Quest domain
     # ─────────────────────────────────────────────
 
-    def quest_create(self, name: str, quest_type: str = "side", description: str = "") -> str:
+    def quest_create(
+        self,
+        name: str,
+        quest_type: str = "side",
+        description: str = "",
+        xp_reward: int = 0,
+    ) -> str:
+        if int(xp_reward) < 0:
+            raise ValueError("Quest XP reward cannot be negative")
         node_id = f"quest:{self._slug(name)}"
         w = self._load()
         if node_id in w["nodes"]:
@@ -817,6 +865,7 @@ class WorldGraph:
             "description": description,
             "status": "active",
             "objectives": [],
+            "xp_reward": int(xp_reward),
             "created": self._now(),
         })
         return node_id
@@ -843,9 +892,65 @@ class WorldGraph:
         objs[index]["done"] = True
         return self._save(w)
 
-    def quest_complete(self, quest_id: str) -> bool:
-        return self.update_node(quest_id, {"data": {"status": "completed",
-                                                    "completed": self._now()}})
+    def quest_set_reward(self, quest_id: str, xp_reward: int) -> bool:
+        if int(xp_reward) < 0:
+            print("  Quest XP reward cannot be negative", file=sys.stderr)
+            return False
+        w = self._load()
+        node = w["nodes"].get(quest_id)
+        if not node or node.get("type") != "quest":
+            print(f"  Quest '{quest_id}' not found", file=sys.stderr)
+            return False
+        if node.get("data", {}).get("status") == "completed":
+            print("  Cannot change the reward of a completed quest", file=sys.stderr)
+            return False
+        node.setdefault("data", {})["xp_reward"] = int(xp_reward)
+        return self._save(w)
+
+    def quest_complete(self, quest_id: str) -> Optional[dict]:
+        if self._transaction_data is None:
+            with self.transaction():
+                return self.quest_complete(quest_id)
+
+        w = self._load()
+        node = w["nodes"].get(quest_id)
+        if not node or node.get("type") != "quest":
+            print(f"  Quest '{quest_id}' not found", file=sys.stderr)
+            return None
+
+        data = node.setdefault("data", {})
+        if data.get("status") == "completed":
+            return {
+                "quest_id": quest_id,
+                "xp_awarded": 0,
+                "already_completed": True,
+            }
+
+        xp_reward = int(data.get("xp_reward", 0) or 0)
+        if xp_reward < 0:
+            print("  Quest XP reward cannot be negative", file=sys.stderr)
+            return None
+        if xp_reward and not self._player_id():
+            print("  No player node found for quest XP reward", file=sys.stderr)
+            return None
+
+        xp_awarded = 0
+        if xp_reward and not data.get("xp_awarded"):
+            if not self.player_update_stat("xp", xp_reward):
+                return None
+            xp_awarded = xp_reward
+
+        data["status"] = "completed"
+        data["completed"] = self._now()
+        data["xp_awarded"] = True
+        data["xp_awarded_amount"] = xp_awarded
+        if not self._save(w):
+            return None
+        return {
+            "quest_id": quest_id,
+            "xp_awarded": xp_awarded,
+            "already_completed": False,
+        }
 
     def quest_fail(self, quest_id: str) -> bool:
         return self.update_node(quest_id, {"data": {"status": "failed",
@@ -1270,15 +1375,30 @@ class WorldGraph:
             print(f"  {B}Used:{RS} {item_key}  {DM}(no effects found in wiki){RS}")
         return effects if effects else {}
 
-    def inventory_loot(self, owner_id: str, items: list = None, gold: int = 0, xp: int = 0) -> bool:
+    def inventory_loot(
+        self,
+        owner_id: str,
+        items: list = None,
+        gold: int = 0,
+        xp: int = 0,
+        hp: int = 0,
+        reason: str = "",
+    ) -> bool:
         if self._transaction_data is None:
             with self.transaction():
-                return self.inventory_loot(owner_id, items, gold, xp)
+                return self.inventory_loot(owner_id, items, gold, xp, hp, reason)
         G_, RS, B = Colors.G, Colors.RESET, Colors.B
         w = self._load()
         if owner_id not in w["nodes"]:
             print(f"  Node '{owner_id}' not found", file=sys.stderr)
             return False
+        owner = w["nodes"][owner_id]
+        hp_stats = self.combatant_stats(owner_id) if hp else None
+        if hp and (not hp_stats or hp_stats.get("hp") is None):
+            print(f"  Node '{owner_id}' has no HP", file=sys.stderr)
+            return False
+        reason_suffix = f" — {reason}" if reason else ""
+        print(f"  INVENTORY UPDATE: {owner.get('name', owner_id)}{reason_suffix}")
         for entry in (items or []):
             name, qty, weight = entry[0], int(entry[1]) if len(entry) > 1 else 1, float(entry[2]) if len(entry) > 2 else 0.5
             self.inventory_add(owner_id, name, qty, weight)
@@ -1297,6 +1417,24 @@ class WorldGraph:
             if pid:
                 self.player_update_stat("xp", xp)
                 print(f"  {G_}+{RS} {B}{xp}{RS} XP")
+        if hp:
+            old_hp = int(hp_stats["hp"])
+            hp_max = int(hp_stats.get("hp_max") or old_hp)
+            new_hp = max(0, min(old_hp + int(hp), hp_max))
+            data = owner.setdefault("data", {})
+            if hp_stats["type"] == "player":
+                hp_data = data.get("hp")
+                if isinstance(hp_data, dict):
+                    hp_data["current"] = new_hp
+                else:
+                    data["hp"] = new_hp
+            elif hp_stats["type"] == "npc" and isinstance(data.get("character_sheet"), dict):
+                data["character_sheet"]["hp"] = new_hp
+            else:
+                mechanics = data.get("mechanics")
+                target = mechanics if isinstance(mechanics, dict) else data
+                target["hp_current"] = new_hp
+            print(f"  HP: {old_hp} -> {new_hp} ({hp:+d})")
         return True
 
     # ─────────────────────────────────────────────
@@ -2082,6 +2220,10 @@ def main():
     p.add_argument("id")
     p.add_argument("--data", required=True, help="JSON updates dict")
 
+    p = sub.add_parser("combat-damage", help="Apply combat damage and automatic XP")
+    p.add_argument("id", help="Combatant name or ID")
+    p.add_argument("amount", type=int)
+
     p = sub.add_parser("remove-node", help="Remove a node")
     p.add_argument("id")
     p.add_argument("--no-cascade", action="store_true", help="Do not remove attached edges")
@@ -2158,6 +2300,10 @@ def main():
     p.add_argument("name")
     p.add_argument("--desc", default="")
 
+    p = sub.add_parser("location-describe", help="Set a location description")
+    p.add_argument("location", help="Location name or ID")
+    p.add_argument("description")
+
     p = sub.add_parser("location-connect", help="Connect two locations bidirectionally")
     p.add_argument("from_loc", help="Location name or ID")
     p.add_argument("to_loc", help="Location name or ID")
@@ -2184,6 +2330,7 @@ def main():
     p.add_argument("name")
     p.add_argument("--type", default="side", dest="quest_type")
     p.add_argument("--desc", default="")
+    p.add_argument("--xp", type=int, default=0, dest="xp_reward")
 
     p = sub.add_parser("quest-list", help="List quests")
     p.add_argument("--status", default=None, help="Filter by status: active/completed/failed")
@@ -2198,6 +2345,10 @@ def main():
 
     p = sub.add_parser("quest-complete", help="Mark quest as completed")
     p.add_argument("id", help="Quest name or ID")
+
+    p = sub.add_parser("quest-reward", help="Set a quest XP reward")
+    p.add_argument("id", help="Quest name or ID")
+    p.add_argument("xp_reward", type=int)
 
     p = sub.add_parser("quest-fail", help="Mark quest as failed")
     p.add_argument("id", help="Quest name or ID")
@@ -2274,12 +2425,14 @@ def main():
     p.add_argument("owner", help="Node name or ID")
     p.add_argument("item")
 
-    p = sub.add_parser("inventory-loot", help="Batch add items + gold + xp")
+    p = sub.add_parser("inventory-loot", help="Batch update items, gold, XP, and HP")
     p.add_argument("owner", help="Node name or ID")
     p.add_argument("--items", nargs="+", metavar="name:qty:weight",
                    help="Items in format name:qty:weight (qty and weight optional)")
     p.add_argument("--gold", type=int, default=0)
     p.add_argument("--xp", type=int, default=0)
+    p.add_argument("--hp", type=int, default=0)
+    p.add_argument("--reason", default="")
 
     sub.add_parser("consequence-list-resolved", help="List resolved consequences")
 
@@ -2370,6 +2523,17 @@ def main():
             print(f"  ✓ Updated: {args.id}")
         else:
             sys.exit(1)
+
+    elif args.command == "combat-damage":
+        result = g.apply_combat_damage(args.id, args.amount)
+        if not result:
+            sys.exit(1)
+        print(
+            f"  {result['damage']} HP -> {result['name']}:"
+            f" {result['old_hp']} -> {result['new_hp']} HP"
+        )
+        if result["xp_awarded"]:
+            print(f"  +{result['xp_awarded']} XP (automatic)")
 
     elif args.command == "remove-node":
         ok = g.remove_node(args.id, cascade=not args.no_cascade)
@@ -2510,6 +2674,14 @@ def main():
         lid = g.location_create(args.name, args.desc)
         print(f"  ✓ Location created: {args.name} ({lid})")
 
+    elif args.command == "location-describe":
+        lid = resolve(args.location, "location")
+        ok = g.location_describe(lid, args.description)
+        if ok:
+            print(f"  ✓ Location described: {lid}")
+        else:
+            sys.exit(1)
+
     elif args.command == "location-connect":
         fid = resolve(args.from_loc, "location")
         tid = resolve(args.to_loc, "location")
@@ -2560,7 +2732,12 @@ def main():
 
     # ── Quest handlers ────────────────────────────────────────────────────────
     elif args.command == "quest-create":
-        qid = g.quest_create(args.name, args.quest_type, args.desc)
+        qid = g.quest_create(
+            args.name,
+            args.quest_type,
+            args.desc,
+            args.xp_reward,
+        )
         print(f"  ✓ Quest created: {args.name} ({qid})")
 
     elif args.command == "quest-list":
@@ -2586,6 +2763,7 @@ def main():
         d = node.get("data", {})
         print(f"\n  {B}{node['name']}{RS}  {DM}{qid}{RS}")
         print(f"  Status: {C}{d.get('status','active')}{RS}  Type: {d.get('quest_type','side')}")
+        print(f"  XP reward: {C}{int(d.get('xp_reward', 0) or 0)}{RS}")
         if d.get("description"):
             print(f"  {d['description']}")
         objs = d.get("objectives", [])
@@ -2613,9 +2791,21 @@ def main():
 
     elif args.command == "quest-complete":
         qid = resolve(args.id, "quest")
-        ok = g.quest_complete(qid)
-        if ok:
+        result = g.quest_complete(qid)
+        if result:
             print(f"  ✓ Quest completed: {qid}")
+            if result["already_completed"]:
+                print("    XP: already awarded")
+            elif result["xp_awarded"]:
+                print(f"    +{result['xp_awarded']} XP (automatic)")
+        else:
+            sys.exit(1)
+
+    elif args.command == "quest-reward":
+        qid = resolve(args.id, "quest")
+        ok = g.quest_set_reward(qid, args.xp_reward)
+        if ok:
+            print(f"  ✓ Quest reward: {qid} → {args.xp_reward} XP")
         else:
             sys.exit(1)
 
@@ -2767,7 +2957,14 @@ def main():
             qty = int(parts[1]) if len(parts) > 1 else 1
             weight = float(parts[2]) if len(parts) > 2 else 0.5
             parsed_items.append((name, qty, weight))
-        ok = g.inventory_loot(oid, parsed_items, args.gold, args.xp)
+        ok = g.inventory_loot(
+            oid,
+            parsed_items,
+            args.gold,
+            args.xp,
+            args.hp,
+            args.reason,
+        )
         if not ok:
             sys.exit(1)
 

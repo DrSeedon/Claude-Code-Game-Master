@@ -7,10 +7,11 @@ if [ "$#" -lt 1 ]; then
     echo "Usage: dm-plot.sh <action> [args]"
     echo ""
     echo "=== Plot Management ==="
-    echo "  add <name> [--type X] [--desc ...]       Create a new quest"
+    echo "  add <name> [--type X] [--desc ...] --xp N Create a new quest"
     echo "  list [--status Y]                        List quests (filter by status)"
     echo "  show <name>                              Show full quest details"
     echo "  complete <name>                          Mark quest as completed"
+    echo "  reward <name> <xp>                       Set quest XP reward"
     echo "  fail <name>                              Mark quest as failed"
     echo "  objective <name> add <text>              Add objective to quest"
     echo "  objective <name> complete <idx>          Mark objective as done"
@@ -19,7 +20,7 @@ if [ "$#" -lt 1 ]; then
     echo "Status: active, completed, failed"
     echo ""
     echo "Examples:"
-    echo "  dm-plot.sh add \"Side Quest\" --type side --desc \"Find the artifact\""
+    echo "  dm-plot.sh add \"Side Quest\" --type side --desc \"Find the artifact\" --xp 100"
     echo "  dm-plot.sh objective \"Main Quest\" add \"Find key\""
     echo "  dm-plot.sh objective \"Main Quest\" complete 0"
     echo "  dm-plot.sh list --status active"
@@ -40,24 +41,34 @@ WG="$PYTHON_CMD $LIB_DIR/world_graph.py"
 case "$ACTION" in
     add)
         if [ "$#" -lt 1 ]; then
-            echo "Usage: dm-plot.sh add <name> [--type X] [--desc ...]"
+            echo "Usage: dm-plot.sh add <name> [--type X] [--desc ...] --xp N"
             exit 1
         fi
         NAME="$1"
         shift
         TYPE="side"
         DESC=""
+        XP=""
         while [ "$#" -gt 0 ]; do
             case "$1" in
                 --type)   TYPE="$2"; shift 2 ;;
                 --desc|--description) DESC="$2"; shift 2 ;;
+                --xp) XP="$2"; shift 2 ;;
                 *) shift ;;
             esac
         done
+        if [ -z "$XP" ]; then
+            echo "Error: Quest XP reward is required. Use --xp N (or --xp 0)." >&2
+            exit 1
+        fi
+        if ! [[ "$XP" =~ ^[0-9]+$ ]]; then
+            echo "Error: Quest XP reward must be a non-negative integer." >&2
+            exit 1
+        fi
         if [ -n "$DESC" ]; then
-            $WG quest-create "$NAME" --type "$TYPE" --desc "$DESC"
+            $WG quest-create "$NAME" --type "$TYPE" --desc "$DESC" --xp "$XP"
         else
-            $WG quest-create "$NAME" --type "$TYPE"
+            $WG quest-create "$NAME" --type "$TYPE" --xp "$XP"
         fi
         ;;
 
@@ -102,6 +113,18 @@ case "$ACTION" in
             exit 1
         fi
         $WG quest-complete "$1"
+        ;;
+
+    reward)
+        if [ "$#" -lt 2 ]; then
+            echo "Usage: dm-plot.sh reward <name> <xp>"
+            exit 1
+        fi
+        if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+            echo "Error: Quest XP reward must be a non-negative integer." >&2
+            exit 1
+        fi
+        $WG quest-reward "$1" "$2"
         ;;
 
     fail)

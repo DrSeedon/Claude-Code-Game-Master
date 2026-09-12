@@ -134,12 +134,13 @@ PYEOF
 
 _recommend() {
     local genre="${2:-}"
+    genre="${genre,,}"
     case "$genre" in
-        horror|survival|sci-fi|scifi) echo "horror-atmospheric" ;;
-        fantasy|epic|mythological)    echo "epic-heroic" ;;
-        comedy|roguelike|absurd|any)  echo "sarcastic-puns" ;;
-        noir|drama|dark*)             echo "serious-cinematic" ;;
-        *)                            echo "sarcastic-puns" ;;
+        *horror*|*survival*|*sci-fi*|*scifi*) echo "horror-atmospheric" ;;
+        *fantasy*|*epic*|*mythological*|*dnd*|*"d&d"*) echo "epic-heroic" ;;
+        *comedy*|*roguelike*|*absurd*) echo "sarcastic-puns" ;;
+        *noir*|*drama*|*dark*) echo "serious-cinematic" ;;
+        *) echo "serious-cinematic" ;;
     esac
 }
 

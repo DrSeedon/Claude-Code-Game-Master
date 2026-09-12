@@ -45,8 +45,8 @@ Build logical additions that:
 ### Step 4: UPDATE & TAG
 - Estimate word count (300-400 words target)
 - Apply enhancement: `./tools/dm-npc.sh update "[Name]" "[new detail or event]"`
-- Tag by location: `./tools/dm-npc.sh tag-location "[Name]" location1 location2`
-- Tag by quest: `./tools/dm-npc.sh tag-quest "[Name]" quest-name`
+- Set the current location: `./tools/dm-npc.sh locate "[Name]" "[Location]"`
+- Link the NPC to a quest: `./tools/dm-world.sh add-edge "npc:<id>" "quest:<id>" involves`
 - Confirm success
 
 
@@ -159,9 +159,9 @@ Maximum: 400 words total
 
 Link NPCs to:
 - **Locations**: Where they work/live/frequent
-  - Use tags: `dm-npc.sh tag-location "[Name]" tavern-name city-name`
+  - Set the current location: `dm-npc.sh locate "[Name]" "[Location]"`
 - **Quests**: Current story involvement
-  - Use tags: `dm-npc.sh tag-quest "[Name]" main-quest side-quest`
+  - Add an `involves` edge: `dm-world.sh add-edge "npc:<id>" "quest:<id>" involves`
 - **Other NPCs**: Family, rivals, employers
 - **Factions**: Guilds, cults, governments
 - **Events**: Past consequences, future plans

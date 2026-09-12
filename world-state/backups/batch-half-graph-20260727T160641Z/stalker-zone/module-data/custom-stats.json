@@ -1,0 +1,159 @@
+{
+  "enabled": true,
+  "character_stats": {
+    "hunger": {
+      "min": 0,
+      "max": 100,
+      "value": 88
+    },
+    "thirst": {
+      "min": 0,
+      "max": 100,
+      "value": 78
+    },
+    "radiation": {
+      "current": 0,
+      "min": 0,
+      "max": 500
+    },
+    "fatigue": {
+      "min": 0,
+      "max": 100,
+      "value": 96
+    },
+    "psi": {
+      "current": 0,
+      "min": 0,
+      "max": 100
+    }
+  },
+  "rules": [
+    {
+      "stat": "hunger",
+      "per_hour": -3,
+      "sleep_rate": -1
+    },
+    {
+      "stat": "thirst",
+      "per_hour": -5,
+      "sleep_rate": -2
+    },
+    {
+      "stat": "radiation",
+      "per_hour": 0,
+      "description": "+2-5/hr в радиоактивных зонах, -1/hr с антирадом"
+    },
+    {
+      "stat": "fatigue",
+      "per_hour": -2,
+      "sleep_rate": 20,
+      "description": "Восстанавливается сном"
+    },
+    {
+      "stat": "psi",
+      "per_hour": 0,
+      "description": "+5-20 от пси-атак и контролёров, -5/hr в безопасности"
+    }
+  ],
+  "stat_consequences": {
+    "starvation": {
+      "condition": {
+        "stat": "hunger",
+        "operator": "<=",
+        "value": 0
+      },
+      "effects": [
+        {
+          "type": "hp_damage",
+          "amount": -2,
+          "per_hour": true
+        },
+        {
+          "type": "message",
+          "text": "Желудок сводит от голода. Руки дрожат."
+        }
+      ]
+    },
+    "dehydration": {
+      "condition": {
+        "stat": "thirst",
+        "operator": "<=",
+        "value": 0
+      },
+      "effects": [
+        {
+          "type": "hp_damage",
+          "amount": -3,
+          "per_hour": true
+        },
+        {
+          "type": "message",
+          "text": "Во рту пустыня. Зрение плывёт."
+        }
+      ]
+    },
+    "radiation_sickness": {
+      "condition": {
+        "stat": "radiation",
+        "operator": ">=",
+        "value": 80
+      },
+      "effects": [
+        {
+          "type": "hp_damage",
+          "amount": -1,
+          "per_hour": true
+        },
+        {
+          "type": "message",
+          "text": "Тошнит. Кожа зудит. Счётчик Гейгера надрывается."
+        }
+      ]
+    },
+    "radiation_death": {
+      "condition": {
+        "stat": "radiation",
+        "operator": ">=",
+        "value": 200
+      },
+      "effects": [
+        {
+          "type": "hp_damage",
+          "amount": -5,
+          "per_hour": true
+        },
+        {
+          "type": "message",
+          "text": "Волосы выпадают клоками. Привкус металла. Счёт идёт на часы."
+        }
+      ]
+    },
+    "exhaustion": {
+      "condition": {
+        "stat": "fatigue",
+        "operator": "<=",
+        "value": 10
+      },
+      "effects": [
+        {
+          "type": "message",
+          "text": "Ноги подкашиваются. Disadvantage на все физические проверки."
+        }
+      ]
+    },
+    "psi_breakdown": {
+      "condition": {
+        "stat": "psi",
+        "operator": ">=",
+        "value": 80
+      },
+      "effects": [
+        {
+          "type": "message",
+          "text": "Голоса в голове. Галлюцинации. WIS saves с disadvantage."
+        }
+      ]
+    }
+  },
+  "precise_time": "08:18"
+}

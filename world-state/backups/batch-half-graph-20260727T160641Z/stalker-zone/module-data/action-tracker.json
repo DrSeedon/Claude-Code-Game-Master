@@ -1,0 +1,977 @@
+{
+  "accounted": [
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "manual test",
+          "timestamp": "11:40:26",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "manual test",
+          "timestamp": "11:40:30",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "hook test",
+          "timestamp": "11:40:39",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "hook test debug",
+          "timestamp": "11:40:44",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "inline test",
+          "timestamp": "11:42:05",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Post-fix test",
+          "timestamp": "11:42:32",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[test] action tracker works",
+          "timestamp": "11:42:40",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "move",
+          "detail": "→ Ангар 2 (Свалка)",
+          "timestamp": "11:42:59",
+          "tool": "dm-session.sh"
+        }
+      ],
+      "elapsed": 0.5,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 8
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Test action 1",
+          "timestamp": "11:44:26",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Test action 2",
+          "timestamp": "11:44:26",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[test] test action 3",
+          "timestamp": "11:44:26",
+          "tool": "dm-note.sh"
+        }
+      ],
+      "elapsed": 0.5,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 3
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Spam roll 1",
+          "timestamp": "11:44:34",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 2",
+          "timestamp": "11:44:34",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 3",
+          "timestamp": "11:44:35",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 4",
+          "timestamp": "11:44:35",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 5",
+          "timestamp": "11:44:35",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 6",
+          "timestamp": "11:44:35",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 7",
+          "timestamp": "11:44:35",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 8",
+          "timestamp": "11:44:36",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 9",
+          "timestamp": "11:44:36",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 10",
+          "timestamp": "11:44:36",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 11",
+          "timestamp": "11:44:36",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 12",
+          "timestamp": "11:44:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 13",
+          "timestamp": "11:44:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 14",
+          "timestamp": "11:44:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 15",
+          "timestamp": "11:44:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Spam roll 16",
+          "timestamp": "11:44:38",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 0.0,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 16
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "WIS (Меченый) — наблюдение за циклом жарки",
+          "timestamp": "12:08:33",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "INT (Меченый) — тайминг вспышек",
+          "timestamp": "12:08:33",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "WIS (Жилистый) — наблюдение за жаркой",
+          "timestamp": "12:08:42",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Меченый) — найти длинный предмет в ангаре",
+          "timestamp": "12:08:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "DEX (Меченый) — подцепить артефакт арматурой после вспышки",
+          "timestamp": "12:08:59",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[session_events] Ангар 2: достал артефакт Огненный шар из жарки арматурой. Провалил тайминг (nat 1 INT) но DEX 17 хватило",
+          "timestamp": "12:09:12",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Stealth (Меченый) — подход к ангару 3",
+          "timestamp": "12:11:27",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Stealth (Жилистый) — подход к ангару 3",
+          "timestamp": "12:11:27",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Stealth (Лёха) — подход к ангару 3",
+          "timestamp": "12:11:27",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Бандиты в ангаре 3 (1-2: ушли, 3-4: в подвале, 5-6: наверху+подвал)",
+          "timestamp": "12:11:34",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Количество бандитов",
+          "timestamp": "12:11:34",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Бандиты в подвале) — слышат Жилистого?",
+          "timestamp": "12:11:39",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Меченый) — осмотр ангара 3, верхний уровень",
+          "timestamp": "12:11:47",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Жилистый) — осмотр ангара 3",
+          "timestamp": "12:11:47",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "move",
+          "detail": "→ Ангар 3 (Свалка)",
+          "timestamp": "12:11:53",
+          "tool": "dm-session.sh"
+        }
+      ],
+      "elapsed": 0.7,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 15
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Stealth (Меченый) — позиция у люка",
+          "timestamp": "12:16:15",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Stealth (Жилистый) — позиция напротив",
+          "timestamp": "12:16:15",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Stealth (Лёха) — позиция у стены",
+          "timestamp": "12:16:16",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Меченый) — подслушать разговор бандитов",
+          "timestamp": "12:16:22",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[session_events] Подслушал бандитов в подвале ангара 3: Филин — главарь, приедет завтра утром с машиной забрать груз. Двоих караванщиков убили, третий сбежал с пулей в ноге. 4 бандита, у одного мало патронов",
+          "timestamp": "12:16:51",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "update Пропавший караван Караван — засада бандитов по наводке. Двое убиты, один сбежал (ранен в ногу). Груз в подвале ангара 3. Филин заберёт завтра утром",
+          "timestamp": "12:16:52",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "objective Пропавший караван Найти выжившего караванщика add",
+          "timestamp": "12:16:52",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Часов ожидания до выхода бандита",
+          "timestamp": "12:20:01",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 1.0,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 8
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Кто вылез (1=главный, 2=молодой, 3=спокойный, 4=тихий)",
+          "timestamp": "12:20:11",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Surprise shot (Меченый) ПМ → Тихий бандит",
+          "timestamp": "12:20:19",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Surprise shot (Жилистый) АКМ → Тихий бандит",
+          "timestamp": "12:20:19",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Surprise shot (Лёха) ТОЗ-34 → Тихий бандит",
+          "timestamp": "12:20:20",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Damage АКМ (Жилистый) → Тихий (PEN 3 vs PROT 1 = FULL)",
+          "timestamp": "12:20:26",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Damage ТОЗ-34 (Лёха) → Тихий (PEN 1 vs PROT 1 = FULL)",
+          "timestamp": "12:20:27",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Меченый) — СДАВАЙТЕСЬ СУКИ",
+          "timestamp": "12:20:36",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Главный) — сдаться?",
+          "timestamp": "12:20:41",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Молодой) — сдаться?",
+          "timestamp": "12:20:41",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Спокойный) — сдаться?",
+          "timestamp": "12:20:42",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Меченый) — последний ультиматум",
+          "timestamp": "12:48:29",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Меченый) — найти горючее для дымовухи",
+          "timestamp": "12:48:29",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Жилистый) — горючее",
+          "timestamp": "12:48:34",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Лёха) — горючее",
+          "timestamp": "12:48:39",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Серый) — держится?",
+          "timestamp": "12:48:46",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Молодой) — ломается?",
+          "timestamp": "12:48:46",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Morale (Спокойный) — рационал?",
+          "timestamp": "12:48:46",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 0.1,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 17
+    },
+    {
+      "actions": [
+        {
+          "type": "note",
+          "detail": "[session_events] Ангар 3: Тихий убит при вылазке (surprise). Дымовая атака — трое сдались: Серый (главный), Молодой (обрез за поясом), Спокойный. Оружие изъято. Серый угрожает Филином",
+          "timestamp": "12:49:25",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Athletics (Жилистый) — связать троих бандитов",
+          "timestamp": "12:52:27",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Жилистый) — допрос Серого",
+          "timestamp": "12:52:28",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Меченый) — обыск подвала + груз",
+          "timestamp": "12:52:28",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Лёха) — обыск трупа + ангар",
+          "timestamp": "12:52:28",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Меченый) — допрос Спокойного (рационал)",
+          "timestamp": "12:52:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Меченый) — обыск подвала, дым осел",
+          "timestamp": "12:52:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Investigation (Лёха) — обыск мертвого Тихого",
+          "timestamp": "12:52:37",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Лут — оружие бандитов",
+          "timestamp": "12:52:44",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Лут — груз Сидоровича",
+          "timestamp": "12:52:45",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Лут — личные вещи бандитов",
+          "timestamp": "12:52:45",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "objective Пропавший караван Выяснить судьбу каравана complete",
+          "timestamp": "12:52:55",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "update Пропавший караван Груз найден в подвале ангара 3, частично разграблен. Бандиты связаны. Спокойный дал показания о Филине",
+          "timestamp": "12:52:56",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Меченый) — дожать Серого: кто наводчик",
+          "timestamp": "12:57:38",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Intimidation (Меченый, помощь Жилистого) — advantage",
+          "timestamp": "12:57:45",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 0.5,
+      "resolved_at": "Утро 15 марта 2012",
+      "action_count": 15
+    },
+    {
+      "actions": [
+        {
+          "type": "note",
+          "detail": "[npc_relations] Серый (бандит) — под давлением выдал наводчика: Жека Бритва из Бара. Жека сливал информацию о караванах Филину за долю",
+          "timestamp": "12:58:18",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "update Наводчик бандитов Филина — сливал маршруты караванов за долю. Серый выдал под давлением",
+          "timestamp": "12:58:24",
+          "tool": "dm-npc.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "update Пропавший караван Наводчик — Жека Бритва из Бара. Сливал маршруты Филину",
+          "timestamp": "12:58:25",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Меченый) — ищем рыжего по оврагу",
+          "timestamp": "13:08:42",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Жилистый) — ищем рыжего",
+          "timestamp": "13:08:42",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Survival (Меченый) — следы крови?",
+          "timestamp": "13:08:42",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Рыжий (1-2: мёртв, 3-4: жив еле, 5-6: жив в укрытии)",
+          "timestamp": "13:08:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Encounter по дороге?",
+          "timestamp": "13:08:50",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Encounter тип (1-2: мутанты, 3-4: сталкеры, 5-6: аномалия)",
+          "timestamp": "13:08:56",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Количество мутантов",
+          "timestamp": "13:09:02",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Тип (1: псы, 2: кабан, 3: плоть, 4: снорк)",
+          "timestamp": "13:09:02",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Меченый) — псы по дороге?",
+          "timestamp": "13:09:09",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Perception (Псы) — слышат колонну?",
+          "timestamp": "13:09:15",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Initiative (Меченый)",
+          "timestamp": "13:09:22",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Initiative (Жилистый)",
+          "timestamp": "13:09:23",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Initiative (Лёха)",
+          "timestamp": "13:09:23",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Initiative (Псы, стая)",
+          "timestamp": "13:09:23",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 0.75,
+      "resolved_at": "Позднее утро 15 марта 2012",
+      "action_count": 17
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Цели псов (1-2: бандиты, 3-4: Меченый, 5: Жилистый, 6: Лёха)",
+          "timestamp": "13:09:39",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Цели псов 2",
+          "timestamp": "13:09:39",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Цели псов 3",
+          "timestamp": "13:09:40",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Цели псов 4",
+          "timestamp": "13:09:40",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite (Пёс 1) → Меченый",
+          "timestamp": "13:09:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite dmg → Молодой (связан, auto-hit, PEN 0 vs PROT 0)",
+          "timestamp": "13:09:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite dmg → Серый (связан, auto-hit, PEN 0 vs PROT 1)",
+          "timestamp": "13:09:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite (Пёс 4) → Лёха",
+          "timestamp": "13:09:50",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite dmg → Лёха (PEN 0 vs PROT 2 = QUARTER)",
+          "timestamp": "13:09:55",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Меченый) ПМ → Пёс 1",
+          "timestamp": "13:10:06",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Жилистый) АКМ → Пёс 2 (на бандите)",
+          "timestamp": "13:10:07",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Жилистый) АКМ → Пёс 3 (на бандите)",
+          "timestamp": "13:10:07",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Лёха) ТОЗ-34 → Пёс 4",
+          "timestamp": "13:10:07",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "ПМ → Пёс 1 (FULL)",
+          "timestamp": "13:10:13",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "АКМ → Пёс 3 (FULL)",
+          "timestamp": "13:10:14",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "ТОЗ → Пёс 4 (FULL)",
+          "timestamp": "13:10:14",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite (Пёс 1, 3HP) → Меченый",
+          "timestamp": "13:10:23",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Bite (Пёс 2) → Молодой (auto-hit)",
+          "timestamp": "13:10:23",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Меченый) ПМ → Пёс 1 (3HP)",
+          "timestamp": "13:10:23",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Shot (Жилистый) АКМ → Пёс 2",
+          "timestamp": "13:10:24",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "CRIT Bite → Меченый (double dice, PEN 0 vs PROT 2 = QUARTER)",
+          "timestamp": "13:10:31",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "ПМ → Пёс 1 (FULL, добивающий)",
+          "timestamp": "13:10:32",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "АКМ → Пёс 2 (FULL)",
+          "timestamp": "13:10:32",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "hp -1",
+          "timestamp": "13:10:42",
+          "tool": "dm-npc.sh"
+        }
+      ],
+      "elapsed": 0.1,
+      "resolved_at": "Позднее утро 15 марта 2012",
+      "action_count": 24
+    },
+    {
+      "actions": [
+        {
+          "type": "note",
+          "detail": "[combat] Дорога обратно: 4 слепых пса напали на колонну. Молодой бандит загрызен. Остальные псы убиты за 2 раунда. Меченый -1HP (крит пса, жилет спас), Лёха -1HP",
+          "timestamp": "13:10:52",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "objective Пропавший караван Найти выжившего караванщика complete",
+          "timestamp": "13:11:16",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "update Пропавший караван Рыжий караванщик найден мёртвым в овраге — кровопотеря от пули в бедро. Молодой бандит загрызен слепыми псами. Итого: 2 пленных (Серый, Гриша), 2 мёртвых бандита, 3 мёртвых караванщика",
+          "timestamp": "13:11:16",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Encounter по дороге до Бара?",
+          "timestamp": "13:13:21",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "move",
+          "detail": "→ Бар 100 Рентген",
+          "timestamp": "13:13:22",
+          "tool": "dm-session.sh"
+        }
+      ],
+      "elapsed": 0.75,
+      "resolved_at": "Полдень 15 марта 2012",
+      "action_count": 5
+    },
+    {
+      "actions": [
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — выбить максимум из Сидоровича",
+          "timestamp": "13:16:08",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "update Меченый вернул груз каравана (3 ящика, частично разграблены). Узнал про Жеку Бритву. Заплатил 500₽ — 300 за инфо + 200 за груз. Отношение улучшилось",
+          "timestamp": "13:16:16",
+          "tool": "dm-npc.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "objective Пропавший караван Вернуть груз Сидоровичу complete",
+          "timestamp": "13:16:17",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "complete Пропавший караван Груз возвращён Сидоровичу. Караванщики мертвы (3 из 5). Бандиты: 2 убиты, 2 сданы Долгу. Наводчик — Жека Бритва, инфа передана Долгу. Филин — Тёмная долина, ~15 бандитов, ждал груз завтра",
+          "timestamp": "13:16:23",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — доклад Долговцу, репутация",
+          "timestamp": "13:16:32",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[session_events] Вернулись в Бар. Груз сдан Сидоровичу — 500₽. Пленные сданы Долгу. Инфо про Жеку Бритву шепнули Долговцу. Квест Пропавший караван — ВЫПОЛНЕН",
+          "timestamp": "13:16:40",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — подойти к Чёрному с артефактом",
+          "timestamp": "13:19:43",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — торг с Чёрным, цена артефакта",
+          "timestamp": "13:19:49",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "update Меченый продал артефакт Огненный шар за 400₽. Первый контакт — деловой, без лишних слов",
+          "timestamp": "13:20:11",
+          "tool": "dm-npc.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — продать 3 потёртых АК Сидоровичу",
+          "timestamp": "13:20:18",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 0.3,
+      "resolved_at": "Полдень 15 марта 2012",
+      "action_count": 10
+    },
+    {
+      "actions": [
+        {
+          "type": "note",
+          "detail": "[session_events] Отдых в баре: поел, попил, поспал 6 часов. HP восстановлены до максимума. Полная готовность к вечеру",
+          "timestamp": "13:42:20",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — Волк, тайные тропы",
+          "timestamp": "13:58:38",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "note",
+          "detail": "[world_lore] Волк раскрыл: 1) Тропа через Жёлтый лес к Агропрому (мало аномалий, обход Долга). 2) Старый коллектор от ручья за Свалкой до Тёмной долины (2ч, выход за лагерем Филина). 3) Тайник Волка под НИИ Агропром — вход через вентшахту на крыше. Синяя флешка для Круглова",
+          "timestamp": "13:59:11",
+          "tool": "dm-note.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "update Раскрыл тайные тропы Меченому. Попросил достать синюю флешку из тайника под НИИ Агропром",
+          "timestamp": "13:59:11",
+          "tool": "dm-npc.sh"
+        },
+        {
+          "type": "quest",
+          "detail": "add Флешка Волка --type side --description Волк просит достать синюю флешку из тайника под НИИ Агропром. Вход через вентшахту на крыше. Данные для Круглова — он заплатит. Волку — информацию, Меченому — деньги --objectives Добраться до НИИ Агропром,Найти вентшахту на крыше,Забрать синюю флешку из тайника,Вернуть флешку Волку",
+          "timestamp": "13:59:12",
+          "tool": "dm-plot.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Количество новых заданий на доске",
+          "timestamp": "13:59:17",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "npc",
+          "detail": "update Повесил объявление — ищет проводника до Янтаря. 3 учёных, выход послезавтра. 800₽ + бесплатный анализ артефактов",
+          "timestamp": "13:59:32",
+          "tool": "dm-npc.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Persuasion (Меченый) — расспросить Круглова про Янтарь",
+          "timestamp": "14:04:45",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "Athletics (Меченый) — тренировка стрельбы АК-74",
+          "timestamp": "14:04:51",
+          "tool": "dm-roll.sh"
+        },
+        {
+          "type": "roll",
+          "detail": "HP gain (Fighter d10 + CON mod +2)",
+          "timestamp": "14:05:12",
+          "tool": "dm-roll.sh"
+        }
+      ],
+      "elapsed": 2.0,
+      "resolved_at": "Поздний вечер 15 марта 2012",
+      "action_count": 10
+    }
+  ],
+  "pending": []
+}

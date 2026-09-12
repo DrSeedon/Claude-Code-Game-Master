@@ -1,0 +1,313 @@
+{
+  "enabled": true,
+  "weapons": {
+    "PM": {
+      "damage": "2d4",
+      "pen": 1,
+      "rpm": 30,
+      "magazine": 8,
+      "type": "pistol"
+    },
+    "Fort-12": {
+      "damage": "2d4+1",
+      "pen": 2,
+      "rpm": 30,
+      "magazine": 12,
+      "type": "pistol"
+    },
+    "AKM": {
+      "damage": "2d6+2",
+      "pen": 3,
+      "rpm": 600,
+      "magazine": 30,
+      "type": "assault_rifle"
+    },
+    "AK-74": {
+      "damage": "2d6+2",
+      "pen": 3,
+      "rpm": 650,
+      "magazine": 30,
+      "type": "assault_rifle"
+    },
+    "АС Вал": {
+      "damage": "2d6+3",
+      "pen": 4,
+      "rpm": 900,
+      "magazine": 20,
+      "type": "assault_rifle"
+    },
+    "OTs-14 Гроза": {
+      "damage": "2d8+2",
+      "pen": 4,
+      "rpm": 700,
+      "magazine": 20,
+      "type": "assault_rifle"
+    },
+    "MP5": {
+      "damage": "2d4+2",
+      "pen": 2,
+      "rpm": 800,
+      "magazine": 30,
+      "type": "smg"
+    },
+    "SPAS-12": {
+      "damage": "2d8+3",
+      "pen": 2,
+      "rpm": 30,
+      "magazine": 8,
+      "type": "shotgun"
+    },
+    "ТОЗ-34": {
+      "damage": "2d8+1",
+      "pen": 1,
+      "rpm": 15,
+      "magazine": 2,
+      "type": "shotgun"
+    },
+    "СВД": {
+      "damage": "2d10+4",
+      "pen": 5,
+      "rpm": 30,
+      "magazine": 10,
+      "type": "sniper_rifle"
+    },
+    "Винторез": {
+      "damage": "2d8+3",
+      "pen": 4,
+      "rpm": 30,
+      "magazine": 10,
+      "type": "sniper_rifle"
+    },
+    "РПГ-7": {
+      "damage": "8d6",
+      "pen": 10,
+      "rpm": 3,
+      "magazine": 1,
+      "type": "heavy"
+    },
+    "Гаусс-пушка": {
+      "damage": "4d12+6",
+      "pen": 10,
+      "rpm": 10,
+      "magazine": 3,
+      "type": "sniper_rifle"
+    }
+  },
+  "fire_modes": {
+    "single": {
+      "attacks": 1,
+      "ammo": 1,
+      "penalty": 0
+    },
+    "burst": {
+      "penalty_per_shot": -3,
+      "penalty_per_shot_sharpshooter": -2
+    },
+    "full_auto": {
+      "penalty_per_shot": -3,
+      "penalty_per_shot_sharpshooter": -2,
+      "max_shots_per_target": 10
+    }
+  },
+  "armor": {
+    "Без брони": {
+      "prot": 0,
+      "ac_bonus": 0
+    },
+    "Кожаная куртка": {
+      "prot": 1,
+      "ac_bonus": 1
+    },
+    "Бандитский жилет": {
+      "prot": 2,
+      "ac_bonus": 1
+    },
+    "Армейский бронежилет": {
+      "prot": 3,
+      "ac_bonus": 3
+    },
+    "Комбинезон «Заря»": {
+      "prot": 3,
+      "ac_bonus": 2,
+      "notes": "Радиозащита +30%"
+    },
+    "Бронекостюм «Булат»": {
+      "prot": 5,
+      "ac_bonus": 4
+    },
+    "Научный комбинезон СЕВА": {
+      "prot": 4,
+      "ac_bonus": 3,
+      "notes": "Полная радиозащита, аномалии -50%"
+    },
+    "Экзоскелет": {
+      "prot": 7,
+      "ac_bonus": 5,
+      "notes": "STR +4, DEX -2, нельзя бегать тихо"
+    }
+  },
+  "bestiary": {
+    "Слепой пёс": {
+      "hp": 8,
+      "ac": 12,
+      "prot": 0,
+      "attack": "+3",
+      "damage": "1d6+1",
+      "speed": 40,
+      "cr": "1/4",
+      "xp": 50,
+      "notes": "Стая 3-6, атакуют вместе"
+    },
+    "Кабан": {
+      "hp": 19,
+      "ac": 13,
+      "prot": 2,
+      "attack": "+4",
+      "damage": "1d8+3",
+      "speed": 40,
+      "cr": "1/2",
+      "xp": 100,
+      "notes": "Charge: +1d8 при разбеге"
+    },
+    "Плоть": {
+      "hp": 26,
+      "ac": 11,
+      "prot": 1,
+      "attack": "+3",
+      "damage": "1d10+2",
+      "speed": 25,
+      "cr": "1",
+      "xp": 200,
+      "notes": "Медленная, тупая, живучая"
+    },
+    "Снорк": {
+      "hp": 22,
+      "ac": 14,
+      "prot": 1,
+      "attack": "+5",
+      "damage": "1d8+3",
+      "speed": 50,
+      "cr": "2",
+      "xp": 450,
+      "notes": "Прыжковая атака, DC 13 DEX или сбивает"
+    },
+    "Кровосос": {
+      "hp": 65,
+      "ac": 16,
+      "prot": 3,
+      "attack": "+7",
+      "damage": "2d6+4",
+      "speed": 40,
+      "cr": "5",
+      "xp": 1800,
+      "notes": "Невидимость, захват DC 15 STR или 2d8 drain/раунд"
+    },
+    "Контролёр": {
+      "hp": 45,
+      "ac": 12,
+      "prot": 1,
+      "attack": "+3",
+      "damage": "1d4",
+      "speed": 25,
+      "cr": "6",
+      "xp": 2300,
+      "notes": "Пси-контроль DC 16 WIS, зомбирует жертву"
+    },
+    "Псевдогигант": {
+      "hp": 120,
+      "ac": 16,
+      "prot": 6,
+      "attack": "+8",
+      "damage": "3d8+6",
+      "speed": 30,
+      "cr": "8",
+      "xp": 3900,
+      "notes": "Удар землёй: DC 16 DEX всем в 15 фт, 2d10"
+    },
+    "Химера": {
+      "hp": 95,
+      "ac": 17,
+      "prot": 4,
+      "attack": "+9",
+      "damage": "2d10+5",
+      "speed": 50,
+      "cr": "7",
+      "xp": 2900,
+      "notes": "Два прыжка за раунд, двойная атака"
+    },
+    "Бандит": {
+      "hp": 11,
+      "ac": 12,
+      "prot": 1,
+      "attack": "+3",
+      "damage": "by weapon",
+      "speed": 30,
+      "cr": "1/4",
+      "xp": 50
+    },
+    "Бандит-ветеран": {
+      "hp": 32,
+      "ac": 14,
+      "prot": 3,
+      "attack": "+5",
+      "damage": "by weapon",
+      "speed": 30,
+      "cr": "2",
+      "xp": 450
+    },
+    "Военный": {
+      "hp": 22,
+      "ac": 15,
+      "prot": 4,
+      "attack": "+5",
+      "damage": "by weapon",
+      "speed": 30,
+      "cr": "1",
+      "xp": 200
+    },
+    "Наёмник": {
+      "hp": 40,
+      "ac": 16,
+      "prot": 5,
+      "attack": "+6",
+      "damage": "by weapon",
+      "speed": 30,
+      "cr": "3",
+      "xp": 700
+    },
+    "Монолитовец": {
+      "hp": 45,
+      "ac": 16,
+      "prot": 5,
+      "attack": "+6",
+      "damage": "by weapon",
+      "speed": 30,
+      "cr": "3",
+      "xp": 700,
+      "notes": "Фанатик, не отступает, никогда"
+    }
+  },
+  "combat_rules": {
+    "headshot": "Натуральная 20 = тройной урон",
+    "cover": "Полное укрытие +5 AC, частичное +2 AC",
+    "suppression": "Full auto зона подавления 15 фт, DEX DC 14 или Prone",
+    "bleed": "Крит от когтей/клыков = 1d4 кровотечение/раунд до Medicine DC 12",
+    "morale": "50%+ союзников мертвы: WIS DC 10 или бегство (не действует на мутантов и Монолит)",
+    "anomaly_combat": "Бой в аномальном поле: каждый раунд DEX DC 12 или получить урон аномалии"
+  },
+  "range_rules": {
+    "close": "+2 атака (до 10м)",
+    "normal": "+0 (10-50м)",
+    "long": "-2 (50-100м)",
+    "beyond_long": "Disadvantage (100м+)"
+  },
+  "penetration_vs_armor": {
+    "pen_greater": "PEN > PROT = полный урон",
+    "pen_equal_or_less": "PEN <= PROT = половина урона",
+    "pen_half_or_less": "PEN <= PROT/2 = четверть урона"
+  },
+  "combat_style": {
+    "style": "hybrid_lethal",
+    "comment": "Мелкие стычки = 1-3 броска нарративно. Серьёзные бои = полный пошаговый."
+  }
+}

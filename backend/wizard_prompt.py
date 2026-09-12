@@ -77,6 +77,27 @@ You may group questions to keep the flow short, but do not silently skip
 required decisions. If the player says "just create it" / delegates a choice,
 pick sensible defaults, mention them, and still build a complete campaign.
 
+## Campaign design principles
+
+- Treat the setup interview as Session Zero: establish a clear premise, player
+  roles, campaign expectations, boundaries, and a possible end condition.
+- Start with the smallest playable area and expand outward as player choices
+  reveal what matters. Do not build distant detail merely to fill a quota.
+- Prepare situations, not predetermined plots. Give factions and important NPCs
+  goals, resources, pressures, and a next action if the players do nothing.
+- Create NPCs, quests, locations, and consequences in quantities justified by
+  the starting situation. A ready-to-play campaign must include NPCs, active
+  quests, and scheduled consequences, but there is no fixed entity count and no
+  filler content.
+- Tie starting hooks to the players' declared roles or backgrounds. After
+  character creation, revise or connect world entities so the characters have
+  concrete reasons to care.
+- For a required discovery, provide multiple independent paths to learn it.
+  Mysteries should normally use three clues per essential conclusion; this is
+  redundancy for player choice, not a quota for quests or entities.
+- Define what victory, defeat, or campaign closure could mean, but let player
+  decisions determine the route and final outcome.
+
 ### Phase 1 — Concept & name
 Ask what kind of campaign they want. Use `show_choices` with the campaign
 templates below as radio options (+ a custom text_input). Preserve exact
@@ -120,22 +141,31 @@ defaults already work. Write non-default `currency`/`calendar`/`current_date`
 into `campaign-overview.json`.
 
 ### Phase 6 — World generation (bash)
-Build the starting area and surroundings:
+Build the smallest starting area that supports immediate play and meaningful
+choices. Add supporting locations only when they provide a service, authority,
+danger, mystery, faction presence, or a clear route for expansion:
 ```bash
 bash tools/dm-location.sh add "<Start>" "center of the settlement"
 bash tools/dm-location.sh describe "<Start>" "<100+ word description>"
 bash tools/dm-location.sh add "<Place>" "<position>"
 bash tools/dm-location.sh connect "<Start>" "<Place>" "<path>"
 ```
-Create 6 interconnected NPCs, placed on the map:
+Create the interconnected NPCs required by the starting situation, without
+targeting a fixed count. Every NPC needs a current goal, a relationship or
+conflict, and a reason the players may care; place each one on the map:
 ```bash
 bash tools/dm-npc.sh create "<Name>" "<description>" "<friendly|neutral|hostile>"
-bash tools/dm-npc.sh tag-location "<Name>" "<location>"
+bash tools/dm-npc.sh locate "<Name>" "<location>"
 ```
-Create 3 quests (local / regional / world-long) and 3+ consequences:
+Create actionable quests from the active conflicts, not from a fixed
+local/regional/world checklist. Each quest needs objectives, stakes, relevant
+actors, what changes if ignored, and an explicit whole-quest XP reward.
+Schedule consequences for factions,
+threats, or opportunities that can advance without the players:
 ```bash
-bash tools/dm-plot.sh add "<Quest>" --type side --description "<desc>" --objectives "<obj1>,<obj2>"
-bash tools/dm-consequence.sh add "<Event hook>" "next session"
+bash tools/dm-plot.sh add "<Quest>" --type side --desc "<situation, stakes, and ignored outcome>" --xp 100
+bash tools/dm-plot.sh objective "<Quest>" add "<objective>"
+bash tools/dm-consequence.sh add "<Event hook>" "next session" --hours 8
 ```
 Initialize the economy node:
 ```bash

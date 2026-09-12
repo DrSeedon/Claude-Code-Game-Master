@@ -485,10 +485,54 @@ def _resolve_skill(char, skill_name):
     """Get skill modifier and dc_mod from character."""
     skills = char.get('skills', {})
     for name, data in skills.items():
-        if name.lower() == skill_name.lower():
+        if name.casefold() == skill_name.casefold():
             if isinstance(data, dict):
                 return data.get('total', 0), data.get('dc_mod', 0), name
             return int(data), 0, name
+
+    ability_by_skill = {
+        "athletics": "str",
+        "атлетика": "str",
+        "acrobatics": "dex",
+        "акробатика": "dex",
+        "sleight of hand": "dex",
+        "ловкость рук": "dex",
+        "stealth": "dex",
+        "скрытность": "dex",
+        "arcana": "int",
+        "магия": "int",
+        "history": "int",
+        "история": "int",
+        "investigation": "int",
+        "расследование": "int",
+        "nature": "int",
+        "природа": "int",
+        "religion": "int",
+        "религия": "int",
+        "animal handling": "wis",
+        "уход за животными": "wis",
+        "insight": "wis",
+        "проницательность": "wis",
+        "medicine": "wis",
+        "медицина": "wis",
+        "perception": "wis",
+        "внимательность": "wis",
+        "survival": "wis",
+        "выживание": "wis",
+        "deception": "cha",
+        "обман": "cha",
+        "intimidation": "cha",
+        "запугивание": "cha",
+        "performance": "cha",
+        "выступление": "cha",
+        "persuasion": "cha",
+        "убеждение": "cha",
+    }
+    stat_key = ability_by_skill.get(skill_name.strip().casefold())
+    if stat_key:
+        stats = char.get("stats") or char.get("abilities") or {}
+        stat_value = int(stats.get(stat_key, 10))
+        return (stat_value - 10) // 2, 0, skill_name
     return None, None, None
 
 
@@ -551,9 +595,18 @@ def _resolve_attack(char, weapon_name=None):
         stat_name = target_weapon.get('stat', 'str')
         stat_val = stats.get(stat_name, 10)
         stat_mod = (stat_val - 10) // 2
-        prof_bonus = proficiency if target_weapon.get('proficient') else 0
-        weapon_bonus = target_weapon.get('bonus', 0)
-        total = stat_mod + prof_bonus + weapon_bonus
+        explicit_attack_bonus = first_present(
+            target_weapon,
+            "attack_bonus",
+            "to_hit",
+            "atk",
+        )
+        if explicit_attack_bonus is not None:
+            total = int(explicit_attack_bonus)
+        else:
+            prof_bonus = proficiency if target_weapon.get('proficient', True) else 0
+            weapon_bonus = target_weapon.get('bonus', 0)
+            total = stat_mod + prof_bonus + weapon_bonus
         name = target_weapon.get('name', '?')
         damage = target_weapon.get('damage', '1d4')
         ammo = target_weapon.get('ammo_type', None)
@@ -598,10 +651,13 @@ def _persist_auto_damage(
     else:
         final_damage = int(result["damage"])
         details = str(result.get("details", ""))
-    transition = WorldGraph(campaign_dir).apply_damage(target_id, final_damage)
+    transition = WorldGraph(campaign_dir).apply_combat_damage(
+        target_id,
+        final_damage,
+    )
     if not transition:
         raise RuntimeError(f"Failed to apply damage to {target_id}")
-    return final_damage, details, transition
+    return final_damage, details, transition, transition["xp_awarded"]
 
 
 def _load_spell(name):
@@ -994,7 +1050,7 @@ def main():
                 dmg_line = format_enhanced(dmg_result, label="Damage")
             print(dmg_line)
             if damage_target_id:
-                final_damage, profile_details, transition = _persist_auto_damage(
+                final_damage, profile_details, transition, xp_awarded = _persist_auto_damage(
                     damage_target_id,
                     dmg_result["total"],
                     damage_attacker_profile,
@@ -1009,6 +1065,8 @@ def main():
                     f"{profile_output} -> {transition['name']}:"
                     f" {transition['old_hp']} -> {transition['new_hp']} HP"
                 )
+                if xp_awarded:
+                    print(f"  +{xp_awarded} XP (automatic)")
         elif damage_dice and not is_hit:
             pass
 

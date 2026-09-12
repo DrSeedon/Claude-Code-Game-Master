@@ -1,0 +1,41 @@
+{
+  "campaign_name": "Хроники Пьяного Посоха",
+  "genre": "Comedy Fantasy",
+  "tone": {
+    "horror": 10,
+    "comedy": 70,
+    "drama": 20
+  },
+  "current_date": "24-е Жнивня, 1247 год от Великого Похмелья",
+  "time_of_day": "Вечер",
+  "player_position": {
+    "current_location": "Таверна 'Дырявый Котёл и Полный Стакан'",
+    "previous_location": "Вход в подземелья Гнилоозёрска",
+    "arrival_time": "2026-03-15 10:51:57 UTC"
+  },
+  "current_character": "Стив Хуйс",
+  "session_count": 0,
+  "advanced_mode": true,
+  "narrator_style": "pratchett",
+  "campaign_rules": {
+    "narrator": "Terry Pratchett style — sarcastic omniscient narrator with footnotes, puns, absurd metaphors, dark humor. Narrator comments on events like an exasperated god watching idiots. Russian humor adapted — wordplay, absurd names, cultural references.",
+    "world_rules": [
+      "Magic works but is unreliable and often ironic in its results",
+      "Gods exist and are petty, bored, and love gambling on mortal fates",
+      "Death is a character who SPEAKS IN CAPS and has a dry sense of humor",
+      "Heroism is real but mostly accidental",
+      "Bureaucracy is the true evil — dungeons have health and safety regulations",
+      "Every tavern has a mysterious stranger with a quest. It's basically a job board with ale",
+      "NPCs have full inner lives and absolutely no patience for adventurers"
+    ],
+    "difficulty": "hard",
+    "permadeath": false,
+    "style_notes": "All NPC names are Russian, colorful, and slightly absurd. Humor is constant but doesn't undermine stakes — people can die funny deaths but they're still dead. Combat is dangerous and fair."
+  },
+  "modules": {
+    "enhanced-dice": true,
+    "inventory-system": true
+  },
+  "schema_version": 2,
+  "name": "pratchett-dungeon"
+}

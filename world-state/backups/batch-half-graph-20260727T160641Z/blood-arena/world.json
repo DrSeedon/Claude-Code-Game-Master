@@ -1,0 +1,474 @@
+{
+  "meta": {
+    "version": 2,
+    "schema": "graph",
+    "revision": 1
+  },
+  "nodes": {
+    "player:active": {
+      "type": "player",
+      "name": "Стив Хуйс IV 'Дерьмомёт'",
+      "data": {
+        "id": "стив-хуйс-iv",
+        "race": "Человек",
+        "class": "Файтер",
+        "level": 2,
+        "hp": {
+          "current": 23,
+          "max": 23
+        },
+        "ac": 16,
+        "stats": {
+          "str": 14,
+          "dex": 16,
+          "con": 15,
+          "int": 9,
+          "wis": 13,
+          "cha": 11
+        },
+        "saves": {
+          "str": 4,
+          "dex": 3,
+          "con": 4,
+          "int": -1,
+          "wis": 1,
+          "cha": 0
+        },
+        "skills": {
+          "perception": 3,
+          "athletics": 4
+        },
+        "equipment": {
+          "armor": "Чешуйчатая броня (AC 14 + DEX max 2) + Щит (+2 AC) — наследие Дерьмомёта",
+          "weapons": [
+            "Длинный лук (1d8 колющего, +7 к атаке, 150/600 ft)",
+            "Короткий меч (1d6 колющего, finesse, +5 к атаке)"
+          ],
+          "items": []
+        },
+        "features": [
+          "Fighting Style: Archery (+2 к дальним атакам)",
+          "Second Wind: бонус-действие, хил 1d10+2, 1/short rest",
+          "Action Surge: доп. действие 1/short rest",
+          "Proficiency: все оружия, все доспехи, щиты"
+        ],
+        "background": "Раб ('Дерьмомёт Перерождённый')",
+        "alignment": "Chaotic Neutral",
+        "bonds": "Имя Дерьмомёта будет жить вечно",
+        "flaws": "Фамилия (проклятая, 4-е поколение)",
+        "ideals": "Стрелять, поджигать, не подходить",
+        "traits": "Человек. Обычный. Но с именем, которое заставляет толпу реветь.",
+        "notes": [
+          "Стив I 'Дерьмомёт' (Человек Варвар) — убит огром на Лавовых Мостах",
+          "Стив II (Полуорк Файтер) — убит гулем с 2 HP в Затопленных Руинах",
+          "Стив III (Тифлинг Файтер) — убит гоблином-снайпером в Теневом Лесу"
+        ],
+        "gold": 235,
+        "xp": {
+          "current": 887,
+          "next_level": 900
+        },
+        "current_location": "Рабские Загоны"
+      }
+    },
+    "location:rabskie-zagony": {
+      "type": "location",
+      "name": "Рабские Загоны",
+      "data": {
+        "position": "Вонючие подземелья под Колизеем Кровавого Солнца. Ржавые клетки на двадцать человек, солома на полу, крысы наглее заключённых. Стены исцарапаны именами тех, кто был до тебя. Большинство зачёркнуты.",
+        "description": "",
+        "discovered": "2026-03-07T11:12:23.942655+00:00"
+      }
+    },
+    "location:kolizey-krovavogo-solntsa": {
+      "type": "location",
+      "name": "Колизей Кровавого Солнца",
+      "data": {
+        "position": "Жемчужина столицы Империи Ашкар. Овальная арена 300 на 200 футов, песок пропитанный кровью поколений. Пятьдесят тысяч мест. Под ареной — люки, ловушки и подъёмники для монстров.",
+        "description": "",
+        "discovered": "2026-03-07T11:12:24.056331+00:00"
+      }
+    },
+    "location:chyornyy-bazar": {
+      "type": "location",
+      "name": "Чёрный Базар",
+      "data": {
+        "position": "Катакомбы под восточной трибуной. Тусклые фонари, шёпот, звон монет. Торговцы не спрашивают имён.",
+        "description": "",
+        "discovered": "2026-03-07T11:12:24.173421+00:00"
+      }
+    },
+    "location:kamorka-kostoprava": {
+      "type": "location",
+      "name": "Каморка Костоправа",
+      "data": {
+        "position": "Тесная комнатка между загонами и ареной. Пахнет спиртом, травами и отчаянием.",
+        "description": "",
+        "discovered": "2026-03-07T11:12:24.289056+00:00"
+      }
+    },
+    "location:imperatorskaya-lozha": {
+      "type": "location",
+      "name": "Императорская Ложа",
+      "data": {
+        "position": "Пурпурные шторы, золотые перила. Император Тиберий Валькор Третий с бокалом вина. Палец вверх — живёшь. Вниз — нет.",
+        "description": "",
+        "discovered": "2026-03-07T11:12:24.407398+00:00"
+      }
+    },
+    "location:yama-arena": {
+      "type": "location",
+      "name": "Яма (Арена)",
+      "data": {
+        "position": "unknown",
+        "description": "",
+        "discovered": "2026-03-07 12:17:11 UTC"
+      }
+    },
+    "location:magazin-zagonov": {
+      "type": "location",
+      "name": "Магазин Загонов",
+      "data": {
+        "position": "unknown",
+        "description": "",
+        "discovered": "2026-03-07 13:51:55 UTC"
+      }
+    },
+    "npc:graksus": {
+      "type": "npc",
+      "name": "Граксус",
+      "data": {
+        "description": "Ланиста — владелец гладиаторов. Бывший боец, шрам через всё лицо, золотые кольца на каждом пальце. Купил тебя за 200 золотых. Говорит тихо, бьёт сильно.",
+        "attitude": "hostile",
+        "created": "2026-03-07T11:12:42.442876+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "npc:martsell": {
+      "type": "npc",
+      "name": "Марцелл",
+      "data": {
+        "description": "Костоправ Колизея. Тощий старик с трясущимися руками, которые не трясутся когда режут. Лечит за деньги, сочувствует бесплатно.",
+        "attitude": "friendly",
+        "created": "2026-03-07T11:12:42.516828+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "npc:veshka": {
+      "type": "npc",
+      "name": "Вешка",
+      "data": {
+        "description": "Гоблинка-торговка на Чёрном Базаре. Метр ростом, три метра наглости. Продаёт всё от ядов до слухов. Любит делать ставки на бои.",
+        "attitude": "neutral",
+        "created": "2026-03-07T11:12:42.609942+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "npc:zheleznyy-kral": {
+      "type": "npc",
+      "name": "Железный Крал",
+      "data": {
+        "description": "Действующий Чемпион арены. Полуорк-варвар, два метра мышц и ярости. Не проиграл ни одного боя за 3 года. Молчалив.",
+        "attitude": "hostile",
+        "created": "2026-03-07T11:12:42.681821+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "npc:lissa": {
+      "type": "npc",
+      "name": "Лисса",
+      "data": {
+        "description": "Рабыня-эльфийка в загонах. Бывшая воровка, попалась на краже у сенатора. Знает все ходы под ареной, все секреты, все слабости.",
+        "attitude": "suspicious",
+        "created": "2026-03-07T11:12:42.757743+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "npc:imperator-valkor": {
+      "type": "npc",
+      "name": "Император Валькор",
+      "data": {
+        "description": "Тиберий Валькор Третий. Скучающий тиран на золотом троне. Любит зрелища, ненавидит предсказуемость. Скучный бой — оба могут не выйти живыми.",
+        "attitude": "indifferent",
+        "created": "2026-03-07T11:12:42.831526+00:00",
+        "events": [],
+        "tags": {
+          "locations": [],
+          "quests": []
+        }
+      }
+    },
+    "fact:legacy-ac2e5766da3e": {
+      "type": "fact",
+      "name": "[combat] Стив Хуйс убил гигантскую крысу в Яме го",
+      "data": {
+        "timestamp": "2026-03-07T12:43:16.385763+00:00",
+        "category": "combat",
+        "text": "Стив Хуйс убил гигантскую крысу в Яме голыми руками — вырвал ей зуб из своей руки и воткнул в глаз (нат 20). Толпа прозвала его Дерьмомёт."
+      }
+    },
+    "fact:legacy-dc20ebcb5a8e": {
+      "type": "fact",
+      "name": "[combat] Стив убил волка Серый Клык в Яме. Прижал",
+      "data": {
+        "timestamp": "2026-03-07T13:48:14.402891+00:00",
+        "category": "combat",
+        "text": "Стив убил волка Серый Клык в Яме. Прижал коленом, приставил копьё к горлу, потом прирезал быстро чтобы не мучался. Толпа букала за милосердие."
+      }
+    },
+    "fact:legacy-bf29331a8e25": {
+      "type": "fact",
+      "name": "[combat] Стив убил гоблина-реванш кинжалом — нат ",
+      "data": {
+        "timestamp": "2026-03-07T14:37:05.412787+00:00",
+        "category": "combat",
+        "text": "Стив убил гоблина-реванш кинжалом — нат 20 крит в финале. Стал рангом Боец."
+      }
+    },
+    "fact:legacy-4562b1ad9047": {
+      "type": "fact",
+      "name": "[session_events] Стив Хуйс выбрал класс Варвар и получил ",
+      "data": {
+        "timestamp": "2026-03-07T13:10:45.766612+00:00",
+        "category": "session_events",
+        "text": "Стив Хуйс выбрал класс Варвар и получил Копьё за первую победу на арене"
+      }
+    },
+    "fact:legacy-69c31f1e00d5": {
+      "type": "fact",
+      "name": "[session_events] Стив купил щит AC+2, AC теперь 13. Трени",
+      "data": {
+        "timestamp": "2026-03-07T14:06:52.140107+00:00",
+        "category": "session_events",
+        "text": "Стив купил щит AC+2, AC теперь 13. Тренировка: спарринг +1 к первой атаке следующего боя."
+      }
+    },
+    "fact:legacy-232d2d904804": {
+      "type": "fact",
+      "name": "[add] Стив III тактика: АДСКИЙ КАЙТИНГ — держа",
+      "data": {
+        "timestamp": "2026-03-08T11:44:09.648471+00:00",
+        "category": "add",
+        "text": "Стив III тактика: АДСКИЙ КАЙТИНГ — держать 100+ ft, отбегать и стрелять. Масло между собой и врагом как стену, НЕ под себя. Огненные стрелы через стену огня."
+      }
+    },
+    "consequence:legacy-67db86a0": {
+      "type": "consequence",
+      "name": "Лисса шепчет из соседней клетки ночью — ",
+      "data": {
+        "trigger": "2 days",
+        "created": "2026-03-07T11:13:04.447604+00:00",
+        "description": "Лисса шепчет из соседней клетки ночью — она что-то знает",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-f3f413b6": {
+      "type": "consequence",
+      "name": "Слухи о Турнире Века ползут по загонам",
+      "data": {
+        "trigger": "1 week",
+        "created": "2026-03-07T11:13:04.578620+00:00",
+        "description": "Слухи о Турнире Века ползут по загонам",
+        "status": "pending"
+      }
+    },
+    "consequence:legacy-da098bf1": {
+      "type": "consequence",
+      "name": "Граксус бросает тебя на первый бой — без",
+      "data": {
+        "trigger": "next session",
+        "created": "2026-03-07T11:13:04.294011+00:00",
+        "resolved": "2026-03-07T12:17:15.796035+00:00",
+        "description": "Граксус бросает тебя на первый бой — без оружия, без брони",
+        "status": "resolved"
+      }
+    },
+    "quest:pervaya-krov": {
+      "type": "quest",
+      "name": "Первая Кровь",
+      "data": {
+        "status": "active",
+        "description": "Ты — свежее мясо. Граксус бросает тебя на арену в первый же день. Выживи, покажи что стоишь больше чем 200 золотых, или твоё тело скормят псам.",
+        "objectives": [
+          {
+            "text": "Выжить в первом бою",
+            "done": false
+          },
+          {
+            "text": "Заработать базовое оружие",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-07T11:12:57.676033+00:00",
+        "quest_type": "side"
+      }
+    },
+    "quest:podzemelya": {
+      "type": "quest",
+      "name": "Подземелья",
+      "data": {
+        "status": "active",
+        "description": "Лисса намекает что под ареной есть тоннели, ведущие наружу. Но путь проходит через старые ловушки и что-то живое в темноте. Свобода — или ещё одна клетка побольше.",
+        "objectives": [
+          {
+            "text": "Узнать про тоннели от Лиссы",
+            "done": false
+          },
+          {
+            "text": "Найти вход в старые катакомбы",
+            "done": false
+          },
+          {
+            "text": "Решить — бежать или стать легендой",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-07T11:12:57.752672+00:00",
+        "quest_type": "mystery"
+      }
+    },
+    "quest:zheleznyy-tron": {
+      "type": "quest",
+      "name": "Железный Трон",
+      "data": {
+        "status": "active",
+        "description": "Железный Крал — непобедимый чемпион. Император скучает. Слухи о Турнире Века — все ранги, один победитель, абсолютная свобода и титул. Но сначала надо дожить.",
+        "objectives": [
+          {
+            "text": "Подняться до ранга Чемпион",
+            "done": false
+          },
+          {
+            "text": "Узнать слабость Железного Крала",
+            "done": false
+          },
+          {
+            "text": "Выжить в Турнире Века",
+            "done": false
+          }
+        ],
+        "events": [],
+        "created_at": "2026-03-07T11:12:57.822496+00:00",
+        "quest_type": "threat"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "location:rabskie-zagony",
+      "to": "location:yama-arena",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:yama-arena",
+      "to": "location:rabskie-zagony",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:rabskie-zagony",
+      "to": "location:magazin-zagonov",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:magazin-zagonov",
+      "to": "location:rabskie-zagony",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:yama-arena",
+      "to": "location:magazin-zagonov",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "location:magazin-zagonov",
+      "to": "location:yama-arena",
+      "type": "connected",
+      "data": {
+        "path": "traveled",
+        "path_type": "traveled"
+      }
+    },
+    {
+      "from": "quest:pervaya-krov",
+      "to": "npc:graksus",
+      "type": "involves"
+    },
+    {
+      "from": "quest:pervaya-krov",
+      "to": "location:kolizey-krovavogo-solntsa",
+      "type": "involves"
+    },
+    {
+      "from": "quest:podzemelya",
+      "to": "npc:lissa",
+      "type": "involves"
+    },
+    {
+      "from": "quest:podzemelya",
+      "to": "location:rabskie-zagony",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zheleznyy-tron",
+      "to": "npc:zheleznyy-kral",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zheleznyy-tron",
+      "to": "npc:imperator-valkor",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zheleznyy-tron",
+      "to": "location:kolizey-krovavogo-solntsa",
+      "type": "involves"
+    },
+    {
+      "from": "quest:zheleznyy-tron",
+      "to": "location:imperatorskaya-lozha",
+      "type": "involves"
+    }
+  ]
+}

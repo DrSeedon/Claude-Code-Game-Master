@@ -1,0 +1,18 @@
+{
+  "nodes": {
+    "player:active": {
+      "type": "player",
+      "name": "Хан Хуйс",
+      "data": {},
+      "race": "Человек",
+      "level": 1,
+      "hp": {
+        "current": 10,
+        "max": 10
+      },
+      "xp": 0,
+      "money": 0
+    }
+  },
+  "edges": []
+}

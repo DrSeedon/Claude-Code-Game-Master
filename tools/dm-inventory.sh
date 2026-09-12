@@ -74,12 +74,13 @@ case "$ACTION" in
         ;;
 
     update)
-        # update <char> [--add "item" qty weight] [--gold N] [--hp N]
+        # update <char> [--add "item" qty weight] [--gold N] [--hp N] [--reason text]
         OWNER="$1"
         shift
         UPDATE_ITEMS=()
         UPDATE_GOLD=""
         UPDATE_HP=""
+        UPDATE_REASON=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --add)
@@ -95,21 +96,22 @@ case "$ACTION" in
                     UPDATE_HP="$2"
                     shift 2
                     ;;
+                --reason)
+                    UPDATE_REASON="$2"
+                    shift 2
+                    ;;
                 *)
                     echo "Unknown update option: $1" >&2
                     exit 1
                     ;;
             esac
         done
-        if [ ${#UPDATE_ITEMS[@]} -gt 0 ] || [ -n "$UPDATE_GOLD" ]; then
-            UPDATE_ARGS=(inventory-loot "$OWNER")
-            [ ${#UPDATE_ITEMS[@]} -gt 0 ] && UPDATE_ARGS+=(--items "${UPDATE_ITEMS[@]}")
-            [ -n "$UPDATE_GOLD" ] && UPDATE_ARGS+=(--gold "$UPDATE_GOLD")
-            run_wg "${UPDATE_ARGS[@]}" || exit $?
-        fi
-        if [ -n "$UPDATE_HP" ]; then
-            run_wg player-hp "$UPDATE_HP" || exit $?
-        fi
+        UPDATE_ARGS=(inventory-loot "$OWNER")
+        [ ${#UPDATE_ITEMS[@]} -gt 0 ] && UPDATE_ARGS+=(--items "${UPDATE_ITEMS[@]}")
+        [ -n "$UPDATE_GOLD" ] && UPDATE_ARGS+=(--gold "$UPDATE_GOLD")
+        [ -n "$UPDATE_HP" ] && UPDATE_ARGS+=(--hp "$UPDATE_HP")
+        [ -n "$UPDATE_REASON" ] && UPDATE_ARGS+=(--reason "$UPDATE_REASON")
+        run_wg "${UPDATE_ARGS[@]}" || exit $?
         ;;
 
     transfer)

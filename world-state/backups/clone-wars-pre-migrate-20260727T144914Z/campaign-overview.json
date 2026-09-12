@@ -1,0 +1,55 @@
+{
+  "campaign_name": "Clone Wars",
+  "genre": "Sci-Fi",
+  "tone": {
+    "horror": 30,
+    "comedy": 30,
+    "drama": 40
+  },
+  "current_date": "22 BBY, День 3 операции",
+  "time_of_day": "05:00",
+  "player_position": {
+    "current_location": "Кирахн",
+    "previous_location": "Пещеры партизан",
+    "arrival_time": "2026-03-12 11:55:59 UTC",
+    "location_stack": [
+      "Аванпост дроидов"
+    ]
+  },
+  "current_character": "CT-7777 Хантер",
+  "session_count": 2,
+  "modules": {
+    "custom-stats": false,
+    "world-travel": true,
+    "inventory-system": true,
+    "firearms-combat": true,
+    "enhanced-dice": true,
+    "mass-combat": true
+  },
+  "narrator_style": {
+    "id": "serious-cinematic",
+    "name": "Serious Cinematic",
+    "description": "Descriptions like film — atmosphere, detail, emotion. No jokes, no meta. Every scene is a shot.",
+    "voice": "A cold, precise narrator. Shows, doesn't tell. Details build the world — smells, textures, sounds. No puns, no meta-commentary.",
+    "genres": [
+      "fantasy",
+      "sci-fi",
+      "horror",
+      "drama",
+      "noir"
+    ],
+    "recommended_for": "Dark campaigns with heavy themes. When atmosphere matters more than laughs. Epic finales.",
+    "rules_raw": "### Tone\n- **Gravity** — every word has weight. No jokes unless earned.\n- **Cinematic framing** — think in shots. Close-up, wide shot, detail.\n- **Sensory detail** — smell of burning metal, cold stone under fingertips, taste of blood.\n- **Silence** — pauses and space between words do the work.\n\n### Descriptions\n- Entering a location — 2-3 sentences hitting key details, not a checklist.\n- NPCs introduced through action or gesture, not appearance rundowns.\n- Danger — building tension, not announcements.\n\n### NPCs\nPeople whose history is readable in their wrinkles and movements. Speak briefly, mean a lot. Subtext beats text.\n\n### Serious Moments\nEvery moment is potentially serious. Death is not a punchline. Victory is not guaranteed.\n\n### Dice & Mechanics\n- Nat 20 — the moment slows down, every movement sharp and clear.\n- Nat 1 — tragedy or bitter irony, not clownery.\n\n### Dialogue\nPauses (…) create weight. NPCs leave things unsaid. The player fills in the gaps — that's better.",
+    "forbidden": [
+      "Puns and meta-humor",
+      "\"Funny\" failure descriptions",
+      "Narrator commenting on mechanics with irony",
+      "Sentences over 20 words in action scenes",
+      "Villain monologues over 3 sentences"
+    ]
+  },
+  "total_hours_elapsed": 6.5,
+  "advanced_mode": true,
+  "schema_version": 2,
+  "name": "clone-wars"
+}

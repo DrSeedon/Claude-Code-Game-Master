@@ -39,6 +39,17 @@ class TestWizardPrompt:
         assert "dm-npc.sh" in prompt
         assert "dm-player.sh" in prompt
 
+    def test_prompt_uses_situation_driven_world_generation(self):
+        prompt = load_wizard_system_prompt()
+        assert "Prepare situations, not predetermined plots" in prompt
+        assert "there is no fixed entity count" in prompt
+        assert "must include NPCs, active" in prompt
+        assert "quests, and scheduled consequences" in prompt
+        assert "multiple independent paths" in prompt
+        assert "--xp 100" in prompt
+        assert "Create 6 interconnected NPCs" not in prompt
+        assert "Create 3 quests" not in prompt
+
     def test_prompt_english_only(self):
         prompt = load_wizard_system_prompt()
         # Check no Russian text in system prompt (rules = English)
