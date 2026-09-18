@@ -180,6 +180,7 @@ def test_default_registry_exposes_supported_model_catalog():
     assert codex_runtime.capabilities.event_stream == "persistent"
     assert codex_runtime.capabilities.interrupt is True
     assert [model.id for model in registry.list_models("claude")] == [
+        "claude-fable-5-1",
         "claude-opus-5",
         "claude-sonnet-5",
     ]

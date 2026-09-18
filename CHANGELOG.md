@@ -2,6 +2,20 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.6.0] - 2026-09-15
+
+### Added
+- 🎭 **Claude Fable 5.1 в выборе моделей** — `backend/runtime/registry.py`, id `claude-fable-5-1`
+  - Модель Anthropic, обученная под художественный текст и ролеплей; раньше в гейм-мастере
+    выбирались только Sonnet 5 и Opus 5, хотя подписка Fable уже отдаёт
+  - Triggered case: владелец спросил, какие модели лучше для отыгрыша, и попросил добавить лучшую
+  - Проверено: `claude --model claude-fable-5-1 -p ...` отвечает, то есть CLI принимает этот id
+
+### Known tradeoff
+- Учёт контекста у Claude-моделей прибит к `CONTEXT_WINDOW = 200_000`, тогда как у Fable 5.1,
+  Opus 5 и Sonnet 5 окно 1M. Проценты заполнения контекста занижены одинаково для всех трёх —
+  поведение прежнее, этой правкой не менялось.
+
 ## [4.5.0] - 2026-07-27
 
 ### Added
