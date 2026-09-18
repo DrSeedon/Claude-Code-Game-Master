@@ -2,6 +2,18 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.6.1] - 2026-09-18
+
+### Fixed
+- 🩹 **Fable 5.1 падала с `400 ... does not support this model`** — `backend/providers/claude_sdk.py`
+  - `claude-agent-sdk` кладёт в колесо собственный бинарник Claude Code и выбирает его ПЕРВЫМ,
+    раньше системного. Бандл заморожен на 2.1.191 (12.07), а Fable 5.1 требует 2.1.251+
+  - Теперь `_installed_cli_path()` отдаёт `shutil.which("claude")` в `options.cli_path`;
+    системный CLI 2.1.263 обновляется сам, значит следующая новая модель не повторит эту историю
+  - Triggered case: владелец выбрал Fable 5.1 сразу после её добавления и получил 400;
+    Sonnet 5 и Opus 5 при этом работали, потому что старому бандлу они известны
+  - Проверено реальным ходом через провайдер приложения: Fable 5.1 ответила, usage вернулся
+
 ## [4.6.0] - 2026-09-15
 
 ### Added
