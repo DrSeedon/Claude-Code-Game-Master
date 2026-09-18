@@ -1,0 +1,134 @@
+{
+  "id": "иван",
+  "name": "Иван",
+  "race": "Human",
+  "class": "Sorcerer",
+  "level": 6,
+  "hp": {
+    "current": 27,
+    "max": 27
+  },
+  "ac": 15,
+  "stats": {
+    "str": 8,
+    "dex": 14,
+    "con": 13,
+    "int": 12,
+    "wis": 9,
+    "cha": 18
+  },
+  "saves": {
+    "str": -1,
+    "dex": 2,
+    "con": 3,
+    "int": 1,
+    "wis": -1,
+    "cha": 6
+  },
+  "skills": {
+    "deception": 6,
+    "intimidation": 6
+  },
+  "spells": {
+    "cantrips": [
+      "Mage Hand",
+      "Prestidigitation",
+      "Minor Illusion",
+      "Shocking Grasp",
+      "Fire Bolt"
+    ],
+    "level_1": [
+      "Shield",
+      "Disguise Self",
+      "Fog Cloud",
+      "Mage Armor"
+    ],
+    "level_2": [
+      "Invisibility",
+      "Misty Step"
+    ],
+    "slots": {
+      "level_1": {
+        "max": 4,
+        "used": 0
+      },
+      "level_2": {
+        "max": 3,
+        "used": 0
+      },
+      "level_3": {
+        "max": 3,
+        "used": 0
+      }
+    },
+    "sorcery_points": {
+      "max": 6,
+      "current": 6
+    },
+    "metamagic": [
+      "Subtle Spell (1 SP)",
+      "Quickened Spell (2 SP)"
+    ],
+    "spell_attack": 7,
+    "spell_dc": 15,
+    "level_3": [
+      "Counterspell",
+      "Blink"
+    ]
+  },
+  "features": [
+    "Sorcerous Origin: Wild Magic",
+    "Wild Magic Surge (d20 on cast, 1 = surge)",
+    "Tides of Chaos (advantage 1/long rest, recharge on surge)",
+    "Bend Luck (spend 2 SP to add/subtract d4 from any roll)",
+    "Font of Magic (6 Sorcery Points)",
+    "Metamagic: Subtle Spell, Quickened Spell",
+    "Spell Slots: 4x L1, 3x L2, 3x L3",
+    "ASI: Charisma 18 (+4)",
+    "Pocket Dimension (stable, apartment-sized)",
+    "Reality Weave Manipulation (km range)",
+    "Fabric Surgery (heal tears in reality)",
+    "Hume Signature: 2.87",
+    "Foundation Consultant Status"
+  ],
+  "background": "Hermit",
+  "alignment": "Chaotic Neutral",
+  "bonds": "Хочу понять что со мной происходит и выжить",
+  "flaws": "Не контролирую свои силы когда злюсь",
+  "ideals": "Свобода — никто не будет решать за меня кто я",
+  "traits": "Замкнутый одиночка, не доверяет людям в форме",
+  "notes": [],
+  "gold": 315400,
+  "xp": {
+    "current": 14000,
+    "next_level": 23000
+  },
+  "inventory": {
+    "stackable": {
+      "Нож": 1,
+      "Сигареты": 1,
+      "Обезболивающее": 1,
+      "Энергетик": 2,
+      "Вода бутылка": 3,
+      "Лапша быстрого приготовления": 5,
+      "Батарейка портативная": 1,
+      "Еда (запас на неделю)": 1
+    },
+    "unique": [
+      "Нож кухонный (1d4)",
+      "Толстовка с капюшоном (AC 10)",
+      "Ноутбук (починен)",
+      "Телефон (старый Android)",
+      "Ключи от квартиры",
+      "Счётчик Кантера (измеритель Хьюма, Фонд SCP)",
+      "Карта аномалий МО (200 точек, .kml, не верифицирована)",
+      "Рюкзак туристический (40л)",
+      "Телефон краденый x2 (на продажу)",
+      "Ключ от полуподвала-мастерской",
+      "Матрас надувной",
+      "Спальник",
+      "Чайник электрический"
+    ]
+  },
+  "current_location": "Бункер точка 203"
+}

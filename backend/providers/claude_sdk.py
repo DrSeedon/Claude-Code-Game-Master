@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from collections.abc import Mapping
 from typing import AsyncGenerator, Dict, Optional
 from pathlib import Path
@@ -163,6 +164,18 @@ def _context_usage_from_sdk(raw: Mapping[str, object]) -> ContextUsage:
     )
 
 
+def _installed_cli_path() -> str | None:
+    """Prefer the system-wide `claude` over the CLI bundled inside the SDK wheel.
+
+    The bundled binary is frozen at the version the SDK was released with and is
+    picked FIRST by the SDK's own lookup, so a model released later is rejected
+    with `does not support this model; version X or newer is required` while the
+    up-to-date system CLI sits right next to it. Verified 2026-09-18: bundled
+    2.1.191 refused claude-fable-5-1, system 2.1.263 ran it.
+    """
+    return shutil.which("claude")
+
+
 class ClaudeSDKProvider:
 
     # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
@@ -200,6 +213,8 @@ class ClaudeSDKProvider:
             include_partial_messages=True,
             env=process_env,
         )
+        if cli_path := _installed_cli_path():
+            options.cli_path = cli_path
         if self._session_id:
             options.resume = self._session_id
         else:

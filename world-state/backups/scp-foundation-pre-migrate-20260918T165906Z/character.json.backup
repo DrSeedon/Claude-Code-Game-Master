@@ -1,0 +1,50 @@
+{
+  "id": "иван",
+  "name": "Иван",
+  "race": "Human",
+  "class": "Sorcerer",
+  "level": 1,
+  "hp": {
+    "current": 7,
+    "max": 7
+  },
+  "ac": 12,
+  "stats": {
+    "str": 8,
+    "dex": 14,
+    "con": 13,
+    "int": 12,
+    "wis": 9,
+    "cha": 16
+  },
+  "saves": {
+    "str": -1,
+    "dex": 2,
+    "con": 3,
+    "int": 1,
+    "wis": -1,
+    "cha": 5
+  },
+  "skills": {
+    "deception": 5,
+    "intimidation": 5
+  },
+  "equipment": [
+    "Нож"
+  ],
+  "features": [
+    "Sorcerous Origin: Wild Magic"
+  ],
+  "background": "Hermit",
+  "alignment": "Chaotic Neutral",
+  "bonds": "Хочу понять что со мной происходит и выжить",
+  "flaws": "Не контролирую свои силы когда злюсь",
+  "ideals": "Свобода — никто не будет решать за меня кто я",
+  "traits": "Замкнутый одиночка, не доверяет людям в форме",
+  "notes": [],
+  "gold": 0,
+  "xp": {
+    "current": 0,
+    "next_level": 300
+  }
+}

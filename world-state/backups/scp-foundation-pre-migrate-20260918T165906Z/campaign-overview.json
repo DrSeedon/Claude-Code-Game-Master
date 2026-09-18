@@ -1,0 +1,112 @@
+{
+  "campaign_name": "scp-foundation's Adventure",
+  "genre": "Modern Horror / SCP",
+  "tone": {
+    "horror": 60,
+    "comedy": 5,
+    "drama": 35
+  },
+  "current_date": "30 November 2024",
+  "time_of_day": "Noon",
+  "clock": "12:00",
+  "player_position": {
+    "current_location": "Бункер точка 203",
+    "previous_location": "Станция Волоколамская",
+    "arrival_time": "2026-02-24 06:54:33 UTC",
+    "location_stack": [
+      "Бункер точка 203"
+    ]
+  },
+  "current_character": "Иван",
+  "session_count": 0,
+  "modules": {
+    "custom-stats": false,
+    "world-travel": false,
+    "inventory-system": true,
+    "firearms-combat": true
+  },
+  "narrator_style": {
+    "id": "horror-atmospheric",
+    "name": "Horror Atmospheric",
+    "description": "The threat is always present but never fully seen. Dread builds through implication, not gore. You don't describe the monster — you describe what it leaves behind.",
+    "voice": "A narrator who understands that what you don't see is worse than what you do. Slow burn. Every detail is potentially significant. The player should feel watched.",
+    "genres": [
+      "horror",
+      "survival",
+      "sci-fi",
+      "dark-fantasy"
+    ],
+    "recommended_for": "CoC, SCP, Delta Green, Alien, Barotrauma. Campaigns where sanity matters and the unknown is scarier than the known.",
+    "rules_raw": "### Tone\n- **Dread over gore** — implication is scarier than description. A bloody handprint says more than a corpse.\n- **The unknown** — never fully explain the threat. Leave gaps the player fills with their own fear.\n- **Wrongness** — small details that are slightly off. The shadow falling the wrong way. A door that wasn't open before.\n- **No comedy** — not even dark humor. Humor breaks the spell.\n\n### Descriptions\n- Environments are alive and hostile. The dungeon breathes.\n- Light and darkness are characters. What the light doesn't reach matters.\n- Sound design — describe what the character hears as much as what they see.\n- Time distortion — moments of fear stretch, safety feels too brief.\n\n### NPCs\nNPCs under stress crack in specific, human ways. Show the cracks. People lie to themselves about what they saw. The party may too.\n\n### The Monster / Threat\n- Describe effects, not the creature. What it does to a room. What it smells like.\n- If you show it, show one wrong detail. Never the full picture.\n- It has agency. It notices the party noticing it.\n\n### Sanity & Fear\n- Triggers should feel earned, not random.\n- Fear responses are physical — sweating, tunnel vision, hands shaking.\n- Recovery from fear takes time and costs something.\n\n### Dice & Mechanics\n- Nat 20 — relief, not triumph. You survived this moment.\n- Nat 1 — something is now worse. Not funny. Just worse.",
+    "forbidden": [
+      "Jump scares described as \"suddenly a monster appears!\"",
+      "Gore for its own sake without narrative purpose",
+      "Comedy of any kind during tense scenes",
+      "Explaining what the monster is before the players discover it",
+      "Safe, well-lit descriptions of dangerous places"
+    ]
+  },
+  "campaign_rules": {
+    "firearms_system": {
+      "weapons": {
+        "Glock 17": {
+          "damage": "2d4+1",
+          "pen": 1,
+          "rpm": 40,
+          "magazine": 17,
+          "type": "pistol"
+        },
+        "FN P90": {
+          "damage": "2d6",
+          "pen": 4,
+          "rpm": 900,
+          "magazine": 50,
+          "type": "smg"
+        },
+        "M4A1": {
+          "damage": "2d6+2",
+          "pen": 3,
+          "rpm": 700,
+          "magazine": 30,
+          "type": "assault_rifle"
+        },
+        "HK MP5": {
+          "damage": "2d4+2",
+          "pen": 2,
+          "rpm": 800,
+          "magazine": 30,
+          "type": "smg"
+        },
+        "Remington 870": {
+          "damage": "2d8+1",
+          "pen": 2,
+          "rpm": 15,
+          "magazine": 7,
+          "type": "shotgun"
+        },
+        "M110 SASS": {
+          "damage": "2d10+4",
+          "pen": 5,
+          "rpm": 20,
+          "magazine": 20,
+          "type": "sniper_rifle"
+        },
+        "FN Minimi": {
+          "damage": "2d8+2",
+          "pen": 4,
+          "rpm": 750,
+          "magazine": 200,
+          "type": "lmg"
+        }
+      },
+      "fire_modes": {
+        "full_auto": {
+          "penalty_per_shot": -2,
+          "penalty_per_shot_sharpshooter": -1
+        }
+      }
+    }
+  },
+  "total_hours_elapsed": 851.0,
+  "advanced_mode": true
+}
