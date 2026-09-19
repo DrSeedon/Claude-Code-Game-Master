@@ -44,3 +44,13 @@ every Claude model, while Sonnet 5, Opus 5 and Fable 5.1 all have a 1M window. T
 percentage shown during play is therefore overstated for all three, and a long campaign looks
 close to overflow while it is not. Fix = take the window from `ModelDefinition.context_window`
 instead of the provider constant. Noticed 2026-09-15 while adding Fable 5.1 to the model picker.
+
+## Collapse CLAUDE.md and AGENTS.md into one file — only after the CLI reaches 2.1.277
+Both files are tracked and different (dev/deploy notes vs multi-client adapters). They do NOT
+conflict inside one context: measured 2026-09-19, Claude Code 2.1.263 injects CLAUDE.md only and
+ignores AGENTS.md entirely, Codex reads AGENTS.md only. The risk is drift BETWEEN clients — a
+Codex agent never sees the deploy and verification lessons, a Claude agent never sees the client
+adapter table. One `AGENTS.md` becomes safe once every client here runs 2.1.277+, where AGENTS.md
+is read as a fallback when CLAUDE.md is absent. Until then, deleting CLAUDE.md strips all rules
+from Claude agents. Owner asked for the merge on 2026-09-19 on a premise that was retracted the
+same day; no urgency.

@@ -217,7 +217,9 @@ Browser (vanilla JS) → nginx (SSL) → FastAPI (server.py)
   failing branch with a deliberately wrong value. Verified 2026-08-07 — the original keep-alive cron
   would have reported success forever after the token was reissued.
 - **Service:** `systemd dnd-game-master.service`
-- **Password:** `dnd2026game` (in `.env` on VPS as `DND_AUTH_PASSWORD`)
+- **Password:** only in `.env` on the VPS as `DND_AUTH_PASSWORD`. **This repository is PUBLIC** —
+  the value was written here in plain text until 2026-09-19 and is still in the Git history, so
+  only rotating it actually revokes it. Never put a password, token or key in a tracked file.
 - **Port:** 18083 (registered in `~/ports.md`)
 - **No proxy needed** — Contabo in DE, direct Anthropic access
 - **Deploy = git pull, NOT rsync.** VPS is a real git clone of `origin` (converted 2026-08-03; it used to be an rsync dump with an empty `.git`, which made pull and rollback impossible). Push first — the VPS pulls from GitHub, not from the laptop:
@@ -250,6 +252,30 @@ The project is played on https://dnd-game-master.duckdns.org, so the orchestrato
 - **Dashboard port 8888 is firewalled off** — reachable only as https://orchestra.seedon.ru from outside, or `127.0.0.1:8888` from inside the VPS.
 - **Skills copied from the laptop carry hardcoded `/mnt/data/...` paths** and silently break. Grep any copied skill for `/mnt/data` before trusting it. Fix with an env var + default, e.g. `ENV_FILE="${DEEPGRAM_ENV_FILE:-/home/kesha/orchestra/.env}"` — not a second hardcode.
 - **An MCP entry in the config proves nothing** — verify the underlying binary exists (`mcp-pandoc` was configured server-wide while `pandoc` itself was missing). Check the fact, not the config line.
+
+### Models and the CLI they run on
+- Selectable Claude models live in `backend/runtime/registry.py`: `claude-sonnet-5` (default),
+  `claude-opus-5`, `claude-fable-5-1` (added 2026-09-18 for roleplay/prose).
+- **`claude-agent-sdk` ships its own copy of the Claude Code CLI inside the wheel and picks it
+  BEFORE the system one.** That copy is frozen at the SDK's release date, so a model released
+  later is rejected with `400 ... does not support this model; version X or newer is required`
+  while an up-to-date CLI sits next to it. Measured 2026-09-18: bundled 2.1.191 refused
+  `claude-fable-5-1`, system 2.1.263 ran it. `ClaudeSDKProvider` passes
+  `options.cli_path = shutil.which("claude")`; do not "simplify" that away.
+- Per-turn token usage arrives from the runtime and is NOT persisted anywhere yet — the context
+  bar is its only consumer (task V-10).
+
+### Two rules files in the root, and which client reads which
+`CLAUDE.md` and `AGENTS.md` are both tracked and deliberately different. Measured here on
+2026-09-19 with tools disabled (`--disallowed-tools Read Grep Glob Bash`) plus a positive control:
+Claude Code **2.1.263 injects `CLAUDE.md` only** — a directory holding just `AGENTS.md` answered
+`NONE`, and with both files present only the `CLAUDE.md` code word came back. Codex reads
+`AGENTS.md` only. So the two files never contradict each other inside one context; they can only
+drift between clients. Deleting `CLAUDE.md` today would silently strip every rule from Claude
+agents. `AGENTS.md` support lands in 2.1.277 as a fallback used only when `CLAUDE.md` is absent.
+**Never test which file is injected with tools enabled** — the agent simply reads both from disk
+and reports them as instructions; the giveaway is a `file.md:3` line citation, which injected
+system text never has.
 
 ### Important files
 - `backend/server.py` — main FastAPI app, WS handlers, auth middleware
