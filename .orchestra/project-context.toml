@@ -1,0 +1,15 @@
+# Project: dnd-game-master
+# Review severity calibration. Values come from this repository, not from a template.
+schema_version = 1
+
+scale = "One owner plus AI agents, no development team. A hobby product in daily use: a web D&D game master running as one systemd service on a single VPS, plus a CLI engine of bash wrappers over Python."
+
+users = "The owner and a handful of friends he invites, one game session at a time. There is no load: turns are minutes apart and the bottleneck is the LLM, never our code. Optimising for RPS or concurrency is wasted work here."
+
+stack = "Python 3.11 (FastAPI backend, WorldGraph engine in lib/, bash wrappers in tools/), vanilla JS frontend with no build step, claude-agent-sdk and a Codex app-server runtime driving CLI subprocesses, JSON files on disk as the only database, nginx + systemd on a Contabo VPS. The GitHub repository is PUBLIC."
+
+philosophy = "Flat, readable code that a single reader can rewrite from scratch. Gameplay rules live in markdown slots, not in code. Tests guard the core that must not change — data integrity, auth, lifecycle — and never the wording of prompts or rules, because those change every week by design."
+
+what_matters = "Live campaign data: world-state/campaigns exists only on this VPS, is not in git, and a corrupted or overwritten world.json is unrecoverable. The auth boundary: the site is reachable from the internet behind one password. Secrets never entering tracked files — the repo is public and a password leaked that way once already. Irreversible actions: deleting campaign data, force-pushing, restarting shared services, DuckDNS updates that can repoint another project's domain."
+
+what_does_not_matter = "Enterprise patterns, dependency injection, layered abstractions. 100% coverage. Performance and scalability under load. Backwards compatibility of internal APIs — we replace the old path outright. Browser support beyond current Firefox and Chrome."
