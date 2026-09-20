@@ -2,6 +2,14 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.7.0] - 2026-09-20
+
+### Added
+- 📊 **Постоянный учёт расхода ходов** — `backend/usage_log.py` дописывает usage каждого
+  завершённого хода в `world-state/usage/game-turns.jsonl`; `/api/usage` отдаёт суммы по
+  кампаниям, моделям и общий итог. Тарифы виртуальные (подписка), неизвестная модель получает
+  неизвестную цену вместо ложного нуля.
+
 ## [4.6.1] - 2026-09-18
 
 ### Fixed

@@ -14,6 +14,7 @@ from urllib.parse import quote
 from backend.event_log import append_event, read_current_session_events
 from backend.live_broker import broker
 from backend.media import store_generated_image
+from backend.usage_log import record_usage
 from backend.runtime import (
     AgentEvent,
     ProviderBuildContext,
@@ -325,7 +326,13 @@ class GameSession:
         self._turn_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         broker.publish(self.campaign, self.status_event())
         self._turn_task = asyncio.create_task(
-            self._run_turn(user_message, system_prompt, mcp_servers, idle_for)
+            self._run_turn(
+                user_message,
+                system_prompt,
+                mcp_servers,
+                idle_for,
+                time.monotonic(),
+            )
         )
         self._turn_task.add_done_callback(self._on_turn_done)
         return True
@@ -346,7 +353,9 @@ class GameSession:
         system_prompt: str,
         mcp_servers: Mapping[str, Any] | None,
         idle_for: float,
+        turn_started_monotonic: float,
     ) -> None:
+        turn_usage: Mapping[str, Any] | None = None
         try:
             async with self._mutation_lock:
                 if idle_for > HIBERNATE_IDLE_SECONDS:
@@ -413,6 +422,27 @@ class GameSession:
                         payload = event.to_dict()
                         payload.update(event.metadata)
                         broker.publish(self.campaign, payload)
+                    elif event.type == "turn_end":
+                        usage_fields = {
+                            key: value
+                            for key, value in event.metadata.items()
+                            if key
+                            in {
+                                "input_tokens",
+                                "output_tokens",
+                                "cache_read_input_tokens",
+                                "cache_creation_input_tokens",
+                                "cache_read_tokens",
+                                "cache_write_tokens",
+                                "cached_input_tokens",
+                                "cachedInputTokens",
+                                "cacheCreationInputTokens",
+                                "inputTokens",
+                                "outputTokens",
+                            }
+                        }
+                        if usage_fields:
+                            turn_usage = usage_fields
                     elif event.type != "turn_end":
                         broker.publish(self.campaign, event.to_dict())
         except asyncio.CancelledError:
@@ -426,6 +456,24 @@ class GameSession:
             self.running = False
             self._turn_started_at = None
             self._last_turn_end_at = time.monotonic()
+            if turn_usage is None:
+                get_turn_usage = getattr(self.provider, "get_turn_usage", None)
+                if callable(get_turn_usage):
+                    turn_usage = get_turn_usage()
+            try:
+                record_usage(
+                    project_root=self.project_root,
+                    campaign=self.campaign,
+                    runtime=self.runtime_id,
+                    model_id=self.model_name,
+                    usage=turn_usage,
+                    duration_seconds=time.monotonic() - turn_started_monotonic,
+                )
+            except Exception:
+                logger.exception(
+                    "[%s] token usage accounting failed; game turn result is preserved",
+                    self.campaign,
+                )
             usage = self.provider.get_context_usage()
             if usage:
                 broker.publish(

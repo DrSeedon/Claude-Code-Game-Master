@@ -249,6 +249,9 @@ class ClaudeSDKProvider:
         Yields:
             dict events: {"type": "text"|"activity"|"error", "content": str}
         """
+        # A missing usage payload on this turn must not reuse the previous turn.
+        self._last_usage = None
+        self._last_context_usage = None
         consecutive_failures = 0
         max_failures = 3
 
@@ -396,6 +399,11 @@ class ClaudeSDKProvider:
         )
         total = self.CONTEXT_WINDOW
         return ContextUsage(used_tokens=used, total_tokens=total)
+
+    def get_turn_usage(self) -> dict | None:
+        """Return raw token counts from the latest ResultMessage, if present."""
+
+        return dict(self._last_usage) if self._last_usage is not None else None
 
     async def compact(self) -> bool:
         """Claude Agent SDK exposes auto-compaction but no manual control call.

@@ -47,6 +47,7 @@ from backend.cinematic_mcp import build_cinematic_mcp
 from backend.campaign_views import get_campaign_views
 from backend.map_view import get_map_snapshot
 from backend.wizard_prompt import load_wizard_system_prompt
+from backend.usage_log import usage_totals
 from backend.runtime import ProviderBuildContext, clear_runtime_session
 from backend.wizard_mcp import (
     WizardEvents,
@@ -182,6 +183,13 @@ async def get_status(campaign: Optional[str] = None):
             return {"error": "Campaign not found"}
     status = get_character_status(campaign_dir=campaign_dir)
     return status
+
+
+@app.get("/api/usage")
+async def get_usage():
+    """Return persistent token and virtual-price totals."""
+
+    return usage_totals(get_config().project_root)
 
 
 # ─────────────────────────── Pydantic Schemas ──────────────────────────────────

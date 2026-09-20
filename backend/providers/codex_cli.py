@@ -789,6 +789,9 @@ class CodexCLIProvider:
                 "cached_input_tokens": _nonnegative_int(
                     last.get("cachedInputTokens")
                 ),
+                "cache_creation_input_tokens": _nonnegative_int(
+                    last.get("cacheCreationInputTokens")
+                ),
                 "output_tokens": _nonnegative_int(last.get("outputTokens")),
             }
         window = usage.get("modelContextWindow")
@@ -907,6 +910,11 @@ class CodexCLIProvider:
             )
         rollout = self._find_rollout()
         return _read_rollout_context(rollout) if rollout else None
+
+    def get_turn_usage(self) -> dict[str, int] | None:
+        """Return usage reported for the latest Codex model call, if any."""
+
+        return dict(self._last_call_usage) if self._last_call_usage is not None else None
 
     @staticmethod
     def _classify_error(error: Mapping[str, Any]) -> str:
