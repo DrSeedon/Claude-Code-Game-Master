@@ -18,9 +18,11 @@ except ImportError:
     WorldGraph = None
 
 
-# Global character state cache
+# Global character state cache — keyed by campaign so switching campaigns within
+# the TTL never serves the previous campaign's stats.
 _character_cache: Optional[Dict] = None
 _cache_timestamp: Optional[datetime] = None
+_cache_key: Optional[str] = None  # str(campaign_dir) the cache belongs to
 _cache_ttl = timedelta(seconds=5)  # Cache valid for 5 seconds
 
 
@@ -44,12 +46,14 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
         Or Dict with error key if error occurred:
             - error (str): Error description
     """
-    global _character_cache, _cache_timestamp
+    global _character_cache, _cache_timestamp, _cache_key
 
-    # Check cache
-    if not force_refresh and _character_cache is not None and _cache_timestamp is not None:
-        if datetime.now() - _cache_timestamp < _cache_ttl:
-            return _character_cache
+    cache_key = str(campaign_dir) if campaign_dir else ""
+
+    # Serve the cache only for the SAME campaign and within the TTL.
+    if (not force_refresh and _character_cache is not None and _cache_timestamp is not None
+            and _cache_key == cache_key and datetime.now() - _cache_timestamp < _cache_ttl):
+        return _character_cache
 
     # WorldGraph not available
     if WorldGraph is None:
@@ -143,9 +147,10 @@ def get_character_status(campaign_dir: Optional[Path] = None, force_refresh: boo
         if location:
             result["location"] = location
 
-        # Save to cache
+        # Save to cache (keyed by this campaign)
         _character_cache = result
         _cache_timestamp = datetime.now()
+        _cache_key = cache_key
 
         return result
 
@@ -161,9 +166,10 @@ def invalidate_cache() -> None:
     Called after executing tools that modify character state
     (HP changes, add/remove items, gain XP, spend gold).
     """
-    global _character_cache, _cache_timestamp
+    global _character_cache, _cache_timestamp, _cache_key
     _character_cache = None
     _cache_timestamp = None
+    _cache_key = None
 
 
 def get_inventory(campaign_dir: Optional[Path] = None) -> List[Dict]:

@@ -54,6 +54,23 @@ def test_prompt_has_current_campaign_context(tmp_path):
     assert "do NOT list campaigns" in ctx
 
 
+def test_character_status_cache_keyed_by_campaign(tmp_path, monkeypatch):
+    """Codex P2: the status cache is module-level; switching campaigns within the 5s
+    TTL must not serve the previous campaign's stats."""
+    from backend.campaign_api import create_campaign
+    from backend import game_state
+    monkeypatch.setattr("backend.campaign_api.get_project_root", lambda: tmp_path)
+    campaigns = tmp_path / "world-state" / "campaigns"
+    campaigns.mkdir(parents=True)
+    create_campaign(name="camp-a", character={"name": "Alice"})
+    create_campaign(name="camp-b", character={"name": "Bob"})
+    game_state.invalidate_cache()
+    a = game_state.get_character_status(campaign_dir=campaigns / "camp-a")
+    b = game_state.get_character_status(campaign_dir=campaigns / "camp-b")  # within TTL
+    assert a.get("name") == "Alice"
+    assert b.get("name") == "Bob"  # not Alice from the cache
+
+
 def test_rate_limit_info_classifies():
     """Provider must recognise rate/session limits and extract retry_after."""
     from backend.providers.claude_sdk import _rate_limit_info

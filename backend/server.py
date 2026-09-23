@@ -496,6 +496,8 @@ async def wizard_websocket(websocket: WebSocket):
                     et = event["type"]
                     if et == "text_delta":
                         await send({"type": "stream", "content": event["content"]})
+                    elif et == "rate_limit":
+                        await send(event)  # forward whole (content + optional retry_after)
                     elif et in ("text", "activity", "error"):
                         await send({"type": et, "content": event["content"]})
 

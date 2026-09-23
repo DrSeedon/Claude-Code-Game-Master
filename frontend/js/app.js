@@ -372,17 +372,22 @@ function hideRateLimit() { el.rateLimitBar.hidden = true; el.rateLimitBar.textCo
 // ── New session (reset Claude context, keep history) ───────────────────────
 async function newSession() {
   if (state.mode !== 'game' || !state.campaign) return;
+  if (state.generating) { addError('Дождитесь ответа DM перед сбросом сессии.'); return; }
   if (!confirm('Сбросить контекст Claude? История чата сохранится.')) return;
   const name = state.campaign;
   // Close the socket FIRST so no turn can start between the reset check and the
   // provider.reset() on the server (avoids resetting mid-turn).
   closeWs();
-  try { await fetch(`/api/campaigns/${encodeURIComponent(name)}/reset-session`, { method: 'POST' }); }
-  catch { /* reconnect anyway */ }
+  let ok = false;
+  try {
+    const r = await fetch(`/api/campaigns/${encodeURIComponent(name)}/reset-session`, { method: 'POST' });
+    ok = r.ok;  // 409 (turn in progress) → not reset
+  } catch { /* network — reconnect to resume */ }
   hideCtxUsage();
   // Keep the current afterId → no history replay on reconnect (chat already shows it,
-  // and reset does NOT touch the event log). The next turn just runs contextless.
+  // and reset does NOT touch the event log).
   connect(gameUrl());
+  if (!ok) addError('Не удалось сбросить сессию (идёт ответ DM?). Контекст сохранён.');
 }
 
 // ─────────────────────────── WebSocket lifecycle ──────────────────────────
