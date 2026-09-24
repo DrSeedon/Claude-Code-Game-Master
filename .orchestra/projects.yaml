@@ -1,0 +1,8 @@
+version: 1
+projects:
+- tag: dnd-game-master
+  name: D&D Game Master
+  scope: /home/kesha/projects/dnd-game-master
+  write_namespace: dnd-game-master
+  namespaces:
+    dnd-game-master: ''
