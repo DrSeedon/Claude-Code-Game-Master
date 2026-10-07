@@ -66,6 +66,27 @@ def test_usage_totals_group_campaigns_and_models_and_price_cache_tokens(tmp_path
     assert totals["total"]["turns"] == 2
 
 
+def test_sonnet_and_opus_55_usage_has_known_prices(tmp_path):
+    for model, expected_price in (
+        ("claude-sonnet-5-5", 12.0),
+        ("claude-opus-5-5", 24.0),
+    ):
+        session = GameSession(model, tmp_path, model)
+        session.provider.process_message = _text_events
+        session.provider.get_turn_usage = lambda: {
+            "input_tokens": 1_000_000,
+            "output_tokens": 1_000_000,
+        }
+
+        _run_turn(session, "price check")
+
+        totals = usage_totals(tmp_path)
+        row = json.loads(usage_log_path(tmp_path).read_text(encoding="utf-8").splitlines()[-1])
+        assert totals["models"][model]["price_usd"] == expected_price
+        assert totals["models"][model]["price_known"] is True
+        assert row["price_status"] == "known"
+
+
 def test_unknown_model_price_is_unknown_but_turn_completes(tmp_path):
     session = GameSession("camp-a", tmp_path, "claude-sonnet-5")
     session.model_name = "future-model"

@@ -1,0 +1,37 @@
+........................................................................ [ 12%]
+........................................................................ [ 25%]
+........................................................................ [ 38%]
+..........................................F............................. [ 50%]
+........................................................................ [ 63%]
+........................................................................ [ 76%]
+........................................................................ [ 88%]
+...............................................................          [100%]
+=================================== FAILURES ===================================
+________________ test_sonnet_and_opus_55_usage_has_known_prices ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-kesha/pytest-12620/test_sonnet_and_opus_55_usage_0')
+
+    def test_sonnet_and_opus_55_usage_has_known_prices(tmp_path):
+        for model, expected_price in (
+            ("claude-sonnet-5-5", 12.0),
+            ("claude-opus-5-5", 24.0),
+        ):
+            session = GameSession(model, tmp_path, model)
+            session.provider.process_message = _text_events
+            session.provider.get_turn_usage = lambda: {
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+            }
+    
+            _run_turn(session, "price check")
+    
+            totals = usage_totals(tmp_path)
+            assert totals["models"][model]["price_usd"] == expected_price
+>           assert totals["models"][model]["price_status"] == "known"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: 'price_status'
+
+tests/test_usage_log.py:85: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_usage_log.py::test_sonnet_and_opus_55_usage_has_known_prices
+1 failed, 566 passed in 41.52s

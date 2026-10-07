@@ -255,15 +255,16 @@ The project is played on https://dnd-game-master.duckdns.org, so the orchestrato
 
 ### Models and the CLI they run on
 - Selectable Claude models live in `backend/runtime/registry.py`: `claude-sonnet-5` (default),
-  `claude-opus-5`, `claude-fable-5-1` (added 2026-09-18 for roleplay/prose).
+  `claude-sonnet-5-5`, `claude-opus-5`, `claude-opus-5-5`, and `claude-fable-5-1` (added
+  2026-09-18 for roleplay/prose).
 - **`claude-agent-sdk` ships its own copy of the Claude Code CLI inside the wheel and picks it
   BEFORE the system one.** That copy is frozen at the SDK's release date, so a model released
   later is rejected with `400 ... does not support this model; version X or newer is required`
   while an up-to-date CLI sits next to it. Measured 2026-09-18: bundled 2.1.191 refused
   `claude-fable-5-1`, system 2.1.263 ran it. `ClaudeSDKProvider` passes
   `options.cli_path = shutil.which("claude")`; do not "simplify" that away.
-- Per-turn token usage arrives from the runtime and is NOT persisted anywhere yet — the context
-  bar is its only consumer (task V-10).
+- Per-turn token usage is persisted in `world-state/usage/game-turns.jsonl`; `GET /api/usage`
+  returns totals by campaign and model (task V-10, merged 2026-09-20).
 
 ### Two rules files in the root, and which client reads which
 `CLAUDE.md` and `AGENTS.md` are both tracked and deliberately different. Measured here on

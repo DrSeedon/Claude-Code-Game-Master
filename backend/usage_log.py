@@ -19,7 +19,9 @@ USAGE_FILENAME = "game-turns.jsonl"
 # Virtual prices, not actual subscription charges.
 MODEL_PRICING: dict[str, dict[str, float]] = {
     "claude-sonnet-5": {"input": 2.0, "output": 10.0},
+    "claude-sonnet-5-5": {"input": 2.0, "output": 10.0},
     "claude-opus-5": {"input": 5.0, "output": 25.0},
+    "claude-opus-5-5": {"input": 4.0, "output": 20.0},
     "claude-fable-5-1": {"input": 10.0, "output": 50.0},
 }
 CACHE_READ_MULTIPLIER = 0.1

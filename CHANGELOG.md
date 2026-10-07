@@ -2,6 +2,16 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [4.8.0] - 2026-10-07
+
+### Added
+- 🎭 **Claude Sonnet 5.5 и Opus 5.5 в выборе моделей** — `backend/runtime/registry.py`
+  - Существующие Sonnet 5, Opus 5 и Fable 5.1 сохранены; модель по умолчанию не менялась
+  - В `backend/usage_log.py` добавлены виртуальные тарифы из `app/models.py`: Sonnet 5.5 — $2/$10,
+    Opus 5.5 — $4/$20 за миллион входных и выходных токенов
+  - Triggered case: игрок выбирает новую модель в `/api/models`, а её завершённые ходы должны
+    получать известную цену в журнале расходов
+
 ## [4.7.0] - 2026-09-20
 
 ### Added
