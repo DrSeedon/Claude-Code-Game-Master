@@ -12,6 +12,15 @@ All notable changes to DM System will be documented in this file.
   values from secret variables in `.env`, common provider token formats, and credential assignments;
   the test fails with the file, line, and variable/type only. Triggered case: a deployment password
   was committed in `CLAUDE.md`; `.duckdns_token` is also verified as ignored and untracked.
+- 📚 **Single project rules source** — deployment, VPS, model, verification, product-interview, and
+  AI-table guidance now lives in `AGENTS.md`; `CLAUDE.md` points to it through a relative symlink and
+  working-document links were updated. Triggered case: SDK-bundled Claude 2.1.205 reads `CLAUDE.md`,
+  Codex reads `AGENTS.md`, and the modded system Claude 2.1.284 reads both, so separate contents gave
+  clients different instructions.
+- 🧭 **Restored operational rules and application map** — `AGENTS.md` now includes the SDK tool
+  allowlist constraint, wizard CLI flow, auth boundaries, client recovery steps, and key runtime
+  modules. Triggered case: those integration and security constraints were missing from the unified
+  rules, leaving future SDK or wizard changes able to reintroduce known breakages.
 
 ## [4.8.0] - 2026-10-07
 
