@@ -2,6 +2,14 @@
 
 All notable changes to DM System will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- 🛡️ **Tracked secret guard** — `tests/test_secret_guard.py` checks Git-tracked file contents for
+  values from secret variables in `.env`, common provider token formats, and credential assignments;
+  the test fails with the file, line, and variable/type only. Triggered case: a deployment password
+  was committed in `CLAUDE.md`; `.duckdns_token` is also verified as ignored and untracked.
+
 ## [4.8.0] - 2026-10-07
 
 ### Added

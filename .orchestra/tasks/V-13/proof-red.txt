@@ -1,0 +1,25 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________________ test_env_secret_values_are_not_tracked ____________________
+
+    def test_env_secret_values_are_not_tracked():
+        if not (REPO_ROOT / ".env").is_file():
+            pytest.skip(".env not present; local secret values cannot be checked")
+>       raise_for_findings(value_findings(REPO_ROOT))
+
+tests/test_secret_guard.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+issues = [('CLAUDE.md', 1, 'DND_AUTH_PASSWORD')]
+
+    def raise_for_findings(issues: list[tuple[str, int, str]]) -> None:
+        if issues:
+            details = "\n".join(f"{path}:{line}: {name}" for path, line, name in issues)
+>           raise AssertionError(f"Potential secrets found in tracked files:\n{details}")
+E           AssertionError: Potential secrets found in tracked files:
+E           CLAUDE.md:1: DND_AUTH_PASSWORD
+
+tests/test_secret_guard.py:102: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_secret_guard.py::test_env_secret_values_are_not_tracked - A...
+1 failed in 0.12s
