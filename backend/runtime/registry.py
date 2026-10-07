@@ -42,6 +42,7 @@ class ProviderBuildContext:
     resume_session_id: str | None = None
     reasoning_effort: str | None = None
     environment: Mapping[str, str] | None = None
+    context_window: int | None = None
 
 
 ProviderFactory = Callable[[ProviderBuildContext], AgentProvider]
@@ -152,7 +153,13 @@ class RuntimeRegistry:
             model.id,
             context.reasoning_effort,
         )
-        provider = runtime.factory(replace(context, reasoning_effort=effort))
+        provider = runtime.factory(
+            replace(
+                context,
+                context_window=model.context_window,
+                reasoning_effort=effort,
+            )
+        )
         if not isinstance(provider, AgentProvider):
             raise TypeError(f"runtime '{runtime.id}' returned an incompatible provider")
         return provider
@@ -216,6 +223,7 @@ def create_default_registry() -> RuntimeRegistry:
             factory=lambda context: ClaudeSDKProvider(
                 project_root=context.project_root,
                 model_name=context.model_name,
+                context_window=context.context_window,
                 campaign_name=context.campaign_name,
                 resume_session_id=context.resume_session_id,
                 environment=dict(context.environment or {}),
@@ -234,7 +242,7 @@ def create_default_registry() -> RuntimeRegistry:
                 id=model_id,
                 display_name=label,
                 runtime_id="claude",
-                context_window=ClaudeSDKProvider.CONTEXT_WINDOW,
+                context_window=1_000_000,
                 selected_reasoning_effort="provider_default",
                 usage_limits={"scope": "provider_subscription"},
             )

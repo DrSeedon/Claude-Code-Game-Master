@@ -133,7 +133,12 @@ def _tool_result_events(block: ToolResultBlock) -> list[AgentEvent]:
     return events
 
 
-def _context_usage_from_sdk(raw: Mapping[str, object]) -> ContextUsage:
+DEFAULT_CONTEXT_WINDOW = 200_000
+
+
+def _context_usage_from_sdk(
+    raw: Mapping[str, object], fallback_total_tokens: int = DEFAULT_CONTEXT_WINDOW
+) -> ContextUsage:
     """Preserve Claude Code's exact `/context` category breakdown."""
     breakdown: dict[str, int] = {}
     categories = raw.get("categories")
@@ -159,7 +164,7 @@ def _context_usage_from_sdk(raw: Mapping[str, object]) -> ContextUsage:
         total = 0
     return ContextUsage(
         used_tokens=used,
-        total_tokens=total or ClaudeSDKProvider.CONTEXT_WINDOW,
+        total_tokens=total or fallback_total_tokens,
         breakdown=breakdown,
     )
 
@@ -178,8 +183,8 @@ def _installed_cli_path() -> str | None:
 
 class ClaudeSDKProvider:
 
-    # Claude context window (Sonnet/Opus). Used to turn token counts into a %.
-    CONTEXT_WINDOW = 200_000
+    # Fallback when a provider is constructed without model metadata.
+    CONTEXT_WINDOW = DEFAULT_CONTEXT_WINDOW
 
     def __init__(
         self,
@@ -188,9 +193,13 @@ class ClaudeSDKProvider:
         campaign_name: str | None = None,
         resume_session_id: str | None = None,
         environment: dict[str, str] | None = None,
+        context_window: int | None = None,
     ):
         self.project_root = project_root
         self.model_name = model_name
+        self.context_window = (
+            context_window if context_window is not None else self.CONTEXT_WINDOW
+        )
         self.campaign_name = campaign_name
         self._client: Optional[ClaudeSDKClient] = None
         self._session_id: Optional[str] = resume_session_id
@@ -349,7 +358,8 @@ class ClaudeSDKProvider:
                         )
                         if isinstance(raw_context, Mapping):
                             self._last_context_usage = _context_usage_from_sdk(
-                                raw_context
+                                raw_context,
+                                fallback_total_tokens=self.context_window,
                             )
                     except Exception as exc:
                         logger.debug("Claude context breakdown unavailable: %s", exc)
@@ -397,7 +407,7 @@ class ClaudeSDKProvider:
             + (u.get("cache_read_input_tokens") or 0)
             + (u.get("cache_creation_input_tokens") or 0)
         )
-        total = self.CONTEXT_WINDOW
+        total = self.context_window
         return ContextUsage(used_tokens=used, total_tokens=total)
 
     def get_turn_usage(self) -> dict | None:

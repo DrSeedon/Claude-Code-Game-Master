@@ -38,13 +38,6 @@ Configurable encounter engine triggered by `dm-session.sh move --elapsed N`. Set
 - Auto-lookup creature stats from wiki for instant combat setup
 - Works with any campaign/setting — zombie hordes, monster hunters, road bandits
 
-## Context window of Claude models is counted as 200K, not 1M
-`ClaudeSDKProvider.CONTEXT_WINDOW = 200_000` (`backend/providers/claude_sdk.py:169`) is used for
-every Claude model, while Sonnet 5, Opus 5 and Fable 5.1 all have a 1M window. The context-usage
-percentage shown during play is therefore overstated for all three, and a long campaign looks
-close to overflow while it is not. Fix = take the window from `ModelDefinition.context_window`
-instead of the provider constant. Noticed 2026-09-15 while adding Fable 5.1 to the model picker.
-
 ## Collapse CLAUDE.md and AGENTS.md into one file — only after the CLI reaches 2.1.277
 Both files are tracked and different (dev/deploy notes vs multi-client adapters). They do NOT
 conflict inside one context: measured 2026-09-19, Claude Code 2.1.263 injects CLAUDE.md only and

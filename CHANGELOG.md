@@ -5,6 +5,9 @@ All notable changes to DM System will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Claude context usage uses the selected model's window** — all selectable Claude models use
+  their 1M `ModelDefinition.context_window` as the fallback; SDK-reported `maxTokens` remains
+  authoritative. This corrects the 200K context-window tradeoff recorded under 4.6.0 below.
 - 🛡️ **Tracked secret guard** — `tests/test_secret_guard.py` checks Git-tracked file contents for
   values from secret variables in `.env`, common provider token formats, and credential assignments;
   the test fails with the file, line, and variable/type only. Triggered case: a deployment password

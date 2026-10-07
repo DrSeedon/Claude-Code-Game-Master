@@ -36,6 +36,58 @@ def test_get_or_create_session_creates_new(tmp_path):
     assert session.campaign == "camp-a"
 
 
+@pytest.mark.parametrize(
+    ("sdk_context", "expected_total", "expected_percent"),
+    [
+        (None, 1_000_000, 4),
+        ({"totalTokens": 40_000, "maxTokens": 200_000}, 200_000, 20),
+    ],
+)
+def test_claude_session_uses_model_window_unless_sdk_reports_one(
+    tmp_path, sdk_context, expected_total, expected_percent
+):
+    from claude_agent_sdk import ResultMessage
+
+    session = GameSession("context-window", tmp_path, "claude-sonnet-5-5")
+    assert session.provider.context_window == 1_000_000
+
+    class FakeClient:
+        async def query(self, _message):
+            return None
+
+        async def receive_messages(self):
+            yield ResultMessage(
+                subtype="success",
+                duration_ms=10,
+                duration_api_ms=5,
+                is_error=False,
+                num_turns=1,
+                session_id="context-session",
+                usage={"input_tokens": 40_000},
+            )
+
+        async def get_context_usage(self):
+            return sdk_context
+
+        async def disconnect(self):
+            return None
+
+    async def connect(_model, _system_prompt, _mcp_servers):
+        return FakeClient()
+
+    session.provider._connect = connect
+
+    async def scenario():
+        assert session.send("continue", "system prompt")
+        await session._turn_task
+
+    asyncio.run(scenario())
+
+    usage = session.provider.get_context_usage()
+    assert usage.total_tokens == expected_total
+    assert usage.percent == expected_percent
+
+
 def test_get_or_create_session_returns_existing(tmp_path):
     first = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")
     second = get_or_create_session("camp-a", tmp_path, "claude-sonnet-5")

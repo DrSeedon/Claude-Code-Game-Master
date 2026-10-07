@@ -186,6 +186,15 @@ def test_default_registry_exposes_supported_model_catalog():
         "claude-sonnet-5",
         "claude-sonnet-5-5",
     ]
+    assert {
+        model.id: model.context_window for model in registry.list_models("claude")
+    } == {
+        "claude-fable-5-1": 1_000_000,
+        "claude-opus-5": 1_000_000,
+        "claude-opus-5-5": 1_000_000,
+        "claude-sonnet-5": 1_000_000,
+        "claude-sonnet-5-5": 1_000_000,
+    }
     assert [model.id for model in registry.list_models("codex")] == [
         "gpt-5.3-codex-spark",
         "gpt-5.6-luna",
