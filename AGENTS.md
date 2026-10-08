@@ -200,7 +200,7 @@ Important files: `backend/server.py` (HTTP and WebSocket routes); `backend/game_
 - `bypassPermissions` is acceptable only for this password-protected site. Authentication middleware skips only `/auth/*` and static assets.
 
 ## Rules file
-There is one project rules content source: this root `AGENTS.md`; root `CLAUDE.md` is a relative symlink to it. Orchestra Claude workers use the CLI bundled in `claude-agent-sdk` 2.1.205, which reads `CLAUDE.md` but not `AGENTS.md` alone; Codex reads `AGENTS.md`. On 2026-10-07, the system Claude Code 2.1.284 on the VPS read both files because the user-wide `~/.claude/mods/agents-md` mod enables `instructionFiles=claude-md-and-agents-md` (installed 2026-09-20). Keep the symlink so every client receives the same rules. Do not remove it or replace it with a second independent rules file.
+There is one project rules content source: this root `AGENTS.md`; root `CLAUDE.md` is a relative symlink to it. Orchestra Claude workers use the system Claude CLI via `cli_path=shutil.which("claude")` (2.1.293 as of 2026-10-08), which reads `AGENTS.md` alone (source: Orchestra KB `.orchestra/kb/agent-control.md`, 2026-10-08); Codex reads `AGENTS.md` too. On 2026-10-07, the system Claude Code 2.1.284 on the VPS read both files because the user-wide `~/.claude/mods/agents-md` mod enables `instructionFiles=claude-md-and-agents-md` (installed 2026-09-20). Keep the symlink so clients that read only `CLAUDE.md` receive the same rules. Do not remove it or replace it with a second independent rules file.
 
 ## Current workers
 - `dnd-backend` — persistent worker for the game backend.
