@@ -1,0 +1,23 @@
+### PROMPT: In this repo's rules, what does the unified dm-roll.sh tool do with --defend --from? Which date did the owner decide the live AI game master uses Sonnet 5.5? Answer from the project instructions only; if you do not know, say UNKNOWN.
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.
+**Both answers are UNKNOWN.** I checked only the rules loaded into this session: the root `AGENTS.md`/`CLAUDE.md` and the global and Orchestra instructions. I didn't open any other files.
+
+1. **`dm-roll.sh --defend --from`: UNKNOWN.** The rules never mention `dm-roll.sh`, `--defend` or `--from`. They only say that `tools/dm-*.sh` are thin bash wrappers over `lib/` and route through `lib/world_graph.py` via `dm-world.sh`. They don't describe what any single tool's flags do. The rules point to `.orchestra/kb/rules-engine.md` for the CORE tools table.
+
+2. **Date the owner chose Sonnet 5.5 for the live AI game master: UNKNOWN.** No such decision is in the loaded rules. They say that dated owner decisions about the AI table, including the "live GM", are kept in `.orchestra/kb/rules-ai-table.md`. Model selection is covered in `.orchestra/kb/rules-web-app.md`. A recent commit message mentions a live AI game master decision on 2026-10-15, but it doesn't name a model. Reading Sonnet 5.5 into that date would be a guess.
+
+If you'd like, I can read those two KB files and give you checked answers.
+
+### PROMPT: From the project instructions only: what language must rules files be written in, and what is the first-listed Python command prefix rule? If not known say UNKNOWN.
+Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.
+Both answers come from this repo's `CLAUDE.md`, which is a symlink to `AGENTS.md`:
+
+1. **Language of rules files:** English only, with no exceptions. This covers dm-slots, module rules, AGENTS.md and module.json, including every example and table cell. Campaign data, such as NPC names and session logs, can be in any language.
+
+2. **First Python command prefix rule:** Run Python with `uv run python`, never `python3`. Tests run with `uv run pytest`.
+
+A separate project file, `/home/kesha/orchestra/CLAUDE.md`, has a stricter version for Orchestra itself. It uses `uv run --frozen python …` and forbids both the system Python and running bare `pytest`. If you meant that file, that's the first Python rule listed.
+
+
+---
+Command: claude -p --tools "" --no-session-persistence "<prompt>" (cwd = repo). Topic-only facts (dm-roll.sh --defend --from; Sonnet 5.5 owner decision) -> UNKNOWN. Core fact (English-only, uv run python) -> known.
