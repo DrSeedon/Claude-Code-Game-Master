@@ -1,0 +1,18 @@
+# Temporary agent rules, managed by the temp_rule_* tools; hand edits and git pulls are honoured.
+# An entry without a reason, or without a date in mode expires/review, is skipped with a warning.
+rules:
+- id: rule-10018b0f21
+  project: this
+  mode: review
+  expires_at: '2026-11-07T07:00:00+00:00'
+  targets:
+  - all
+  author: Claude-Code-Game-Master-orchestrator
+  created_at: '2026-10-17T18:40:30.602149+00:00'
+  text: 'Project focus: the AI-table MVP (/home/kesha/projects/ai-table-mvp) is the only active line.
+    The web game master in /home/kesha/projects/dnd-game-master is in maintenance: no new features, only
+    fixes for breakage.'
+  reason: 'Owner decision 2026-10-07 22:07, from his voice message: "Now we focus on one project — the
+    commercial project with Lyosha. Only that one for now: the D&D master for a physical table." The rule
+    is temporary by his own words ("for now"); it moved here from the dnd-game-master AGENTS.md during
+    the 17.10 rules review.'
