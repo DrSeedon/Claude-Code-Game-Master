@@ -15,6 +15,6 @@ bash tools/dm-screen.sh enable
 bash tools/dm-screen.sh act --image art.png --title "..." --place "..." --date "..." --captions captions.json
 ```
 4. Show the opening turn with `dm-screen.sh turn --file turn.json`, then `dm-screen.sh start`.
-5. Attach the Monitor tool to `bash tools/dm-screen.sh listen` (persistent) and play. Lines from it are game actions only.
+5. Attach the Monitor tool to `bash tools/dm-screen.sh listen` (persistent) and play. Lines from it are game actions only. Without a Monitor tool, run `bash tools/dm-screen.sh wait --timeout 6900` as a background command instead: it exits with the next action (play the turn, then start it again) or with code 2 when nothing came (start it again).
 
 To leave the mode, stop the server with `bash tools/dm-screen.sh stop` and narrate in the terminal again.

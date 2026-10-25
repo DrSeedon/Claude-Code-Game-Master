@@ -14,7 +14,7 @@ bash tools/dm-screen.sh enable     # applies the `html-screen` rule to the activ
 Then play as usual (`/dm`). The Master (the AI) follows the rule in `campaign-rules.md`:
 
 1. For every act it generates key art and runs `dm-screen.sh act ...` (the colors come from the art).
-2. It starts `dm-screen.sh start` once and attaches a listener (`dm-screen.sh listen`) so your clicks and voice reach it.
+2. It starts `dm-screen.sh start` once and attaches a listener (`dm-screen.sh listen`) so your clicks and voice reach it. An agent without a persistent monitor runs `dm-screen.sh wait` in the background instead: it exits with the next action and is started again after each turn.
 3. Every turn it shows the result with `dm-screen.sh turn --file turn.json`.
 
 You can also drive it by hand, see "Commands".

@@ -217,6 +217,35 @@ def listen(sdir, from_start):
         time.sleep(0.3)
 
 
+WAIT_CURSOR = "wait-cursor.json"
+
+
+def wait_for_action(sdir, after=None, timeout=0, settle=1.5, poll=0.3):
+    """Block until the next player action, print it (with any that follow within `settle` seconds) and return 0.
+
+    For agents without a persistent monitor: run it as a background command, answer when it exits, run it again.
+    The cursor in <screen>/wait-cursor.json makes a restart neither miss nor repeat an action. Returns 2 on timeout.
+    """
+    from . import inbox
+
+    if after is None:
+        after = max((_read(sdir / WAIT_CURSOR) or {}).get("last", 0), (_read(sdir / "turn.json") or {}).get("answered", 0))
+    deadline = time.monotonic() + timeout if timeout else None
+    while True:
+        events = inbox.read_events(sdir, after_id=after)
+        if events:
+            time.sleep(settle)           # two players, or a correction right after: deliver them together
+            events = inbox.read_events(sdir, after_id=after)
+            for event in events:
+                print(inbox.format_line(event), flush=True)
+            _write(sdir / WAIT_CURSOR, {"last": events[-1]["id"]})
+            return 0
+        if deadline and time.monotonic() >= deadline:
+            print("no player action yet: run wait again", flush=True)
+            return 2
+        time.sleep(poll)
+
+
 def _parse_age(text):
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     if not text or text[-1] not in units or not text[:-1].isdigit():
@@ -536,6 +565,9 @@ def main(argv=None):
     sub.add_parser("status")
     l = sub.add_parser("listen", help="print player actions as they arrive (use with the Monitor tool)")
     l.add_argument("--from-start", action="store_true")
+    wt = sub.add_parser("wait", help="wait for the next player action, print it and exit (for agents without a Monitor tool)")
+    wt.add_argument("--after", type=int, help="action id already handled (default: the saved cursor or the shown turn)")
+    wt.add_argument("--timeout", type=float, default=0, help="seconds; exit 2 when nothing came (0 = wait forever)")
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=DEFAULT_PORT)
     sub.add_parser("hook")
@@ -640,6 +672,8 @@ def main(argv=None):
         print(f"running on http://127.0.0.1:{info['port']}/" if info else "not running")
     elif args.cmd == "listen":
         listen(sdir, args.from_start)
+    elif args.cmd == "wait":
+        return wait_for_action(sdir, args.after, args.timeout)
     elif args.cmd == "serve":
         serve(sdir, args.port)
     elif args.cmd == "log":

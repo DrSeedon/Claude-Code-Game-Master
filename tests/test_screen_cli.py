@@ -270,3 +270,32 @@ def test_a_voice_in_use_is_not_deleted_without_force(tmp_path, monkeypatch, caps
     screen_cli.delete_voice(api, "Slavic", force=True)
 
     assert api.deleted == ["SLAV"] and "still referenced by: war: narrator" in capsys.readouterr().out
+
+
+def test_wait_returns_the_next_action_and_remembers_it(tmp_path, capsys):
+    import json as _json
+    import threading
+
+    from lib.screen import cli as screen_cli, inbox
+
+    (tmp_path / "turn.json").write_text(_json.dumps({"id": 4, "answered": 0}))
+    inbox.append_event(tmp_path, "Стив", "text", "уже отвечено")
+    (tmp_path / "turn.json").write_text(_json.dumps({"id": 5, "answered": 1}))
+    threading.Timer(0.2, lambda: inbox.append_event(tmp_path, "Стив", "voice", "читаю бланк")).start()
+
+    assert screen_cli.wait_for_action(tmp_path, timeout=5, settle=0.1, poll=0.05) == 0
+    assert capsys.readouterr().out.strip() == "[screen #2] Стив (voice): читаю бланк"
+    assert _json.loads((tmp_path / "wait-cursor.json").read_text()) == {"last": 2}
+
+    assert screen_cli.wait_for_action(tmp_path, timeout=0.3, settle=0.1, poll=0.05) == 2    # nothing new: no repeat
+    assert "no player action yet" in capsys.readouterr().out
+
+
+def test_wait_delivers_actions_that_arrive_together(tmp_path, capsys):
+    from lib.screen import cli as screen_cli, inbox
+
+    inbox.append_event(tmp_path, "Стив", "button", "Подписать бланк")
+    inbox.append_event(tmp_path, "Оба", "text", "и заказать пива")
+
+    assert screen_cli.wait_for_action(tmp_path, after=0, timeout=1, settle=0.05, poll=0.05) == 0
+    assert capsys.readouterr().out.count("[screen #") == 2
