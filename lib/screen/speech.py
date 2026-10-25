@@ -10,9 +10,11 @@ import html
 import json
 import os
 import re
+import threading
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -28,6 +30,8 @@ IDS = {"environment_id": ENVIRONMENTS, "filter_preset_id": FILTERS, "background_
 DEFAULTS = {"model": "eleven_flash_v2_5", "language": "ru", "output_format": "mp3_44100_128",
             "stability": 0.5, "similarity_boost": 0.75, "narrator": {}, "default": {}}
 CONFIG_FILE = "speech.json"
+LEDGER = "usage.jsonl"
+LEDGER_DAYS = 30
 AUDIO_DIR = "audio"
 CHUNK = 600
 _TAG = re.compile(r"<[^>]+>")
@@ -230,6 +234,7 @@ class ElevenLabsApi:
 class Speaker:
     def __init__(self, screen_dir, api, characters):
         self.dir, self.api, self.characters = Path(screen_dir), api, characters
+        self._ledger_lock = threading.Lock()
 
     def _segments(self, turn, config, characters):
         out = []
@@ -249,10 +254,31 @@ class Speaker:
         return {"segments": len(segments), "cached": len(segments) - len(todo),
                 "credits": int(sum(_credits(s["text"], s["voice"]["model"]) for s in todo) + 0.999)}
 
+    def _ledger_used(self):
+        path = self.dir / AUDIO_DIR / LEDGER
+        if not path.is_file():
+            return 0
+        since = datetime.now(timezone.utc) - timedelta(days=LEDGER_DAYS)
+        total = 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            entry = json.loads(line)
+            if datetime.strptime(entry["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) >= since:
+                total += entry["credits"]
+        return total
+
     def quota(self):
+        """The account counter can lag or be stale, so our own ledger of the last 30 days wins when it is larger."""
         sub = self.api.subscription()
-        used, limit = int(sub["character_count"]), int(sub["character_limit"])
+        limit = int(sub["character_limit"])
+        used = max(int(sub["character_count"]), self._ledger_used())
         return {"used": used, "limit": limit, "left": max(0, limit - used)}
+
+    def _log_spending(self, credits):
+        path = self.dir / AUDIO_DIR / LEDGER
+        entry = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "credits": credits}
+        with self._ledger_lock:
+            with open(path, "a", encoding="utf-8") as out:
+                out.write(json.dumps(entry) + "\n")
 
     def _synthesize(self, seg, config):
         voice = seg["voice"]
@@ -268,6 +294,7 @@ class Speaker:
         tmp = path.with_suffix(".part")
         tmp.write_bytes(audio)
         tmp.replace(path)
+        self._log_spending(int(_credits(seg["text"], voice["model"]) + 0.999))
 
     def render(self, turn):
         config, characters = load_config(self.dir), self.characters()

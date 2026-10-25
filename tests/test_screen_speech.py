@@ -170,3 +170,23 @@ def test_quota_reads_the_subscription(speaker):
     spk, _, _ = speaker
 
     assert spk.quota() == {"used": 100, "limit": 10000, "left": 9900}
+
+
+def test_spending_is_logged_and_wins_over_a_stale_account_counter(speaker):
+    spk, api, tmp_path = speaker      # the account counter says 100 used
+    spk.render(TURN)
+
+    ledger = [json.loads(line) for line in (tmp_path / "audio" / "usage.jsonl").read_text().splitlines()]
+    assert sum(entry["credits"] for entry in ledger) == 11    # 'Дверь закрывается.' (18) + 'Всё.' (4) at 0.5 = 11 rounded up per line
+
+    api.subscription = lambda: {"character_count": 0, "character_limit": 10000}
+    assert spk.quota()["used"] == 11 and spk.quota()["left"] == 9989
+
+
+def test_old_spending_does_not_count(speaker):
+    spk, api, tmp_path = speaker
+    (tmp_path / "audio").mkdir(exist_ok=True)
+    (tmp_path / "audio" / "usage.jsonl").write_text(json.dumps({"ts": "2025-01-01T00:00:00Z", "credits": 5000}) + "\n")
+    api.subscription = lambda: {"character_count": 0, "character_limit": 10000}
+
+    assert spk.quota()["used"] == 0
