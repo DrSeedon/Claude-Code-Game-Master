@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, eventlog, inbox, speech as speech_module, voice
+from . import activity, audio as audio_module, eventlog, inbox, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
@@ -46,7 +46,7 @@ class ScreenServer(ThreadingHTTPServer):
 
 
 def _signature(screen_dir):
-    files = [screen_dir / n for n in ("act.json", "turn.json", activity.ACTIVITY, inbox.INBOX)]
+    files = [screen_dir / n for n in ("act.json", "turn.json", activity.ACTIVITY, inbox.INBOX)] + [TEMPLATE]   # a new page build reloads open pages
     files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"]
     sig = []
     for f in files:
@@ -65,7 +65,7 @@ def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_
             "inbox_last": events[-1]["id"] if events else 0}
 
 
-def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None, speaker=None):
+def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None, speaker=None, director=None):
     screen_dir = Path(screen_dir)
     token = token or secrets.token_urlsafe(24)
     views_provider = views_provider or (lambda: {})
@@ -131,6 +131,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._page() if self._host_ok() else self._deny()
             if path.startswith("/audio/"):
                 return self._audio(path[len("/audio/"):])
+            if path.startswith("/library/"):
+                return self._library(path[len("/library/"):])
             if path == "/art.png":
                 art = screen_dir / "art.png"
                 if not self._host_ok() or not art.is_file():
@@ -142,6 +144,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on()))
             if path == "/api/speech/plan":
                 return self._plan()
+            if path == "/api/audio":
+                return self._sounds()
             if path == "/api/clients":
                 return self._send(200, {"clients": self.server.clients})
             if path == "/api/events":
@@ -226,6 +230,23 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._send(404, {"error": "no such audio"})
             self._send(200, path.read_bytes(), "audio/mpeg")
 
+        def _library(self, name):
+            if not self._authorized():
+                return self._deny()
+            if director is None or not audio_module.FILE_NAME.fullmatch(name):
+                return self._send(404, {"error": "no such sound"})
+            path = director.library.dir / "files" / name
+            if not path.is_file():
+                return self._send(404, {"error": "no such sound"})
+            self._send(200, path.read_bytes(), audio_module.CONTENT_TYPES[name.rsplit(".", 1)[1]])
+
+        def _sounds(self):
+            """The turn's sounds that cost nothing: the library and free sources, never a generation."""
+            turn = self._turn()
+            if director is None or not turn:
+                return self._send(200, {"audio": None})
+            return self._send(200, {"turn": turn["id"], "audio": director.resolve(turn, generate=False)})
+
         def _turn(self):
             return _read_json(screen_dir / "turn.json")
 
@@ -245,7 +266,12 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             except Exception:
                 quota = None
             try:
-                return self._send(200, {"plan": speaker.plan(turn), "quota": quota})
+                plan = speaker.plan(turn)
+                if director is not None:
+                    sounds = director.plan(turn)
+                    plan = {**plan, "speech_credits": plan["credits"], "sound_credits": sounds["credits"], "credits": plan["credits"] + sounds["credits"],
+                            "sounds": sounds["cues"], "sounds_found": sounds["found"]}
+                return self._send(200, {"plan": plan, "quota": quota})
             except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
                 return self._speech_error(exc)
 
@@ -263,7 +289,13 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._speech_error(exc)
             for seg in segments:
                 seg["url"] = "/audio/" + seg["file"]
-            self._send(200, {"turn": turn["id"], "segments": segments, "quota": quota})
+            sounds = director.resolve(turn, generate=True) if director is not None else None
+            if sounds and (sounds["sfx"] or sounds["music"] != "keep" or sounds["ambience"] != "keep"):
+                try:
+                    quota = speaker.quota()
+                except Exception:
+                    pass
+            self._send(200, {"turn": turn["id"], "segments": segments, "audio": sounds, "quota": quota})
 
         def _ui_log(self, body):
             try:

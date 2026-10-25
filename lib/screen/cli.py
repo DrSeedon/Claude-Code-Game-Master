@@ -119,12 +119,14 @@ def run_hook(payload_text):
 def serve(sdir, port):
     from backend.campaign_views import get_campaign_views
 
-    from . import clock, eventlog, server, speech, voice
+    from . import audio, clock, eventlog, server, speech, voice
 
     campaign = sdir.parent
+    api = speech.ElevenLabsApi(PROJECT_ROOT)
+    speaker = speech.Speaker(sdir, api, lambda: speech.characters_from_world(campaign))
     httpd, token = server.make_server(sdir, port=port, views_provider=lambda: get_campaign_views(campaign),
-                                      clock_provider=lambda: clock.world_clock(campaign),
-                                      speaker=speech.Speaker(sdir, speech.ElevenLabsApi(PROJECT_ROOT), lambda: speech.characters_from_world(campaign)),
+                                      clock_provider=lambda: clock.world_clock(campaign), speaker=speaker,
+                                      director=audio.Director(PROJECT_ROOT, api, speaker, log=lambda kind, **data: eventlog.log(sdir, kind, **data)),
                                       transcriber=voice.make_transcriber(PROJECT_ROOT))
     _write(sdir / "server.json", {"pid": os.getpid(), "port": httpd.server_port, "token": token})
     eventlog.log(sdir, "server", event="start", pid=os.getpid(), port=httpd.server_port, speech=speech.load_config(sdir).get("model"), key_present=bool(speech.load_api_key(PROJECT_ROOT)))
@@ -235,7 +237,7 @@ def _format_entry(entry):
     if entry.get("words"):
         extra = " | words: " + " ".join(f"{w['word']}({w.get('confidence')})" for w in entry["words"])[:400]
     if entry.get("blocks"):
-        extra += f" | {len(entry['blocks'])} blocks"
+        extra += f" | {entry['blocks'] if isinstance(entry['blocks'], int) else len(entry['blocks'])} blocks"
     return f"{entry['ts'][11:23]} {entry['kind']:<14} " + " ".join(parts)[:260] + extra
 
 
@@ -305,7 +307,7 @@ def key_command(action):
         raise SystemExit("no ELEVENLABS_API_KEY in .env")
     print(f"key ending {key[-4:]}")
     for name, ok in keys.permission_report(key).items():
-        print(f"  {'ok     ' if ok else 'MISSING'} {name}")
+        print(f"  {'UNKNOWN (no answer)' if ok is None else 'ok     ' if ok else 'MISSING'} {name}")
 
 
 def voice_command(sdir, args):
@@ -317,6 +319,13 @@ def voice_command(sdir, args):
         print("model:", config["model"], "| language:", config["language"])
         print("narrator:", config.get("narrator") or "(not set)")
         print("default:", config.get("default") or "(not set)")
+        for gender, profile in sorted((config.get("cast") or {}).items()):
+            print(f"cast {gender}:", profile)
+        try:
+            sub = api.subscription()
+            print(f"own voice slots: {sub.get('voice_slots_used')} of {sub.get('voice_limit')} used")
+        except Exception as exc:
+            print(f"own voice slots: unknown ({type(exc).__name__})")
         for name, profile in sorted(speech.characters_from_world(sdir.parent).items()):
             print(f"{name}: {profile}")
         return
@@ -343,12 +352,18 @@ def voice_command(sdir, args):
         eventlog.log(sdir, "voice_keep", character=args.name, profile=profile)
         print(f"kept: {args.name} -> voice {profile['voice_id']}")
         return
+    if args.what == "delete":
+        return delete_voice(api, args.name or args.voice, args.force)
     if not args.voice:
         raise SystemExit("--voice is required")
     effects = {k: v for k, v in (("environment_id", args.env), ("distance", args.distance), ("pan", args.pan),
                                  ("filter_preset_id", args.filter)) if v is not None}
     profile = voices.make_profile(voices.find_voice(api, args.voice), args.model, args.stability, args.similarity, effects, args.speed)
-    if args.what == "narrator":
+    if args.what == "cast":
+        if args.name not in speech.CASTS:
+            raise SystemExit(f"voice cast {'|'.join(speech.CASTS)} --voice ...")
+        voices.set_cast(sdir, args.name, profile)
+    elif args.what == "narrator":
         voices.set_narrator(sdir, profile)
     elif args.what == "default":
         voices.set_default(sdir, profile)
@@ -356,7 +371,98 @@ def voice_command(sdir, args):
         if not args.name:
             raise SystemExit('give the character name: voice set "Name" --voice ...')
         voices.set_character_voice(sdir.parent, args.name, profile)
-    print(f"{args.what}{' ' + args.name if args.what == 'set' else ''}: {profile['name']}")
+    print(f"{args.what}{' ' + args.name if args.what in ('set', 'cast') else ''}: {profile['name']}")
+
+
+def voice_users(voice_id):
+    """Every campaign place that uses a voice: the screen config (narrator, default, cast) and character cards."""
+    users = []
+    for campaign in sorted(c for c in (PROJECT_ROOT / "world-state" / "campaigns").iterdir() if c.is_dir()):
+        config = _read(campaign / "screen" / "speech.json") or {}
+        for role in ("narrator", "default"):
+            if (config.get(role) or {}).get("voice_id") == voice_id:
+                users.append(f"{campaign.name}: {role}")
+        for gender, profile in (config.get("cast") or {}).items():
+            if (profile or {}).get("voice_id") == voice_id:
+                users.append(f"{campaign.name}: cast {gender}")
+        world = _read(campaign / "world.json") or {}
+        for node in (world.get("nodes") or {}).values():
+            if ((node.get("data") or {}).get("voice") or {}).get("voice_id") == voice_id:
+                users.append(f"{campaign.name}: {node.get('name')}")
+    return users
+
+
+def delete_voice(api, query, force=False):
+    from . import voices
+
+    if not query:
+        raise SystemExit('voice delete "Name or id" [--force]')
+    voice = voices.find_voice(api, query)
+    if voice.get("category") == "premade":
+        raise SystemExit(f"{voice['name']} is a premade voice: it cannot be deleted")
+    users = voice_users(voice["voice_id"])
+    if users and not force:
+        raise SystemExit(f"{voice['name']} is still used by: " + "; ".join(users) + ". Give them another voice first, or pass --force")
+    api.delete_voice(voice["voice_id"])
+    print(f"deleted {voice['name']} ({voice['voice_id']})" + (f"; still referenced by: {'; '.join(users)}" if users else ""))
+
+
+SEED_FILE = Path(__file__).with_name("audio_seed.json")
+
+
+def audio_command(args):
+    from . import audio, eventlog, speech
+
+    library = audio.Library(PROJECT_ROOT)
+    if args.what == "list":
+        for e in sorted(library.entries(), key=lambda e: (e["kind"], e["title"])):
+            if not args.kind or e["kind"] == args.kind:
+                print(f"{e['id']}  {e['kind']:8} {e.get('source', ''):11} {e['title'][:48]:48} [{', '.join(e.get('tags', []))}]")
+        return
+    if args.what == "find":
+        entry = library.find(args.kind or "sfx", args.text, args.tags.split(",") if args.tags else [])
+        print(f"{entry['id']}  {entry['title']}  {library.path(entry)}" if entry else "nothing in the library")
+        return
+    if args.what == "normalize":
+        print(f"{library.renormalize()} sounds brought to even loudness")
+        return
+    if args.what == "remove":
+        library.remove(args.text)
+        print("removed", args.text)
+        return
+    if args.what == "add":
+        if not (args.kind and args.title):
+            raise SystemExit("audio add <file|url> --kind sfx|ambience|music --title ... [--tags a,b] [--license ...] [--attribution ...]")
+        remote = args.text.startswith(("http://", "https://"))
+        data = audio.download(args.text) if remote else Path(args.text).read_bytes()
+        entry = library.add(data, audio.extension(args.text), args.kind, args.title, args.tags.split(",") if args.tags else [],
+                            source=args.source or ("web" if remote else "local"), license=args.license or "", attribution=args.attribution or "",
+                            url=args.text if remote else "", loop=args.kind != "sfx")
+        print(f"added {entry['id']} ({entry['kind']}): {entry['title']}")
+        return
+    if args.what == "seed":
+        seeds = json.loads(SEED_FILE.read_text(encoding="utf-8"))["sounds"]
+        have = {e.get("url") for e in library.entries()}
+        for seed in seeds:
+            if seed["url"] in have:
+                continue
+            try:
+                library.add(audio.download(seed["url"]), audio.extension(seed["url"]), seed["kind"], seed["title"], seed.get("tags", []),
+                            source=seed.get("source", "web"), license=seed.get("license", ""), attribution=seed.get("attribution", ""),
+                            url=seed["url"], loop=seed["kind"] != "sfx")
+                print(f"added {seed['kind']}: {seed['title']}")
+            except Exception as exc:
+                print(f"skipped {seed['title']}: {type(exc).__name__}: {exc}")
+        return
+    if args.what == "make":
+        kind = args.kind or "sfx"
+        cue = audio.validate_cue({"cue": args.text, "tags": args.tags.split(",") if args.tags else [],
+                                  **({"seconds": args.seconds} if args.seconds else {})}, kind, "make")
+        sdir = screen_dir()
+        api = speech.ElevenLabsApi(PROJECT_ROOT)
+        director = audio.Director(PROJECT_ROOT, api, speech.Speaker(sdir, api, lambda: {}), log=lambda kind, **data: eventlog.log(sdir, kind, **data))
+        entry = director.library.find(kind, cue["cue"], cue["tags"]) or director._free(kind, cue) or director._generate(kind, cue)
+        print(f"{entry['id']}  {entry.get('source')}  {entry['title']}  {library.path(entry)}")
 
 
 def audition(sdir, text, names, speed, model, models=None):
@@ -445,8 +551,9 @@ def main(argv=None):
     ky.add_argument("action", choices=["paste", "check"])
     sub.add_parser("voices", help="list the voices of your ElevenLabs account (Russian first)")
     vp = sub.add_parser("voice", help="narrator, default and per-character voices")
-    vp.add_argument("what", choices=["narrator", "default", "model", "set", "show", "design", "keep"])
-    vp.add_argument("name", nargs="?", help="character name for 'set', model id for 'model'")
+    vp.add_argument("what", choices=["narrator", "default", "cast", "model", "set", "show", "design", "keep", "delete"])
+    vp.add_argument("name", nargs="?", help="character name for 'set', male|female for 'cast', model id for 'model', voice for 'delete'")
+    vp.add_argument("--force", action="store_true", help="delete: even when a campaign still uses the voice")
     vp.add_argument("--voice", help="voice name (or part of it) or id")
     vp.add_argument("--model")
     vp.add_argument("--stability", type=float)
@@ -469,6 +576,16 @@ def main(argv=None):
     sp = sub.add_parser("speak", help="voice one line now (spends credits) and print the audio file")
     sp.add_argument("text")
     sp.add_argument("--as", dest="speaker", default="narrator")
+    ad = sub.add_parser("audio", help="the shared library of sound effects, ambience and music")
+    ad.add_argument("what", choices=["list", "find", "add", "remove", "seed", "make", "normalize"])
+    ad.add_argument("text", nargs="?", default="", help="find/make: the cue; add: a file or URL; remove: the entry id")
+    ad.add_argument("--kind", choices=["sfx", "ambience", "music"])
+    ad.add_argument("--tags", help="comma-separated English tags")
+    ad.add_argument("--title")
+    ad.add_argument("--seconds", type=float)
+    ad.add_argument("--license")
+    ad.add_argument("--attribution")
+    ad.add_argument("--source")
     sub.add_parser("doctor", help="check what the screen needs")
     sub.add_parser("enable", help="turn the screen mode on for the active campaign")
     args = ap.parse_args(argv)
@@ -536,6 +653,8 @@ def main(argv=None):
             print(f"{'RU ' if v['ru'] else '   '}{v['name'][:40]:40} {v['gender'] or '?':8} {v['accent'] or '':11} {v['category']:12} {v['voice_id']}")
     elif args.cmd == "voice":
         voice_command(sdir, args)
+    elif args.cmd == "audio":
+        audio_command(args)
     elif args.cmd == "speak":
         speak_once(sdir, args.text, args.speaker)
     elif args.cmd == "audition":

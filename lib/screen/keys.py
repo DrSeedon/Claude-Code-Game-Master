@@ -42,12 +42,14 @@ def _call(method, path, body, key):
             return response.status, response.read().decode()[:400]
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode()[:400]
+    except (TimeoutError, urllib.error.URLError, OSError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
 
 
 def permission_report(key, call=_call):
-    """What the key may do, found with requests that create, change and spend nothing."""
+    """What the key may do, found with requests that create, change and spend nothing; None when a probe did not answer."""
     def allowed(status, text):
-        return not (status == 401 and "permission" in text)
+        return None if status is None else not (status == 401 and "permission" in text)
 
     checks = {"read_voices": ("GET", "/v1/voices", None), "read_models": ("GET", "/v1/models", None), "read_user": ("GET", "/v1/user/subscription", None),
               "history": ("GET", "/v1/history?page_size=1", None), "voices_write": ("DELETE", "/v1/voices/doesNotExist000000", None),

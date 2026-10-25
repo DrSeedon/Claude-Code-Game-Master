@@ -83,8 +83,9 @@ def test_good_effects_pass():
 def test_credit_estimate_uses_model_multiplier():
     segments = [{"speaker": "narrator", "text": "а" * 100}]
 
-    assert speech.estimate_credits(segments, {"model": "eleven_flash_v2_5"}) == 50
-    assert speech.estimate_credits(segments, {"model": "eleven_v4"}) == 100
+    assert speech.estimate_credits(segments, {"model": "eleven_flash_v2_5"}) == 20
+    assert speech.estimate_credits(segments, {"model": "eleven_v4"}) == 45
+    assert speech.estimate_credits(segments, {"model": "eleven_multilingual_v2"}) == 100
 
 
 class FakeApi:
@@ -157,7 +158,7 @@ def test_plan_reports_cost_and_cached_state(speaker):
 
 def test_render_refuses_when_credits_are_not_enough(speaker):
     spk, api, _ = speaker
-    api.subscription = lambda: {"character_count": 9990, "character_limit": 10000}
+    api.subscription = lambda: {"character_count": 9998, "character_limit": 10000}
 
     with pytest.raises(speech.SpeechError) as error:
         spk.render(TURN)
@@ -169,7 +170,7 @@ def test_render_refuses_when_credits_are_not_enough(speaker):
 def test_quota_reads_the_subscription(speaker):
     spk, _, _ = speaker
 
-    assert spk.quota() == {"used": 100, "limit": 10000, "left": 9900}
+    assert spk.quota() == {"used": 100, "limit": 10000, "left": 9900, "account": 100}
 
 
 def test_spending_is_logged_and_wins_over_a_stale_account_counter(speaker):
@@ -177,10 +178,10 @@ def test_spending_is_logged_and_wins_over_a_stale_account_counter(speaker):
     spk.render(TURN)
 
     ledger = [json.loads(line) for line in (tmp_path / "audio" / "usage.jsonl").read_text().splitlines()]
-    assert sum(entry["credits"] for entry in ledger) == 11    # 'Дверь закрывается.' (18) + 'Всё.' (4) at 0.5 = 11 rounded up per line
+    assert sum(entry["credits"] for entry in ledger) == 5    # 'Дверь закрывается.' (18) + 'Всё.' (4) at 0.2, rounded up
 
     api.subscription = lambda: {"character_count": 0, "character_limit": 10000}
-    assert spk.quota()["used"] == 11 and spk.quota()["left"] == 9989
+    assert spk.quota()["used"] == 5 and spk.quota()["left"] == 9995
 
 
 def test_old_spending_does_not_count(speaker):
@@ -252,12 +253,12 @@ def test_every_synthesis_and_cache_hit_is_logged_with_price_and_ids(tmp_path):
 
     tts = eventlog.read(tmp_path, kinds={"tts"})
     fresh, cached = tts[0], tts[1]
-    assert fresh["cached"] is False and fresh["credits"] == 9 and fresh["chars"] == 18 and fresh["model"] == "eleven_flash_v2_5"
+    assert fresh["cached"] is False and fresh["credits"] == 4 and fresh["chars"] == 18 and fresh["model"] == "eleven_flash_v2_5"
     assert fresh["voice_id"] == "NARR" and fresh["voice"] == "Nikolay" and fresh["speed"] == 1.1 and fresh["request_id"] == "req-9"
     assert fresh["api_chars"] == "11" and fresh["ms"] >= 0 and fresh["turn"] == 5 and fresh["text"] == "Дверь закрывается."
     assert cached["cached"] is True and cached["credits"] == 0
     render = eventlog.read(tmp_path, kinds={"speech_render"})
-    assert render[0]["segments"] == 1 and render[0]["credits"] == 9 and render[0]["quota_before"]["used"] == 100
+    assert render[0]["segments"] == 1 and render[0]["credits"] == 4 and render[0]["quota_before"]["used"] == 100
 
 
 def test_a_failed_synthesis_is_logged_with_its_status(tmp_path):
@@ -274,3 +275,108 @@ def test_a_failed_synthesis_is_logged_with_its_status(tmp_path):
 
     failed = eventlog.read(tmp_path, kinds={"tts"})[0]
     assert failed["ok"] is False and failed["status"] == 402 and "library voices" in failed["error"]
+
+
+SCRIPTED = {"id": 5, "blocks": ["<p>Таверна гудит.</p>", "<p><b>Зоя:</b> «Можно я его потрогаю?»</p>"],
+            "audio": {"scene": {"environment_id": "big_room", "background_noise_id": "cafe"},
+                      "speech": [{"who": "narrator", "text": "Таверна гудит, [pause] как улей.", "blocks": [0]},
+                                 {"who": "Зоя", "text": "[whispers] Можно я его потрогаю?", "blocks": [1], "effects": {"distance": 0.2}},
+                                 {"who": "Трактирщица", "text": "Не трогать!", "cast": "female"}]}}
+
+
+@pytest.fixture
+def cast_speaker(tmp_path):
+    (tmp_path / "speech.json").write_text(json.dumps({"model": "eleven_v4", "narrator": {"voice_id": "NARR"}, "default": {"voice_id": "MALE"},
+                                                      "cast": {"female": {"voice_id": "FEM"}}}))
+    api = FakeApi()
+    return speech.Speaker(tmp_path, api=api, characters=lambda: {"зоя": {"voice_id": "ZOYA", "effects": {"pan": -0.3}}}), api, tmp_path
+
+
+def test_the_voice_script_replaces_the_shown_blocks(cast_speaker):
+    spk, api, _ = cast_speaker
+
+    segments = spk.render(SCRIPTED)
+
+    assert [s["speaker"] for s in segments] == ["narrator", "Зоя", "Трактирщица"]
+    assert [call[1]["text"] for call in api.calls] == ["Таверна гудит, [pause] как улей.", "[whispers] Можно я его потрогаю?", "Не трогать!"]
+    assert segments[1]["text"] == "Можно я его потрогаю?" and segments[0]["blocks"] == [0] and segments[2]["blocks"] == []
+
+
+def test_scene_effects_reach_characters_but_not_the_narrator(cast_speaker):
+    spk, api, _ = cast_speaker
+
+    spk.render(SCRIPTED)
+
+    bodies = {call[0]: call[1] for call in api.calls}
+    assert "audio_effects" not in bodies["NARR"]
+    assert bodies["ZOYA"]["audio_effects"] == {"environment_id": "big_room", "background_noise_id": "cafe", "pan": -0.3, "distance": 0.2}
+    assert bodies["FEM"]["audio_effects"] == {"environment_id": "big_room", "background_noise_id": "cafe"}
+
+
+def test_a_line_cast_picks_the_campaign_voice_for_an_unknown_character(cast_speaker):
+    spk, api, _ = cast_speaker
+    turn = {"id": 1, "blocks": ["<p>x</p>"], "audio": {"speech": [{"who": "Прохожий", "text": "Эй!"}, {"who": "Торговка", "text": "Ой!", "cast": "female"}]}}
+
+    spk.render(turn)
+
+    assert [call[0] for call in api.calls] == ["MALE", "FEM"]
+
+
+def test_a_turn_without_a_voice_script_still_reads_its_blocks(cast_speaker):
+    spk, api, _ = cast_speaker
+
+    spk.render({"id": 2, "blocks": ["<p>Тишина.</p>"], "audio": {"scene": {"environment_id": "hall"}}})
+
+    assert [(call[0], call[1]["text"]) for call in api.calls] == [("NARR", "Тишина.")]
+
+
+def test_spending_records_the_account_counter_move_not_the_estimate(speaker):
+    spk, api, tmp_path = speaker
+    counts = iter([100, 104, 104])
+    api.subscription = lambda: {"character_count": next(counts), "character_limit": 10000}
+
+    spk.render(TURN)
+
+    ledger = [json.loads(line) for line in (tmp_path / "audio" / "usage.jsonl").read_text().splitlines()]
+    assert ledger[0]["credits"] == 4 and "estimated" not in ledger[0] and len(ledger) == 1
+
+
+def test_a_lagging_account_counter_falls_back_to_the_marked_estimate(speaker):
+    spk, _, tmp_path = speaker      # the fake counter never moves
+
+    spk.render(TURN)
+
+    ledger = [json.loads(line) for line in (tmp_path / "audio" / "usage.jsonl").read_text().splitlines()]
+    assert ledger == [{"ts": ledger[0]["ts"], "credits": 5, "estimated": True}]
+
+
+def test_a_failed_line_still_records_what_was_made(speaker):
+    spk, api, tmp_path = speaker
+    real = api.tts
+
+    def flaky(voice_id, body, fmt):
+        if voice_id == "VIC":
+            raise speech.SpeechError("boom", 500)
+        return real(voice_id, body, fmt)
+    api.tts = flaky
+
+    with pytest.raises(speech.SpeechError):
+        spk.render(TURN)
+
+    ledger = [json.loads(line) for line in (tmp_path / "audio" / "usage.jsonl").read_text().splitlines()]
+    assert sum(entry["credits"] for entry in ledger) == 4    # only 'Дверь закрывается.' (18 at 0.2, rounded up)
+
+
+def test_spoken_text_drops_performance_tags():
+    assert speech.spoken_text("[sighs] Ну вот. [laughs] Опять.") == "Ну вот. Опять."
+
+
+def test_an_old_estimate_stops_counting_once_the_account_had_time_to_catch_up(speaker):
+    spk, api, tmp_path = speaker
+    (tmp_path / "audio").mkdir(exist_ok=True)
+    fresh = speech.datetime.now(speech.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [{"ts": "2026-01-01T00:00:00Z", "credits": 9000, "estimated": True}, {"ts": fresh, "credits": 300, "estimated": True}]
+    (tmp_path / "audio" / "usage.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    api.subscription = lambda: {"character_count": 0, "character_limit": 10000}
+
+    assert spk.quota()["used"] == 300

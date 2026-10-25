@@ -64,6 +64,11 @@ def set_default(screen_dir, profile):
     _write_config(screen_dir, lambda c: c.__setitem__("default", profile))
 
 
+def set_cast(screen_dir, gender, profile):
+    """The campaign voice for characters of that gender who have no voice of their own."""
+    _write_config(screen_dir, lambda c: c.setdefault("cast", {}).__setitem__(gender, profile))
+
+
 def set_model(screen_dir, model):
     _write_config(screen_dir, lambda c: c.__setitem__("model", model))
 

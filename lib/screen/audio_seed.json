@@ -1,0 +1,349 @@
+{
+ "_note": "Free sounds for 'dm-screen.sh audio seed'. CC0 needs no credit; CC BY 4.0 shows its credit in the page (hover the music button). Kevin MacLeod's comedy tracks (Investigations, Fluffing a Duck, Monkeys Spinning Monkeys, Sneaky Snitch, Call to Adventure) are left out: players know them from countless YouTube videos.",
+ "sounds": [
+  {
+   "title": "The Old Tower Inn",
+   "url": "https://opengameart.org/sites/default/files/The_Old_Tower_Inn.mp3",
+   "kind": "music",
+   "tags": [
+    "tavern",
+    "inn",
+    "medieval",
+    "lute",
+    "cozy"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«The Old Tower Inn» by RandomMind (opengameart.org/content/medieval-the-old-tower-inn, CC0)"
+  },
+  {
+   "title": "Minstrel Dance",
+   "url": "https://opengameart.org/sites/default/files/Minstrel_Dance.mp3",
+   "kind": "music",
+   "tags": [
+    "tavern",
+    "dance",
+    "medieval",
+    "lute",
+    "cheerful"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Minstrel Dance» by RandomMind (opengameart.org/content/medieval-minstrel-dance, CC0)"
+  },
+  {
+   "title": "King's Feast",
+   "url": "https://opengameart.org/sites/default/files/Kings_Feast.mp3",
+   "kind": "music",
+   "tags": [
+    "feast",
+    "tavern",
+    "medieval",
+    "celebration"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«King's Feast» by RandomMind (opengameart.org/content/medieval-kings-feast, CC0)"
+  },
+  {
+   "title": "The Bard's Tale",
+   "url": "https://opengameart.org/sites/default/files/The_Bards_Tale.mp3",
+   "kind": "music",
+   "tags": [
+    "bard",
+    "story",
+    "medieval",
+    "calm",
+    "lute",
+    "flute"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«The Bard's Tale» by RandomMind (opengameart.org/content/medieval-the-bards-tale, CC0)"
+  },
+  {
+   "title": "Market Day",
+   "url": "https://opengameart.org/sites/default/files/Market_Day.mp3",
+   "kind": "music",
+   "tags": [
+    "town",
+    "market",
+    "medieval",
+    "cheerful",
+    "day"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Market Day» by RandomMind (opengameart.org/content/medieval-market-day, CC0)"
+  },
+  {
+   "title": "Rejoicing",
+   "url": "https://opengameart.org/sites/default/files/Rejoicing.mp3",
+   "kind": "music",
+   "tags": [
+    "celebration",
+    "victory",
+    "medieval",
+    "cheerful"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Rejoicing» by RandomMind (opengameart.org/content/medieval-rejoicing, CC0)"
+  },
+  {
+   "title": "Victory Theme",
+   "url": "https://opengameart.org/sites/default/files/victory.mp3",
+   "kind": "music",
+   "tags": [
+    "victory",
+    "fanfare",
+    "medieval",
+    "triumph"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Victory Theme» by RandomMind (opengameart.org/content/medieval-victory-theme, CC0)"
+  },
+  {
+   "title": "Dungeon Ambience",
+   "url": "https://opengameart.org/sites/default/files/dungeon002.ogg",
+   "kind": "ambience",
+   "tags": [
+    "dungeon",
+    "dark",
+    "underground",
+    "cave"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Dungeon Ambience» by yd (opengameart.org/content/dungeon-ambience, CC0)"
+  },
+  {
+   "title": "Loopable Dungeon Ambience",
+   "url": "https://opengameart.org/sites/default/files/dungeon_ambient_1.ogg",
+   "kind": "ambience",
+   "tags": [
+    "dungeon",
+    "cave",
+    "wind",
+    "drips",
+    "water",
+    "underground"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Loopable Dungeon Ambience» by JaggedStone (opengameart.org/content/loopable-dungeon-ambience, CC0)"
+  },
+  {
+   "title": "Dark Cavern Ambient",
+   "url": "https://opengameart.org/sites/default/files/dark_cavern_ambient_002.ogg",
+   "kind": "ambience",
+   "tags": [
+    "cavern",
+    "cave",
+    "dark",
+    "underground"
+   ],
+   "source": "opengameart",
+   "license": "CC0",
+   "attribution": "«Dark Cavern Ambient» by Paul Wortmann (opengameart.org/content/dark-cavern-ambient, CC0)"
+  },
+  {
+   "title": "Master of the Feast",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Master%20of%20the%20Feast.mp3",
+   "kind": "music",
+   "tags": [
+    "tavern",
+    "feast",
+    "medieval",
+    "humorous",
+    "cheerful"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Master of the Feast» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Teller of the Tales",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Teller%20of%20the%20Tales.mp3",
+   "kind": "music",
+   "tags": [
+    "calm",
+    "story",
+    "medieval",
+    "somber"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Teller of the Tales» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Suonatore di Liuto",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Suonatore%20di%20Liuto.mp3",
+   "kind": "music",
+   "tags": [
+    "lute",
+    "medieval",
+    "calm",
+    "mysterious"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Suonatore di Liuto» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Drums of the Deep",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Drums%20of%20the%20Deep.mp3",
+   "kind": "music",
+   "tags": [
+    "dungeon",
+    "dark",
+    "suspense",
+    "drums"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Drums of the Deep» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Lord of the Land",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Lord%20of%20the%20Land.mp3",
+   "kind": "music",
+   "tags": [
+    "medieval",
+    "mysterious",
+    "castle",
+    "suspense"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Lord of the Land» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Village Consort",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Village%20Consort.mp3",
+   "kind": "music",
+   "tags": [
+    "village",
+    "tavern",
+    "medieval",
+    "cheerful"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Village Consort» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Pippin the Hunchback",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pippin%20the%20Hunchback.mp3",
+   "kind": "music",
+   "tags": [
+    "medieval",
+    "bouncy",
+    "mysterious",
+    "village"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Pippin the Hunchback» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Crypto",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crypto.mp3",
+   "kind": "music",
+   "tags": [
+    "dark",
+    "eerie",
+    "dungeon",
+    "suspense"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Crypto» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Darkest Child",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Darkest%20Child.mp3",
+   "kind": "music",
+   "tags": [
+    "horror",
+    "eerie",
+    "dark",
+    "crypt"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Darkest Child» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Five Armies",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Five%20Armies.mp3",
+   "kind": "music",
+   "tags": [
+    "battle",
+    "combat",
+    "epic",
+    "intense"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Five Armies» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Heroic Age",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heroic%20Age.mp3",
+   "kind": "music",
+   "tags": [
+    "battle",
+    "heroic",
+    "epic",
+    "combat"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Heroic Age» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Volatile Reaction",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3",
+   "kind": "music",
+   "tags": [
+    "combat",
+    "fight",
+    "intense",
+    "action"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Volatile Reaction» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Rites",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Rites.mp3",
+   "kind": "music",
+   "tags": [
+    "ritual",
+    "magic",
+    "mystical",
+    "dark"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Rites» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Moorland",
+   "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Moorland.mp3",
+   "kind": "music",
+   "tags": [
+    "wilderness",
+    "somber",
+    "travel",
+    "moor"
+   ],
+   "source": "incompetech",
+   "license": "CC BY 4.0",
+   "attribution": "«Moorland» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  }
+ ]
+}

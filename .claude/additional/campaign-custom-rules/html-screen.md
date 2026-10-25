@@ -34,14 +34,15 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 3. Write the turn as JSON and show it: `bash tools/dm-screen.sh turn --file turn.json`
    - `blocks`: HTML strings (`h1`, `h2`, `p`, `b`, `i`, `ul`, `li`, `div`). No scripts, styles, frames or event handlers (rejected).
    - `question`: plain text. `options`: up to 6 plain-text choices following the active agency mode.
+   - `audio` (optional): the voice script, acoustics, sound effects, ambience and music for this turn (see Sound below).
    - `panels` (optional, campaign-specific side boxes): `{"title","chips":[...]}`, `{"title","bars":[{"label","value","max"}]}`, `{"title","steps":[{"label","current"}]}`.
    - Heroes, HP, abilities, skills and quests come from the world automatically (player-safe view); never put hidden information in a block.
 4. Reply in the terminal with one short line. Do not repeat the narration there.
 
-### Voices (optional, ElevenLabs)
-- Write every spoken line of a non-player character as its own paragraph: `<p><b>Name:</b> «the line»</p>`. Everything else is read by the narrator. Do not put hidden information in blocks: whatever is shown can be read aloud.
-- When a character speaks for the first time, give them a voice: `bash tools/dm-screen.sh voice set "Name" --voice <voice> [--env ...] [--pan ...]`. Add `data.aliases` to the card for nicknames used in the text. Heroes have profiles too.
-- Credits are limited: keep the narrated text tight (dice lines, headings and lists are never read). The 🔊 tooltip shows the price of a turn. Never run `dm-screen.sh speak` or force a render without the players' consent to spend credits.
+### Sound (optional, ElevenLabs)
+- Before writing a turn's sound, read `.claude/additional/infrastructure/audio-direction.md` once per session: the voice script, scene acoustics, sound effects, ambience and music all go into the turn's `audio` field.
+- Main characters speak with their own voices; every other character uses the campaign cast (`"cast": "female"` or `"male"` on the line). Do not put hidden information in blocks or in the voice script: whatever is shown or spoken reaches the players.
+- The voice reads the shown text word for word (only performance tags are added), so credits are saved by keeping the shown text tight, never by paraphrasing it in the voice script. Reuse library sounds (`dm-screen.sh audio find`), and change music only when the place or mood changes. The 🔊 tooltip shows the price of a turn. Never run `dm-screen.sh speak`, `audio make`, `voice design` or force a render without the players' consent to spend credits.
 
 ### Debugging
 - Everything the screen does is logged: `bash tools/dm-screen.sh log --errors --since 1h`, `--kind tts,stt,turn`, `--summary`. Read it before guessing when something looks wrong.

@@ -106,7 +106,29 @@ Your own voices: `dm-screen.sh voice design "Name" --describe "stern old woman, 
 
 A character's voice profile lives in the character's own card (`data.voice`, with optional `data.aliases`), so it travels with the campaign. Options per voice: `--model`, `--stability`, `--similarity`, and effects that cost nothing: a room (`small_room big_room hall tunnel street valley forest`), `--distance` 0..1, `--pan` -1..1 (left to right) and a `--filter` (`old_radio phone ...`). Two heroes can share one voice and still differ by pan and room.
 
-Economy: every audio file is cached by its content (`screen/audio/`), so the same text with the same voice is never paid twice. The tooltip of 🔊 shows the price of the turn in credits, the footer shows what is left, and a turn that does not fit the remaining credits is refused before anything is spent. Credits per character: 0.5 on `eleven_flash_v2_5`, 1 on `eleven_v4`, `eleven_v3` and `eleven_multilingual_v2`. The Free plan has 10,000 credits a month and 3 custom voice slots; premade voices are unlimited. The key stays on the server and is never sent to the page.
+Economy: every audio file is cached by its content (`screen/audio/`), so the same text with the same voice is never paid twice. The tooltip of 🔊 shows the price of the turn in credits, the footer shows what is left, and a turn that does not fit the remaining credits is refused before anything is spent. Credits per character, measured from the account history on the Starter plan (2026-10-25): about 0.2 on `eleven_flash_v2_5` and 0.45 on `eleven_v4`; unmeasured models are estimated at 1. The Free plan has 10,000 credits a month and 3 custom voice slots; premade voices are unlimited. The key stays on the server and is never sent to the page.
+
+## Sound: voice script, acoustics, effects, ambience, music
+
+A turn can carry an `audio` field next to its blocks (the full guide for the Master is `.claude/additional/infrastructure/audio-direction.md`):
+
+- `speech`: the voice script. It must read the shown paragraphs word for word (only performance tags and punctuation may be added, every readable block must be covered); the screen refuses a turn that paraphrases or skips. Each line has `who` (`narrator` or a name), `text` (Eleven v4 performance tags such as `[whispers]` or `[laughs]` are allowed and hidden from the page), `blocks` to highlight, optional `effects` and `cast` (`male`/`female`: the campaign voice for a character without one of their own). Without `speech` the turn is read from its blocks as before.
+- `scene`: acoustics for every character line of the turn (room, distance, pan, filter, background noise). The narrator is never placed in the scene. Effects cost nothing.
+- `music`, `ambience`: looping beds that keep playing across turns until a turn gives a new cue or `null`. `sfx`: up to 6 one-shots, each tied to a block.
+
+Sounds come from one library shared by all campaigns, `world-state/audio-library/` (git-ignored): first the library, then Freesound CC0 when `FREESOUND_API_KEY` is in `.env` (free key at freesound.org/apiv2/apply), and only then ElevenLabs generation (sound effects about 10 credits a second as measured, music about 15). Whatever is found or generated is stored and reused. The page's 🎵 button switches music and sounds on and off; its tooltip shows the credits of CC BY tracks.
+
+```bash
+dm-screen.sh audio seed                         # free CC0 (OpenGameArt) and CC BY (Incompetech) tracks from lib/screen/audio_seed.json
+dm-screen.sh audio list [--kind music]
+dm-screen.sh audio find "door creaks" --kind sfx
+dm-screen.sh audio add <file|url> --kind sfx --title "..." --tags a,b --license CC0 --attribution "..."
+dm-screen.sh audio make "thunder clap" --kind sfx --seconds 2    # library, Freesound, then generation (spends credits)
+dm-screen.sh voice cast female --voice Victoria                  # the campaign voice for minor female characters
+dm-screen.sh voice delete "Old voice"                            # refuses while a campaign uses it (--force to override)
+```
+
+The credit counter writes what a generation really cost (the move of the account counter); only when the account counter lags is the estimate written, marked `"estimated": true`, and it counts for ten minutes, until the account counter has caught up.
 
 ## Log
 

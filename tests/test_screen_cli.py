@@ -236,3 +236,37 @@ def test_a_service_refusal_is_one_readable_line_and_is_logged(sdir, monkeypatch,
 
     assert code == 1 and "only available on a paid plan" in capsys.readouterr().err
     assert "paid plan" in eventlog.read(sdir, kinds={"error"})[0]["message"]
+
+
+def test_a_voice_in_use_is_not_deleted_without_force(tmp_path, monkeypatch, capsys):
+    import json as _json
+
+    from lib.screen import cli as screen_cli
+
+    camp = tmp_path / "world-state" / "campaigns" / "war"
+    (camp / "screen").mkdir(parents=True)
+    (camp / "screen" / "speech.json").write_text(_json.dumps({"narrator": {"voice_id": "SLAV"}, "cast": {"female": {"voice_id": "VIC"}}}))
+    (camp / "world.json").write_text(_json.dumps({"nodes": {"npc:a": {"name": "Анна", "data": {"voice": {"voice_id": "VIC"}}}}}))
+    (camp.parent / ".gitkeep").write_text("")
+    monkeypatch.setattr(screen_cli, "PROJECT_ROOT", tmp_path)
+
+    class Api:
+        deleted = []
+
+        def voices(self):
+            return [{"voice_id": "SLAV", "name": "Slavic Man", "category": "generated"}, {"voice_id": "ADAM", "name": "Adam", "category": "premade"}]
+
+        def delete_voice(self, voice_id):
+            self.deleted.append(voice_id)
+
+    api = Api()
+    assert screen_cli.voice_users("VIC") == ["war: cast female", "war: Анна"]
+    with pytest.raises(SystemExit, match="still used by: war: narrator"):
+        screen_cli.delete_voice(api, "Slavic")
+    with pytest.raises(SystemExit, match="premade"):
+        screen_cli.delete_voice(api, "Adam")
+    assert api.deleted == []
+
+    screen_cli.delete_voice(api, "Slavic", force=True)
+
+    assert api.deleted == ["SLAV"] and "still referenced by: war: narrator" in capsys.readouterr().out

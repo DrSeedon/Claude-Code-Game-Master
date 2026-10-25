@@ -23,7 +23,8 @@ from dotenv import dotenv_values
 from . import eventlog
 
 API = "https://api.elevenlabs.io"
-MODEL_COST = {"eleven_flash_v2_5": 0.5, "eleven_turbo_v2_5": 0.5}
+# Credits per character measured from the account history on the Starter plan (2026-10-25): v4 ≈ 0.42, Flash ≈ 0.2.
+MODEL_COST = {"eleven_flash_v2_5": 0.2, "eleven_turbo_v2_5": 0.2, "eleven_v4": 0.45}
 NO_LANGUAGE_CODE = {"eleven_multilingual_v2"}
 NO_SPEED = {"eleven_v4", "eleven_v4_turbo"}
 SPEED_RANGE = (0.7, 1.2)
@@ -37,12 +38,15 @@ DEFAULTS = {"model": "eleven_flash_v2_5", "language": "ru", "output_format": "mp
 CONFIG_FILE = "speech.json"
 LEDGER = "usage.jsonl"
 LEDGER_DAYS = 30
+ESTIMATE_GRACE = timedelta(minutes=10)   # an estimate only bridges the account counter's lag
 AUDIO_DIR = "audio"
 CHUNK = 600
 _TAG = re.compile(r"<[^>]+>")
 _DIALOGUE = re.compile(r"\s*<p[^>]*>\s*<b>(?P<who>[^<]{1,60}?):</b>\s*(?P<rest>.*)</p>\s*$", re.S)
 _QUOTED = re.compile(r"^[«\"“](?P<line>.+)[»\"”]$", re.S)
 _SENTENCE = re.compile(r"(?<=[.!?…])\s+")
+_AUDIO_TAG = re.compile(r"\s*\[[^\[\]]{1,60}\]\s*")
+CASTS = ("male", "female")
 
 
 class SpeechUnavailable(RuntimeError):
@@ -117,6 +121,22 @@ def script_from_blocks(blocks, max_chars=CHUNK):
     return segments
 
 
+def script_from_speech(lines, max_chars=CHUNK):
+    """Segments from the turn's own voice script (audio.speech); long narration is chunked like the blocks are."""
+    segments = []
+    for line in lines:
+        chunks = _split(line["text"], max_chars) if line["who"] == "narrator" else [line["text"]]
+        for chunk in chunks:
+            segments.append({"speaker": line["who"], "text": chunk, "blocks": list(line.get("blocks") or []),
+                             "effects": dict(line.get("effects") or {}), "cast": line.get("cast")})
+    return segments
+
+
+def spoken_text(text):
+    """What the page shows for a line: the text without performance tags such as [whispers]."""
+    return " ".join(_AUDIO_TAG.sub(" ", text).split())
+
+
 def validate_effects(effects):
     out = {}
     for key, value in effects.items():
@@ -167,12 +187,13 @@ def _lookup(characters, speaker):
     return None
 
 
-def resolve_voice(speaker, config, characters):
+def resolve_voice(speaker, config, characters, cast=None):
+    """Narrator, or: default voice < the campaign cast voice for the line's gender < the character's own profile."""
     base = {"model": config.get("model"), "stability": config.get("stability"), "similarity_boost": config.get("similarity_boost"), "speed": config.get("speed"), "effects": {}}
     if speaker == "narrator":
         layers = [config.get("narrator") or {}]
     else:
-        layers = [config.get("default") or {}, _lookup(characters, speaker) or {}]
+        layers = [config.get("default") or {}, (config.get("cast") or {}).get(cast) or {}, _lookup(characters, speaker) or {}]
     for layer in layers:
         base.update({k: v for k, v in layer.items() if v is not None})
     if not base.get("voice_id"):
@@ -240,6 +261,23 @@ class ElevenLabsApi:
     def voices(self):
         return json.loads(self._call("GET", "/v1/voices"))["voices"]
 
+    def delete_voice(self, voice_id):
+        return self._call("DELETE", f"/v1/voices/{voice_id}")
+
+    def sound(self, text, seconds=None, loop=False, prompt_influence=None, model_id=None):
+        """Text to sound effect (40 credits a second when the length is given)."""
+        body = {"text": text, "loop": bool(loop)}
+        for key, value in (("duration_seconds", seconds), ("prompt_influence", prompt_influence), ("model_id", model_id)):
+            if value is not None:
+                body[key] = value
+        data, _ = self._call("POST", "/v1/sound-generation?output_format=mp3_44100_128", body)
+        return data
+
+    def music(self, prompt, length_ms, model_id="music_v1", instrumental=True):
+        data, _ = self._call("POST", "/v1/music?output_format=mp3_44100_128",
+                             {"prompt": prompt, "music_length_ms": int(length_ms), "model_id": model_id, "force_instrumental": bool(instrumental)})
+        return data
+
     def design(self, description, text=None, model_id=None, seed=None, loudness=None, guidance_scale=None):
         body = {"voice_description": description}
         body.update({"text": text} if text else {"auto_generate_text": True})
@@ -261,11 +299,17 @@ class Speaker:
         self._ledger_lock = threading.Lock()
 
     def _segments(self, turn, config, characters):
+        """The turn's voice script if it has one, otherwise the shown blocks. Scene effects reach the characters, not the narrator."""
         out = []
         extra = {name.lower(): profile for name, profile in (config.get("voices") or {}).items()}
         characters = {**characters, **extra}
-        for seg in script_from_blocks(turn.get("blocks", [])):
-            voice = resolve_voice(seg["speaker"], config, characters)
+        audio = turn.get("audio") or {}
+        scene = audio.get("scene") or {}
+        script = script_from_speech(audio["speech"]) if audio.get("speech") else script_from_blocks(turn.get("blocks", []))
+        for seg in script:
+            voice = resolve_voice(seg["speaker"], config, characters, seg.pop("cast", None))
+            effects = {**({} if seg["speaker"] == "narrator" else scene), **voice["effects"], **seg.pop("effects", {})}
+            voice = {**voice, "effects": effects}
             out.append({**seg, "voice": voice, "file": _cache_key(voice, seg["text"], config)})
         return out
 
@@ -284,11 +328,13 @@ class Speaker:
         path = self.dir / AUDIO_DIR / LEDGER
         if not path.is_file():
             return 0
-        since = datetime.now(timezone.utc) - timedelta(days=LEDGER_DAYS)
+        now = datetime.now(timezone.utc)
+        since = now - timedelta(days=LEDGER_DAYS)
         total = 0
         for line in path.read_text(encoding="utf-8").splitlines():
             entry = json.loads(line)
-            if datetime.strptime(entry["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) >= since:
+            ts = datetime.strptime(entry["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if ts >= since and not (entry.get("estimated") and ts < now - ESTIMATE_GRACE):
                 total += entry["credits"]
         return total
 
@@ -297,11 +343,25 @@ class Speaker:
         sub = self.api.subscription()
         limit = int(sub["character_limit"])
         used = max(int(sub["character_count"]), self._ledger_used())
-        return {"used": used, "limit": limit, "left": max(0, limit - used)}
+        return {"used": used, "limit": limit, "left": max(0, limit - used), "account": int(sub["character_count"])}
 
-    def _log_spending(self, credits):
+    def spent(self, before, estimate):
+        """Write what a generation really cost: the account counter's move, or our estimate while the counter lags."""
+        try:
+            after = int(self.api.subscription()["character_count"])
+        except Exception:
+            after = None
+        moved = after - before["account"] if after is not None and before and "account" in before else 0
+        credits, estimated = (moved, False) if moved > 0 else (estimate, True)
+        self._log_spending(credits, estimated)
+        return credits
+
+    def _log_spending(self, credits, estimated=False):
         path = self.dir / AUDIO_DIR / LEDGER
         entry = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "credits": credits}
+        if estimated:
+            entry["estimated"] = True
+        path.parent.mkdir(parents=True, exist_ok=True)
         with self._ledger_lock:
             with open(path, "a", encoding="utf-8") as out:
                 out.write(json.dumps(entry) + "\n")
@@ -332,7 +392,6 @@ class Speaker:
         tmp = path.with_suffix(".part")
         tmp.write_bytes(audio)
         tmp.replace(path)
-        self._log_spending(credits)
         self.log("tts", ok=True, cached=False, ms=round((time.monotonic() - started) * 1000), bytes=len(audio), request_id=info.get("request-id"),
                  api_chars=info.get("x-character-count"), history_item=info.get("history-item-id"), **facts)
 
@@ -351,8 +410,13 @@ class Speaker:
             if need > before["left"]:
                 self.log("speech_render", ok=False, turn=turn.get("id"), credits=need, quota_before=before, error="not enough credits")
                 raise SpeechError(f"Not enough ElevenLabs credits: need {need}, left {before['left']}", 402)
-            with ThreadPoolExecutor(3) as pool:
-                list(pool.map(lambda s: self._synthesize(s, config, turn.get("id")), todo))
+            try:
+                with ThreadPoolExecutor(3) as pool:
+                    list(pool.map(lambda s: self._synthesize(s, config, turn.get("id")), todo))
+            finally:
+                made = [s for s in todo if (self.dir / AUDIO_DIR / s["file"]).is_file()]
+                if made:
+                    need = self.spent(before, int(sum(_credits(s["text"], s["voice"]["model"]) for s in made) + 0.999))
         self.log("speech_render", ok=True, turn=turn.get("id"), segments=len(segments), generated=len(todo), credits=need, quota_before=before,
                  quota_after=self.quota() if todo else None, ms=round((time.monotonic() - started) * 1000))
-        return [{k: seg[k] for k in ("speaker", "text", "blocks", "file")} for seg in segments]
+        return [{"speaker": seg["speaker"], "text": spoken_text(seg["text"]), "blocks": seg["blocks"], "file": seg["file"]} for seg in segments]

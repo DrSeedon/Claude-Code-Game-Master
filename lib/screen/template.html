@@ -66,7 +66,7 @@ body.waiting .opt{opacity:.45;pointer-events:none}
 .btn{font:inherit;font-size:max(1.7vh,13px);color:var(--text);background:rgba(var(--line),.15);border:1px solid var(--accent);border-radius:calc(var(--radius) * .7);padding:.5vh 1vw;cursor:pointer}
 .btn:hover{background:rgba(var(--line),.35)}
 #voicebox{display:flex;align-items:center;gap:.5vw}#speak{min-width:3em}
-#speak.on{background:rgba(var(--line),.4)}#speak.busy{opacity:.6}#speak.off,#autoBtn.off{opacity:.45}
+#speak.on{background:rgba(var(--line),.4)}#speak.busy{opacity:.6}#speak.off,#autoBtn.off,#bgBtn.off{opacity:.45}
 #autoBtn{border-radius:99px;padding:.4vh .9vw}#autoBtn.on{background:rgba(var(--line),.4);box-shadow:0 0 .8em rgba(var(--line),.5)}
 #vol{width:5.5vw;accent-color:var(--accent)}#quota{color:var(--muted);font-size:max(1.4vh,11px);white-space:nowrap}
 .story .speaking{background:rgba(var(--line),.16);border-radius:6px;box-shadow:-.5em 0 0 rgba(var(--line),.16),.5em 0 0 rgba(var(--line),.16);transition:background .3s}
@@ -110,7 +110,7 @@ body.nocaps .zone,body.nocaps #lines{display:none}
   <section id="feed" class="glass"><h6 id="feedh"></h6><div id="feedlist"></div></section>
   <footer class="glass">
     <div class="qrow"><div class="q" id="q"></div><div class="opts" id="opts"></div></div>
-    <div class="irow"><div class="who" id="who"></div><input id="txt" autocomplete="off"><button class="btn" id="send"></button><div id="voicebox"><button class="btn" id="speak">🔊</button><button class="btn" id="autoBtn"></button><input type="range" id="vol" min="0" max="1" step="0.05" title="Volume"><span id="quota"></span></div><button class="btn" id="mic">🎤</button></div>
+    <div class="irow"><div class="who" id="who"></div><input id="txt" autocomplete="off"><button class="btn" id="send"></button><div id="voicebox"><button class="btn" id="speak">🔊</button><button class="btn" id="autoBtn"></button><button class="btn" id="bgBtn">🎵</button><input type="range" id="vol" min="0" max="1" step="0.05" title="Volume"><span id="quota"></span></div><button class="btn" id="mic">🎤</button></div>
   </footer>
 </div>
 <script>
@@ -124,12 +124,13 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 uiLog('load',{ua:navigator.userAgent,w:innerWidth,h:innerHeight,dpr:devicePixelRatio});
 const TOKEN=document.body.dataset.token, $=id=>document.getElementById(id);
 const I18N={
- ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',speak:'Озвучить ход',stopSpeak:'Остановить',auto:'Авто',autoTip:'Читать вслух каждый новый ход',speechOff:'Озвучка не настроена: нужен ключ ElevenLabs и голос рассказчика (dm-screen.sh voice narrator)',credits:'кредитов',left:'осталось',tapToPlay:'Браузер не разрешил автозапуск звука: нажмите 🔊',paused:'Пауза: пока мышь над панелью или идёт правка',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
- en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',speak:'Read this turn aloud',stopSpeak:'Stop',auto:'Auto',autoTip:'Read every new turn aloud',speechOff:'Speech is not set up: an ElevenLabs key and a narrator voice are needed (dm-screen.sh voice narrator)',credits:'credits',left:'left',tapToPlay:'The browser blocked autoplay: press 🔊',paused:'Paused while the mouse is over this panel or you are editing',abil:['STR','DEX','CON','INT','WIS','CHA']}};
+ ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',speak:'Озвучить ход',stopSpeak:'Остановить',auto:'Авто',autoTip:'Читать вслух каждый новый ход',speechOff:'Озвучка не настроена: нужен ключ ElevenLabs и голос рассказчика (dm-screen.sh voice narrator)',credits:'кредитов',left:'осталось',tapToPlay:'Браузер не разрешил автозапуск звука: нажмите 🔊',bg:'Музыка и звуки',bgOff:'Музыка и звуки выключены',paused:'Пауза: пока мышь над панелью или идёт правка',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
+ en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',speak:'Read this turn aloud',stopSpeak:'Stop',auto:'Auto',autoTip:'Read every new turn aloud',speechOff:'Speech is not set up: an ElevenLabs key and a narrator voice are needed (dm-screen.sh voice narrator)',credits:'credits',left:'left',tapToPlay:'The browser blocked autoplay: press 🔊',bg:'Music and sounds',bgOff:'Music and sounds are off',paused:'Paused while the mouse is over this panel or you are editing',abil:['STR','DEX','CON','INT','WIS','CHA']}};
 let L=I18N.en;const t=k=>L[k];
 function applyLang(lang){L=I18N[lang]||I18N.en;document.documentElement.lang=lang||'en';
  $('feedh').textContent=t('feed');$('txt').placeholder=t('ph');$('send').textContent=t('send');$('saygo').textContent=t('sendNow');$('sayedit').textContent=t('edit');$('saycancel').textContent=t('cancel');$('mic').title=t('mic');$('saypause').textContent=t('paused');$('autoBtn').textContent=t('auto');$('autoBtn').title=t('autoTip');$('speak').title=t('speak');setPicText();setCapsText()}
 const SP={auto:false,vol:1,run:0,audio:null,armed:false};
+const BG={on:true,music:null,amb:null,musicFile:null,ambFile:null,sfx:[],played:new Set(),timers:[],turn:null};
 try{SP.auto=localStorage.getItem('auto')==='1';SP.vol=parseFloat(localStorage.getItem('vol')||'1')}catch(e){}
 const S={speech:false,actId:null,build:null,lang:'en',turnId:null,feedLast:0,who:'',waiting:false,heroes:{},panels:'',views:null};
 try{S.who=localStorage.getItem('who')||''}catch(e){}
@@ -238,7 +239,7 @@ function onState(st){
   S.views=st.views;
   if(st.act&&st.act.id!==S.actId){uiLog('act',{id:st.act.id,from:S.actId});if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   S.speech=!!st.speech;$('speak').classList.toggle('off',!S.speech);
-  if(st.turn&&st.turn.id!==S.turnId){uiLog('turn',{id:st.turn.id,from:S.turnId,blocks:st.turn.blocks.length,options:(st.turn.options||[]).length});const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);refreshPlan();if(fresh&&SP.auto&&S.speech)speak()}
+  if(st.turn&&st.turn.id!==S.turnId){uiLog('turn',{id:st.turn.id,from:S.turnId,blocks:st.turn.blocks.length,options:(st.turn.options||[]).length});const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);loadSounds(st.turn.id,!(fresh&&SP.auto&&S.speech));if(fresh&&SP.auto&&S.speech)speak()}
   else if(st.turn&&JSON.stringify(st.turn.panels||[])!==S.panelsKey){S.panelsKey=JSON.stringify(st.turn.panels||[]);S.panelsHtml=buildPanels(st.turn.panels||[]);renderSide()}
   else renderSide();
   if(st.turn){S.waiting=S.waiting||(st.inbox_last>(st.turn.answered||0))}
@@ -275,22 +276,56 @@ function highlight(indices){[...story.children].forEach((el,i)=>el.classList.tog
   const el=indices.length&&story.children[indices[0]];if(el){el.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'});setTimeout(pgUpd,600)}}
 function setSpeakUi(state){const b=$('speak');b.classList.toggle('on',state==='playing');b.classList.toggle('busy',state==='busy');b.textContent=state==='playing'?'⏹':state==='busy'?'…':'🔊';b.title=state==='playing'?t('stopSpeak'):t('speak')}
 function showQuota(q,credits){$('quota').textContent=q?`${q.left} ${t('left')}`:'';if(credits!=null)$('speak').title=`${t('speak')}: ≈${credits} ${t('credits')}`}
-function stopSpeech(){SP.run++;if(SP.audio){SP.audio.pause();SP.audio=null}highlight([]);setSpeakUi('idle')}
+function stopSpeech(){SP.run++;if(SP.audio){SP.audio.pause();SP.audio=null}highlight([]);setSpeakUi('idle');bgVol()}
 async function refreshPlan(){if(!S.speech)return;try{const r=await fetch('/api/speech/plan',{headers:{'X-Screen-Token':TOKEN}});if(r.ok){const j=await r.json();showQuota(j.quota,j.plan.credits)}}catch(e){}}
 async function speak(){
   if(!S.speech){toast(t('speechOff'));return}
   stopSpeech();const run=SP.run,turnId=S.turnId;setSpeakUi('busy');uiLog('speech',{event:'render',turn:turnId,auto:SP.auto});
   let j;try{const r=await fetch('/api/speech/render',{method:'POST',headers:{'X-Screen-Token':TOKEN,'Content-Type':'application/json'},body:'{}'});j=await r.json();if(!r.ok){uiLog('speech',{event:'render_failed',status:r.status,error:j.error});setSpeakUi('idle');toast(j.error||t('noNet'));return}}catch(e){uiLog('speech',{event:'render_failed',error:String(e)});setSpeakUi('idle');toast(t('noNet'));return}
   if(SP.run!==run||S.turnId!==turnId){return}
-  showQuota(j.quota,0);setSpeakUi('playing');uiLog('speech',{event:'play',segments:j.segments.length,quota:j.quota});let i=0;
+  if(j.audio)applySounds(j.audio,turnId);BG.timers.forEach(clearTimeout);BG.timers=[];BG.played=new Set();showQuota(j.quota,0);setSpeakUi('playing');uiLog('speech',{event:'play',segments:j.segments.length,quota:j.quota});let i=0;
   const next=()=>{if(SP.run!==run)return;if(i>=j.segments.length){stopSpeech();return}
-    const seg=j.segments[i++];highlight(seg.blocks);uiLog('speech',{event:'segment',speaker:seg.speaker,file:seg.file,chars:seg.text.length});const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
-    a.onended=next;a.onerror=()=>{uiLog('speech',{event:'audio_error',file:seg.file});next()};a.play().catch(err=>{uiLog('speech',{event:'blocked',message:String(err)});toast(t('tapToPlay'));stopSpeech()})};
+    const seg=j.segments[i++];highlight(seg.blocks);playSfx(seg.blocks,i===1);uiLog('speech',{event:'segment',speaker:seg.speaker,file:seg.file,chars:seg.text.length});const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
+    a.onplay=bgVol;a.onended=()=>{SP.audio=null;next()};a.onerror=()=>{uiLog('speech',{event:'audio_error',file:seg.file});next()};a.play().catch(err=>{uiLog('speech',{event:'blocked',message:String(err)});toast(t('tapToPlay'));stopSpeech()})};
   next()}
 $('speak').onclick=()=>$('speak').classList.contains('on')?stopSpeech():speak();
+
+// ---- music, ambience and sound effects from the shared library ----
+const bgSrc=item=>`${item.url}?token=${encodeURIComponent(TOKEN)}`;
+function bgTarget(a){return Math.min(1,parseFloat(a.dataset.base)*SP.vol*(SP.audio?0.4:1))}
+function bgVol(){for(const a of [BG.music,BG.amb])if(a)a.volume=bgTarget(a)}
+// one window plays the beds: the one that started last (or was clicked last) silences the others
+const PAGE_ID=Math.random().toString(36).slice(2);let bgChan=null;try{bgChan=new BroadcastChannel('dm-screen-sound')}catch(e){}
+function bgClaim(){if(bgChan)bgChan.postMessage({owner:PAGE_ID})}
+if(bgChan)bgChan.onmessage=e=>{if(e.data&&e.data.owner!==PAGE_ID){for(const a of [BG.music,BG.amb])if(a)a.pause();BG.muted=true;uiLog('sound',{event:'yielded'})}};
+function bgPlay(a){if(!BG.on)return;BG.muted=false;bgClaim();a.play().catch(err=>{uiLog('sound',{event:'blocked',message:String(err)})})}
+function setLoop(slot,item){
+  if(item==='keep'||item===undefined)return;
+  const file=item&&item.file;
+  if(BG[slot]&&BG[slot+'File']===file){BG[slot].dataset.base=item.volume;bgVol();return}
+  if(BG[slot]){BG[slot].pause();BG[slot]=null;BG[slot+'File']=null}
+  if(!item)return;
+  const a=new Audio(bgSrc(item));a.loop=true;a.dataset.base=item.volume;a.dataset.credit=item.credit||'';a.volume=bgTarget(a);
+  BG[slot]=a;BG[slot+'File']=file;bgPlay(a);uiLog('sound',{event:slot,file,title:item.title,source:item.source})}
+function bgTitle(){const credits=[BG.music,BG.amb].filter(a=>a&&a.dataset.credit).map(a=>a.dataset.credit);$('bgBtn').title=(BG.on?t('bg'):t('bgOff'))+(credits.length?'\n'+credits.join('\n'):'')}
+function applySounds(au,turnId){if(!au)return;if(turnId!==BG.turn){BG.turn=turnId;BG.played=new Set()}
+  setLoop('music',au.music);setLoop('amb',au.ambience);BG.sfx=au.sfx||[];bgTitle();if(au.missing&&au.missing.length)uiLog('sound',{event:'missing',cues:au.missing})}
+function sfxOnce(item){if(!BG.on||BG.muted||BG.played.has(item.file+':'+(item.block??'')))return;BG.played.add(item.file+':'+(item.block??''));
+  const a=new Audio(bgSrc(item));a.volume=Math.min(1,item.volume*SP.vol);a.play().catch(()=>{});uiLog('sound',{event:'sfx',file:item.file,title:item.title})}
+function playSfx(blocks,first){for(const item of BG.sfx){if((item.block===undefined&&first)||(item.block!==undefined&&blocks.includes(item.block)))sfxOnce(item)}}
+async function loadSounds(turnId,withStory){
+  BG.timers.forEach(clearTimeout);BG.timers=[];
+  try{const r=await fetch('/api/audio',{headers:{'X-Screen-Token':TOKEN}});const j=await r.json();if(r.ok&&j.audio&&S.turnId===turnId){applySounds(j.audio,turnId);
+    if(withStory&&!S.speech)for(const item of BG.sfx)BG.timers.push(setTimeout(()=>sfxOnce(item),(item.block||0)*160+300))}}catch(e){uiLog('sound',{event:'load_failed',error:String(e)})}
+  refreshPlan()}
+function setBg(on){BG.on=on;$('bgBtn').classList.toggle('off',!on);try{localStorage.setItem('bg',on?'1':'0')}catch(e){}
+  for(const a of [BG.music,BG.amb])if(a){on?bgPlay(a):a.pause()}bgTitle();uiLog('sound',{event:'toggle',on})}
+$('bgBtn').onclick=()=>setBg(!BG.on);
+addEventListener('pointerdown',()=>{for(const a of [BG.music,BG.amb])if(a&&a.paused&&BG.on)bgPlay(a)});
+try{BG.on=localStorage.getItem('bg')!=='0'}catch(e){}setBg(BG.on);
 function setAuto(on){uiLog('speech',{event:'auto',on});SP.auto=on;$('autoBtn').classList.toggle('on',on);$('autoBtn').classList.toggle('off',!on);try{localStorage.setItem('auto',on?'1':'0')}catch(e){}}
 $('autoBtn').onclick=()=>{setAuto(!SP.auto);if(SP.auto&&S.speech&&!SP.audio)speak()};
-$('vol').value=SP.vol;$('vol').oninput=()=>{SP.vol=parseFloat($('vol').value);uiLog('speech',{event:'volume',value:SP.vol});if(SP.audio)SP.audio.volume=SP.vol;try{localStorage.setItem('vol',String(SP.vol))}catch(e){}};
+$('vol').value=SP.vol;$('vol').oninput=()=>{SP.vol=parseFloat($('vol').value);uiLog('speech',{event:'volume',value:SP.vol});if(SP.audio)SP.audio.volume=SP.vol;bgVol();try{localStorage.setItem('vol',String(SP.vol))}catch(e){}};
 setAuto(SP.auto);
 
 // ---- microphone: record, transcribe, show, send ----

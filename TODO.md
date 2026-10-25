@@ -1,5 +1,23 @@
 # TODO — DM System
 
+## `tests/test_secret_guard.py` crashes on tracked directory symlinks (found 2026-10-25)
+`value_findings` and `pattern_findings` call `path.read_bytes()` on every tracked path. `.agents/skills/cinematic-scene`
+and `.agents/skills/dm` are tracked symlinks (mode 120000) to `codex-skills/*` directories, so both tests die with
+`IsADirectoryError` instead of scanning. Fix direction: skip symlinks (`path.is_symlink()`) and directories before
+reading, or read the link target text for mode-120000 entries.
+
+## Wizard MCP tests fail on the laptop's `mcp` 2.x (found 2026-10-25)
+Five `tests/test_wizard.py::TestWizardMCPTools` tests fail on the owner's laptop checkout: the installed `mcp` package is
+2.x (`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, `'Server' object has no attribute 'request_handlers'`).
+The wizard code targets the 1.x API. Fix direction: pin `mcp<2` in `pyproject.toml` (and refresh `uv.lock`), or port the
+wizard tools to `mcp.server.mcpserver.MCPServer` per the mcp v2 migration guide.
+
+## `dm-time.sh --elapsed` on a campaign without `precise_time` jumps to morning (found 2026-10-25)
+pratchett-dungeon had `time_of_day: "Вечер"` and no `precise_time`. `dm-time.sh "_" "<date>" --elapsed 0.25` started the
+clock at 08:00 and wrote `08:15` into both fields, so an evening tavern scene became morning. Fix direction: when
+`precise_time` is missing, derive the start from a named `time_of_day` (Morning/Вечер/Night → a default hour) or refuse
+with "set the time first with --to HH:MM"; never overwrite a named time of day with the 08:00 default.
+
 ## Generated files tracked in git break `git pull --ff-only` on the VPS (found 2026-08-03)
 Deploy on the VPS is `git pull --ff-only`, and it aborts on a dirty tree. Two tracked files are
 rewritten by simply RUNNING the project, so the tree is never clean for long:

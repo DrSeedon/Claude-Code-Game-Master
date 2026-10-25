@@ -393,3 +393,75 @@ def test_page_log_endpoint_needs_the_token_and_limits_size(running):
     assert call(port, "POST", "/api/log", b"x" * (300 * 1024), {"X-Screen-Token": token})[0] == 413
     assert len([e for e in _events(tmp_path) if e["kind"] == "ui.x"]) <= 50
     assert all(len(json.dumps(e)) < 6000 for e in _events(tmp_path) if e["kind"] == "ui.x")
+
+
+@pytest.fixture
+def sounding(tmp_path):
+    from lib.screen import audio
+
+    class Api:
+        def __init__(self):
+            self.calls = 0
+
+        def sound(self, text, seconds=None, loop=False, **_):
+            self.calls += 1
+            return b"SFX"
+
+    class Spk(FakeSpeaker):
+        dir = tmp_path
+
+        def spent(self, before, estimate):
+            return estimate
+
+    class NoFreesound:
+        def search(self, query, kind):
+            return None
+
+    lib = audio.Library(tmp_path)
+    entry = lib.add(b"LUTE", "mp3", "music", "Tavern lute", ["tavern"], source="opengameart", attribution="«Tavern lute» CC0")
+    (tmp_path / "turn.json").write_text(json.dumps({"id": 9, "blocks": ["<p>x</p>"],
+                                                    "audio": {"music": {"cue": "lute", "tags": ["tavern"], "seconds": 90, "volume": 0.3},
+                                                              "sfx": [{"cue": "thunder", "tags": [], "seconds": 2, "volume": 0.9, "block": 0}]}}))
+    api, speaker = Api(), Spk()
+    director = audio.Director(tmp_path, api, speaker, freesound=NoFreesound())
+    httpd, _ = server.make_server(tmp_path, port=0, token="T", views_provider=dict, speaker=speaker, director=director)
+    server.serve_in_thread(httpd)
+    yield httpd.server_port, api, entry
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_free_sounds_come_from_the_library_without_generating(sounding):
+    port, api, entry = sounding
+
+    status, body = call(port, "GET", "/api/audio", headers={"X-Screen-Token": "T"})
+
+    data = json.loads(body)["audio"]
+    assert status == 200 and api.calls == 0
+    assert data["music"]["url"] == "/library/" + entry["file"] and data["music"]["credit"] == "«Tavern lute» CC0"
+    assert data["sfx"] == [] and data["missing"] == ["thunder"]
+
+
+def test_plan_adds_the_sounds_the_library_lacks(sounding):
+    port, _, _ = sounding
+
+    plan = json.loads(call(port, "GET", "/api/speech/plan", headers={"X-Screen-Token": "T"})[1])["plan"]
+
+    assert plan["speech_credits"] == 40 and plan["sound_credits"] == 20 and plan["credits"] == 60 and plan["sounds_found"] == 1
+
+
+def test_render_generates_missing_sounds_and_returns_them(sounding):
+    port, api, _ = sounding
+
+    data = json.loads(call(port, "POST", "/api/speech/render", b"{}", {"X-Screen-Token": "T"})[1])
+
+    assert api.calls == 1 and data["audio"]["sfx"][0]["block"] == 0 and data["audio"]["music"]["title"] == "Tavern lute"
+
+
+def test_library_files_need_the_token_and_a_clean_name(sounding):
+    port, _, entry = sounding
+
+    assert call(port, "GET", f"/library/{entry['file']}")[0] == 403
+    status, body = call(port, "GET", f"/library/{entry['file']}?token=T")
+    assert status == 200 and body == b"LUTE"
+    assert call(port, "GET", "/library/..%2Findex.json?token=T")[0] == 404
