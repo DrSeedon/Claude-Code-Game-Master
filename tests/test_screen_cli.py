@@ -220,3 +220,19 @@ def test_log_viewer_filters_and_summarises(sdir, capsys):
 
     cli.show_log(sdir, summary=True)
     assert "tts_credits" in capsys.readouterr().out
+
+
+def test_a_service_refusal_is_one_readable_line_and_is_logged(sdir, monkeypatch, capsys):
+    from lib.screen import eventlog, speech
+
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+
+    def refuse(*args, **kwargs):
+        raise speech.SpeechError("ElevenLabs: Creating a voice through the API is only available on a paid plan.", 402)
+
+    monkeypatch.setattr(cli, "voice_command", refuse)
+
+    code = cli.run(["voice", "show"])
+
+    assert code == 1 and "only available on a paid plan" in capsys.readouterr().err
+    assert "paid plan" in eventlog.read(sdir, kinds={"error"})[0]["message"]

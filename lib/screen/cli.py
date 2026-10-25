@@ -305,7 +305,7 @@ def voice_command(sdir, args):
     if args.what == "design":
         if not args.name or not args.describe:
             raise SystemExit('voice design "Name" --describe "..."')
-        found = voices.design_voice(api, sdir, args.describe, args.text, args.seed)
+        found = voices.design_voice(api, sdir, args.describe, args.text, args.seed, args.model)
         from . import eventlog
         eventlog.log(sdir, "voice_design", character=args.name, description=args.describe, seed=args.seed, previews=found)
         for item in found:
@@ -519,5 +519,17 @@ def main(argv=None):
         print("Next: dm-screen.sh act ... (art + captions), dm-screen.sh turn --file ..., dm-screen.sh start")
 
 
+def run(argv=None):
+    """main() with readable errors: a service refusal or a bad value prints one line instead of a traceback."""
+    from . import eventlog, speech
+
+    try:
+        return main(argv) or 0
+    except (speech.SpeechError, speech.SpeechUnavailable, ValueError) as exc:
+        eventlog.log(screen_dir(), "error", where="cli " + " ".join(argv if argv is not None else sys.argv[1:3]), message=f"{type(exc).__name__}: {exc}")
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
-    sys.exit(main() or 0)
+    sys.exit(run())
