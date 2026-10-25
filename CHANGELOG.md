@@ -23,6 +23,8 @@ All notable changes to DM System will be documented in this file.
   Acts swap in place (no new window): theme, fonts, panel shape and art change in the open page; `start` is
   idempotent (`/api/clients` counts connected pages), `start --replace` / `restart` close a stale window;
   open pages reload on code changes only when idle; the send countdown pauses under the mouse.
+  The Master's feed shows plain-language, spoiler-free notes (no command arguments, names or descriptions;
+  consequences, notes and world edits stay hidden) in the act's language.
   Triggered case: War and Peace campaign, couple playing on a couch with only a mouse.
 
 ### Fixed

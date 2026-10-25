@@ -30,7 +30,7 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 
 ### Every turn
 1. A player action arrives through the listener. Optionally show your thinking with `bash tools/dm-screen.sh activity think "short text"`.
-2. Do the usual work with the `dm-*.sh` tools. A PostToolUse hook mirrors every dice roll and state change into the live feed automatically. Persist state before narrating, as always.
+2. Do the usual work with the `dm-*.sh` tools. A PostToolUse hook mirrors every dice roll and a plain-language note of each state change into the live feed automatically (never arguments, names or hidden machinery such as consequences and notes). Persist state before narrating, as always.
 3. Write the turn as JSON and show it: `bash tools/dm-screen.sh turn --file turn.json`
    - `blocks`: HTML strings (`h1`, `h2`, `p`, `b`, `i`, `ul`, `li`, `div`). No scripts, styles, frames or event handlers (rejected).
    - `question`: plain text. `options`: up to 6 plain-text choices following the active agency mode.

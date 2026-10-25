@@ -87,8 +87,8 @@ def run_hook(payload_text):
         sdir = screen_dir()
         if not server_info(sdir):
             return
-        event = hook.activity_from_hook(json.loads(payload_text))
-        if event:
+        lang = (_read(sdir / "act.json") or {}).get("lang", "en")
+        for event in hook.activities_from_hook(json.loads(payload_text), lang):
             activity.append_activity(sdir, event["kind"], event["text"])
     except Exception:
         return

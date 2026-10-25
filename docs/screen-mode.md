@@ -26,7 +26,7 @@ You can also drive it by hand, see "Commands".
 | Story | The Master's text, in pages (`◀ ▶`, arrow keys). New paragraphs rise in one after another. |
 | Heroes | Player and party members from the world: HP bar, abilities, skills. Changed numbers flash, bars glide. |
 | Side boxes | Anything campaign-specific the Master sends (`panels`): chips, bars, steps. |
-| Master's work | Live feed: thinking, dice (animated), saves. Filled automatically from `dm-*.sh` calls by a hook. |
+| Master's work | Live feed: thinking, dice (animated), short plain-language notes of what changed ("A new character appears", "A quest objective is done", "Time passes: +6 min"). Filled automatically from `dm-*.sh` calls by a hook. Never shows names, descriptions or arguments, and never shows consequences, notes or world edits, so it cannot spoil anything. |
 | Footer | Question, option buttons, who is acting, a text field, a microphone. |
 | Picture | Hides the panels and shows the art with captions; captions can be switched on and off. Key `H`. Fullscreen `F`. |
 

@@ -73,7 +73,7 @@ def test_hook_records_when_server_is_running(sdir, monkeypatch):
 
     cli.run_hook(payload)
 
-    assert "dm-player" in (sdir / "activity.jsonl").read_text()
+    assert "health" in (sdir / "activity.jsonl").read_text()
 
 
 def test_hook_never_raises_on_garbage(sdir, monkeypatch):
