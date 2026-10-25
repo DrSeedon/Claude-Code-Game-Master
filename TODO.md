@@ -75,3 +75,9 @@ Workaround that works: Codex imagegen, see ~/.claude/docs/image-generation-codex
 ## Full test suite has 7 failures unrelated to the screen (found 2026-10-25)
 - `tests/test_wizard.py::TestWizardMCPTools` (5 tests): `mcp` is 2.x in `.venv`, where `mcp.server.fastmcp` no longer exists (`FastMCP` became `MCPServer`). Fix direction: pin `mcp<2` or migrate `backend/wizard_mcp*.py`. Fails on a clean `HEAD` checkout as well.
 - `tests/test_secret_guard.py` (2 tests): `value_findings`/`pattern_findings` call `read_bytes()` on every tracked path and crash with `IsADirectoryError` on `.agents/skills/cinematic-scene` (a staged directory entry). Fix direction: skip non-regular files in the guard, and check why that path is staged as a directory.
+
+## `dm-inventory.sh update "<name>"` can match a fact node instead of the hero (found 2026-10-25)
+The fuzzy name lookup resolved `Максим Астраханцев` to `fact:npc-001` (a `dm-note` fact whose text starts with the heroes' names): `--gold 9500` was written into that fact's `data.money` and the player's purse stayed unchanged. Fix direction: resolve only `player:*` and `npc:*` nodes in `lib/inventory_manager.py` and fail loudly on any other type; until then use `dm-player.sh gold` for the player. Triggered case: War and Peace, payment for the first order.
+
+## `/dm-save` skill calls actions that do not exist (found 2026-10-25)
+`.claude/commands/dm-save.md` (and its Codex copy) runs `bash tools/dm-plot.sh threads`, which fails with `Unknown action 'threads'`. Also the orphan check compares the player's location name with location node ids, so it can report false issues. Fix direction: replace with `dm-plot.sh list --status active` and compare names or ids consistently.
