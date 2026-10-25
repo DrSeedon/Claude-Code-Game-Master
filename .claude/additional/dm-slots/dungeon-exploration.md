@@ -94,7 +94,7 @@ Separate location per room with `dungeon` field:
 
   EXITS: North (door, locked) · South (passage) · East (wall?)
 
-  [A]ttack goblins  [S]earch room  [B]ack south
+  1. [Attack the goblins] 2. [Search the room] 3. [Go back south]
 
 ================================================================
 ```

@@ -20,7 +20,7 @@
 
 ### Codex context architecture
 
-Codex does not rely on Claude's `UserPromptSubmit` hooks. Run the adapter once:
+Native Codex `UserPromptSubmit` hooks reuse the shared context loaders when trusted. Run the adapter once to register the session and refresh context, including when hooks are unavailable:
 
 ```bash
 bash codex-skills/dm/scripts/prepare_session.sh

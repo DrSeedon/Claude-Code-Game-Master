@@ -1,0 +1,136 @@
+{
+  "campaign_name": "Меня призвали, а инструкцию забыли",
+  "character": "Стив",
+  "stats": {
+    "str": 10,
+    "dex": 12,
+    "con": 10,
+    "int": 14,
+    "wis": 7,
+    "cha": 12
+  },
+  "level": 1,
+  "xp": {
+    "current": 0,
+    "next_level": 300
+  },
+  "play_mode": "interactive",
+  "currency": {
+    "base": "cp",
+    "denominations": [
+      {
+        "id": "cp",
+        "name": "Медь",
+        "symbol": "м",
+        "rate": 1
+      },
+      {
+        "id": "sp",
+        "name": "Серебро",
+        "symbol": "с",
+        "rate": 10
+      },
+      {
+        "id": "gp",
+        "name": "Золото",
+        "symbol": "з",
+        "rate": 100
+      }
+    ]
+  },
+  "calendar": {
+    "epoch": "Новой эры",
+    "months": [
+      {
+        "id": "dawn",
+        "name": "Рассвета",
+        "days": 30
+      },
+      {
+        "id": "sprouts",
+        "name": "Ростков",
+        "days": 30
+      },
+      {
+        "id": "flowers",
+        "name": "Цветов",
+        "days": 30
+      },
+      {
+        "id": "rains",
+        "name": "Дождей",
+        "days": 30
+      },
+      {
+        "id": "sun",
+        "name": "Солнца",
+        "days": 30
+      },
+      {
+        "id": "heat",
+        "name": "Жары",
+        "days": 30
+      },
+      {
+        "id": "harvest",
+        "name": "Жатвы",
+        "days": 30
+      },
+      {
+        "id": "winds",
+        "name": "Ветров",
+        "days": 30
+      },
+      {
+        "id": "leaffall",
+        "name": "Листопада",
+        "days": 30
+      },
+      {
+        "id": "mists",
+        "name": "Туманов",
+        "days": 30
+      },
+      {
+        "id": "frost",
+        "name": "Инея",
+        "days": 30
+      },
+      {
+        "id": "snow",
+        "name": "Снегов",
+        "days": 30
+      }
+    ],
+    "weekdays": [
+      "День Солнца",
+      "День Луны",
+      "День Пламени",
+      "День Ветра",
+      "День Камня",
+      "День Моря",
+      "День Звёзд"
+    ],
+    "year_zero_weekday": 0
+  },
+  "narrator_style": {
+    "id": "sarcastic-anime-adventure",
+    "name": "Sarcastic Anime Adventure",
+    "description": "Sarcastic narration blended with adventurous anime, expressive characters, spectacle, and earned growth.",
+    "voice": "A witty, sarcastic storyteller with an adventurous anime rhythm. Laugh with the player, never humiliate them. Let characters and their goals drive both comedy and drama.",
+    "rules_raw": "### Tone\n- Blend situational sarcasm, wordplay, physical comedy, and occasional contextual profanity with wonder, exploration, and character growth.\n- Use humor in ordinary scenes and dialogue without forcing a joke into every sentence. Running jokes arise from established events and personalities.\n- NPCs have independent goals, contradictions, and emotions; they are not interchangeable joke dispensers.\n### Action\n- Present vivid tactical exchanges, expressive reactions, and clear stakes. Spectacle follows established abilities, environment, and persisted outcomes.\n- Natural 20 can be spectacular; natural 1 can be funny when the stakes allow it, but neither changes established ability limits or cancels consequences.\n### Drama\n- Let danger, losses, and meaningful emotional scenes land. Do not immediately undercut them with a punchline or impose a quota on serious scenes.\n- Do not force romance, player dialogue, player decisions, or predetermined victories.\n### Presentation\n- Narrate in Russian. Use concrete sensory details, lively dialogue, and short actionable scenes. Keep mechanical explanations brief unless requested.",
+    "forbidden": [
+      "Humiliating the player",
+      "Forced jokes during grief or serious danger",
+      "Automatic victories for comedy",
+      "Predetermined player actions",
+      "NPCs reduced to catchphrases"
+    ]
+  },
+  "cinematic_visuals": {
+    "enabled": true,
+    "frequency": "occasional",
+    "aspect_ratio": "16:9",
+    "presentation": "game-loading-screen"
+  }
+}

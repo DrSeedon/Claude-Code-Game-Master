@@ -157,6 +157,76 @@ def test_attack_bonus_calculation(fake_campaign):
     assert attack_bonus == expected
 
 
+def test_attack_bonus_uses_canonical_stats(fake_campaign):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "player:active", {"data": {"stats": {"dex": 12}}}
+    )
+    resolver.character = resolver._load_character()
+
+    assert resolver._get_attack_bonus() == 1 + 3 + 2
+
+
+@pytest.mark.parametrize("mode", ["single", "burst", "full_auto"])
+def test_configured_combat_xp_is_awarded_once(fake_campaign, monkeypatch, mode):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "creature:test-target", {"data": {"hp": 2, "xp": 5}}
+    )
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: 20)
+    monkeypatch.setattr(resolver, "_roll_damage", lambda _dice: 5)
+    initial_xp = resolver.character["xp"]["current"]
+    resolve = getattr(resolver, "resolve_" + mode)
+    result = resolve("AK-74", 5, [resolver.load_target("Test Target")])
+
+    assert result["total_xp"] == 5
+    resolver.update_character_after_combat(result)
+    resolver.update_character_after_combat(result)
+
+    player = resolver.world_graph.get_node("player:active")
+    target = resolver.world_graph.get_node("creature:test-target")
+    assert player["data"]["xp"]["current"] == initial_xp + 5
+    assert target["data"]["xp_awarded_amount"] == 5
+
+
+def test_configured_xp_rolls_back_with_target_and_ammo(fake_campaign, monkeypatch):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "creature:test-target", {"data": {"hp": 2, "xp": 5}}
+    )
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: 20)
+    monkeypatch.setattr(resolver, "_roll_damage", lambda _dice: 5)
+    before = resolver.world_graph.get_node("creature:test-target")
+    initial_xp = resolver.character["xp"]["current"]
+    result = resolver.resolve_single("AK-74", 5, [resolver.load_target("Test Target")])
+    result["ammo_type"] = "missing-ammo"
+
+    with pytest.raises(RuntimeError, match="ammunition"):
+        resolver.update_character_after_combat(result)
+
+    assert resolver.world_graph.get_node("creature:test-target") == before
+    assert resolver.world_graph.get_node("player:active")["data"]["xp"]["current"] == initial_xp
+
+
+def test_configured_combat_xp_preserves_level_up(fake_campaign, monkeypatch):
+    resolver = FirearmsCombatResolver(str(fake_campaign))
+    resolver.world_graph.update_node(
+        "player:active", {"data": {"level": 1, "xp": {"current": 275, "next_level": 300}}}
+    )
+    resolver.world_graph.update_node(
+        "creature:test-target", {"data": {"hp": 2, "xp": 50}}
+    )
+    resolver.character = resolver._load_character()
+    monkeypatch.setattr(resolver, "_roll_d20", lambda: 20)
+    monkeypatch.setattr(resolver, "_roll_damage", lambda _dice: 5)
+    result = resolver.resolve_single("AK-74", 5, [resolver.load_target("Test Target")])
+    resolver.update_character_after_combat(result)
+
+    player = resolver.world_graph.get_node("player:active")["data"]
+    assert player["level"] == 2
+    assert player["xp"] == {"current": 325, "next_level": 900}
+
+
 def test_world_graph_target_and_ammo_lookup(fake_campaign):
     resolver = FirearmsCombatResolver(str(fake_campaign))
 

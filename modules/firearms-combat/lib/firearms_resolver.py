@@ -18,7 +18,7 @@ PROJECT_ROOT = next(p for p in Path(__file__).parents if (p / ".git").exists())
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from lib.campaign_manager import CampaignManager
-from lib.combat_rules import penetration_damage
+from lib.combat_rules import node_mechanics, penetration_damage
 from lib.world_graph import WorldGraph
 
 from lib.module_data import ModuleDataManager
@@ -173,7 +173,7 @@ class FirearmsCombatResolver:
 
     def _get_attack_bonus(self) -> int:
         """Calculate base attack bonus for character"""
-        abilities = self.character.get("abilities", {})
+        abilities = self.character.get("stats") or self.character.get("abilities", {})
         dex_mod = (abilities.get("dex", 10) - 10) // 2
         prof_bonus = self.character.get("proficiency_bonus", 2)
 
@@ -275,6 +275,16 @@ class FirearmsCombatResolver:
             "prot": stats["prot"],
         }
 
+    def _target_xp(self, target: Dict[str, Any]) -> int:
+        target_id = target.get("id")
+        if not target_id:
+            # Legacy targets are only accepted by the CLI in preview mode.
+            return max(0, int(target.get("xp", 25)))
+        node = self.world_graph.get_node(target_id)
+        if not node or node.get("type") != "creature" or node.get("data", {}).get("xp_awarded"):
+            return 0
+        return max(0, int(node_mechanics(node).get("xp", 0) or 0))
+
     def ammunition_available(self, weapon_name: str) -> int:
         """Read available ammunition for a weapon from player inventory."""
         weapon = self._get_weapon_stats(weapon_name)
@@ -361,9 +371,9 @@ class FirearmsCombatResolver:
                 "scaling_pct": scaling_pct, "final_damage": final_damage
             })
 
-        if target["hp"] <= 0:
+        if target_result["initial_hp"] > 0 and target["hp"] <= 0:
             target_result["killed"] = True
-            total_xp = 25
+            total_xp = self._target_xp(target)
 
         magazine = int(weapon.get("magazine", ammo_available))
         magazine_remaining = min(ammo_available, magazine) - 1
@@ -599,10 +609,10 @@ class FirearmsCombatResolver:
 
             target_result["final_hp"] = target["hp"]
 
-            if target["hp"] <= 0:
+            if target_result["initial_hp"] > 0 and target["hp"] <= 0:
                 target_result["killed"] = True
                 enemies_killed += 1
-                total_xp += 25
+                total_xp += self._target_xp(target)
 
             results.append(target_result)
 
@@ -644,8 +654,10 @@ class FirearmsCombatResolver:
         """Persist target HP, earned XP, and ammunition in one transaction."""
         ammo_type = result.get("ammo_type")
         shots_fired = result.get("shots_fired", 0)
+        targets = result.get("targets", [])
+        earned_xp = 0
         with self.world_graph.transaction():
-            for target in result.get("targets", []):
+            for target in targets:
                 damage = int(target.get("damage_dealt", 0))
                 target_id = target.get("id")
                 if damage <= 0:
@@ -654,15 +666,20 @@ class FirearmsCombatResolver:
                     raise RuntimeError(
                         "Cannot persist damage for a target without a WorldGraph ID"
                     )
-                transition = self.world_graph.apply_damage(target_id, damage)
+                transition = self.world_graph.apply_combat_damage(target_id, damage)
                 if not transition:
                     raise RuntimeError(f"Failed to persist target HP: {target_id}")
+                earned_xp += transition["xp_awarded"]
                 print(
                     f"[AUTO-HP] {transition['name']}: "
                     f"{transition['old_hp']} -> {transition['new_hp']} HP"
                 )
 
-            if result.get("total_xp", 0) > 0:
+            if earned_xp:
+                # CORE paid the reward; normalize levels without paying it twice.
+                if not self.progression.award_xp(0).get("success"):
+                    raise RuntimeError("Failed to update player level")
+            elif not targets and result.get("total_xp", 0) > 0:
                 xp_result = self.progression.award_xp(result["total_xp"])
                 if not xp_result.get("success"):
                     raise RuntimeError("Failed to persist player XP")
@@ -671,6 +688,8 @@ class FirearmsCombatResolver:
                 if not self._deduct_ammo(ammo_type, shots_fired):
                     raise RuntimeError("Failed to persist ammunition use")
 
+        if targets:
+            result["total_xp"] = earned_xp
         self.character = self._load_character()
 
     def _deduct_ammo(self, ammo_type: str, quantity: int) -> bool:

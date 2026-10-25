@@ -5,6 +5,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from lib.narrator_style import render_narrator_style
+
 
 def load_system_prompt(campaign_name: str | None = None) -> str:
     """Build the DM system prompt for a specific campaign.
@@ -71,16 +73,9 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
             try:
                 with open(overview_path) as f:
                     overview = json.load(f)
-                narrator_data = overview.get("narrator_style", "")
-                if isinstance(narrator_data, str) and narrator_data.strip():
-                    style_file = styles_dir / f"{narrator_data.strip()}.md"
-                    if style_file.exists():
-                        narrator_style = f"\n---\n{style_file.read_text()}\n"
-                elif isinstance(narrator_data, dict) and narrator_data:
-                    style_rules = narrator_data.get("rules_raw", "")
-                    style_name = narrator_data.get("name", "")
-                    style_desc = narrator_data.get("description", "")
-                    narrator_style = f"\n---\n# Narrator Style: {style_name}\n\n{style_desc}\n\n{style_rules}\n"
+                rendered = render_narrator_style(project_root, overview.get("narrator_style"))
+                if rendered:
+                    narrator_style = f"\n---\n{rendered}\n"
             except (json.JSONDecodeError, IOError):
                 pass
 

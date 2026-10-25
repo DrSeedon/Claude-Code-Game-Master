@@ -286,6 +286,28 @@ def enable():
     return (rule.stdout + rule.stderr).strip().splitlines()[-1] if (rule.stdout + rule.stderr).strip() else "rule applied"
 
 
+def key_command(action):
+    from . import keys, speech
+
+    if action == "paste":
+        for reader in (["wl-paste", "-n"], ["xclip", "-o", "-selection", "clipboard"], ["xsel", "-ob"]):
+            if shutil.which(reader[0]):
+                text = subprocess.run(reader, capture_output=True, text=True).stdout
+                break
+        else:
+            raise SystemExit("no clipboard tool found (wl-paste, xclip or xsel)")
+        keys.store_key(PROJECT_ROOT / ".env", text)
+        if shutil.which("wl-copy"):
+            subprocess.run(["wl-copy", "--clear"], capture_output=True)
+        print("key stored in .env, clipboard cleared")
+    key = speech.load_api_key(PROJECT_ROOT, {})
+    if not key:
+        raise SystemExit("no ELEVENLABS_API_KEY in .env")
+    print(f"key ending {key[-4:]}")
+    for name, ok in keys.permission_report(key).items():
+        print(f"  {'ok     ' if ok else 'MISSING'} {name}")
+
+
 def voice_command(sdir, args):
     from . import speech, voices
 
@@ -419,6 +441,8 @@ def main(argv=None):
     lg.add_argument("--json", action="store_true", dest="as_json")
     lg.add_argument("--summary", action="store_true")
     lg.add_argument("--follow", action="store_true")
+    ky = sub.add_parser("key", help="ElevenLabs key: 'paste' stores the key from the clipboard into .env, 'check' shows what it may do")
+    ky.add_argument("action", choices=["paste", "check"])
     sub.add_parser("voices", help="list the voices of your ElevenLabs account (Russian first)")
     vp = sub.add_parser("voice", help="narrator, default and per-character voices")
     vp.add_argument("what", choices=["narrator", "default", "model", "set", "show", "design", "keep"])
@@ -504,6 +528,8 @@ def main(argv=None):
     elif args.cmd == "log":
         show_log(sdir, args.tail, set(args.kind.split(",")) if args.kind else None, args.errors, _parse_age(args.since) if args.since else None,
                  args.as_json, args.summary, args.follow)
+    elif args.cmd == "key":
+        key_command(args.action)
     elif args.cmd == "voices":
         from . import speech as speech_mod, voices as voices_mod
         for v in sorted(voices_mod.describe_all(speech_mod.ElevenLabsApi(PROJECT_ROOT)), key=lambda v: (not v["ru"], v["name"])):

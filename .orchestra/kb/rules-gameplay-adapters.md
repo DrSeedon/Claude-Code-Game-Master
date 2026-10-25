@@ -29,6 +29,12 @@ continue, play, inspect, save, switch agency mode, or reset a campaign:
 
 Treat `/dm` as an alias for `$dm` even when the host has no native slash registration.
 
+Codex discovers the DM and cinematic skills through `.agents/skills/` symlinks
+to `codex-skills/`. Native `UserPromptSubmit` hooks in `.codex/hooks.json`
+reuse the shared Claude context loaders for DM startup commands. Read the
+complete compiled `/tmp/dm-rules.md` before play; keep explicit session
+registration in `prepare_session.sh` so hooks do not start extra sessions.
+
 ### Campaign migration after engine upgrades
 
 - Empty inventory / Gold 0 / firearms "weapon not found" on an old campaign is often

@@ -5,7 +5,7 @@ description: Run the repository's local AI Dungeon Master and persistent campaig
 
 # DM Game Master
 
-Operate the existing campaign engine through its shell tools. Treat `.claude/additional/` as runtime data shared by Claude and Codex, not as instructions to preload wholesale.
+Operate the existing campaign engine through its shell tools. Codex discovers this skill through `.agents/skills/dm`, a symlink to this directory. Native project hooks reuse the shared context loaders; explicit session preparation remains the fallback and registers the session once. Treat `.claude/additional/` as runtime data shared by Claude and Codex, not as instructions to preload wholesale.
 
 ## Non-negotiable rules
 

@@ -1,0 +1,460 @@
+{
+  "duration_s": 608.5,
+  "video": {
+    "index": 0,
+    "codec_name": "h264",
+    "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+    "profile": "High",
+    "codec_type": "video",
+    "codec_tag_string": "avc1",
+    "codec_tag": "0x31637661",
+    "width": 1920,
+    "height": 1080,
+    "coded_width": 1920,
+    "coded_height": 1080,
+    "has_b_frames": 2,
+    "sample_aspect_ratio": "1:1",
+    "display_aspect_ratio": "16:9",
+    "pix_fmt": "yuvj420p",
+    "level": 40,
+    "color_range": "pc",
+    "color_space": "bt470bg",
+    "chroma_location": "left",
+    "field_order": "progressive",
+    "refs": 1,
+    "is_avc": "true",
+    "nal_length_size": "4",
+    "id": "0x1",
+    "r_frame_rate": "24/1",
+    "avg_frame_rate": "24/1",
+    "time_base": "1/12288",
+    "start_pts": 0,
+    "start_time": "0.000000",
+    "duration_ts": 7476736,
+    "duration": "608.458333",
+    "bit_rate": "155223",
+    "bits_per_raw_sample": "8",
+    "nb_frames": "14603",
+    "extradata_size": 51,
+    "disposition": {
+      "default": 1,
+      "dub": 0,
+      "original": 0,
+      "comment": 0,
+      "lyrics": 0,
+      "karaoke": 0,
+      "forced": 0,
+      "hearing_impaired": 0,
+      "visual_impaired": 0,
+      "clean_effects": 0,
+      "attached_pic": 0,
+      "timed_thumbnails": 0,
+      "non_diegetic": 0,
+      "captions": 0,
+      "descriptions": 0,
+      "metadata": 0,
+      "dependent": 0,
+      "still_image": 0,
+      "multilayer": 0
+    },
+    "tags": {
+      "language": "und",
+      "handler_name": "VideoHandler",
+      "vendor_id": "[0][0][0][0]"
+    },
+    "side_data_list": [
+      {
+        "side_data_type": "ICC Profile"
+      }
+    ]
+  },
+  "audio": {
+    "index": 1,
+    "codec_name": "aac",
+    "codec_long_name": "AAC (Advanced Audio Coding)",
+    "profile": "LC",
+    "codec_type": "audio",
+    "codec_tag_string": "mp4a",
+    "codec_tag": "0x6134706d",
+    "sample_fmt": "fltp",
+    "sample_rate": "48000",
+    "channels": 2,
+    "channel_layout": "stereo",
+    "bits_per_sample": 0,
+    "initial_padding": 0,
+    "id": "0x2",
+    "r_frame_rate": "0/0",
+    "avg_frame_rate": "0/0",
+    "time_base": "1/48000",
+    "start_pts": 0,
+    "start_time": "0.000000",
+    "duration_ts": 29208000,
+    "duration": "608.500000",
+    "bit_rate": "148129",
+    "nb_frames": "28524",
+    "extradata_size": 5,
+    "disposition": {
+      "default": 1,
+      "dub": 0,
+      "original": 0,
+      "comment": 0,
+      "lyrics": 0,
+      "karaoke": 0,
+      "forced": 0,
+      "hearing_impaired": 0,
+      "visual_impaired": 0,
+      "clean_effects": 0,
+      "attached_pic": 0,
+      "timed_thumbnails": 0,
+      "non_diegetic": 0,
+      "captions": 0,
+      "descriptions": 0,
+      "metadata": 0,
+      "dependent": 0,
+      "still_image": 0,
+      "multilayer": 0
+    },
+    "tags": {
+      "language": "und",
+      "handler_name": "SoundHandler",
+      "vendor_id": "[0][0][0][0]"
+    }
+  },
+  "chapter_count": 10,
+  "phrase_count": 66,
+  "phrase_audio_presence": [
+    {
+      "title": "Портал без инструкции",
+      "duration_s": 8.093,
+      "rms_pcm16": 3195
+    },
+    {
+      "title": "Магия вокруг",
+      "duration_s": 8.801,
+      "rms_pcm16": 3148
+    },
+    {
+      "title": "С нуля — это с нуля",
+      "duration_s": 7.976,
+      "rms_pcm16": 3123
+    },
+    {
+      "title": "Знание Земли — гипотеза",
+      "duration_s": 7.965,
+      "rms_pcm16": 3252
+    },
+    {
+      "title": "Рост должен быть заработан",
+      "duration_s": 9.126,
+      "rms_pcm16": 3186
+    },
+    {
+      "title": "Шесть характеристик",
+      "duration_s": 7.303,
+      "rms_pcm16": 2955
+    },
+    {
+      "title": "Модификаторы",
+      "duration_s": 9.056,
+      "rms_pcm16": 3156
+    },
+    {
+      "title": "Основа — знакомая система",
+      "duration_s": 9.358,
+      "rms_pcm16": 3368
+    },
+    {
+      "title": "Кубик нужен не всегда",
+      "duration_s": 8.557,
+      "rms_pcm16": 3103
+    },
+    {
+      "title": "Сложность объявляется заранее",
+      "duration_s": 8.406,
+      "rms_pcm16": 3470
+    },
+    {
+      "title": "Преимущество и пределы",
+      "duration_s": 9.672,
+      "rms_pcm16": 3313
+    },
+    {
+      "title": "Пример — только пример",
+      "duration_s": 7.21,
+      "rms_pcm16": 3233
+    },
+    {
+      "title": "Предложение ещё не способность",
+      "duration_s": 7.651,
+      "rms_pcm16": 3292
+    },
+    {
+      "title": "Контракт: источник и домен",
+      "duration_s": 9.637,
+      "rms_pcm16": 3162
+    },
+    {
+      "title": "Контракт: цель и досягаемость",
+      "duration_s": 7.686,
+      "rms_pcm16": 3256
+    },
+    {
+      "title": "Контракт: время",
+      "duration_s": 8.035,
+      "rms_pcm16": 3294
+    },
+    {
+      "title": "Контракт: цена и мощность",
+      "duration_s": 7.953,
+      "rms_pcm16": 3065
+    },
+    {
+      "title": "Контракт: защита и провал",
+      "duration_s": 7.466,
+      "rms_pcm16": 3282
+    },
+    {
+      "title": "Мастерство тоже часть договора",
+      "duration_s": 7.686,
+      "rms_pcm16": 3219
+    },
+    {
+      "title": "В бою нет тихих переписей",
+      "duration_s": 8.0,
+      "rms_pcm16": 3145
+    },
+    {
+      "title": "Не всякая идея наносит урон",
+      "duration_s": 9.544,
+      "rms_pcm16": 3350
+    },
+    {
+      "title": "Порядок столкновения",
+      "duration_s": 9.857,
+      "rms_pcm16": 3166
+    },
+    {
+      "title": "Автоматический исход должен подходить",
+      "duration_s": 9.695,
+      "rms_pcm16": 3244
+    },
+    {
+      "title": "Защита имеет область",
+      "duration_s": 8.104,
+      "rms_pcm16": 3375
+    },
+    {
+      "title": "Источник и контроллер — разные роли",
+      "duration_s": 8.894,
+      "rms_pcm16": 2989
+    },
+    {
+      "title": "Громкие слова не решают спор",
+      "duration_s": 9.056,
+      "rms_pcm16": 3327
+    },
+    {
+      "title": "Прецедент сохраняет честность",
+      "duration_s": 9.196,
+      "rms_pcm16": 3213
+    },
+    {
+      "title": "Перемотка требует настоящей истории",
+      "duration_s": 9.567,
+      "rms_pcm16": 3210
+    },
+    {
+      "title": "Здоровье не равно анатомии",
+      "duration_s": 8.894,
+      "rms_pcm16": 3317
+    },
+    {
+      "title": "Последствия привязаны к травме",
+      "duration_s": 6.932,
+      "rms_pcm16": 3479
+    },
+    {
+      "title": "Ноль не означает мгновенную смерть",
+      "duration_s": 8.754,
+      "rms_pcm16": 3401
+    },
+    {
+      "title": "Мана, усталость, рана — отдельно",
+      "duration_s": 8.278,
+      "rms_pcm16": 3316
+    },
+    {
+      "title": "Сон не отменяет лечение",
+      "duration_s": 7.059,
+      "rms_pcm16": 3092
+    },
+    {
+      "title": "Опыт дают за вклад в приключение",
+      "duration_s": 7.892,
+      "rms_pcm16": 3365
+    },
+    {
+      "title": "Небольшая практика",
+      "duration_s": 7.626,
+      "rms_pcm16": 3096
+    },
+    {
+      "title": "Значимое занятие",
+      "duration_s": 8.429,
+      "rms_pcm16": 3165
+    },
+    {
+      "title": "Крупное достижение",
+      "duration_s": 8.278,
+      "rms_pcm16": 3073
+    },
+    {
+      "title": "Награда существа уже уменьшена",
+      "duration_s": 9.196,
+      "rms_pcm16": 3332
+    },
+    {
+      "title": "Одно достижение — одна выплата",
+      "duration_s": 8.394,
+      "rms_pcm16": 3310
+    },
+    {
+      "title": "Помощь армии — не весь её опыт",
+      "duration_s": 8.313,
+      "rms_pcm16": 3296
+    },
+    {
+      "title": "Порог первого уровня",
+      "duration_s": 9.405,
+      "rms_pcm16": 3200
+    },
+    {
+      "title": "Здоровье новичка растёт по правилу кампании",
+      "duration_s": 8.766,
+      "rms_pcm16": 3401
+    },
+    {
+      "title": "Владение следует уровню",
+      "duration_s": 8.348,
+      "rms_pcm16": 3336
+    },
+    {
+      "title": "Навык растёт через источник",
+      "duration_s": 8.592,
+      "rms_pcm16": 3248
+    },
+    {
+      "title": "Четыре ступени освоения",
+      "duration_s": 9.625,
+      "rms_pcm16": 3276
+    },
+    {
+      "title": "Три магических показателя",
+      "duration_s": 8.522,
+      "rms_pcm16": 3245
+    },
+    {
+      "title": "Ранг гильдии не уровень",
+      "duration_s": 7.547,
+      "rms_pcm16": 3244
+    },
+    {
+      "title": "В мире соседствуют эпохи",
+      "duration_s": 8.696,
+      "rms_pcm16": 3151
+    },
+    {
+      "title": "Модуль не вооружает Стива",
+      "duration_s": 7.129,
+      "rms_pcm16": 3252
+    },
+    {
+      "title": "Бронепробитие имеет доли",
+      "duration_s": 9.091,
+      "rms_pcm16": 3113
+    },
+    {
+      "title": "Крит и укрытие",
+      "duration_s": 8.499,
+      "rms_pcm16": 3173
+    },
+    {
+      "title": "Боеприпасы имеют состояние",
+      "duration_s": 8.58,
+      "rms_pcm16": 3264
+    },
+    {
+      "title": "Сначала контакт, потом травма",
+      "duration_s": 8.952,
+      "rms_pcm16": 3432
+    },
+    {
+      "title": "Региональная карта измеряется километрами",
+      "duration_s": 7.024,
+      "rms_pcm16": 3340
+    },
+    {
+      "title": "Пеший ориентир",
+      "duration_s": 9.021,
+      "rms_pcm16": 3051
+    },
+    {
+      "title": "Путь двигает часы мира",
+      "duration_s": 7.129,
+      "rms_pcm16": 3269
+    },
+    {
+      "title": "У путешествий есть опасность",
+      "duration_s": 7.117,
+      "rms_pcm16": 3216
+    },
+    {
+      "title": "У неигровых персонажей свои цели",
+      "duration_s": 7.617,
+      "rms_pcm16": 3164
+    },
+    {
+      "title": "Время здесь настроено отдельно",
+      "duration_s": 8.383,
+      "rms_pcm16": 3227
+    },
+    {
+      "title": "Игрок выбирает за Стива",
+      "duration_s": 8.151,
+      "rms_pcm16": 3201
+    },
+    {
+      "title": "Состояние записывается до рассказа",
+      "duration_s": 8.72,
+      "rms_pcm16": 3356
+    },
+    {
+      "title": "Истина и знание персонажа разделены",
+      "duration_s": 8.174,
+      "rms_pcm16": 3238
+    },
+    {
+      "title": "Договоры одинаковы для всех",
+      "duration_s": 7.651,
+      "rms_pcm16": 3144
+    },
+    {
+      "title": "Романтика и победа не навязываются",
+      "duration_s": 8.836,
+      "rms_pcm16": 3492
+    },
+    {
+      "title": "Киношный кадр — для больших сцен",
+      "duration_s": 8.127,
+      "rms_pcm16": 3317
+    },
+    {
+      "title": "Итог: условия важнее ярлыка",
+      "duration_s": 9.544,
+      "rms_pcm16": 3178
+    }
+  ],
+  "audio_onset_offset_max_abs_s": 0.0002290000000009229,
+  "speech_recognition": "Not run: no local ASR model; no paid external API requested.",
+  "sha256_mp4": "31740627e4fd4bc1caa235125a5a3c7b685055979cda8f9095cb10d5ac04b92c"
+}

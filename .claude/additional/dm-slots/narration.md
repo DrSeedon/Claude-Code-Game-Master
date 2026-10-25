@@ -12,15 +12,13 @@ bash tools/dm-search.sh "[location_name]"
 ```
 
 ### Action Suggestions
-Always provide 3-5 contextual options in bracket notation:
+Provide contextual options when the active agency mode calls for a player decision. Use the shared Output Format choice contract: sequential numbers outside square brackets and all options on one source line.
 ```
-[A]pproach the stranger  [O]rder a drink
-[T]alk to barkeep  [L]ook around
+1. [Approach the stranger] 2. [Order a drink] 3. [Talk to the barkeep] 4. [Look around]
 ```
 
 Rules:
-- First letter capitalized in brackets
-- Keep actions to 1-2 words
+- Keep action labels short and concrete
 - Include obvious AND creative options
 
 ### Quick Templates

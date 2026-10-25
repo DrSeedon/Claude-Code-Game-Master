@@ -1,0 +1,29 @@
+{
+  "description": "Load shared DM rules and campaign context for DM startup commands.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash .claude/hooks/dm-load-rules.sh",
+            "timeout": 30,
+            "statusMessage": "Loading DM rules"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash .claude/hooks/dm-load-campaign.sh",
+            "timeout": 30,
+            "statusMessage": "Loading campaign context"
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && bash .claude/hooks/dm-load-session.sh",
+            "timeout": 30,
+            "statusMessage": "Loading session context"
+          }
+        ]
+      }
+    ]
+  }
+}

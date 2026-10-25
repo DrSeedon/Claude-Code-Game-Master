@@ -76,7 +76,7 @@ Single fire doubles the damage dice on a natural 20. Automatic fire doubles only
 ## After Combat
 
 The resolver automatically:
-1. **Writes XP** to `player:active` in WorldGraph (25 XP per kill)
+1. **Writes XP** to `player:active` in WorldGraph using the defeated creature's configured reward, paid exactly once
 2. **Deducts ammo** from the `player:active` WorldGraph inventory
 3. Reports a failed deduction when the ammunition stack is missing or insufficient
 

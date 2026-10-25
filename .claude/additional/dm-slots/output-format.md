@@ -1,5 +1,15 @@
 ## Output Format <!-- slot:output-format -->
 
+### Gameplay Choice Formatting (All Campaigns)
+
+Whenever gameplay offers choices, write the entire menu as one continuous paragraph on one source line: `1. [Action] 2. [Alternative] 3. [Unusual action] 4. [Personal approach]`.
+
+- Put the complete action label inside square brackets, with its number outside.
+- Use consecutive numbers, compact labels, and spaces between options. Do not use a vertical numbered list, bullet points, letter hotkeys, category headings, or a separate paragraph for each option.
+- Normal wrapping by the client is allowed; do not insert manual line breaks between options.
+- The active agency mode determines the option count and content. Hybrid mode requires four options; formatting alone does not change another mode's count.
+- This presentation rule applies to every campaign, genre, narrator style, exploration scene, dialogue, and combat menu. Put any necessary explanation or visible stakes in the preceding narration, and accept free-form actions.
+
 ### Unicode Indicators
 ```
 HP healthy (>50%)   → ████████░░░░ 18/24 ✓
@@ -51,7 +61,7 @@ Use after enemy HP bars:
   │ "[Dialogue goes here]"                                  │
   └─────────────────────────────────────────────────────────┘
 
-  [A]ction option  [B]ction option  [C]ction option
+  1. [Action] 2. [Alternative] 3. [Unusual action] 4. [Personal approach]
 
 ================================================================
   /dm save · /dm character · /help
@@ -79,7 +89,7 @@ Use after enemy HP bars:
   ────────────────────────────────────────────────────────────
   YOUR TURN
 
-  [A]ttack (Orc Warrior)  [M]ove  [C]ast spell  [D]odge
+  1. [Attack the orc] 2. [Move] 3. [Cast a spell] 4. [Dodge]
 
 ================================================================
 ```

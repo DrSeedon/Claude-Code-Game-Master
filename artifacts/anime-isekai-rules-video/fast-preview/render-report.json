@@ -1,0 +1,22 @@
+{
+  "encoder": "nvenc",
+  "jobs": 2,
+  "cpu_threads_per_encoder": 6,
+  "frames": 480,
+  "seconds": 6.93,
+  "parts": [
+    {
+      "part": 0,
+      "frames": 240,
+      "captures": 97,
+      "seconds": 6.86
+    },
+    {
+      "part": 1,
+      "frames": 240,
+      "captures": 89,
+      "seconds": 6.53
+    }
+  ],
+  "output": "/mnt/data/Projects/Python/Claude-Code-Game-Master/artifacts/anime-isekai-rules-video/fast-preview/campaign-rules-ru-fast.mp4"
+}

@@ -22,6 +22,8 @@ MODE_ALIASES = {
     "narrative": "narrative",
     "book": "narrative",
     "story": "narrative",
+    "hybrid": "hybrid",
+    "balanced": "hybrid",
 }
 
 
@@ -68,7 +70,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "mode",
         nargs="?",
         default="status",
-        help="interactive|dnd|narrative|book|status",
+        help="interactive|dnd|narrative|book|hybrid|balanced|status",
     )
     args = parser.parse_args(argv)
 

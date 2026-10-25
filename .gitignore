@@ -44,8 +44,10 @@ source-material/*
 .claude/settings.local.json
 
 # Third-party skill installs (per-user, not project code)
-.agents/
-.codex/
+.agents/*
+!.agents/skills/
+.codex/*
+!.codex/hooks.json
 .opencode/
 
 # IDE & Editors

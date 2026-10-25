@@ -49,6 +49,17 @@ def test_unknown_mode_is_rejected(world_state):
         manager.set_mode("cinematic")
 
 
+@pytest.mark.parametrize("mode", ["hybrid", "balanced"])
+def test_hybrid_mode_persists_without_advancing_campaign(world_state, mode):
+    manager = CampaignModeManager(str(world_state))
+    original = json.loads(manager.overview_path.read_text())
+    assert manager.set_mode(mode) == "hybrid"
+    assert manager.get_mode() == "hybrid"
+    assert json.loads(manager.overview_path.read_text()) == {
+        **original, "play_mode": "hybrid"
+    }
+
+
 def test_new_campaign_enables_mode_and_visual_defaults(tmp_path):
     manager = CampaignManager(str(tmp_path / "world-state"))
 

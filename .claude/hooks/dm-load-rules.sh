@@ -8,10 +8,21 @@ bash "$PROJECT_ROOT/.claude/additional/infrastructure/dm-active-modules-rules.sh
 CAMPAIGN_RULES="$CAMPAIGN_DIR/campaign-rules.md"
 [ -f "$CAMPAIGN_RULES" ] && cat "$CAMPAIGN_RULES" >> /tmp/dm-rules.md
 
-NARRATOR_STYLE=$(python3 -c "import json; d=json.load(open('$CAMPAIGN_DIR/campaign-overview.json')); print(d.get('narrator_style',''))" 2>/dev/null)
-if [ -n "$NARRATOR_STYLE" ]; then
-    STYLE_FILE="$PROJECT_ROOT/.claude/additional/narrator-styles/$NARRATOR_STYLE.md"
-    [ -f "$STYLE_FILE" ] && cat "$STYLE_FILE" >> /tmp/dm-rules.md
+cd "$PROJECT_ROOT" || exit 1
+uv run python - "$PROJECT_ROOT" "$CAMPAIGN_DIR/campaign-overview.json" >> /tmp/dm-rules.md <<'PY'
+import json
+import sys
+from pathlib import Path
+from lib.narrator_style import render_narrator_style
+
+overview = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+style = render_narrator_style(Path(sys.argv[1]), overview.get("narrator_style"))
+if style:
+    print("\n---\n" + style)
+PY
+if [ $? -ne 0 ]; then
+    echo "Failed to load campaign narrator style." >&2
+    exit 1
 fi
 
 SIZE=$(wc -c < /tmp/dm-rules.md)
