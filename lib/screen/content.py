@@ -41,6 +41,10 @@ def _validate_panel(panel):
     return out
 
 
+def validate_panels(panels):
+    return [_validate_panel(p) for p in panels]
+
+
 def validate_turn(data):
     blocks = data.get("blocks")
     if not blocks or not isinstance(blocks, list):
@@ -51,7 +55,7 @@ def validate_turn(data):
     return {"blocks": [_check_html(str(b), "block") for b in blocks],
             "question": _check_plain(str(data.get("question", "")), "question"),
             "options": [_check_plain(str(o), "option") for o in options],
-            "panels": [_validate_panel(p) for p in data.get("panels", [])]}
+            "panels": validate_panels(data.get("panels", []))}
 
 
 def validate_captions(cards):

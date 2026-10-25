@@ -143,3 +143,20 @@ def test_start_replace_closes_old_windows_before_opening(sdir, monkeypatch):
 
     assert [kind for kind, _ in calls] == ["run", "open"]
     assert calls[0][1][:2] == ["pkill", "-f"] and str(sdir / "chrome-profile") in calls[0][1][2]
+
+
+def test_panels_update_keeps_the_turn_id(sdir):
+    cli.set_turn(sdir, {"blocks": ["<p>x</p>"], "question": "?", "options": ["a"], "panels": [{"title": "A", "chips": ["1"]}]})
+
+    cli.set_panels(sdir, [{"title": "A", "chips": ["{money}", "2"]}])
+
+    turn = json.loads((sdir / "turn.json").read_text())
+    assert turn["id"] == 1 and turn["panels"][0]["chips"] == ["{money}", "2"]
+
+
+def test_panels_update_needs_a_turn_and_valid_panels(sdir):
+    with pytest.raises(ValueError):
+        cli.set_panels(sdir, [{"title": "A"}])
+    cli.set_turn(sdir, {"blocks": ["<p>x</p>"], "question": "?", "options": []})
+    with pytest.raises(ValueError):
+        cli.set_panels(sdir, [{"title": "<b>A</b>", "chips": ["x"]}])

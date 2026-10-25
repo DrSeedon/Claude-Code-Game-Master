@@ -79,6 +79,18 @@ def set_turn(sdir, data):
     return turn
 
 
+def set_panels(sdir, panels):
+    """Replace the side panels of the current turn in place (no new turn, no story animation)."""
+    from . import content
+
+    turn = _read(sdir / "turn.json")
+    if not turn:
+        raise ValueError("no turn is shown yet")
+    turn["panels"] = content.validate_panels(panels)
+    _write(sdir / "turn.json", turn)
+    return turn
+
+
 def run_hook(payload_text):
     """PostToolUse: never fail, never print, do nothing unless the screen server is running."""
     try:
@@ -97,10 +109,11 @@ def run_hook(payload_text):
 def serve(sdir, port):
     from backend.campaign_views import get_campaign_views
 
-    from . import server, voice
+    from . import clock, server, voice
 
     campaign = sdir.parent
     httpd, token = server.make_server(sdir, port=port, views_provider=lambda: get_campaign_views(campaign),
+                                      clock_provider=lambda: clock.world_clock(campaign),
                                       transcriber=voice.make_transcriber(PROJECT_ROOT))
     _write(sdir / "server.json", {"pid": os.getpid(), "port": httpd.server_port, "token": token})
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -228,6 +241,8 @@ def main(argv=None):
     a.add_argument("--labels", help="JSON file: skill key to display name")
     t = sub.add_parser("turn", help="show a new turn (story blocks, question, options, panels)")
     t.add_argument("--file", required=True, help="JSON file or - for stdin")
+    pn = sub.add_parser("panels", help="replace the side panels of the current turn without a new turn")
+    pn.add_argument("--file", required=True, help="JSON list of panels, or - for stdin")
     n = sub.add_parser("activity", help="add a line to the Master's visible work feed")
     n.add_argument("kind", choices=["think", "roll", "save", "world", "info"])
     n.add_argument("text")
@@ -267,6 +282,9 @@ def main(argv=None):
         data = json.loads(sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8"))
         print(f"turn {set_turn(sdir, data)['id']} shown")
         ensure_window(sdir)
+    elif args.cmd == "panels":
+        data = json.loads(sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8"))
+        print(f"{len(set_panels(sdir, data)['panels'])} panels updated")
     elif args.cmd == "activity":
         from . import activity
         print(f"activity {activity.append_activity(sdir, args.kind, args.text)['id']}")

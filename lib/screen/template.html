@@ -137,7 +137,7 @@ async function swapAct(act){document.body.classList.add('swapping');await sleep(
 function renderAct(act){
   S.actId=act.id;labels=act.labels||{};S.lang=act.lang||'en';applyTheme(act.theme);applyLang(S.lang);
   setBackground(`/art.png?v=${act.id}`);$('art').src=`/art.png?v=${act.id}`;
-  $('kick').textContent=act.kicker||'';$('place').textContent=act.place||'';$('date').textContent=act.date||'';document.title=act.title||document.title;
+  $('kick').textContent=act.kicker||'';S.actPlace=act.place||'';S.actDate=act.date||'';document.title=act.title||document.title;
   for(const z of ['tl','tr','bottom'])$('z-'+z).innerHTML=(act.captions||[]).filter(c=>c.zone===z).map((c,i)=>`<div class="cap" ${c.dot?`data-dot="${c.dot}"`:''} style="animation-delay:${i*90}ms"><b>${esc(c.title)}</b><small>${esc(c.text||'')}</small></div>`).join('');
   drawLines();
 }
@@ -159,34 +159,39 @@ function renderTurn(t){
   $('q').textContent=t.question||'';
   $('opts').innerHTML=(t.options||[]).map((o,i)=>`<button class="opt" style="animation-delay:${400+i*120}ms" data-i="${i}"><i>${i+1}</i>${esc(o)}</button>`).join('');
   document.querySelectorAll('.opt').forEach(b=>b.onclick=()=>sendAction('button',`${+b.dataset.i+1}. ${t.options[+b.dataset.i]}`));
-  S.panelsHtml=(t.panels||[]).map(p=>`<div class="box"><h5>${esc(p.title)}</h5>`+
+  S.panelsKey=JSON.stringify(t.panels||[]);S.panelsHtml=buildPanels(t.panels||[]);
+  renderSide();
+}
+function buildPanels(panels){
+  return (panels||[]).map(p=>`<div class="box"><h5>${esc(p.title)}</h5>`+
     (p.chips?`<div class="chips">${p.chips.map(c=>`<span class="chip">${esc(c)}</span>`).join('')}</div>`:'')+
     (p.bars||[]).map(b=>`<div class="bar-row"><span>${esc(b.label)}</span><div><i style="width:${Math.min(100,b.value/b.max*100)}%"></i></div><b>${b.value}</b></div>`).join('')+
     (p.steps?`<div class="steps">${p.steps.map(s=>`<div class="step ${s.current?'cur':''}">${esc(s.label)}</div>`).join('')}</div>`:'')+`</div>`).join('');
-  renderSide();
 }
 
 // ---- heroes: updated in place, numbers flash and bars glide ----
 function heroList(v){
   const out=[];const c=v&&v.character;
-  if(c)out.push({id:c.id||'pc',name:c.name,sub:[c.race,c.class].filter(Boolean).join(' · ')+(c.level?` · ${t('lvl')} ${c.level}`:''),hp:c.hp&&c.hp.current,hpMax:c.hp&&c.hp.max,ac:c.ac,stats:c.stats,skills:c.skills});
+  if(c)out.push({id:c.id||'pc',name:c.name,sub:[c.race,c.class].filter(Boolean).join(' · ')+(c.level?` · ${t('lvl')} ${c.level}`:''),hp:c.hp&&c.hp.current,hpMax:c.hp&&c.hp.max,ac:c.ac,stats:c.stats,skills:c.skills,money:c.money&&c.money.formatted});
   for(const p of (v&&v.npcs&&v.npcs.party)||[]){const s=p.character_sheet||{};out.push({id:p.id,name:p.name,sub:[s.race,s.class].filter(Boolean).join(' · ')+(s.level?` · ${t('lvl')} ${s.level}`:''),hp:s.hp,hpMax:s.hp_max,ac:s.ac,stats:s.stats,skills:s.skills})}
   return out;
 }
 function renderSide(){
   const side=$('side');let keep=Object.keys(S.heroes).join('|');
   const heroes=heroList(S.views);
-  if(keep!==heroes.map(h=>h.id).join('|')||side.dataset.panels!==S.panelsHtml){
+  const cm=S.views&&S.views.character&&S.views.character.money,purse=cm?cm.formatted:'—';
+  const panelsNow=(S.panelsHtml||'').split('{money}').join(esc(purse));
+  if(keep!==heroes.map(h=>h.id).join('|')||side.dataset.panels!==panelsNow){
     S.heroes={};
     side.innerHTML=heroes.map(h=>`<section class="hero" data-id="${esc(h.id)}"><h3>${esc(h.name)}</h3><div class="sub">${esc(h.sub)}</div>
-      <div class="hp"><div class="bar"><i></i></div><span><span data-f="hp"></span>/<span data-f="hpMax"></span> · ${t('ac')} <span data-f="ac"></span></span></div>
+      <div class="hp"><div class="bar"><i></i></div><span><span data-f="hp"></span>/<span data-f="hpMax"></span> · ${t('ac')} <span data-f="ac"></span>${h.money?` · 💰 <span data-f="money"></span>`:''}</span></div>
       ${h.stats?`<div class="abs">${ABIL().map(([k,l])=>`<div class="ab"><em>${l}</em><b data-s="${k}"></b><u data-m="${k}"></u></div>`).join('')}</div>`:''}
-      <div class="chips" data-f="skills"></div></section>`).join('')+(S.panelsHtml||'')+questsHtml();
-    side.dataset.panels=S.panelsHtml;
+      <div class="chips" data-f="skills"></div></section>`).join('')+panelsNow+questsHtml();
+    side.dataset.panels=panelsNow;
     heroes.forEach(h=>S.heroes[h.id]=side.querySelector(`[data-id="${CSS.escape(h.id)}"]`));
   }
   for(const h of heroes){const el=S.heroes[h.id];if(!el)continue;
-    setText(el.querySelector('[data-f=hp]'),h.hp??'?');setText(el.querySelector('[data-f=hpMax]'),h.hpMax??'?');setText(el.querySelector('[data-f=ac]'),h.ac??'—');
+    setText(el.querySelector('[data-f=hp]'),h.hp??'?');setText(el.querySelector('[data-f=hpMax]'),h.hpMax??'?');setText(el.querySelector('[data-f=ac]'),h.ac??'—');if(h.money)setText(el.querySelector('[data-f=money]'),h.money);
     el.querySelector('.bar i').style.width=(h.hpMax?Math.max(0,Math.min(100,100*h.hp/h.hpMax)):100)+'%';
     if(h.stats)for(const k of ABIL_KEYS){const b=el.querySelector(`[data-s=${k}]`),m=el.querySelector(`[data-m=${k}]`);if(b){setText(b,h.stats[k]);setText(m,mod(h.stats[k]))}}
     const sk=Object.entries(h.skills||{}).map(([k,v])=>`<span class="chip">${esc(skillName(k))} <b>+${typeof v==='object'?v.total:v}</b></span>`).join('');
@@ -212,15 +217,18 @@ function renderFeed(list){
 let reloadWanted=false;
 const busyNow=()=>(rec&&rec.state==='recording')||$('say').classList.contains('on')||$('mic').classList.contains('busy')||($('txt').value&&document.activeElement===$('txt'));
 setInterval(()=>{if(reloadWanted&&!busyNow())location.reload()},1500);
+function showClock(st){$('place').textContent=S.actPlace||(st.clock&&st.clock.location)||'';$('date').textContent=(st.clock&&st.clock.text)||S.actDate||''}
 function onState(st){
   if(S.build&&st.build&&st.build!==S.build)reloadWanted=true;
   else S.build=st.build||S.build;
   S.views=st.views;
   if(st.act&&st.act.id!==S.actId){if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   if(st.turn&&st.turn.id!==S.turnId){S.waiting=false;renderTurn(st.turn)}
+  else if(st.turn&&JSON.stringify(st.turn.panels||[])!==S.panelsKey){S.panelsKey=JSON.stringify(st.turn.panels||[]);S.panelsHtml=buildPanels(st.turn.panels||[]);renderSide()}
   else renderSide();
   if(st.turn){S.waiting=S.waiting||(st.inbox_last>(st.turn.answered||0))}
   document.body.classList.toggle('waiting',S.waiting);
+  showClock(st);
   renderWho();renderFeed(st.activity||[]);
 }
 function connect(){const es=new EventSource('/api/events?token='+encodeURIComponent(TOKEN));

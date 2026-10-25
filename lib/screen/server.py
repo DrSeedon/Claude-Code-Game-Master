@@ -39,7 +39,7 @@ class ScreenServer(ThreadingHTTPServer):
 
 def _signature(screen_dir):
     files = [screen_dir / n for n in ("act.json", "turn.json", activity.ACTIVITY, inbox.INBOX)]
-    files.append(screen_dir.parent / "world.json")
+    files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"]
     sig = []
     for f in files:
         try:
@@ -50,17 +50,18 @@ def _signature(screen_dir):
     return tuple(sig)
 
 
-def build_state(screen_dir, views_provider):
+def build_state(screen_dir, views_provider, clock_provider=lambda: None):
     events = inbox.read_events(screen_dir)
     return {"build": TEMPLATE.stat().st_mtime_ns, "act": _read_json(screen_dir / "act.json"), "turn": _read_json(screen_dir / "turn.json"),
-            "views": views_provider(), "activity": activity.read_activity(screen_dir, tail=40),
+            "views": views_provider(), "clock": clock_provider(), "activity": activity.read_activity(screen_dir, tail=40),
             "inbox_last": events[-1]["id"] if events else 0}
 
 
-def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1"):
+def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None):
     screen_dir = Path(screen_dir)
     token = token or secrets.token_urlsafe(24)
     views_provider = views_provider or (lambda: {})
+    clock_provider = clock_provider or (lambda: None)
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -104,7 +105,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if not self._authorized():
                 return self._deny()
             if path == "/api/state":
-                return self._send(200, build_state(screen_dir, views_provider))
+                return self._send(200, build_state(screen_dir, views_provider, clock_provider))
             if path == "/api/clients":
                 return self._send(200, {"clients": self.server.clients})
             if path == "/api/events":
@@ -133,7 +134,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     sig = _signature(screen_dir)
                     if sig != last:
                         last, idle = sig, 0.0
-                        payload = json.dumps(build_state(screen_dir, views_provider), ensure_ascii=False)
+                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider), ensure_ascii=False)
                         self.wfile.write(f"event: state\ndata: {payload}\n\n".encode())
                     elif idle >= PING_SECONDS:
                         idle = 0.0

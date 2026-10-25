@@ -196,3 +196,28 @@ def test_client_count_follows_open_pages(running):
         if json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 0:
             break
     assert json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 0
+
+
+def test_state_carries_the_live_clock(tmp_path):
+    (tmp_path / "act.json").write_text(json.dumps({"id": 1, "title": "t", "theme_css": ""}))
+    httpd, token = server.make_server(tmp_path, port=0, token="T", views_provider=dict,
+                                      clock_provider=lambda: {"text": "Monday — 20:15", "location": "Courtyard"})
+    server.serve_in_thread(httpd)
+    try:
+        _, body = call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert json.loads(body)["clock"] == {"text": "Monday — 20:15", "location": "Courtyard"}
+
+
+def test_signature_changes_when_the_game_time_changes(tmp_path):
+    (tmp_path / "act.json").write_text("{}")
+    overview = tmp_path.parent / "campaign-overview.json"
+    overview.write_text('{"precise_time": "20:00"}')
+    before = server._signature(tmp_path)
+
+    overview.write_text('{"precise_time": "20:15", "x": "longer"}')
+
+    assert server._signature(tmp_path) != before
