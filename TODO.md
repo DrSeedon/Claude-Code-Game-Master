@@ -37,3 +37,31 @@ Configurable encounter engine triggered by `dm-session.sh move --elapsed N`. Set
 - On trigger: roll category from weighted table, create creature from wiki (if exists) or print type for DM to narrate
 - Auto-lookup creature stats from wiki for instant combat setup
 - Works with any campaign/setting — zombie hordes, monster hunters, road bandits
+
+## Import without RAG is broken end to end (found 2026-10-25, War and Peace import)
+Importing a book needs `sentence-transformers` + `chromadb` (several GB with torch) even though extractor agents only read chunk files:
+- `tools/dm-extract.sh prepare` aborts without RAG; `lib/agent_extractor.py` `prepare_for_agents` exits too. Chunking could be a plain paragraph split.
+- `.claude/agents/extractor-*.md` tell agents to use `dm-search.sh --rag-only` and carry `model: opus` (expensive). Worked around with custom Haiku prompts, one agent per ~145k-char package writing `extracted/agent-NN.json`.
+- `lib/rag/__init__.py` does not export `QuoteExtractor`, so the quote step of `save` fails with `cannot import name 'QuoteExtractor'`.
+- `lib/rag/embedder.py` defaults to `all-MiniLM-L6-v2`, English only: useless for Russian books. Use a multilingual model (multilingual-e5-small needs `query: `/`passage: ` prefixes).
+
+## Import drops factions (found 2026-10-25)
+`AgentExtractor.validate_and_save` saves only npcs, locations, items, plots; `factions`, `monsters`, `traps` from `merge_agent_results` are silently dropped. War and Peace factions were kept in `world-state/campaigns/war-and-peace/merged-clean.json`.
+
+## No dedupe of the same entity across extraction packages (found 2026-10-25)
+Per-package extraction produced 419 NPC keys for ~139 real characters («Пьер Безухов» x19, «Фёдор/Федор Долохов», «Бенигсен/Беннигсен»). Needed a hand-made alias map; the importer has no normalisation step.
+
+## Two-player (couple) play is not supported natively (found 2026-10-25)
+One `player:active` node plus DM-controlled party NPCs (`dm-npc.sh promote`). Second human player has to be played as a party NPC with a campaign rule that the DM never decides for them.
+
+## Campaign rules template can never apply to a freshly created campaign (found 2026-10-25)
+`dm-campaign-rules.sh apply <id>` prints `[SKIP] campaign-rules.md already exists` and only writes the metadata to `campaign-overview.json`, but `CampaignManager.init_campaign_files` (also used by import `prepare`) already creates a placeholder `campaign-rules.md`. Result: "Template set to: political-intrigue" while the file holds no template rules. Same for `dm-campaign-custom-rules.sh apply`: "already applied" is tracked in the overview, so re-applying after the file was recreated is skipped. Fix: skip only when the file contains template content, and derive "applied" from the markers in the file, not from the overview.
+
+## Calendar has no leap years (found 2026-10-25)
+`lib/calendar.py` `days_in_year` sums fixed month lengths and `_absolute_day` multiplies `year * days_in_year`, so February is always 28 days. War and Peace runs 1805-1813 on the Julian calendar (1808 and 1812 are leap years), so dates and weekdays drift by one day after each 29 February. Fix direction: optional `leap_rule` in the calendar config (every N years, which month gets the extra day).
+
+## Imported quests crash `dm-plot.sh list` and spam the active list (found 2026-10-25)
+`AgentExtractor.validate_and_save` stores extracted `plot_hooks` as `quest:*` nodes with `objectives` as plain strings and no `status`. `world_graph.py` `quest-list` (line ~2751, `o.get("done")`) assumes objective dicts `{text, done}` and raises `AttributeError: 'str' object has no attribute 'get'`. Also 201 book beats became 201 active quests, drowning the real ones. Fix direction: importer must write objectives as `{"text","done"}`, set `status`, and put non-quest scene/theme beats into `chapter`/`fact` nodes instead of quests; make `quest-list` tolerate legacy string objectives.
+
+## Image MCP (`mcp__websearch__generate_image`) fails on every prompt (found 2026-10-25)
+Workaround that works: Codex imagegen, see ~/.claude/docs/image-generation-codex.md. Three calls in a row (two cinematic prompts and a trivial "red apple" 1:1) returned `Provider returned error` for `google/gemini-nano-banana-2.1` (OpenRouter shows the model and its single provider, Google AI Studio, as listed and up). `~/.claude/mcp-servers/websearch/index.js` sends `modalities: ['image']` plus `image_config.aspect_ratio`; Gemini image models normally require `['image','text']`. Hypothesis, not yet verified. Fix direction: change the modalities array in `index.js` (global file, owner approval needed) and reconnect the MCP; otherwise retry later. The campaign needs this for cinematic scene art (`cinematic_visuals` is enabled).
