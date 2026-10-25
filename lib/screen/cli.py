@@ -55,7 +55,7 @@ def server_info(sdir):
 
 
 def set_act(sdir, image, title, kicker="", place="", date="", style="classic", captions=None, labels=None, lang="en"):
-    from . import content, theme
+    from . import content, eventlog, theme
 
     cards = content.validate_captions(captions or [])
     sdir.mkdir(parents=True, exist_ok=True)
@@ -65,42 +65,52 @@ def set_act(sdir, image, title, kicker="", place="", date="", style="classic", c
     act = {"id": previous.get("id", 0) + 1, "title": title, "kicker": kicker, "place": place, "date": date,
            "style": style, "lang": lang, "captions": cards, "labels": labels or {}, "theme": built, "theme_css": theme.theme_css(built)}
     _write(sdir / "act.json", act)
+    eventlog.log(sdir, "act", id=act["id"], title=title, kicker=kicker, place=place, date=date, style=style, lang=lang, captions=len(cards),
+                 labels=len(labels or {}), theme=built, snapshot=eventlog.world_snapshot(sdir.parent))
     return act
 
 
 def set_turn(sdir, data):
-    from . import content, inbox
+    from . import content, eventlog, inbox
 
     checked = content.validate_turn(data)
     previous = _read(sdir / "turn.json") or {}
     events = inbox.read_events(sdir)
     turn = {"id": previous.get("id", 0) + 1, "answered": events[-1]["id"] if events else 0, **checked}
     _write(sdir / "turn.json", turn)
+    eventlog.log(sdir, "turn", snapshot=eventlog.world_snapshot(sdir.parent), **turn)
     return turn
 
 
 def set_panels(sdir, panels):
     """Replace the side panels of the current turn in place (no new turn, no story animation)."""
-    from . import content
+    from . import content, eventlog
 
     turn = _read(sdir / "turn.json")
     if not turn:
         raise ValueError("no turn is shown yet")
     turn["panels"] = content.validate_panels(panels)
     _write(sdir / "turn.json", turn)
+    eventlog.log(sdir, "panels", turn=turn["id"], panels=turn["panels"], snapshot=eventlog.world_snapshot(sdir.parent))
     return turn
 
 
 def run_hook(payload_text):
     """PostToolUse: never fail, never print, do nothing unless the screen server is running."""
     try:
-        from . import activity, hook
+        from . import activity, eventlog, hook
 
         sdir = screen_dir()
         if not server_info(sdir):
             return
         lang = (_read(sdir / "act.json") or {}).get("lang", "en")
-        for event in hook.activities_from_hook(json.loads(payload_text), lang):
+        payload = json.loads(payload_text)
+        shown = hook.activities_from_hook(payload, lang)
+        if shown or "dm-" in json.dumps(payload.get("tool_input") or {}):
+            response = payload.get("tool_response")
+            output = response.get("stdout", "") if isinstance(response, dict) else str(response or "")
+            eventlog.log(sdir, "tool", command=(payload.get("tool_input") or {}).get("command", ""), output=output[:1500], shown=[e["text"] for e in shown])
+        for event in shown:
             activity.append_activity(sdir, event["kind"], event["text"])
     except Exception:
         return
@@ -109,7 +119,7 @@ def run_hook(payload_text):
 def serve(sdir, port):
     from backend.campaign_views import get_campaign_views
 
-    from . import clock, server, speech, voice
+    from . import clock, eventlog, server, speech, voice
 
     campaign = sdir.parent
     httpd, token = server.make_server(sdir, port=port, views_provider=lambda: get_campaign_views(campaign),
@@ -117,6 +127,7 @@ def serve(sdir, port):
                                       speaker=speech.Speaker(sdir, speech.ElevenLabsApi(PROJECT_ROOT), lambda: speech.characters_from_world(campaign)),
                                       transcriber=voice.make_transcriber(PROJECT_ROOT))
     _write(sdir / "server.json", {"pid": os.getpid(), "port": httpd.server_port, "token": token})
+    eventlog.log(sdir, "server", event="start", pid=os.getpid(), port=httpd.server_port, speech=speech.load_config(sdir).get("model"), key_present=bool(speech.load_api_key(PROJECT_ROOT)))
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
         httpd.serve_forever()
@@ -124,6 +135,7 @@ def serve(sdir, port):
         pass
     finally:
         (sdir / "server.json").unlink(missing_ok=True)
+        eventlog.log(sdir, "server", event="stop", pid=os.getpid())
 
 
 def connected_pages(info):
@@ -138,6 +150,8 @@ def connected_pages(info):
 
 def close_windows(sdir):
     """Close every app window of this campaign's screen profile (the profile belongs to the screen only)."""
+    from . import eventlog
+    eventlog.log(sdir, "window", event="close")
     subprocess.run(["pkill", "-f", f"--user-data-dir={sdir / 'chrome-profile'}"], capture_output=True)
 
 
@@ -164,6 +178,8 @@ def start(sdir, port, open_window, new_window=False, replace=False):
     if open_window and (replace or new_window or connected_pages(info) == 0):
         browser = next((shutil.which(b) for b in os.environ.get("DM_SCREEN_BROWSER", "").split() + list(BROWSERS) if shutil.which(b)), None)
         if browser:
+            from . import eventlog
+            eventlog.log(sdir, "window", event="open", browser=browser, replace=replace, url=url)
             subprocess.Popen([browser, f"--app={url}", f"--user-data-dir={sdir / 'chrome-profile'}",
                               "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--start-maximized", "--no-first-run"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -197,6 +213,49 @@ def listen(sdir, from_start):
             print(inbox.format_line(event), flush=True)
             last = event["id"]
         time.sleep(0.3)
+
+
+def _parse_age(text):
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if not text or text[-1] not in units or not text[:-1].isdigit():
+        raise SystemExit("--since looks like 30s, 10m, 2h or 1d")
+    from datetime import timedelta
+    return timedelta(seconds=int(text[:-1]) * units[text[-1]])
+
+
+def _format_entry(entry):
+    skip = {"ts", "kind", "blocks", "words", "theme", "snapshot", "traceback"}
+    parts = []
+    for key, value in entry.items():
+        if key in skip:
+            continue
+        shown = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+        parts.append(f"{key}={shown[:90]}")
+    extra = ""
+    if entry.get("words"):
+        extra = " | words: " + " ".join(f"{w['word']}({w.get('confidence')})" for w in entry["words"])[:400]
+    if entry.get("blocks"):
+        extra += f" | {len(entry['blocks'])} blocks"
+    return f"{entry['ts'][11:23]} {entry['kind']:<14} " + " ".join(parts)[:260] + extra
+
+
+def show_log(sdir, tail=40, kinds=None, errors=False, since=None, as_json=False, summary=False, follow=False):
+    from . import eventlog
+
+    if summary:
+        for key, value in eventlog.summary(sdir).items():
+            print(f"{key}: {value}")
+        return
+    seen = 0
+    while True:
+        entries = eventlog.read(sdir, kinds=kinds, since=since, errors=errors)
+        fresh = entries[seen:] if follow and seen else entries[-tail:] if tail else entries
+        for entry in fresh:
+            print(json.dumps(entry, ensure_ascii=False) if as_json else _format_entry(entry), flush=True)
+        seen = len(entries)
+        if not follow:
+            return
+        time.sleep(0.5)
 
 
 def doctor():
@@ -243,11 +302,30 @@ def voice_command(sdir, args):
         voices.set_model(sdir, args.name)
         print("model set to", args.name)
         return
+    if args.what == "design":
+        if not args.name or not args.describe:
+            raise SystemExit('voice design "Name" --describe "..."')
+        found = voices.design_voice(api, sdir, args.describe, args.text, args.seed)
+        from . import eventlog
+        eventlog.log(sdir, "voice_design", character=args.name, description=args.describe, seed=args.seed, previews=found)
+        for item in found:
+            print(f"preview {item['id']}  {item['seconds']}s  {sdir / item['file']}")
+        print(f'listen, then: dm-screen.sh voice keep "{args.name}" --preview <id> --describe "{args.describe}"')
+        return
+    if args.what == "keep":
+        if not (args.name and args.preview and args.describe):
+            raise SystemExit('voice keep "Name" --preview <id> --describe "..."')
+        profile = voices.keep_voice(api, args.name, args.describe, args.preview, args.model)
+        voices.set_character_voice(sdir.parent, args.name, profile)
+        from . import eventlog
+        eventlog.log(sdir, "voice_keep", character=args.name, profile=profile)
+        print(f"kept: {args.name} -> voice {profile['voice_id']}")
+        return
     if not args.voice:
         raise SystemExit("--voice is required")
     effects = {k: v for k, v in (("environment_id", args.env), ("distance", args.distance), ("pan", args.pan),
                                  ("filter_preset_id", args.filter)) if v is not None}
-    profile = voices.make_profile(voices.find_voice(api, args.voice), args.model, args.stability, args.similarity, effects)
+    profile = voices.make_profile(voices.find_voice(api, args.voice), args.model, args.stability, args.similarity, effects, args.speed)
     if args.what == "narrator":
         voices.set_narrator(sdir, profile)
     elif args.what == "default":
@@ -257,6 +335,35 @@ def voice_command(sdir, args):
             raise SystemExit('give the character name: voice set "Name" --voice ...')
         voices.set_character_voice(sdir.parent, args.name, profile)
     print(f"{args.what}{' ' + args.name if args.what == 'set' else ''}: {profile['name']}")
+
+
+def audition(sdir, text, names, speed, model, models=None):
+    """Show a turn with one paragraph per voice, then render it so a click plays them in order."""
+    from . import speech, voices
+
+    api = speech.ElevenLabsApi(PROJECT_ROOT)
+    profiles, blocks = {}, ["<h1>Прослушивание голосов</h1>"]
+    if models:
+        if len(names) != 1:
+            raise SystemExit("--models needs exactly one voice")
+        voice = voices.find_voice(api, names[0])
+        for number, model_id in enumerate([m.strip() for m in models.split(",")], 1):
+            label = f"Модель {number} · {model_id.replace('eleven_', '')}"
+            profiles[label] = voices.make_profile(voice, model=model_id, speed=speed if model_id not in speech.NO_SPEED else None)
+            blocks.append(f"<p><b>{label}:</b> «{text}»</p>")
+    else:
+        for number, query in enumerate(names, 1):
+            profile = voices.make_profile(voices.find_voice(api, query), model=model, speed=speed)
+            label = f"Голос {number} · {profile['name']}"
+            profiles[label] = profile
+            blocks.append(f"<p><b>{label}:</b> «{text}»</p>")
+    voices.set_audition(sdir, profiles)
+    set_turn(sdir, {"blocks": blocks, "question": "Какой голос взять диктором?", "options": [f"Вариант {i}" for i in range(1, len(profiles) + 1)][:6]})
+    spk = speech.Speaker(sdir, api, lambda: speech.characters_from_world(sdir.parent))
+    plan = spk.plan({"blocks": blocks})
+    print(f"rendering {plan['segments']} lines, about {plan['credits']} credits")
+    spk.render({"blocks": blocks})
+    print("done: press the speaker button on the page")
 
 
 def speak_once(sdir, text, speaker_name):
@@ -304,18 +411,37 @@ def main(argv=None):
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=DEFAULT_PORT)
     sub.add_parser("hook")
+    lg = sub.add_parser("log", help="read the screen log: requests, microphone words, prices, turns, errors")
+    lg.add_argument("--tail", type=int, default=40)
+    lg.add_argument("--kind", help="comma-separated kinds, e.g. tts,stt,turn,error,ui.click")
+    lg.add_argument("--errors", action="store_true")
+    lg.add_argument("--since", help="30s, 10m, 2h, 1d")
+    lg.add_argument("--json", action="store_true", dest="as_json")
+    lg.add_argument("--summary", action="store_true")
+    lg.add_argument("--follow", action="store_true")
     sub.add_parser("voices", help="list the voices of your ElevenLabs account (Russian first)")
     vp = sub.add_parser("voice", help="narrator, default and per-character voices")
-    vp.add_argument("what", choices=["narrator", "default", "model", "set", "show"])
+    vp.add_argument("what", choices=["narrator", "default", "model", "set", "show", "design", "keep"])
     vp.add_argument("name", nargs="?", help="character name for 'set', model id for 'model'")
     vp.add_argument("--voice", help="voice name (or part of it) or id")
     vp.add_argument("--model")
     vp.add_argument("--stability", type=float)
     vp.add_argument("--similarity", type=float)
+    vp.add_argument("--speed", type=float, help="0.7 to 1.2 (not for Eleven v4)")
+    vp.add_argument("--describe", help="design/keep: what the voice is like (age, timbre, manner)")
+    vp.add_argument("--text", help="design: sample text of 100 to 1000 characters (default: written by the service)")
+    vp.add_argument("--seed", type=int, help="design: the same seed and description give the same voice")
+    vp.add_argument("--preview", help="keep: the preview id printed by design")
     vp.add_argument("--env", help="room: small_room big_room hall tunnel street valley forest")
     vp.add_argument("--distance", type=float)
     vp.add_argument("--pan", type=float)
     vp.add_argument("--filter", help="old_radio robot cheap_microphone phone low_quality_phone bright_phone")
+    au = sub.add_parser("audition", help="the same line in several voices, one after another (spends credits)")
+    au.add_argument("text")
+    au.add_argument("--voices", required=True, help="comma-separated voice names")
+    au.add_argument("--speed", type=float)
+    au.add_argument("--model")
+    au.add_argument("--models", help="comma-separated model ids: the same voice in each model (needs exactly one voice)")
     sp = sub.add_parser("speak", help="voice one line now (spends credits) and print the audio file")
     sp.add_argument("text")
     sp.add_argument("--as", dest="speaker", default="narrator")
@@ -375,6 +501,9 @@ def main(argv=None):
         listen(sdir, args.from_start)
     elif args.cmd == "serve":
         serve(sdir, args.port)
+    elif args.cmd == "log":
+        show_log(sdir, args.tail, set(args.kind.split(",")) if args.kind else None, args.errors, _parse_age(args.since) if args.since else None,
+                 args.as_json, args.summary, args.follow)
     elif args.cmd == "voices":
         from . import speech as speech_mod, voices as voices_mod
         for v in sorted(voices_mod.describe_all(speech_mod.ElevenLabsApi(PROJECT_ROOT)), key=lambda v: (not v["ru"], v["name"])):
@@ -383,6 +512,8 @@ def main(argv=None):
         voice_command(sdir, args)
     elif args.cmd == "speak":
         speak_once(sdir, args.text, args.speaker)
+    elif args.cmd == "audition":
+        audition(sdir, args.text, [v.strip() for v in args.voices.split(",")], args.speed, args.model, args.models)
     elif args.cmd == "enable":
         print(enable())
         print("Next: dm-screen.sh act ... (art + captions), dm-screen.sh turn --file ..., dm-screen.sh start")

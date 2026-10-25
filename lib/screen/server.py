@@ -3,6 +3,7 @@
 import json
 import re
 import secrets
+import traceback
 import select
 import socket
 import threading
@@ -11,10 +12,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, inbox, speech as speech_module, voice
+from . import activity, eventlog, inbox, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
+QUIET_PATHS = {"/api/state", "/api/events", "/api/clients", "/art.png"}
+MAX_UI_EVENTS, MAX_UI_BYTES, MAX_LOG_BODY = 50, 4000, 256 * 1024
 _AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$|^ambient-[\w-]{1,60}\.mp3$")
 POLL_SECONDS = 0.3
 PING_SECONDS = 15
@@ -33,6 +36,9 @@ class ScreenServer(ThreadingHTTPServer):
 
     clients = 0
     clients_lock = threading.Lock()
+
+    def handle_error(self, request, client_address):
+        pass  # a page that went away mid-request is normal; real failures are logged by the handler
 
     def shutdown(self):
         self.stopping = True
@@ -65,6 +71,9 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
     views_provider = views_provider or (lambda: {})
     clock_provider = clock_provider or (lambda: None)
 
+    def note(kind, **data):
+        eventlog.log(screen_dir, kind, **data)
+
     def speech_on():
         return speaker is not None and getattr(speaker, "available", lambda: True)()
 
@@ -83,6 +92,10 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             return self._host_ok() and secrets.compare_digest(supplied, token)
 
         def _send(self, status, body, content_type="application/json; charset=utf-8"):
+            path = urlparse(self.path).path
+            if (path not in QUIET_PATHS and not path.startswith("/audio/")) or status >= 400:
+                note("http", method=self.command, path=path, status=status, ms=round((time.monotonic() - getattr(self, "_t0", time.monotonic())) * 1000),
+                     bytes=len(body) if isinstance(body, bytes) else len(json.dumps(body)), error=body.get("error") if isinstance(body, dict) else None)
             if not isinstance(body, bytes):
                 body = json.dumps(body, ensure_ascii=False).encode()
             self.send_response(status)
@@ -99,6 +112,20 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self._send(403, {"error": "forbidden"})
 
         def do_GET(self):
+            self._t0 = time.monotonic()
+            try:
+                self._get()
+            except Exception as exc:
+                self._crash(exc)
+
+        def _crash(self, exc):
+            note("error", where=f"{self.command} {urlparse(self.path).path}", message=f"{type(exc).__name__}: {exc}", traceback=traceback.format_exc())
+            try:
+                self._send(500, {"error": "internal error, see the log"})
+            except Exception:
+                pass
+
+        def _get(self):
             path = urlparse(self.path).path
             if path == "/":
                 return self._page() if self._host_ok() else self._deny()
@@ -167,11 +194,18 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return True
 
         def do_POST(self):
+            self._t0 = time.monotonic()
+            try:
+                self._post()
+            except Exception as exc:
+                self._crash(exc)
+
+        def _post(self):
             if not self._authorized():
                 return self._deny()
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_AUDIO:
+            if length > (MAX_LOG_BODY if path == "/api/log" else MAX_AUDIO):
                 return self._send(413, {"error": "too large"})
             body = self.rfile.read(length)
             if path == "/api/action":
@@ -180,6 +214,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._voice(body)
             if path == "/api/speech/render":
                 return self._render()
+            if path == "/api/log":
+                return self._ui_log(body)
             self._send(404, {"error": "not found"})
 
         def _audio(self, name):
@@ -229,26 +265,50 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 seg["url"] = "/audio/" + seg["file"]
             self._send(200, {"turn": turn["id"], "segments": segments, "quota": quota})
 
+        def _ui_log(self, body):
+            try:
+                events = json.loads(body or b"{}").get("events", [])
+            except (json.JSONDecodeError, AttributeError):
+                return self._send(400, {"error": "bad json"})
+            kept = 0
+            for event in events[:MAX_UI_EVENTS]:
+                kind = str(event.get("kind", ""))
+                if not kind.startswith("ui."):
+                    continue
+                data = {k: (v[:MAX_UI_BYTES] if isinstance(v, str) else v) for k, v in event.items() if k != "kind"}
+                if len(json.dumps(data, ensure_ascii=False)) > MAX_UI_BYTES:
+                    data = {"truncated": json.dumps(data, ensure_ascii=False)[:MAX_UI_BYTES]}
+                note(kind, **data)
+                kept += 1
+            self._send(200, {"ok": True, "kept": kept})
+
         def _action(self, body):
             try:
                 data = json.loads(body or b"{}")
                 event = inbox.append_event(screen_dir, data.get("who", ""), data.get("source", "text"), data.get("text", ""))
             except (ValueError, json.JSONDecodeError) as exc:
                 return self._send(400, {"error": str(exc)})
+            note("action", id=event["id"], who=event["who"], source=event["source"], text=event["text"])
             self._send(200, {"ok": True, "id": event["id"]})
 
         def _voice(self, body):
             if not body:
                 return self._send(400, {"error": "empty recording"})
+            started = time.monotonic()
             try:
-                text = transcriber(body, self.headers.get("Content-Type", "audio/webm"))
+                result = transcriber(body, self.headers.get("Content-Type", "audio/webm"))
             except voice.VoiceUnavailable as exc:
+                note("stt", ok=False, bytes=len(body), error=str(exc))
                 return self._send(503, {"error": str(exc)})
             except ValueError as exc:
+                note("stt", ok=False, bytes=len(body), error=str(exc))
                 return self._send(400, {"error": str(exc)})
             except Exception as exc:  # network or provider failure: tell the page, keep the server alive
+                note("stt", ok=False, bytes=len(body), error=f"{type(exc).__name__}: {exc}")
                 return self._send(502, {"error": f"speech service failed: {exc}"})
-            self._send(200, {"text": text})
+            details = result if isinstance(result, dict) else {"text": result}
+            note("stt", ok=True, bytes=len(body), content_type=self.headers.get("Content-Type"), ms=round((time.monotonic() - started) * 1000), **details)
+            self._send(200, {"text": details["text"]})
 
     httpd = ScreenServer((host, port), Handler)
     httpd.stopping = False

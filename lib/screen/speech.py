@@ -11,6 +11,7 @@ import json
 import os
 import re
 import threading
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -19,9 +20,13 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from . import eventlog
+
 API = "https://api.elevenlabs.io"
 MODEL_COST = {"eleven_flash_v2_5": 0.5, "eleven_turbo_v2_5": 0.5}
 NO_LANGUAGE_CODE = {"eleven_multilingual_v2"}
+NO_SPEED = {"eleven_v4", "eleven_v4_turbo"}
+SPEED_RANGE = (0.7, 1.2)
 ENVIRONMENTS = {"small_room", "big_room", "hall", "tunnel", "street", "valley", "forest"}
 FILTERS = {"old_radio", "robot", "cheap_microphone", "phone", "low_quality_phone", "bright_phone"}
 NOISES = {"call_center", "cafe", "city", "keyboard"}
@@ -163,7 +168,7 @@ def _lookup(characters, speaker):
 
 
 def resolve_voice(speaker, config, characters):
-    base = {"model": config.get("model"), "stability": config.get("stability"), "similarity_boost": config.get("similarity_boost"), "effects": {}}
+    base = {"model": config.get("model"), "stability": config.get("stability"), "similarity_boost": config.get("similarity_boost"), "speed": config.get("speed"), "effects": {}}
     if speaker == "narrator":
         layers = [config.get("narrator") or {}]
     else:
@@ -190,8 +195,11 @@ def estimate_credits(segments, config, characters=None):
 
 
 def _cache_key(voice, text, config):
-    material = json.dumps([voice["voice_id"], voice["model"], voice["stability"], voice["similarity_boost"],
-                           voice["effects"], config["output_format"], config["language"], text], sort_keys=True, ensure_ascii=False)
+    parts = [voice["voice_id"], voice["model"], voice["stability"], voice["similarity_boost"],
+             voice["effects"], config["output_format"], config["language"], text]
+    if voice.get("speed") is not None:      # only when set: audio made before speed existed keeps its file name
+        parts.append(voice["speed"])
+    material = json.dumps(parts, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(material.encode()).hexdigest() + ".mp3"
 
 
@@ -210,7 +218,9 @@ class ElevenLabsApi:
                                          headers={"xi-api-key": key, "Content-Type": "application/json"})
         try:
             with self.opener(request, timeout=60) as response:
-                return response.read()
+                data = response.read()
+                headers = {k.lower(): v for k, v in response.headers.items()} if getattr(response, "headers", None) else {}
+                return (data, headers) if method == "POST" else data
         except urllib.error.HTTPError as exc:
             try:
                 detail = json.loads(exc.read().decode())["detail"]
@@ -230,14 +240,30 @@ class ElevenLabsApi:
     def voices(self):
         return json.loads(self._call("GET", "/v1/voices"))["voices"]
 
+    def design(self, description, text=None, model_id=None, seed=None, loudness=None, guidance_scale=None):
+        body = {"voice_description": description}
+        body.update({"text": text} if text else {"auto_generate_text": True})
+        for key, value in (("model_id", model_id), ("seed", seed), ("loudness", loudness), ("guidance_scale", guidance_scale)):
+            if value is not None:
+                body[key] = value
+        data, _ = self._call("POST", "/v1/text-to-voice/design", body)
+        return json.loads(data)
+
+    def create_voice(self, name, description, generated_voice_id):
+        data, _ = self._call("POST", "/v1/text-to-voice", {"voice_name": name, "voice_description": description, "generated_voice_id": generated_voice_id})
+        return json.loads(data)
+
 
 class Speaker:
-    def __init__(self, screen_dir, api, characters):
+    def __init__(self, screen_dir, api, characters, log=None):
         self.dir, self.api, self.characters = Path(screen_dir), api, characters
+        self.log = log or (lambda kind, **data: eventlog.log(self.dir, kind, **data))
         self._ledger_lock = threading.Lock()
 
     def _segments(self, turn, config, characters):
         out = []
+        extra = {name.lower(): profile for name, profile in (config.get("voices") or {}).items()}
+        characters = {**characters, **extra}
         for seg in script_from_blocks(turn.get("blocks", [])):
             voice = resolve_voice(seg["speaker"], config, characters)
             out.append({**seg, "voice": voice, "file": _cache_key(voice, seg["text"], config)})
@@ -280,31 +306,53 @@ class Speaker:
             with open(path, "a", encoding="utf-8") as out:
                 out.write(json.dumps(entry) + "\n")
 
-    def _synthesize(self, seg, config):
+    def _synthesize(self, seg, config, turn_id=None):
         voice = seg["voice"]
+        credits = int(_credits(seg["text"], voice["model"]) + 0.999)
+        facts = dict(turn=turn_id, speaker=seg["speaker"], voice=voice.get("name"), voice_id=voice["voice_id"], model=voice["model"], stability=voice["stability"],
+                     similarity_boost=voice["similarity_boost"], speed=voice.get("speed"), effects=voice["effects"], chars=len(seg["text"]), credits=credits,
+                     text=seg["text"], file=seg["file"])
         body = {"text": seg["text"], "model_id": voice["model"], "apply_text_normalization": "auto",
                 "voice_settings": {"stability": voice["stability"], "similarity_boost": voice["similarity_boost"]}}
+        if voice.get("speed") is not None and voice["model"] not in NO_SPEED:
+            body["voice_settings"]["speed"] = voice["speed"]
         if config.get("language") and voice["model"] not in NO_LANGUAGE_CODE:
             body["language_code"] = config["language"]
         if voice["effects"]:
             body["audio_effects"] = validate_effects(voice["effects"])
-        audio = self.api.tts(voice["voice_id"], body, config["output_format"])
+        started = time.monotonic()
+        try:
+            result = self.api.tts(voice["voice_id"], body, config["output_format"])
+        except SpeechError as exc:
+            self.log("tts", ok=False, cached=False, status=exc.status, error=str(exc), ms=round((time.monotonic() - started) * 1000), **facts)
+            raise
+        audio, info = result if isinstance(result, tuple) else (result, {})
         path = self.dir / AUDIO_DIR / seg["file"]
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".part")
         tmp.write_bytes(audio)
         tmp.replace(path)
-        self._log_spending(int(_credits(seg["text"], voice["model"]) + 0.999))
+        self._log_spending(credits)
+        self.log("tts", ok=True, cached=False, ms=round((time.monotonic() - started) * 1000), bytes=len(audio), request_id=info.get("request-id"),
+                 api_chars=info.get("x-character-count"), history_item=info.get("history-item-id"), **facts)
 
     def render(self, turn):
         config, characters = load_config(self.dir), self.characters()
         segments = self._segments(turn, config, characters)
         todo = [s for s in segments if not (self.dir / AUDIO_DIR / s["file"]).is_file()]
+        started, need, before = time.monotonic(), 0, None
+        for seg in segments:
+            if seg not in todo:
+                self.log("tts", ok=True, cached=True, turn=turn.get("id"), speaker=seg["speaker"], voice=seg["voice"].get("name"), model=seg["voice"]["model"],
+                         chars=len(seg["text"]), credits=0, text=seg["text"], file=seg["file"])
         if todo:
             need = int(sum(_credits(s["text"], s["voice"]["model"]) for s in todo) + 0.999)
-            left = self.quota()["left"]
-            if need > left:
-                raise SpeechError(f"Not enough ElevenLabs credits: need {need}, left {left}", 402)
+            before = self.quota()
+            if need > before["left"]:
+                self.log("speech_render", ok=False, turn=turn.get("id"), credits=need, quota_before=before, error="not enough credits")
+                raise SpeechError(f"Not enough ElevenLabs credits: need {need}, left {before['left']}", 402)
             with ThreadPoolExecutor(3) as pool:
-                list(pool.map(lambda s: self._synthesize(s, config), todo))
+                list(pool.map(lambda s: self._synthesize(s, config, turn.get("id")), todo))
+        self.log("speech_render", ok=True, turn=turn.get("id"), segments=len(segments), generated=len(todo), credits=need, quota_before=before,
+                 quota_after=self.quota() if todo else None, ms=round((time.monotonic() - started) * 1000))
         return [{k: seg[k] for k in ("speaker", "text", "blocks", "file")} for seg in segments]

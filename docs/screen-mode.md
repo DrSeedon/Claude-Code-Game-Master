@@ -100,9 +100,24 @@ dm-screen.sh voice show
 dm-screen.sh speak "Test line" [--as "Name"]               # voice one line now (spends credits)
 ```
 
+Choosing voices: `dm-screen.sh audition "text" --voices A,B,C` reads one line in several voices (or `--voices X --models m1,m2` in several models) and shows them as one turn; press 🔊 and listen. `--speed 0.7..1.2` slows or speeds a voice (not on Eleven v4).
+
+Your own voices: `dm-screen.sh voice design "Name" --describe "stern old woman, low husky voice" [--seed 7]` asks ElevenLabs Voice Design for previews and saves them as mp3 files; after listening, `dm-screen.sh voice keep "Name" --preview <id> --describe "..."` makes the chosen one a permanent voice of your account and writes it into the character's card. The id never changes, so the character always sounds the same. It needs a free custom-voice slot (Free has 3).
+
 A character's voice profile lives in the character's own card (`data.voice`, with optional `data.aliases`), so it travels with the campaign. Options per voice: `--model`, `--stability`, `--similarity`, and effects that cost nothing: a room (`small_room big_room hall tunnel street valley forest`), `--distance` 0..1, `--pan` -1..1 (left to right) and a `--filter` (`old_radio phone ...`). Two heroes can share one voice and still differ by pan and room.
 
 Economy: every audio file is cached by its content (`screen/audio/`), so the same text with the same voice is never paid twice. The tooltip of 🔊 shows the price of the turn in credits, the footer shows what is left, and a turn that does not fit the remaining credits is refused before anything is spent. Credits per character: 0.5 on `eleven_flash_v2_5`, 1 on `eleven_v4`, `eleven_v3` and `eleven_multilingual_v2`. The Free plan has 10,000 credits a month and 3 custom voice slots; premade voices are unlimited. The key stays on the server and is never sent to the page.
+
+## Log
+
+Everything is written to `<campaign>/screen/log/YYYY-MM-DD.jsonl` (git-ignored: it contains the words you said and the story text). One JSON line per event: `http` (every API call with status and time), `action`, `stt` (every spoken word with confidence and timing, audio length, Deepgram request id), `tts` (voice, model, characters, credits, latency, ElevenLabs request id, cached or not), `speech_render` (credits, quota before and after), `turn` (full text, options, panels and a snapshot of time, place, HP, purse and quests), `act`, `panels`, `activity`, `tool` (the Master's full tool calls), `server`, `window`, `voice_design`, `error` (with traceback) and `ui.*` (the page itself: clicks, connection, microphone, send countdown, playback, JavaScript errors). Keys and tokens are scrubbed before writing; a failing log never breaks the game.
+
+```bash
+dm-screen.sh log --errors --since 1h        # what went wrong lately
+dm-screen.sh log --kind tts,stt --tail 20   # prices and microphone words
+dm-screen.sh log --follow                   # live
+dm-screen.sh log --summary                  # totals: credits, listening seconds, errors
+```
 
 ## Voice input
 

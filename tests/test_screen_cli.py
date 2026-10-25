@@ -160,3 +160,63 @@ def test_panels_update_needs_a_turn_and_valid_panels(sdir):
     cli.set_turn(sdir, {"blocks": ["<p>x</p>"], "question": "?", "options": []})
     with pytest.raises(ValueError):
         cli.set_panels(sdir, [{"title": "<b>A</b>", "chips": ["x"]}])
+
+
+def test_turn_is_logged_in_full_with_a_snapshot_of_the_game_values(sdir):
+    from lib.screen import eventlog
+
+    campaign = sdir.parent
+    campaign.mkdir(parents=True, exist_ok=True)
+    (campaign / "campaign-overview.json").write_text(json.dumps({"current_date": "10 июля, 1805 г.", "precise_time": "20:21", "player_position": {"current_location": "Двор"}}))
+    (campaign / "world.json").write_text(json.dumps({"nodes": {"player:active": {"type": "player", "name": "Максим", "data": {"hp": {"current": 9, "max": 9}, "money": 21500}}}}))
+
+    cli.set_turn(sdir, {"blocks": ["<p>Полный текст хода</p>"], "question": "Что делаете?", "options": ["А", "Б"], "panels": [{"title": "ОБОЗ", "chips": ["x"]}]})
+
+    event = eventlog.read(sdir, kinds={"turn"})[0]
+    assert event["id"] == 1 and event["blocks"] == ["<p>Полный текст хода</p>"] and event["options"] == ["А", "Б"] and event["panels"][0]["title"] == "ОБОЗ"
+    assert event["snapshot"]["time"] == "20:21" and event["snapshot"]["player"]["money"] == 21500
+
+
+def test_act_and_panels_are_logged(sdir, art):
+    from lib.screen import eventlog
+
+    cli.set_act(sdir, art, "Акт 1", place="Петербург", style="severe", lang="ru")
+    cli.set_turn(sdir, {"blocks": ["<p>x</p>"], "question": "?", "options": []})
+    cli.set_panels(sdir, [{"title": "A", "chips": ["1"]}])
+
+    act = eventlog.read(sdir, kinds={"act"})[0]
+    assert act["title"] == "Акт 1" and act["style"] == "severe" and act["theme"]["accent"].startswith("#")
+    assert eventlog.read(sdir, kinds={"panels"})[0]["panels"][0]["chips"] == ["1"]
+
+
+def test_hook_logs_the_full_command_and_what_was_shown(sdir, monkeypatch):
+    import os
+
+    from lib.screen import eventlog
+
+    sdir.mkdir(parents=True)
+    (sdir / "server.json").write_text(json.dumps({"pid": os.getpid(), "port": 1, "token": "t"}))
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+    (sdir / "act.json").write_text(json.dumps({"lang": "ru"}))
+    payload = {"tool_name": "Bash", "tool_input": {"command": 'bash tools/dm-npc.sh create "Поручик Лабазов" "тайный шпион" neutral'},
+               "tool_response": {"stdout": "✓ NPC created: Поручик Лабазов"}}
+
+    cli.run_hook(json.dumps(payload))
+
+    tool = eventlog.read(sdir, kinds={"tool"})[0]
+    assert "Поручик Лабазов" in tool["command"] and "NPC created" in tool["output"] and tool["shown"] == ["Появился новый персонаж"]
+    assert eventlog.read(sdir, kinds={"activity"})[0]["text"] == "Появился новый персонаж"
+
+
+def test_log_viewer_filters_and_summarises(sdir, capsys):
+    from lib.screen import eventlog
+
+    eventlog.log(sdir, "tts", credits=30, chars=61, cached=False, text="привет")
+    eventlog.log(sdir, "error", message="boom")
+
+    cli.show_log(sdir, tail=10, kinds={"tts"})
+    out = capsys.readouterr().out
+    assert "tts" in out and "привет" in out and "boom" not in out
+
+    cli.show_log(sdir, summary=True)
+    assert "tts_credits" in capsys.readouterr().out

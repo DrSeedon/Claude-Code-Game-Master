@@ -314,3 +314,82 @@ def test_speech_is_off_without_a_speaker(running):
     _, state = call(port, "GET", "/api/state", headers={"X-Screen-Token": token})
 
     assert status == 503 and json.loads(state)["speech"] is False
+
+
+def _events(tmp_path, **kw):
+    from lib.screen import eventlog
+    return eventlog.read(tmp_path, **kw)
+
+
+def test_every_api_call_is_logged_with_status_and_time(running):
+    port, token, tmp_path = running
+
+    call(port, "POST", "/api/action", json.dumps({"who": "Катя", "source": "button", "text": "ход"}), {"X-Screen-Token": token})
+    call(port, "GET", "/api/state")           # forbidden: no token
+
+    http = _events(tmp_path, kinds={"http"})
+    assert [(e["path"], e["status"]) for e in http] == [("/api/action", 200), ("/api/state", 403)]
+    assert all("ms" in e for e in http)
+
+
+def test_player_actions_and_voice_words_are_logged_in_full(running):
+    port, token, tmp_path = running
+    call(port, "POST", "/api/action", json.dumps({"who": "Оба", "source": "voice", "text": "Показать товар"}), {"X-Screen-Token": token})
+
+    action = _events(tmp_path, kinds={"action"})[0]
+
+    assert action["who"] == "Оба" and action["source"] == "voice" and action["text"] == "Показать товар" and action["id"] == 1
+
+
+def test_voice_details_are_logged(tmp_path):
+    details = {"text": "привет мир", "words": [{"word": "привет", "confidence": 0.99, "start": 0.1, "end": 0.5}], "seconds": 2.4, "request_id": "dg-1", "fallback": False}
+    httpd, _ = server.make_server(tmp_path, port=0, token="T", views_provider=dict, transcriber=lambda audio, ctype: details)
+    server.serve_in_thread(httpd)
+    try:
+        status, body = call(httpd.server_port, "POST", "/api/voice", b"x" * 100, {"X-Screen-Token": "T", "Content-Type": "audio/webm"})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert status == 200 and json.loads(body)["text"] == "привет мир"
+    stt = _events(tmp_path, kinds={"stt"})[0]
+    assert stt["text"] == "привет мир" and stt["words"][0]["confidence"] == 0.99 and stt["seconds"] == 2.4 and stt["bytes"] == 100
+
+
+def test_an_unhandled_exception_is_logged_and_answered(tmp_path):
+    def boom():
+        raise RuntimeError("views exploded")
+
+    httpd, _ = server.make_server(tmp_path, port=0, token="T", views_provider=boom)
+    server.serve_in_thread(httpd)
+    try:
+        status, body = call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert status == 500
+    error = _events(tmp_path, kinds={"error"})[0]
+    assert "views exploded" in error["message"] and "Traceback" in error["traceback"]
+
+
+def test_the_page_can_report_its_own_events_and_errors(running):
+    port, token, tmp_path = running
+    batch = {"events": [{"kind": "ui.click", "target": "speak"}, {"kind": "ui.error", "message": "boom", "stack": "at x"}, {"kind": "not-ui", "x": 1}]}
+
+    status, _ = call(port, "POST", "/api/log", json.dumps(batch), {"X-Screen-Token": token})
+
+    assert status == 200
+    kinds = [e["kind"] for e in _events(tmp_path) if e["kind"].startswith("ui.")]
+    assert kinds == ["ui.click", "ui.error"]
+
+
+def test_page_log_endpoint_needs_the_token_and_limits_size(running):
+    port, token, tmp_path = running
+
+    assert call(port, "POST", "/api/log", json.dumps({"events": [{"kind": "ui.click"}]}))[0] == 403
+    huge = {"events": [{"kind": "ui.x", "blob": "я" * 1500}] * 100}
+    call(port, "POST", "/api/log", json.dumps(huge, ensure_ascii=False).encode(), {"X-Screen-Token": token})
+    assert call(port, "POST", "/api/log", b"x" * (300 * 1024), {"X-Screen-Token": token})[0] == 413
+    assert len([e for e in _events(tmp_path) if e["kind"] == "ui.x"]) <= 50
+    assert all(len(json.dumps(e)) < 6000 for e in _events(tmp_path) if e["kind"] == "ui.x")

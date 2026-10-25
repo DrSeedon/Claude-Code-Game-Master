@@ -57,7 +57,8 @@ def clean_audio(data):
     return run.stdout
 
 
-def transcribe(audio, content_type, api_key, opener=urllib.request.urlopen):
+def transcribe_detailed(audio, content_type, api_key, opener=urllib.request.urlopen):
+    """Text plus everything worth keeping for debugging: every word with confidence and timing, length, request id."""
     if not api_key:
         raise VoiceUnavailable("DEEPGRAM_API_KEY is not set (put it in the project .env)")
     request = urllib.request.Request(DEEPGRAM_URL, data=audio, method="POST")
@@ -65,11 +66,20 @@ def transcribe(audio, content_type, api_key, opener=urllib.request.urlopen):
     request.add_header("Content-Type", content_type)
     with opener(request, timeout=30) as response:
         result = json.loads(response.read().decode())
-    words = result["results"]["channels"][0]["alternatives"][0]["words"]
-    return format_words(words)
+    alternative = result["results"]["channels"][0]["alternatives"][0]
+    words = alternative["words"]
+    meta = result.get("metadata", {})
+    return {"text": format_words(words), "seconds": meta.get("duration"), "request_id": meta.get("request_id"), "models": meta.get("models"),
+            "confidence": alternative.get("confidence"),
+            "words": [{"word": w.get("punctuated_word") or w["word"], "confidence": w.get("confidence"), "speaker": w.get("speaker"),
+                       "start": w.get("start"), "end": w.get("end")} for w in words]}
 
 
-def make_transcriber(project_root, cleaner=clean_audio, sender=transcribe):
+def transcribe(audio, content_type, api_key, opener=urllib.request.urlopen):
+    return transcribe_detailed(audio, content_type, api_key, opener)["text"]
+
+
+def make_transcriber(project_root, cleaner=clean_audio, sender=transcribe_detailed):
     """Transcriber for the server: clean the browser recording, then ask Deepgram.
 
     If cleaning fails the raw recording is sent as it is (same fallback as VoiceType)."""
@@ -77,8 +87,13 @@ def make_transcriber(project_root, cleaner=clean_audio, sender=transcribe):
         key = load_api_key(project_root)
         if not key:
             raise VoiceUnavailable("DEEPGRAM_API_KEY is not set (put it in the project .env)")
+        fallback = False
         try:
-            return sender(cleaner(audio), "audio/flac", key)
+            result = sender(cleaner(audio), "audio/flac", key)
         except ValueError:
-            return sender(audio, content_type, key)
+            fallback = True
+            result = sender(audio, content_type, key)
+        if isinstance(result, dict):
+            result["fallback"] = fallback
+        return result
     return run

@@ -110,3 +110,30 @@ def test_transcriber_without_key_is_unavailable(tmp_path, monkeypatch):
 
     with pytest.raises(voice.VoiceUnavailable):
         run(b"x", "audio/webm")
+
+
+def test_detailed_transcription_keeps_every_word_with_confidence_and_timing():
+    payload = {"metadata": {"request_id": "dg-77", "duration": 3.2, "models": ["m"]},
+               "results": {"channels": [{"alternatives": [{"confidence": 0.93, "words": [
+                   {"word": "привет", "punctuated_word": "Привет,", "confidence": 0.99, "speaker": 0, "start": 0.1, "end": 0.5},
+                   {"word": "мир", "punctuated_word": "мир.", "confidence": 0.4, "speaker": 0, "start": 0.6, "end": 0.9}]}]}]}}
+
+    def opener(request, timeout):
+        return _Response(json.dumps(payload).encode())
+
+    details = voice.transcribe_detailed(b"audio", "audio/flac", "KEY", opener=opener)
+
+    assert details["text"] == "Привет, мир.(?)"
+    assert details["seconds"] == 3.2 and details["request_id"] == "dg-77" and details["confidence"] == 0.93
+    assert details["words"][1] == {"word": "мир.", "confidence": 0.4, "speaker": 0, "start": 0.6, "end": 0.9}
+
+
+def test_transcriber_marks_the_raw_fallback(tmp_path):
+    (tmp_path / ".env").write_text("DEEPGRAM_API_KEY=k\n")
+
+    def broken(audio):
+        raise ValueError("cannot decode")
+
+    run = voice.make_transcriber(tmp_path, cleaner=broken, sender=lambda audio, ctype, key: {"text": "ок", "words": []})
+
+    assert run(b"raw", "audio/webm")["fallback"] is True

@@ -114,7 +114,14 @@ body.nocaps .zone,body.nocaps #lines{display:none}
   </footer>
 </div>
 <script>
-window.onerror=(m,u,l)=>{document.body.setAttribute('data-err',m+' @'+l)};
+const UL={q:[],t:null};
+function uiLog(kind,data){UL.q.push({kind:'ui.'+kind,at:Date.now(),...data});if(UL.q.length>=20)flushLog();else if(!UL.t)UL.t=setTimeout(flushLog,2000)}
+function flushLog(){clearTimeout(UL.t);UL.t=null;if(!UL.q.length)return;const events=UL.q.splice(0,50);fetch('/api/log',{method:'POST',keepalive:true,headers:{'X-Screen-Token':document.body.dataset.token,'Content-Type':'application/json'},body:JSON.stringify({events})}).catch(()=>{})}
+addEventListener('pagehide',()=>{if(UL.q.length)navigator.sendBeacon('/api/log?token='+encodeURIComponent(document.body.dataset.token),new Blob([JSON.stringify({events:UL.q.splice(0,50)})],{type:'application/json'}))});
+window.onerror=(m,u,l)=>{document.body.setAttribute('data-err',m+' @'+l);uiLog('error',{message:String(m),line:l})};
+addEventListener('unhandledrejection',e=>uiLog('error',{message:'unhandled rejection: '+String(e.reason&&e.reason.message||e.reason),stack:String(e.reason&&e.reason.stack||'')}));
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button,input[type=range]');if(b)uiLog('click',{id:b.id||b.className,text:(b.textContent||'').trim().slice(0,80)})},true);
+uiLog('load',{ua:navigator.userAgent,w:innerWidth,h:innerHeight,dpr:devicePixelRatio});
 const TOKEN=document.body.dataset.token, $=id=>document.getElementById(id);
 const I18N={
  ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',speak:'Озвучить ход',stopSpeak:'Остановить',auto:'Авто',autoTip:'Читать вслух каждый новый ход',speechOff:'Озвучка не настроена: нужен ключ ElevenLabs и голос рассказчика (dm-screen.sh voice narrator)',credits:'кредитов',left:'осталось',tapToPlay:'Браузер не разрешил автозапуск звука: нажмите 🔊',paused:'Пауза: пока мышь над панелью или идёт правка',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
@@ -223,15 +230,15 @@ function renderFeed(list){
 // ---- state from the server ----
 let reloadWanted=false;
 const busyNow=()=>(rec&&rec.state==='recording')||$('say').classList.contains('on')||$('mic').classList.contains('busy')||($('txt').value&&document.activeElement===$('txt'));
-setInterval(()=>{if(reloadWanted&&!busyNow())location.reload()},1500);
+setInterval(()=>{if(reloadWanted&&!busyNow()){uiLog('reload',{reason:'code or server changed'});flushLog();setTimeout(()=>location.reload(),150)}},1500);
 function showClock(st){$('place').textContent=S.actPlace||(st.clock&&st.clock.location)||'';$('date').textContent=(st.clock&&st.clock.text)||S.actDate||''}
 function onState(st){
   if(S.build&&st.build&&st.build!==S.build)reloadWanted=true;
   else S.build=st.build||S.build;
   S.views=st.views;
-  if(st.act&&st.act.id!==S.actId){if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
+  if(st.act&&st.act.id!==S.actId){uiLog('act',{id:st.act.id,from:S.actId});if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   S.speech=!!st.speech;$('speak').classList.toggle('off',!S.speech);
-  if(st.turn&&st.turn.id!==S.turnId){const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);refreshPlan();if(fresh&&SP.auto&&S.speech)speak()}
+  if(st.turn&&st.turn.id!==S.turnId){uiLog('turn',{id:st.turn.id,from:S.turnId,blocks:st.turn.blocks.length,options:(st.turn.options||[]).length});const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);refreshPlan();if(fresh&&SP.auto&&S.speech)speak()}
   else if(st.turn&&JSON.stringify(st.turn.panels||[])!==S.panelsKey){S.panelsKey=JSON.stringify(st.turn.panels||[]);S.panelsHtml=buildPanels(st.turn.panels||[]);renderSide()}
   else renderSide();
   if(st.turn){S.waiting=S.waiting||(st.inbox_last>(st.turn.answered||0))}
@@ -239,9 +246,9 @@ function onState(st){
   showClock(st);
   renderWho();renderFeed(st.activity||[]);
 }
-function connect(){const es=new EventSource('/api/events?token='+encodeURIComponent(TOKEN));
+function connect(){const es=new EventSource('/api/events?token='+encodeURIComponent(TOKEN));es.onopen=()=>uiLog('sse',{event:'open'});
   es.addEventListener('state',e=>{$('live').classList.add('on');onState(JSON.parse(e.data))});
-  es.onerror=()=>{$('live').classList.remove('on');probe()}}
+  es.onerror=()=>{$('live').classList.remove('on');uiLog('sse',{event:'error'});probe()}}
 let probing=false;
 function probe(){if(probing)return;probing=true;const tick=()=>fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>{probing=false;if(r.status===403)reloadWanted=true;else if(r.ok)setTimeout(()=>{if(!$('live').classList.contains('on'))reloadWanted=true},2500);else setTimeout(()=>{probing=false;probe()},2000)}).catch(()=>setTimeout(tick,2000));tick()}
 fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>r.json()).then(onState).catch(e=>document.body.setAttribute('data-err',String(e&&e.stack||e)));
@@ -257,6 +264,7 @@ function renderWho(){const names=[];const c=S.views&&S.views.character;if(c)name
 async function sendAction(source,text){
   text=(text||'').trim();if(!text)return false;
   const r=await fetch('/api/action',{method:'POST',headers:{'X-Screen-Token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify({who:S.who,source,text})});
+  uiLog('send',{ok:r.ok,status:r.status,source,text,who:S.who});
   if(!r.ok){toast(t('fail')+((await r.json()).error||r.status));return false}
   S.waiting=true;document.body.classList.add('waiting');renderFeed([]);toast(t('sent')+text);$('txt').value='';return true}
 $('send').onclick=()=>sendAction('text',$('txt').value);
@@ -271,48 +279,49 @@ function stopSpeech(){SP.run++;if(SP.audio){SP.audio.pause();SP.audio=null}highl
 async function refreshPlan(){if(!S.speech)return;try{const r=await fetch('/api/speech/plan',{headers:{'X-Screen-Token':TOKEN}});if(r.ok){const j=await r.json();showQuota(j.quota,j.plan.credits)}}catch(e){}}
 async function speak(){
   if(!S.speech){toast(t('speechOff'));return}
-  stopSpeech();const run=SP.run,turnId=S.turnId;setSpeakUi('busy');
-  let j;try{const r=await fetch('/api/speech/render',{method:'POST',headers:{'X-Screen-Token':TOKEN,'Content-Type':'application/json'},body:'{}'});j=await r.json();if(!r.ok){setSpeakUi('idle');toast(j.error||t('noNet'));return}}catch(e){setSpeakUi('idle');toast(t('noNet'));return}
+  stopSpeech();const run=SP.run,turnId=S.turnId;setSpeakUi('busy');uiLog('speech',{event:'render',turn:turnId,auto:SP.auto});
+  let j;try{const r=await fetch('/api/speech/render',{method:'POST',headers:{'X-Screen-Token':TOKEN,'Content-Type':'application/json'},body:'{}'});j=await r.json();if(!r.ok){uiLog('speech',{event:'render_failed',status:r.status,error:j.error});setSpeakUi('idle');toast(j.error||t('noNet'));return}}catch(e){uiLog('speech',{event:'render_failed',error:String(e)});setSpeakUi('idle');toast(t('noNet'));return}
   if(SP.run!==run||S.turnId!==turnId){return}
-  showQuota(j.quota,0);setSpeakUi('playing');let i=0;
+  showQuota(j.quota,0);setSpeakUi('playing');uiLog('speech',{event:'play',segments:j.segments.length,quota:j.quota});let i=0;
   const next=()=>{if(SP.run!==run)return;if(i>=j.segments.length){stopSpeech();return}
-    const seg=j.segments[i++];highlight(seg.blocks);const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
-    a.onended=next;a.onerror=next;a.play().catch(()=>{toast(t('tapToPlay'));stopSpeech()})};
+    const seg=j.segments[i++];highlight(seg.blocks);uiLog('speech',{event:'segment',speaker:seg.speaker,file:seg.file,chars:seg.text.length});const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
+    a.onended=next;a.onerror=()=>{uiLog('speech',{event:'audio_error',file:seg.file});next()};a.play().catch(err=>{uiLog('speech',{event:'blocked',message:String(err)});toast(t('tapToPlay'));stopSpeech()})};
   next()}
 $('speak').onclick=()=>$('speak').classList.contains('on')?stopSpeech():speak();
-function setAuto(on){SP.auto=on;$('autoBtn').classList.toggle('on',on);$('autoBtn').classList.toggle('off',!on);try{localStorage.setItem('auto',on?'1':'0')}catch(e){}}
+function setAuto(on){uiLog('speech',{event:'auto',on});SP.auto=on;$('autoBtn').classList.toggle('on',on);$('autoBtn').classList.toggle('off',!on);try{localStorage.setItem('auto',on?'1':'0')}catch(e){}}
 $('autoBtn').onclick=()=>{setAuto(!SP.auto);if(SP.auto&&S.speech&&!SP.audio)speak()};
-$('vol').value=SP.vol;$('vol').oninput=()=>{SP.vol=parseFloat($('vol').value);if(SP.audio)SP.audio.volume=SP.vol;try{localStorage.setItem('vol',String(SP.vol))}catch(e){}};
+$('vol').value=SP.vol;$('vol').oninput=()=>{SP.vol=parseFloat($('vol').value);uiLog('speech',{event:'volume',value:SP.vol});if(SP.audio)SP.audio.volume=SP.vol;try{localStorage.setItem('vol',String(SP.vol))}catch(e){}};
 setAuto(SP.auto);
 
 // ---- microphone: record, transcribe, show, send ----
 let started=0,rec=null,chunks=[],stream=null,countdown=null,pending='';
 const SAY_MS=4000;let sayLeft=0;
 const sayHeld=()=>$('say').matches(':hover')||$('sayin').style.display==='block';
-function showSay(text){pending=text;$('saytx').textContent='«'+text+'»';$('sayin').style.display='none';$('saytx').style.display='block';$('say').classList.add('on');
+let lastHeld=false;
+function showSay(text){uiLog('say',{event:'shown',text});lastHeld=false;pending=text;$('saytx').textContent='«'+text+'»';$('sayin').style.display='none';$('saytx').style.display='block';$('say').classList.add('on');
   sayLeft=SAY_MS;$('saycd').style.width='100%';clearInterval(countdown);
   countdown=setInterval(()=>{if(!$('say').classList.contains('on')){clearInterval(countdown);return}
-    const held=sayHeld();$('say').classList.toggle('paused',held);
+    const held=sayHeld();if(held!==lastHeld){lastHeld=held;uiLog('say',{event:held?'paused':'resumed',left_ms:sayLeft})}$('say').classList.toggle('paused',held);
     if(!held){sayLeft-=50;$('saycd').style.width=Math.max(0,sayLeft/SAY_MS*100)+'%';if(sayLeft<=0)finishSay(true)}},50)}
-function finishSay(send){clearInterval(countdown);const t=$('sayin').style.display==='block'?$('sayin').value:pending;$('say').classList.remove('on');if(send)sendAction('voice',t)}
+function finishSay(send){clearInterval(countdown);uiLog('say',{event:send?'send':'cancel',left_ms:sayLeft,edited:$('sayin').style.display==='block'});const t=$('sayin').style.display==='block'?$('sayin').value:pending;$('say').classList.remove('on');if(send)sendAction('voice',t)}
 $('saygo').onclick=()=>finishSay(true);$('saycancel').onclick=()=>finishSay(false);
 $('sayedit').onclick=()=>{$('saytx').style.display='none';const i=$('sayin');i.value=pending;i.style.display='block';i.focus()};
 $('sayin').addEventListener('keydown',e=>{if(e.key==='Enter')finishSay(true)});
 $('mic').onclick=async()=>{
   const mic=$('mic');
   if(rec&&rec.state==='recording'){rec.stop();return}
-  try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){toast(t('noMic'));return}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){uiLog('mic',{event:'denied',message:String(e)});toast(t('noMic'));return}
   const type=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'';
   rec=new MediaRecorder(stream,type?{mimeType:type}:{});chunks=[];
   rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());mic.classList.remove('rec');
+  rec.onstop=async()=>{const ms=Date.now()-started;uiLog('mic',{event:'stop',ms,mime:rec.mimeType});stream.getTracks().forEach(t=>t.stop());mic.classList.remove('rec');
     if(Date.now()-started<500){mic.textContent='🎤';toast(t('short'));return}
     mic.classList.add('busy');mic.textContent='…';
     try{const r=await fetch('/api/voice',{method:'POST',headers:{'X-Screen-Token':TOKEN,'Content-Type':rec.mimeType||'audio/webm'},body:new Blob(chunks,{type:rec.mimeType})});
-      const j=await r.json();if(!r.ok)toast(j.error||t('notUnderstood'));else if(!j.text)toast(t('silence'));else showSay(j.text)}
-    catch(e){toast(t('noNet'))}
+      const j=await r.json();uiLog('mic',{event:'result',status:r.status,text:j.text,error:j.error,ms});if(!r.ok)toast(j.error||t('notUnderstood'));else if(!j.text)toast(t('silence'));else showSay(j.text)}
+    catch(e){uiLog('mic',{event:'error',message:String(e)});toast(t('noNet'))}
     mic.classList.remove('busy');mic.textContent='🎤'};
-  started=Date.now();rec.start();mic.classList.add('rec');mic.textContent='■';toast(t('speak'))};
+  started=Date.now();uiLog('mic',{event:'start'});rec.start();mic.classList.add('rec');mic.textContent='■';toast(t('speak'))};
 
 // ---- picture mode ----
 const setPicText=()=>{$('pic').textContent=document.body.classList.contains('clear')?t('picBack'):t('pic')};

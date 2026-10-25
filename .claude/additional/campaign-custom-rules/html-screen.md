@@ -43,6 +43,9 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 - When a character speaks for the first time, give them a voice: `bash tools/dm-screen.sh voice set "Name" --voice <voice> [--env ...] [--pan ...]`. Add `data.aliases` to the card for nicknames used in the text. Heroes have profiles too.
 - Credits are limited: keep the narrated text tight (dice lines, headings and lists are never read). The 🔊 tooltip shows the price of a turn. Never run `dm-screen.sh speak` or force a render without the players' consent to spend credits.
 
+### Debugging
+- Everything the screen does is logged: `bash tools/dm-screen.sh log --errors --since 1h`, `--kind tts,stt,turn`, `--summary`. Read it before guessing when something looks wrong.
+
 ### Two players
 - Actions carry the speaker (a character name or "Оба"). Never decide for a player who has not acted; wait for both when the scene needs both.
 

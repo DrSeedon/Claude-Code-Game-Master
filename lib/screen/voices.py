@@ -1,5 +1,6 @@
 """Choosing and storing voices: the campaign narrator, a default, and a voice profile on every character."""
 
+import base64
 import json
 from pathlib import Path
 
@@ -32,9 +33,11 @@ def describe_all(api):
              "accent": v.get("labels", {}).get("accent"), "ru": _is_russian(v)} for v in api.voices()]
 
 
-def make_profile(voice, model=None, stability=None, similarity_boost=None, effects=None):
+def make_profile(voice, model=None, stability=None, similarity_boost=None, effects=None, speed=None):
     profile = {"voice_id": voice["voice_id"], "name": voice["name"].split(" - ")[0]}
-    for key, value in (("model", model), ("stability", stability), ("similarity_boost", similarity_boost)):
+    if speed is not None and not (isinstance(speed, (int, float)) and speech.SPEED_RANGE[0] <= speed <= speech.SPEED_RANGE[1]):
+        raise ValueError(f"speed must be between {speech.SPEED_RANGE[0]} and {speech.SPEED_RANGE[1]}")
+    for key, value in (("model", model), ("stability", stability), ("similarity_boost", similarity_boost), ("speed", speed)):
         if value is not None:
             profile[key] = value
     if effects:
@@ -77,3 +80,29 @@ def set_character_voice(campaign_dir, name, profile):
         raise ValueError(f"no single character named {name!r} (known: {known})")
     graph.update_node(matches[0]["id"], {"data": {"voice": profile}})
     return matches[0]["id"]
+
+
+def set_audition(screen_dir, profiles):
+    """Temporary named voices for the audition paragraphs (replaced by the next audition)."""
+    _write_config(screen_dir, lambda c: c.__setitem__("voices", profiles))
+
+
+def design_voice(api, screen_dir, description, text=None, seed=None, model_id=None):
+    """Ask for voice previews from a description; each preview is saved as an mp3 in <screen>/voices/ to listen to."""
+    if text is not None and not 100 <= len(text) <= 1000:
+        raise ValueError("the sample text must be 100 to 1000 characters (or leave it out to let the service write one)")
+    result = api.design(description, text=text, model_id=model_id, seed=seed)
+    folder = Path(screen_dir) / "voices"
+    folder.mkdir(parents=True, exist_ok=True)
+    previews = []
+    for preview in result["previews"]:
+        path = folder / f"preview-{preview['generated_voice_id']}.mp3"
+        path.write_bytes(base64.b64decode(preview["audio_base_64"]))
+        previews.append({"id": preview["generated_voice_id"], "file": str(path.relative_to(screen_dir)), "seconds": preview.get("duration_secs")})
+    return previews
+
+
+def keep_voice(api, name, description, generated_voice_id, model=None):
+    """Turn a chosen preview into a permanent voice of the account and return its profile."""
+    created = api.create_voice(name, description, generated_voice_id)
+    return make_profile({"voice_id": created["voice_id"], "name": created.get("name", name)}, model=model)

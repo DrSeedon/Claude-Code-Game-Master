@@ -101,3 +101,47 @@ def test_aliases_find_the_character_and_are_spoken_for(campaign):
 
     found = speech.characters_from_world(campaign)
     assert found["макс"] == found["максим астраханцев"]
+
+
+import base64
+
+
+class DesignApi(Api):
+    def __init__(self):
+        self.designs, self.created = [], []
+
+    def design(self, description, text=None, model_id=None, seed=None, loudness=None, guidance_scale=None):
+        self.designs.append({"description": description, "text": text, "model_id": model_id, "seed": seed})
+        return {"previews": [{"generated_voice_id": f"prev-{i}", "audio_base_64": base64.b64encode(b"MP3-%d" % i).decode(), "duration_secs": 6.5} for i in (1, 2, 3)],
+                "text": text or "auto text"}
+
+    def create_voice(self, name, description, generated_voice_id):
+        self.created.append((name, description, generated_voice_id))
+        return {"voice_id": "V" * 20, "name": name}
+
+
+def test_design_saves_every_preview_as_a_playable_file(tmp_path):
+    api = DesignApi()
+
+    previews = voices.design_voice(api, tmp_path, "Суровая пожилая женщина, хрипловатый низкий голос", text="т" * 120, seed=7)
+
+    assert [p["id"] for p in previews] == ["prev-1", "prev-2", "prev-3"]
+    assert all((tmp_path / p["file"]).read_bytes().startswith(b"MP3-") for p in previews)
+    assert api.designs[0]["seed"] == 7 and api.designs[0]["text"] == "т" * 120
+
+
+def test_design_text_must_be_100_to_1000_characters_or_auto(tmp_path):
+    api = DesignApi()
+    with pytest.raises(ValueError):
+        voices.design_voice(api, tmp_path, "голос", text="коротко")
+    voices.design_voice(api, tmp_path, "голос")           # no text: the service writes one
+    assert api.designs[0]["text"] is None
+
+
+def test_keep_creates_a_permanent_voice_and_returns_a_profile():
+    api = DesignApi()
+
+    profile = voices.keep_voice(api, "Аграфена", "Суровая ключница", "prev-2", model="eleven_v4")
+
+    assert api.created == [("Аграфена", "Суровая ключница", "prev-2")]
+    assert profile == {"voice_id": "V" * 20, "name": "Аграфена", "model": "eleven_v4"}

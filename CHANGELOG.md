@@ -30,6 +30,10 @@ All notable changes to DM System will be documented in this file.
   Narrator and character voices through ElevenLabs (`lib/screen/speech.py`, `voices.py`): 🔊 reads the
   turn, Auto reads each new one, per-character profiles in the character card (+ aliases), room, distance
   and pan effects, on-disk cache, price shown before spending, refusal when credits are not enough.
+  `audition` compares voices and models by ear, `voice design|keep` create permanent custom voices, own
+  spending ledger backs the credit guard. Full structured log (`lib/screen/eventlog.py`, `dm-screen.sh log`):
+  every request, microphone word with confidence, voiceover price, turn with a snapshot of the game values,
+  tool call and page event; secrets scrubbed.
   Triggered case: War and Peace campaign, couple playing on a couch with only a mouse.
 
 ### Fixed

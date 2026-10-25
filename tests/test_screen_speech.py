@@ -190,3 +190,87 @@ def test_old_spending_does_not_count(speaker):
     api.subscription = lambda: {"character_count": 0, "character_limit": 10000}
 
     assert spk.quota()["used"] == 0
+
+
+def test_speed_goes_to_voice_settings_but_not_for_v4(tmp_path):
+    (tmp_path / "speech.json").write_text(json.dumps({"model": "eleven_flash_v2_5", "narrator": {"voice_id": "NARR", "speed": 1.12},
+                                                      "default": {"voice_id": "DEF", "model": "eleven_v4", "speed": 1.1}}))
+    api = FakeApi()
+    spk = speech.Speaker(tmp_path, api=api, characters=lambda: {})
+
+    spk.render({"id": 1, "blocks": ["<p>Диктор.</p>", "<p><b>Некто:</b> «Реплика.»</p>"]})
+
+    assert api.calls[0][1]["voice_settings"]["speed"] == 1.12
+    assert "speed" not in api.calls[1][1]["voice_settings"]
+
+
+def test_speed_does_not_change_old_cache_names_when_unset():
+    voice = {"voice_id": "V", "model": "m", "stability": 0.5, "similarity_boost": 0.75, "effects": {}}
+    config = {"output_format": "f", "language": "ru"}
+
+    before = speech._cache_key(voice, "текст", config)
+
+    assert speech._cache_key({**voice, "speed": None}, "текст", config) == before
+    assert speech._cache_key({**voice, "speed": 1.1}, "текст", config) != before
+
+
+def test_extra_voices_in_the_config_are_used_by_name(tmp_path):
+    (tmp_path / "speech.json").write_text(json.dumps({"model": "eleven_flash_v2_5", "narrator": {"voice_id": "NARR"},
+                                                      "voices": {"Голос 1 · Daniel": {"voice_id": "DAN"}}}))
+    api = FakeApi()
+    spk = speech.Speaker(tmp_path, api=api, characters=lambda: {})
+
+    spk.render({"id": 1, "blocks": ["<p><b>Голос 1 · Daniel:</b> «Проба.»</p>"]})
+
+    assert api.calls[0][0] == "DAN"
+
+
+@pytest.mark.parametrize("speed", [0.5, 1.5, "fast"])
+def test_bad_speed_is_rejected(speed):
+    from lib.screen import voices
+
+    with pytest.raises(ValueError):
+        voices.make_profile({"voice_id": "V" * 20, "name": "V"}, speed=speed)
+
+
+class RichApi(FakeApi):
+    def tts(self, voice_id, body, output_format):
+        self.calls.append((voice_id, body, output_format))
+        return b"MP3:" + body["text"].encode(), {"request-id": "req-9", "x-character-count": "11", "history-item-id": "h-1"}
+
+
+def test_every_synthesis_and_cache_hit_is_logged_with_price_and_ids(tmp_path):
+    from lib.screen import eventlog
+
+    (tmp_path / "speech.json").write_text(json.dumps({"model": "eleven_flash_v2_5", "narrator": {"voice_id": "NARR", "name": "Nikolay", "speed": 1.1},
+                                                      "default": {"voice_id": "DEF"}}))
+    spk = speech.Speaker(tmp_path, api=RichApi(), characters=lambda: {})
+    turn = {"id": 5, "blocks": ["<p>Дверь закрывается.</p>"]}
+
+    spk.render(turn)
+    spk.render(turn)
+
+    tts = eventlog.read(tmp_path, kinds={"tts"})
+    fresh, cached = tts[0], tts[1]
+    assert fresh["cached"] is False and fresh["credits"] == 9 and fresh["chars"] == 18 and fresh["model"] == "eleven_flash_v2_5"
+    assert fresh["voice_id"] == "NARR" and fresh["voice"] == "Nikolay" and fresh["speed"] == 1.1 and fresh["request_id"] == "req-9"
+    assert fresh["api_chars"] == "11" and fresh["ms"] >= 0 and fresh["turn"] == 5 and fresh["text"] == "Дверь закрывается."
+    assert cached["cached"] is True and cached["credits"] == 0
+    render = eventlog.read(tmp_path, kinds={"speech_render"})
+    assert render[0]["segments"] == 1 and render[0]["credits"] == 9 and render[0]["quota_before"]["used"] == 100
+
+
+def test_a_failed_synthesis_is_logged_with_its_status(tmp_path):
+    from lib.screen import eventlog
+
+    (tmp_path / "speech.json").write_text(json.dumps({"model": "eleven_flash_v2_5", "narrator": {"voice_id": "NARR"}}))
+
+    class Broken(FakeApi):
+        def tts(self, voice_id, body, output_format):
+            raise speech.SpeechError("ElevenLabs: Free users cannot use library voices via the API.", 402)
+
+    with pytest.raises(speech.SpeechError):
+        speech.Speaker(tmp_path, api=Broken(), characters=lambda: {}).render({"id": 1, "blocks": ["<p>Текст.</p>"]})
+
+    failed = eventlog.read(tmp_path, kinds={"tts"})[0]
+    assert failed["ok"] is False and failed["status"] == 402 and "library voices" in failed["error"]
