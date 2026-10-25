@@ -65,3 +65,13 @@ One `player:active` node plus DM-controlled party NPCs (`dm-npc.sh promote`). Se
 
 ## Image MCP (`mcp__websearch__generate_image`) fails on every prompt (found 2026-10-25)
 Workaround that works: Codex imagegen, see ~/.claude/docs/image-generation-codex.md. Three calls in a row (two cinematic prompts and a trivial "red apple" 1:1) returned `Provider returned error` for `google/gemini-nano-banana-2.1` (OpenRouter shows the model and its single provider, Google AI Studio, as listed and up). `~/.claude/mcp-servers/websearch/index.js` sends `modalities: ['image']` plus `image_config.aspect_ratio`; Gemini image models normally require `['image','text']`. Hypothesis, not yet verified. Fix direction: change the modalities array in `index.js` (global file, owner approval needed) and reconnect the MCP; otherwise retry later. The campaign needs this for cinematic scene art (`cinematic_visuals` is enabled).
+
+## HTML play screen follow-ups (found 2026-10-25)
+- [ ] **Declare Pillow** — `lib/screen/theme.py` imports PIL, which is only present transitively; add it to `pyproject.toml` dependencies together with a deliberate `uv.lock` update (see the lockfile churn note above).
+- [ ] **Web-app integration** — the screen runs next to Claude Code (actions reach the Master through `dm-screen.sh listen`). A standalone mode for the FastAPI game master (`backend/game_session.py`) should read the same `inbox.jsonl` and write `turn.json`; not done.
+- [ ] **Mic tuning** — VoiceType self-tunes the system microphone volume (clipping/too quiet); the screen only cleans audio with ffmpeg and relies on VoiceType's tuning of the shared source.
+- [ ] **Window on top** — the app window opens through Chrome `--app`; whether KDE raises it above other windows was not verified from the sandbox.
+
+## Full test suite has 7 failures unrelated to the screen (found 2026-10-25)
+- `tests/test_wizard.py::TestWizardMCPTools` (5 tests): `mcp` is 2.x in `.venv`, where `mcp.server.fastmcp` no longer exists (`FastMCP` became `MCPServer`). Fix direction: pin `mcp<2` or migrate `backend/wizard_mcp*.py`. Fails on a clean `HEAD` checkout as well.
+- `tests/test_secret_guard.py` (2 tests): `value_findings`/`pattern_findings` call `read_bytes()` on every tracked path and crash with `IsADirectoryError` on `.agents/skills/cinematic-scene` (a staged directory entry). Fix direction: skip non-regular files in the guard, and check why that path is staged as a directory.

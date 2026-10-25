@@ -105,6 +105,19 @@ A campaign imported from *Dungeon Crawler Carl*. Tandy the sasquatch rips the sk
 ---
 
 
+## HTML Play Screen (optional)
+
+Play in a themed web page instead of terminal text: key art per act with colors derived from it, live story and stats, option buttons, a microphone (Deepgram) and a visible feed of the Master's work. Turn it on for any campaign:
+
+```bash
+bash tools/dm-screen.sh doctor   # check requirements
+bash tools/dm-screen.sh enable   # apply the html-screen rule to the active campaign
+```
+
+Details, file formats and security model: [docs/screen-mode.md](docs/screen-mode.md).
+
+---
+
 ## How It Works
 
 When you import a document, the system vectorizes it with ChromaDB and spawns extraction agents that pull the book apart into structured data. During gameplay, every scene gets grounded in real passages from your source material.

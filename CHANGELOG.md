@@ -4,6 +4,24 @@ All notable changes to DM System will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- 🖥️ **HTML play screen (`tools/dm-screen.sh`, `lib/screen/`)** — a themed web page that replaces terminal
+  narration: key art per act, a theme (colors) derived from that art in one of three shapes
+  (`classic|severe|soft`), live story and stats without reloads, option buttons, a text field, a
+  microphone, a picture view with switchable captions, and a feed of the Master's visible work.
+  Technical: `lib/screen/{theme,voice,inbox,activity,content,hook,server,cli}.py` and `template.html`;
+  stdlib `ThreadingHTTPServer` on `127.0.0.1:18115` with a per-run token and Host check (no foreign
+  site can post actions), Server-Sent Events for pushes, player actions in `screen/inbox.jsonl`
+  followed by `dm-screen.sh listen` under the Monitor tool, a `PostToolUse` Bash hook
+  (`python3 -m lib.screen.cli hook`, silent unless the server runs) that mirrors every `dm-*.sh`
+  call and dice roll into the feed. Custom rule `html-screen` holds the Master's protocol. Stats come
+  from `backend/campaign_views.py` (player-safe), so hidden data never reaches the page.
+  Voice: browser recording, ffmpeg clean-up, Deepgram nova-3 `ru` (same recipe as the VoiceType app);
+  `DEEPGRAM_API_KEY` is read from the git-ignored `.env`.
+  Any campaign: `dm-screen.sh doctor` / `enable` / `act --lang en|ru`; guide in `docs/screen-mode.md`, command
+  `/dm-screen`.
+  Triggered case: War and Peace campaign, couple playing on a couch with only a mouse.
+
 ### Fixed
 - **Claude context usage uses the selected model's window** — all selectable Claude models use
   their 1M `ModelDefinition.context_window` as the fallback; SDK-reported `maxTokens` remains

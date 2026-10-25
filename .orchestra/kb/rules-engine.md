@@ -18,6 +18,7 @@ Moved verbatim from the root AGENTS.md on 2026-10-17 (task V-47, owner's rules-s
 | `dm-time.sh` | `time_manager.py` | Game clock. Usage: `dm-time.sh "<time>" "<date>" --elapsed N [--sleeping]`. Positional args required. |
 | `dm-campaign.sh` | `campaign_manager.py` | Campaign management |
 | `dm-mode.sh` | `campaign_mode.py` | Persistent narrative/interactive player-agency mode |
+| `dm-screen.sh` | `screen/cli.py` | HTML play screen: `act` (art + theme), `turn`, `activity`, `start`/`stop`, `listen` (player actions for the Monitor tool); campaign rule `html-screen` |
 | `dm-wiki.sh` | `wiki_manager.py` | Structured knowledge base: items, recipes, abilities, materials |
 | `dm-condition.sh` | `player_manager.py` | Condition management (add/remove/check) — wrapper for dm-player.sh condition |
 | `dm-search.sh` | `entity_enhancer.py` | Hybrid world-state + RAG search for scenes and entities |
