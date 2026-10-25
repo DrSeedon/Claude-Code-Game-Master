@@ -1,6 +1,7 @@
 """Local web server for the play screen: page, live event stream, player actions, microphone."""
 
 import json
+import re
 import secrets
 import select
 import socket
@@ -10,10 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, inbox, voice
+from . import activity, inbox, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
+_AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$|^ambient-[\w-]{1,60}\.mp3$")
 POLL_SECONDS = 0.3
 PING_SECONDS = 15
 
@@ -50,18 +52,21 @@ def _signature(screen_dir):
     return tuple(sig)
 
 
-def build_state(screen_dir, views_provider, clock_provider=lambda: None):
+def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_on=False):
     events = inbox.read_events(screen_dir)
     return {"build": TEMPLATE.stat().st_mtime_ns, "act": _read_json(screen_dir / "act.json"), "turn": _read_json(screen_dir / "turn.json"),
-            "views": views_provider(), "clock": clock_provider(), "activity": activity.read_activity(screen_dir, tail=40),
+            "views": views_provider(), "clock": clock_provider(), "speech": speech_on, "activity": activity.read_activity(screen_dir, tail=40),
             "inbox_last": events[-1]["id"] if events else 0}
 
 
-def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None):
+def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None, speaker=None):
     screen_dir = Path(screen_dir)
     token = token or secrets.token_urlsafe(24)
     views_provider = views_provider or (lambda: {})
     clock_provider = clock_provider or (lambda: None)
+
+    def speech_on():
+        return speaker is not None and getattr(speaker, "available", lambda: True)()
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -97,6 +102,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             path = urlparse(self.path).path
             if path == "/":
                 return self._page() if self._host_ok() else self._deny()
+            if path.startswith("/audio/"):
+                return self._audio(path[len("/audio/"):])
             if path == "/art.png":
                 art = screen_dir / "art.png"
                 if not self._host_ok() or not art.is_file():
@@ -105,7 +112,9 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if not self._authorized():
                 return self._deny()
             if path == "/api/state":
-                return self._send(200, build_state(screen_dir, views_provider, clock_provider))
+                return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on()))
+            if path == "/api/speech/plan":
+                return self._plan()
             if path == "/api/clients":
                 return self._send(200, {"clients": self.server.clients})
             if path == "/api/events":
@@ -134,7 +143,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     sig = _signature(screen_dir)
                     if sig != last:
                         last, idle = sig, 0.0
-                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider), ensure_ascii=False)
+                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider, speech_on()), ensure_ascii=False)
                         self.wfile.write(f"event: state\ndata: {payload}\n\n".encode())
                     elif idle >= PING_SECONDS:
                         idle = 0.0
@@ -169,7 +178,56 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._action(body)
             if path == "/api/voice":
                 return self._voice(body)
+            if path == "/api/speech/render":
+                return self._render()
             self._send(404, {"error": "not found"})
+
+        def _audio(self, name):
+            if not self._authorized():
+                return self._deny()
+            path = screen_dir / speech_module.AUDIO_DIR / name
+            if not _AUDIO_NAME.fullmatch(name) or not path.is_file():
+                return self._send(404, {"error": "no such audio"})
+            self._send(200, path.read_bytes(), "audio/mpeg")
+
+        def _turn(self):
+            return _read_json(screen_dir / "turn.json")
+
+        def _speech_error(self, exc):
+            if isinstance(exc, speech_module.SpeechUnavailable):
+                return self._send(503, {"error": str(exc)})
+            if isinstance(exc, speech_module.SpeechError):
+                return self._send(exc.status if 400 <= exc.status < 600 else 502, {"error": str(exc)})
+            raise exc
+
+        def _plan(self):
+            turn = self._turn()
+            if speaker is None or not turn:
+                return self._send(503, {"error": "speech is not available"})
+            try:
+                quota = speaker.quota()
+            except Exception:
+                quota = None
+            try:
+                return self._send(200, {"plan": speaker.plan(turn), "quota": quota})
+            except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
+                return self._speech_error(exc)
+
+        def _render(self):
+            turn = self._turn()
+            if speaker is None or not turn:
+                return self._send(503, {"error": "speech is not available"})
+            try:
+                segments = speaker.render(turn)
+                try:
+                    quota = speaker.quota()
+                except Exception:
+                    quota = None
+            except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
+                return self._speech_error(exc)
+            for seg in segments:
+                seg["url"] = "/audio/" + seg["file"]
+            self._send(200, {"turn": turn["id"], "segments": segments, "quota": quota})
 
         def _action(self, body):
             try:

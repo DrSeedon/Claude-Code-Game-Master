@@ -84,7 +84,27 @@ A new `act` never opens another window. The open page fades out, swaps the color
 
 `act` extracts the dominant colors of the art and derives background, panel, text, muted text and two accents. Every text color is lifted until it passes WCAG contrast on the panel (text 7:1, accents 4.5:1), so any art gives a readable page. `--style` changes the shape and the type: `classic` (rounded, serif), `severe` (sharp, serif), `soft` (very round, sans-serif). A new act gets a new look.
 
-## Voice
+## Narrator and character voices (ElevenLabs)
+
+The 🔊 button reads the current turn aloud; **Auto** reads every new turn by itself; the slider sets the volume. The paragraph being read is highlighted. Narration is read by the campaign narrator; a paragraph written as `<p><b>Name:</b> «the line»</p>` is read by that character's own voice (the `Name` can be a first name or an alias). Dice lines, headings, lists and UI boxes are never read.
+
+Setup (key in the project `.env`: `ELEVENLABS_API_KEY=...`, created by `npx -y @elevenlabs/cli@latest onboard init`):
+
+```bash
+dm-screen.sh voices                                        # your account's voices, Russian first
+dm-screen.sh voice model eleven_flash_v2_5                 # cheapest model with Russian (0.5 credit per character)
+dm-screen.sh voice narrator --voice Nikolay --env hall     # the campaign narrator
+dm-screen.sh voice set "Agrafena" --voice Victoria --env small_room --distance 0.2
+dm-screen.sh voice default --voice Brian                   # everyone without a profile
+dm-screen.sh voice show
+dm-screen.sh speak "Test line" [--as "Name"]               # voice one line now (spends credits)
+```
+
+A character's voice profile lives in the character's own card (`data.voice`, with optional `data.aliases`), so it travels with the campaign. Options per voice: `--model`, `--stability`, `--similarity`, and effects that cost nothing: a room (`small_room big_room hall tunnel street valley forest`), `--distance` 0..1, `--pan` -1..1 (left to right) and a `--filter` (`old_radio phone ...`). Two heroes can share one voice and still differ by pan and room.
+
+Economy: every audio file is cached by its content (`screen/audio/`), so the same text with the same voice is never paid twice. The tooltip of 🔊 shows the price of the turn in credits, the footer shows what is left, and a turn that does not fit the remaining credits is refused before anything is spent. Credits per character: 0.5 on `eleven_flash_v2_5`, 1 on `eleven_v4`, `eleven_v3` and `eleven_multilingual_v2`. The Free plan has 10,000 credits a month and 3 custom voice slots; premade voices are unlimited. The key stays on the server and is never sent to the page.
+
+## Voice input
 
 The 🎤 button records in the page, the server cleans the audio with ffmpeg and sends it to Deepgram (nova-3, Russian, punctuation and speaker labels, uncertain words marked `(?)`). The page shows what was understood and sends it after four seconds unless you edit or cancel. The countdown freezes while the mouse is over the panel (and while you edit), and resumes when the mouse leaves. Put `DEEPGRAM_API_KEY=...` in the project `.env` (git-ignored). The recipe matches the VoiceType desktop tool.
 

@@ -38,6 +38,11 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
    - Heroes, HP, abilities, skills and quests come from the world automatically (player-safe view); never put hidden information in a block.
 4. Reply in the terminal with one short line. Do not repeat the narration there.
 
+### Voices (optional, ElevenLabs)
+- Write every spoken line of a non-player character as its own paragraph: `<p><b>Name:</b> «the line»</p>`. Everything else is read by the narrator. Do not put hidden information in blocks: whatever is shown can be read aloud.
+- When a character speaks for the first time, give them a voice: `bash tools/dm-screen.sh voice set "Name" --voice <voice> [--env ...] [--pan ...]`. Add `data.aliases` to the card for nicknames used in the text. Heroes have profiles too.
+- Credits are limited: keep the narrated text tight (dice lines, headings and lists are never read). The 🔊 tooltip shows the price of a turn. Never run `dm-screen.sh speak` or force a render without the players' consent to spend credits.
+
 ### Two players
 - Actions carry the speaker (a character name or "Оба"). Never decide for a player who has not acted; wait for both when the scene needs both.
 

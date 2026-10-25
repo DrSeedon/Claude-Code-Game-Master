@@ -221,3 +221,96 @@ def test_signature_changes_when_the_game_time_changes(tmp_path):
     overview.write_text('{"precise_time": "20:15", "x": "longer"}')
 
     assert server._signature(tmp_path) != before
+
+
+class FakeSpeaker:
+    def __init__(self):
+        self.rendered = []
+
+    def plan(self, turn):
+        return {"segments": 2, "cached": 0, "credits": 40}
+
+    def quota(self):
+        return {"used": 100, "limit": 10000, "left": 9900}
+
+    def render(self, turn):
+        self.rendered.append(turn["id"])
+        return [{"speaker": "narrator", "text": "Текст", "blocks": [0], "file": "a" * 64 + ".mp3"}]
+
+
+@pytest.fixture
+def talking(tmp_path):
+    (tmp_path / "turn.json").write_text(json.dumps({"id": 7, "blocks": ["<p>x</p>"], "question": "?", "options": []}))
+    (tmp_path / "audio").mkdir()
+    (tmp_path / "audio" / ("a" * 64 + ".mp3")).write_bytes(b"ID3fake-mp3")
+    speaker = FakeSpeaker()
+    httpd, token = server.make_server(tmp_path, port=0, token="T", views_provider=dict, speaker=speaker)
+    server.serve_in_thread(httpd)
+    yield httpd.server_port, speaker, tmp_path
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_render_returns_playable_segments_and_quota(talking):
+    port, speaker, _ = talking
+
+    status, body = call(port, "POST", "/api/speech/render", b"{}", {"X-Screen-Token": "T"})
+
+    data = json.loads(body)
+    assert status == 200 and speaker.rendered == [7]
+    assert data["segments"][0]["url"] == "/audio/" + "a" * 64 + ".mp3" and data["quota"]["left"] == 9900
+
+
+def test_plan_shows_cost_before_spending(talking):
+    port, _, _ = talking
+
+    status, body = call(port, "GET", "/api/speech/plan", headers={"X-Screen-Token": "T"})
+
+    assert status == 200 and json.loads(body)["plan"]["credits"] == 40
+
+
+def test_audio_file_is_served_with_token_only(talking):
+    port, _, _ = talking
+    name = "a" * 64 + ".mp3"
+
+    assert call(port, "GET", f"/audio/{name}")[0] == 403
+    status, body = call(port, "GET", f"/audio/{name}?token=T")
+    assert status == 200 and body == b"ID3fake-mp3"
+
+
+@pytest.mark.parametrize("name", ["../act.json", "..%2Fact.json", "x.mp3", "a" * 64 + ".wav", ("a" * 64) + ".mp3/../../x"])
+def test_audio_path_traversal_is_refused(talking, name):
+    port, _, _ = talking
+
+    status, _ = call(port, "GET", f"/audio/{name}?token=T")
+
+    assert status in (403, 404)
+
+
+def test_speech_errors_become_http_errors(tmp_path):
+    from lib.screen import speech
+
+    (tmp_path / "turn.json").write_text(json.dumps({"id": 1, "blocks": ["<p>x</p>"], "question": "", "options": []}))
+
+    class Broke(FakeSpeaker):
+        def render(self, turn):
+            raise speech.SpeechError("Not enough ElevenLabs credits: need 5, left 1", 402)
+
+    httpd, _ = server.make_server(tmp_path, port=0, token="T", views_provider=dict, speaker=Broke())
+    server.serve_in_thread(httpd)
+    try:
+        status, body = call(httpd.server_port, "POST", "/api/speech/render", b"{}", {"X-Screen-Token": "T"})
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert status == 402 and "credits" in json.loads(body)["error"]
+
+
+def test_speech_is_off_without_a_speaker(running):
+    port, token, _ = running
+
+    status, _ = call(port, "POST", "/api/speech/render", b"{}", {"X-Screen-Token": token})
+    _, state = call(port, "GET", "/api/state", headers={"X-Screen-Token": token})
+
+    assert status == 503 and json.loads(state)["speech"] is False

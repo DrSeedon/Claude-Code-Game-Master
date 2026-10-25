@@ -109,11 +109,12 @@ def run_hook(payload_text):
 def serve(sdir, port):
     from backend.campaign_views import get_campaign_views
 
-    from . import clock, server, voice
+    from . import clock, server, speech, voice
 
     campaign = sdir.parent
     httpd, token = server.make_server(sdir, port=port, views_provider=lambda: get_campaign_views(campaign),
                                       clock_provider=lambda: clock.world_clock(campaign),
+                                      speaker=speech.Speaker(sdir, speech.ElevenLabsApi(PROJECT_ROOT), lambda: speech.characters_from_world(campaign)),
                                       transcriber=voice.make_transcriber(PROJECT_ROOT))
     _write(sdir / "server.json", {"pid": os.getpid(), "port": httpd.server_port, "token": token})
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -164,7 +165,7 @@ def start(sdir, port, open_window, new_window=False, replace=False):
         browser = next((shutil.which(b) for b in os.environ.get("DM_SCREEN_BROWSER", "").split() + list(BROWSERS) if shutil.which(b)), None)
         if browser:
             subprocess.Popen([browser, f"--app={url}", f"--user-data-dir={sdir / 'chrome-profile'}",
-                              "--use-fake-ui-for-media-stream", "--start-maximized", "--no-first-run"],
+                              "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--start-maximized", "--no-first-run"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         else:
             print("no Chromium-based browser found; open the URL manually", file=sys.stderr)
@@ -226,6 +227,49 @@ def enable():
     return (rule.stdout + rule.stderr).strip().splitlines()[-1] if (rule.stdout + rule.stderr).strip() else "rule applied"
 
 
+def voice_command(sdir, args):
+    from . import speech, voices
+
+    api = speech.ElevenLabsApi(PROJECT_ROOT)
+    if args.what == "show":
+        config = speech.load_config(sdir)
+        print("model:", config["model"], "| language:", config["language"])
+        print("narrator:", config.get("narrator") or "(not set)")
+        print("default:", config.get("default") or "(not set)")
+        for name, profile in sorted(speech.characters_from_world(sdir.parent).items()):
+            print(f"{name}: {profile}")
+        return
+    if args.what == "model":
+        voices.set_model(sdir, args.name)
+        print("model set to", args.name)
+        return
+    if not args.voice:
+        raise SystemExit("--voice is required")
+    effects = {k: v for k, v in (("environment_id", args.env), ("distance", args.distance), ("pan", args.pan),
+                                 ("filter_preset_id", args.filter)) if v is not None}
+    profile = voices.make_profile(voices.find_voice(api, args.voice), args.model, args.stability, args.similarity, effects)
+    if args.what == "narrator":
+        voices.set_narrator(sdir, profile)
+    elif args.what == "default":
+        voices.set_default(sdir, profile)
+    else:
+        if not args.name:
+            raise SystemExit('give the character name: voice set "Name" --voice ...')
+        voices.set_character_voice(sdir.parent, args.name, profile)
+    print(f"{args.what}{' ' + args.name if args.what == 'set' else ''}: {profile['name']}")
+
+
+def speak_once(sdir, text, speaker_name):
+    from . import speech
+
+    spk = speech.Speaker(sdir, speech.ElevenLabsApi(PROJECT_ROOT), lambda: speech.characters_from_world(sdir.parent))
+    before = spk.quota()
+    block = f"<p>{text}</p>" if speaker_name == "narrator" else f"<p><b>{speaker_name}:</b> «{text}»</p>"
+    result = spk.render({"id": 0, "blocks": [block]})
+    after = spk.quota()
+    print(f"audio: {sdir / speech.AUDIO_DIR / result[0]['file']}\ncredits used: {after['used'] - before['used']} (left {after['left']})")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="dm-screen")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -260,6 +304,21 @@ def main(argv=None):
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=DEFAULT_PORT)
     sub.add_parser("hook")
+    sub.add_parser("voices", help="list the voices of your ElevenLabs account (Russian first)")
+    vp = sub.add_parser("voice", help="narrator, default and per-character voices")
+    vp.add_argument("what", choices=["narrator", "default", "model", "set", "show"])
+    vp.add_argument("name", nargs="?", help="character name for 'set', model id for 'model'")
+    vp.add_argument("--voice", help="voice name (or part of it) or id")
+    vp.add_argument("--model")
+    vp.add_argument("--stability", type=float)
+    vp.add_argument("--similarity", type=float)
+    vp.add_argument("--env", help="room: small_room big_room hall tunnel street valley forest")
+    vp.add_argument("--distance", type=float)
+    vp.add_argument("--pan", type=float)
+    vp.add_argument("--filter", help="old_radio robot cheap_microphone phone low_quality_phone bright_phone")
+    sp = sub.add_parser("speak", help="voice one line now (spends credits) and print the audio file")
+    sp.add_argument("text")
+    sp.add_argument("--as", dest="speaker", default="narrator")
     sub.add_parser("doctor", help="check what the screen needs")
     sub.add_parser("enable", help="turn the screen mode on for the active campaign")
     args = ap.parse_args(argv)
@@ -316,6 +375,14 @@ def main(argv=None):
         listen(sdir, args.from_start)
     elif args.cmd == "serve":
         serve(sdir, args.port)
+    elif args.cmd == "voices":
+        from . import speech as speech_mod, voices as voices_mod
+        for v in sorted(voices_mod.describe_all(speech_mod.ElevenLabsApi(PROJECT_ROOT)), key=lambda v: (not v["ru"], v["name"])):
+            print(f"{'RU ' if v['ru'] else '   '}{v['name'][:40]:40} {v['gender'] or '?':8} {v['accent'] or '':11} {v['category']:12} {v['voice_id']}")
+    elif args.cmd == "voice":
+        voice_command(sdir, args)
+    elif args.cmd == "speak":
+        speak_once(sdir, args.text, args.speaker)
     elif args.cmd == "enable":
         print(enable())
         print("Next: dm-screen.sh act ... (art + captions), dm-screen.sh turn --file ..., dm-screen.sh start")

@@ -81,3 +81,9 @@ The fuzzy name lookup resolved `Максим Астраханцев` to `fact:np
 
 ## `/dm-save` skill calls actions that do not exist (found 2026-10-25)
 `.claude/commands/dm-save.md` (and its Codex copy) runs `bash tools/dm-plot.sh threads`, which fails with `Unknown action 'threads'`. Also the orphan check compares the player's location name with location node ids, so it can report false issues. Fix direction: replace with `dm-plot.sh list --status active` and compare names or ids consistently.
+
+## Screen voices: follow-ups (found 2026-10-25)
+- [ ] **Ambient sound** — per-act looping background (wind, fire, salon murmur) through the ElevenLabs sound-effects API (`/v1/sound-generation`, `loop: true`), cached per act and cross-faded when the act changes. Credit cost per generation was not measured yet; the TTS audio effects catalog only has modern noises (cafe, city, keyboard, call center).
+- [ ] **Voice slots** — the Free plan has 3 custom voice slots (all used by Nikolay, Victoria and "Slavic Man"); only two native Russian voices exist there. More distinct characters need Starter or higher, or premade voices that speak Russian with an accent. Compare samples before choosing.
+- [ ] **Word highlight** — Forced Alignment would allow karaoke-style highlighting; paragraphs are highlighted now.
+- [ ] **Eleven v4** — the Russian-verified list of the professional voices does not name v4; try it on a short sample before using it for the narrator.
