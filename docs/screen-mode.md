@@ -41,7 +41,8 @@ The page updates through a Server-Sent Events stream; nothing reloads. While the
 | `dm-screen.sh act --image art.png --title "..." [--kicker --place --date --style classic\|severe\|soft --lang en\|ru --captions captions.json --labels labels.json]` | Start a new act: copies the art, derives the theme from it. |
 | `dm-screen.sh turn --file turn.json` | Show a turn (also `--file -` for stdin). |
 | `dm-screen.sh activity think\|roll\|save\|world\|info "text"` | Add a line to the live feed by hand. |
-| `dm-screen.sh start [--port N] [--no-open]` | Run the server (default port 18115) and open the window. |
+| `dm-screen.sh start [--port N] [--no-open] [--new-window] [--replace]` | Run the server (default port 18115) and open the window. Idempotent: if a page is already connected no second window is opened; `--replace` closes the old window first. |
+| `dm-screen.sh restart` | Restart the server; open pages reconnect by themselves, a stale window is replaced. |
 | `dm-screen.sh stop` / `status` | Stop or inspect the server. |
 | `dm-screen.sh listen [--from-start]` | Print player actions as they arrive, one line each. For the Monitor tool. |
 
@@ -72,13 +73,17 @@ Zones: `tl` (top-left row), `tr` (top-right column), `bottom` (bottom row). They
 
 `labels.json` maps skill keys to display names: `{"trade": "Trade"}`.
 
+## One window, many acts
+
+A new `act` never opens another window. The open page fades out, swaps the colors, type, panel shape and key art in place (the art cross-fades), and fades back in. `act` and `turn` also start the server and a window if none exists (`DM_SCREEN_AUTOSTART=0` disables that). Edits to `lib/screen/template.html` reload open pages automatically, but never while you are recording, reading the recognised phrase or typing a line.
+
 ## Themes
 
 `act` extracts the dominant colors of the art and derives background, panel, text, muted text and two accents. Every text color is lifted until it passes WCAG contrast on the panel (text 7:1, accents 4.5:1), so any art gives a readable page. `--style` changes the shape and the type: `classic` (rounded, serif), `severe` (sharp, serif), `soft` (very round, sans-serif). A new act gets a new look.
 
 ## Voice
 
-The 🎤 button records in the page, the server cleans the audio with ffmpeg and sends it to Deepgram (nova-3, Russian, punctuation and speaker labels, uncertain words marked `(?)`). The page shows what was understood and sends it after four seconds unless you edit or cancel. Put `DEEPGRAM_API_KEY=...` in the project `.env` (git-ignored). The recipe matches the VoiceType desktop tool.
+The 🎤 button records in the page, the server cleans the audio with ffmpeg and sends it to Deepgram (nova-3, Russian, punctuation and speaker labels, uncertain words marked `(?)`). The page shows what was understood and sends it after four seconds unless you edit or cancel. The countdown freezes while the mouse is over the panel (and while you edit), and resumes when the mouse leaves. Put `DEEPGRAM_API_KEY=...` in the project `.env` (git-ignored). The recipe matches the VoiceType desktop tool.
 
 ## How the Master receives your actions
 

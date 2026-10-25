@@ -103,3 +103,43 @@ def test_doctor_main_fails_only_for_required_parts(monkeypatch, capsys):
 
     assert cli.main(["doctor"]) == 0
     assert "[MISSING] ffmpeg" in capsys.readouterr().out
+
+
+def test_start_opens_a_window_only_when_no_page_is_connected(sdir, monkeypatch):
+    import os
+
+    sdir.mkdir(parents=True)
+    (sdir / "server.json").write_text(json.dumps({"pid": os.getpid(), "port": 5, "token": "t"}))
+    opened = []
+    monkeypatch.setattr(cli.subprocess, "Popen", lambda cmd, **kw: opened.append(cmd))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/chromium")
+
+    monkeypatch.setattr(cli, "connected_pages", lambda info: 1)
+    cli.start(sdir, 5, True)
+    assert opened == []
+
+    cli.start(sdir, 5, True, new_window=True)
+    assert len(opened) == 1
+
+    opened.clear()
+    monkeypatch.setattr(cli, "connected_pages", lambda info: 0)
+    cli.start(sdir, 5, True)
+    assert len(opened) == 1 and opened[0][1].startswith("--app=http://127.0.0.1:5/")
+
+
+def test_start_replace_closes_old_windows_before_opening(sdir, monkeypatch):
+    import os
+
+    sdir.mkdir(parents=True)
+    (sdir / "server.json").write_text(json.dumps({"pid": os.getpid(), "port": 5, "token": "t"}))
+    calls = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda cmd, **kw: calls.append(("run", cmd)))
+    monkeypatch.setattr(cli.subprocess, "Popen", lambda cmd, **kw: calls.append(("open", cmd)))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/chromium")
+    monkeypatch.setattr(cli, "connected_pages", lambda info: 3)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+
+    cli.start(sdir, 5, True, replace=True)
+
+    assert [kind for kind, _ in calls] == ["run", "open"]
+    assert calls[0][1][:2] == ["pkill", "-f"] and str(sdir / "chrome-profile") in calls[0][1][2]

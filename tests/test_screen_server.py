@@ -174,3 +174,25 @@ def test_state_carries_a_build_stamp_so_open_windows_can_refresh(running):
     _, body = call(port, "GET", "/api/state", headers={"X-Screen-Token": token})
 
     assert isinstance(json.loads(body)["build"], int)
+
+
+def test_client_count_follows_open_pages(running):
+    import time
+
+    port, token, _ = running
+    assert json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 0
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request("GET", f"/api/events?token={token}")
+    stream = conn.getresponse()
+    stream.fp.readline()
+    time.sleep(0.2)
+
+    assert json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 1
+
+    stream.close()
+    conn.close()
+    for _ in range(20):
+        time.sleep(0.2)
+        if json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 0:
+            break
+    assert json.loads(call(port, "GET", "/api/clients", headers={"X-Screen-Token": token})[1])["clients"] == 0

@@ -2,6 +2,8 @@
 
 import json
 import secrets
+import select
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +28,9 @@ def _read_json(path):
 class ScreenServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    clients = 0
+    clients_lock = threading.Lock()
 
     def shutdown(self):
         self.stopping = True
@@ -79,7 +84,10 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page went away (reload) while we answered
 
         def _deny(self):
             self._send(403, {"error": "forbidden"})
@@ -97,6 +105,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 return self._deny()
             if path == "/api/state":
                 return self._send(200, build_state(screen_dir, views_provider))
+            if path == "/api/clients":
+                return self._send(200, {"clients": self.server.clients})
             if path == "/api/events":
                 return self._stream()
             self._send(404, {"error": "not found"})
@@ -116,8 +126,10 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self.send_header("Connection", "keep-alive")
             self.end_headers()
             last, idle = None, 0.0
+            with self.server.clients_lock:
+                self.server.clients += 1
             try:
-                while not getattr(self.server, "stopping", False):
+                while not getattr(self.server, "stopping", False) and not self._client_gone():
                     sig = _signature(screen_dir)
                     if sig != last:
                         last, idle = sig, 0.0
@@ -131,6 +143,18 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     idle += POLL_SECONDS
             except (BrokenPipeError, ConnectionResetError, OSError):
                 return
+            finally:
+                with self.server.clients_lock:
+                    self.server.clients -= 1
+
+        def _client_gone(self):
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            if not readable:
+                return False
+            try:
+                return self.connection.recv(1, socket.MSG_PEEK) == b""
+            except OSError:
+                return True
 
         def do_POST(self):
             if not self._authorized():

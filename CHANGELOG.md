@@ -20,6 +20,9 @@ All notable changes to DM System will be documented in this file.
   `DEEPGRAM_API_KEY` is read from the git-ignored `.env`.
   Any campaign: `dm-screen.sh doctor` / `enable` / `act --lang en|ru`; guide in `docs/screen-mode.md`, command
   `/dm-screen`.
+  Acts swap in place (no new window): theme, fonts, panel shape and art change in the open page; `start` is
+  idempotent (`/api/clients` counts connected pages), `start --replace` / `restart` close a stale window;
+  open pages reload on code changes only when idle; the send countdown pauses under the mouse.
   Triggered case: War and Peace campaign, couple playing on a couch with only a mouse.
 
 ### Fixed

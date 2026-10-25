@@ -5,9 +5,11 @@
 {{THEME_CSS}}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;overflow:hidden;color:var(--text);font-family:var(--font)}
-body{background:var(--bg) center/cover no-repeat fixed;transition:background-image .8s}
-body::before{content:"";position:fixed;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.5),transparent 18%,transparent 70%,rgba(0,0,0,.72));pointer-events:none}
-#app{position:relative;height:100vh;display:grid;grid-template-rows:auto 1fr auto auto;gap:1vh;padding:1.4vh 1.6vw}
+body{background:var(--bg)}
+.bg{position:fixed;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.2s ease}.bg.on{opacity:1}
+#shade{position:fixed;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.5),transparent 18%,transparent 70%,rgba(0,0,0,.72));pointer-events:none}
+#app{transition:opacity .45s ease,transform .45s ease;position:relative;height:100vh;display:grid;grid-template-rows:auto 1fr auto auto;gap:1vh;padding:1.4vh 1.6vw}
+.swapping #app{opacity:0;transform:translateY(10px) scale(.995)}
 .glass{background:rgba(var(--panel-rgb),.62);border:1px solid rgba(var(--line),.35);border-radius:var(--radius);backdrop-filter:blur(6px)}
 header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(var(--line),.35);padding-bottom:.6vh}
 .kicker{letter-spacing:.35em;color:var(--accent);font-size:max(1.3vh,12px)}
@@ -68,7 +70,8 @@ body.waiting .opt{opacity:.45;pointer-events:none}
 #mic.busy{opacity:.6}
 #say{position:fixed;left:50%;bottom:22vh;transform:translateX(-50%);min-width:34vw;max-width:60vw;padding:1.2vh 1.4vw;z-index:9;display:none;animation:rise .35s both}
 #say.on{display:block}#say .tx{font-size:max(2.2vh,16px)}#say .cd{height:.35em;background:rgba(0,0,0,.45);border-radius:99px;margin:.8vh 0;overflow:hidden}
-#say .cd i{display:block;height:100%;width:100%;background:var(--accent);transition:width linear}
+#say .cd i{display:block;height:100%;width:100%;background:var(--accent)}
+#saypause{display:none;color:var(--muted);font-size:max(1.5vh,12px);margin:-.3vh 0 .8vh}#say.paused #saypause{display:block}#say.paused .cd i{opacity:.45}
 #say input{width:100%;font:inherit;font-size:max(2vh,15px);color:var(--text);background:rgba(0,0,0,.4);border:1px solid var(--accent);border-radius:8px;padding:.5vh .8vw;display:none}
 #say .acts{display:flex;gap:.6vw}
 #pic,#caps{position:fixed;top:1.2vh;z-index:7;font:inherit;font-size:max(1.5vh,12px);color:var(--text);background:rgba(var(--panel-rgb),.85);border:1px solid var(--accent);border-radius:99px;padding:.3em 1.1em;cursor:pointer}
@@ -88,9 +91,10 @@ body.nocaps .zone,body.nocaps #lines{display:none}
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:rgba(var(--line),.4);border-radius:8px}
 </style></head>
 <body data-token="{{TOKEN}}">
+<div class="bg" id="bgA"></div><div class="bg" id="bgB"></div><div id="shade"></div>
 <button id="pic"></button><button id="caps"></button>
 <div id="stage"><img id="art" alt=""><svg id="lines"></svg><div class="zone" id="z-tl"></div><div class="zone" id="z-tr"></div><div class="zone" id="z-bottom"></div></div>
-<div id="say" class="glass"><div class="tx" id="saytx"></div><input id="sayin"><div class="cd"><i id="saycd"></i></div><div class="acts"><button class="btn" id="saygo"></button><button class="btn" id="sayedit"></button><button class="btn" id="saycancel"></button></div></div>
+<div id="say" class="glass"><div class="tx" id="saytx"></div><input id="sayin"><div class="cd"><i id="saycd"></i></div><div id="saypause"></div><div class="acts"><button class="btn" id="saygo"></button><button class="btn" id="sayedit"></button><button class="btn" id="saycancel"></button></div></div>
 <div id="toast"></div>
 <div id="app">
   <header><div class="kicker"><span id="live"></span><span id="kick"></span></div><div class="place"><span id="place"></span><small id="date"></small></div></header>
@@ -108,11 +112,11 @@ body.nocaps .zone,body.nocaps #lines{display:none}
 window.onerror=(m,u,l)=>{document.body.setAttribute('data-err',m+' @'+l)};
 const TOKEN=document.body.dataset.token, $=id=>document.getElementById(id);
 const I18N={
- ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
- en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',abil:['STR','DEX','CON','INT','WIS','CHA']}};
+ ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',paused:'Пауза: пока мышь над панелью или идёт правка',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
+ en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',paused:'Paused while the mouse is over this panel or you are editing',abil:['STR','DEX','CON','INT','WIS','CHA']}};
 let L=I18N.en;const t=k=>L[k];
 function applyLang(lang){L=I18N[lang]||I18N.en;document.documentElement.lang=lang||'en';
- $('feedh').textContent=t('feed');$('txt').placeholder=t('ph');$('send').textContent=t('send');$('saygo').textContent=t('sendNow');$('sayedit').textContent=t('edit');$('saycancel').textContent=t('cancel');$('mic').title=t('mic');setPicText();setCapsText()}
+ $('feedh').textContent=t('feed');$('txt').placeholder=t('ph');$('send').textContent=t('send');$('saygo').textContent=t('sendNow');$('sayedit').textContent=t('edit');$('saycancel').textContent=t('cancel');$('mic').title=t('mic');$('saypause').textContent=t('paused');setPicText();setCapsText()}
 const S={actId:null,build:null,lang:'en',turnId:null,feedLast:0,who:'',waiting:false,heroes:{},panels:'',views:null};
 try{S.who=localStorage.getItem('who')||''}catch(e){}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -123,10 +127,16 @@ const skillName=k=>labels[k]||(k.replace(/_/g,' ').replace(/^./,c=>c.toUpperCase
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
 function setText(el,v){v=String(v);if(el.textContent!==v){el.textContent=v;el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash')}}
 
-// ---- act: background, header, captions ----
+// ---- act: theme, background, header, captions (swapped in place, no new window) ----
+function applyTheme(t){if(!t)return;const r=document.documentElement.style,m={'--bg':t.bg,'--panel':t.panel,'--panel-rgb':t.panel_rgb,'--text':t.text,'--muted':t.muted,'--accent':t.accent,'--accent2':t.accent2,'--line':t.line,'--radius':t.radius,'--font':t.font,'--spacing':t.heading_spacing};
+  for(const k in m)if(m[k])r.setProperty(k,m[k])}
+let bgFlip=false;
+function setBackground(url){const next=$(bgFlip?'bgA':'bgB'),prev=$(bgFlip?'bgB':'bgA');next.style.backgroundImage=`url(${url})`;next.classList.add('on');prev.classList.remove('on');bgFlip=!bgFlip}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function swapAct(act){document.body.classList.add('swapping');await sleep(450);renderAct(act);await sleep(60);document.body.classList.remove('swapping')}
 function renderAct(act){
-  S.actId=act.id;labels=act.labels||{};S.lang=act.lang||'en';applyLang(S.lang);
-  document.body.style.backgroundImage=`url(/art.png?v=${act.id})`;$('art').src=`/art.png?v=${act.id}`;
+  S.actId=act.id;labels=act.labels||{};S.lang=act.lang||'en';applyTheme(act.theme);applyLang(S.lang);
+  setBackground(`/art.png?v=${act.id}`);$('art').src=`/art.png?v=${act.id}`;
   $('kick').textContent=act.kicker||'';$('place').textContent=act.place||'';$('date').textContent=act.date||'';document.title=act.title||document.title;
   for(const z of ['tl','tr','bottom'])$('z-'+z).innerHTML=(act.captions||[]).filter(c=>c.zone===z).map((c,i)=>`<div class="cap" ${c.dot?`data-dot="${c.dot}"`:''} style="animation-delay:${i*90}ms"><b>${esc(c.title)}</b><small>${esc(c.text||'')}</small></div>`).join('');
   drawLines();
@@ -199,11 +209,14 @@ function renderFeed(list){
 }
 
 // ---- state from the server ----
+let reloadWanted=false;
+const busyNow=()=>(rec&&rec.state==='recording')||$('say').classList.contains('on')||$('mic').classList.contains('busy')||($('txt').value&&document.activeElement===$('txt'));
+setInterval(()=>{if(reloadWanted&&!busyNow())location.reload()},1500);
 function onState(st){
-  if(S.build&&st.build&&st.build!==S.build){location.reload();return}
-  S.build=st.build||S.build;
+  if(S.build&&st.build&&st.build!==S.build)reloadWanted=true;
+  else S.build=st.build||S.build;
   S.views=st.views;
-  if(st.act&&st.act.id!==S.actId)renderAct(st.act);
+  if(st.act&&st.act.id!==S.actId){if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   if(st.turn&&st.turn.id!==S.turnId){S.waiting=false;renderTurn(st.turn)}
   else renderSide();
   if(st.turn){S.waiting=S.waiting||(st.inbox_last>(st.turn.answered||0))}
@@ -212,7 +225,9 @@ function onState(st){
 }
 function connect(){const es=new EventSource('/api/events?token='+encodeURIComponent(TOKEN));
   es.addEventListener('state',e=>{$('live').classList.add('on');onState(JSON.parse(e.data))});
-  es.onerror=()=>$('live').classList.remove('on')}
+  es.onerror=()=>{$('live').classList.remove('on');probe()}}
+let probing=false;
+function probe(){if(probing)return;probing=true;const tick=()=>fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>{probing=false;if(r.status===403)reloadWanted=true;else if(r.ok)setTimeout(()=>{if(!$('live').classList.contains('on'))reloadWanted=true},2500);else setTimeout(()=>{probing=false;probe()},2000)}).catch(()=>setTimeout(tick,2000));tick()}
 fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>r.json()).then(onState).catch(e=>document.body.setAttribute('data-err',String(e&&e.stack||e)));
 if(!location.search.includes('nosse'))connect();
 
@@ -233,12 +248,16 @@ $('txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendAction('text',$('
 
 // ---- microphone: record, transcribe, show, send ----
 let started=0,rec=null,chunks=[],stream=null,countdown=null,pending='';
+const SAY_MS=4000;let sayLeft=0;
+const sayHeld=()=>$('say').matches(':hover')||$('sayin').style.display==='block';
 function showSay(text){pending=text;$('saytx').textContent='«'+text+'»';$('sayin').style.display='none';$('saytx').style.display='block';$('say').classList.add('on');
-  const cd=$('saycd');cd.style.transition='none';cd.style.width='100%';void cd.offsetWidth;cd.style.transition='width 4s linear';cd.style.width='0%';
-  clearTimeout(countdown);countdown=setTimeout(()=>{if($('say').classList.contains('on'))finishSay(true)},4000)}
-function finishSay(send){clearTimeout(countdown);const t=$('sayin').style.display==='block'?$('sayin').value:pending;$('say').classList.remove('on');if(send)sendAction('voice',t)}
+  sayLeft=SAY_MS;$('saycd').style.width='100%';clearInterval(countdown);
+  countdown=setInterval(()=>{if(!$('say').classList.contains('on')){clearInterval(countdown);return}
+    const held=sayHeld();$('say').classList.toggle('paused',held);
+    if(!held){sayLeft-=50;$('saycd').style.width=Math.max(0,sayLeft/SAY_MS*100)+'%';if(sayLeft<=0)finishSay(true)}},50)}
+function finishSay(send){clearInterval(countdown);const t=$('sayin').style.display==='block'?$('sayin').value:pending;$('say').classList.remove('on');if(send)sendAction('voice',t)}
 $('saygo').onclick=()=>finishSay(true);$('saycancel').onclick=()=>finishSay(false);
-$('sayedit').onclick=()=>{clearTimeout(countdown);$('saycd').style.transition='none';$('saycd').style.width='0%';$('saytx').style.display='none';const i=$('sayin');i.value=pending;i.style.display='block';i.focus()};
+$('sayedit').onclick=()=>{$('saytx').style.display='none';const i=$('sayin');i.value=pending;i.style.display='block';i.focus()};
 $('sayin').addEventListener('keydown',e=>{if(e.key==='Enter')finishSay(true)});
 $('mic').onclick=async()=>{
   const mic=$('mic');
