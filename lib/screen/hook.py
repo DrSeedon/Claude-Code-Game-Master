@@ -95,6 +95,8 @@ def describe(tool, rest, stdout="", lang="en"):
             break
     if not rule:
         return None
+    if tool == "dm-player" and sub in ("gold", "hp", "hp-max", "xp") and len(words) < 2:
+        return None  # a bare "gold" / "hp" only shows the value, nothing changed
     kind, message = rule
     texts = MESSAGES.get(lang, MESSAGES["en"])
     text = texts[message].format(amount=_amount(stdout, texts) if message == "time" else "")

@@ -121,3 +121,12 @@ def test_several_rolls_in_one_call_make_one_dice_line():
     events = hook.activities_from_hook(payload('bash tools/dm-roll.sh "1d20+2" --label A && bash tools/dm-roll.sh "1d20+1" --label B', out))
 
     assert len(events) == 1 and "A:" in events[0]["text"] and "B:" in events[0]["text"]
+
+
+@pytest.mark.parametrize("command", ["bash tools/dm-player.sh gold", "bash tools/dm-player.sh hp", "bash tools/dm-player.sh xp"])
+def test_reading_a_value_is_not_a_change(command):
+    assert first(payload(command), "ru") is None
+
+
+def test_changing_a_value_is_shown():
+    assert first(payload("bash tools/dm-player.sh gold +9500"), "ru")["text"] == "Кошелёк изменился"
