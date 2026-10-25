@@ -40,6 +40,7 @@ The page updates through a Server-Sent Events stream; nothing reloads. While the
 | `dm-screen.sh enable` | Turn the mode on for the active campaign (applies the `html-screen` custom rule). |
 | `dm-screen.sh act --image art.png --title "..." [--kicker --place --date --style classic\|severe\|soft --lang en\|ru --captions captions.json --labels labels.json]` | Start a new act: copies the art, derives the theme from it. |
 | `dm-screen.sh turn --file turn.json` | Show a turn (also `--file -` for stdin). |
+| `dm-screen.sh panels --file panels.json` | Replace the side panels of the current turn in place (no new turn, no story animation). |
 | `dm-screen.sh activity think\|roll\|save\|world\|info "text"` | Add a line to the live feed by hand. |
 | `dm-screen.sh start [--port N] [--no-open] [--new-window] [--replace]` | Run the server (default port 18115) and open the window. Idempotent: if a page is already connected no second window is opened; `--replace` closes the old window first. |
 | `dm-screen.sh restart` | Restart the server; open pages reconnect by themselves, a stale window is replaced. |
@@ -63,6 +64,8 @@ Files live in `world-state/campaigns/<campaign>/screen/` (git-ignored): `act.jso
   ]
 }
 ```
+In panel chips `{money}` is replaced by the hero's live purse. The header shows the live game date and time (from `campaign-overview.json`, with the campaign calendar), the hero cards show live HP and purse, and quests come from the world; only `panels` text is static, so refresh it with `dm-screen.sh panels` when stock or debts change.
+
 `blocks` allow `h1 h2 p b i ul li div`; scripts, styles, frames and event handlers are rejected. `options` are plain text, at most six. Heroes, HP, abilities, skills and quests are read from the world through the player-safe view (`backend/campaign_views.py`), so hidden data never reaches the page.
 
 `captions.json`
