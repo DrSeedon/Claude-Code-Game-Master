@@ -38,7 +38,12 @@ server {
         proxy_ssl_name play-158-220-127-161.sslip.io;
         # The guests' password crosses this hop: verify the Contabo certificate (dnd-table-mirror does not).
         proxy_ssl_verify on;
-        proxy_ssl_verify_depth 3;
+        # Let's Encrypt chains are 5 deep since the 2026 roots (leaf, YE1, Root YE, ISRG Root X2, ISRG Root X1);
+        # depth 3 failed intermittently with "unable to get local issuer certificate" (502).
+        proxy_ssl_verify_depth 5;
+        # A resumed upstream session carries no intermediates (YE1, Root YE are not in this host's CA store), so
+        # about 1 request in 20 failed verification with session reuse on.
+        proxy_ssl_session_reuse off;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
         proxy_set_header Host play-158-220-127-161.sslip.io;
 
