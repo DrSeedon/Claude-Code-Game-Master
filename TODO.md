@@ -11,6 +11,9 @@ Five `tests/test_wizard.py::TestWizardMCPTools` tests fail on the owner's laptop
 2.x (`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, `'Server' object has no attribute 'request_handlers'`).
 The wizard code targets the 1.x API. Fix direction: pin `mcp<2` in `pyproject.toml` (and refresh `uv.lock`), or port the
 wizard tools to `mcp.server.mcpserver.MCPServer` per the mcp v2 migration guide.
+**2026-10-26: now live on the VPS.** `uv.lock` pins `mcp` 2.3.0 since `the Codex DM hooks commit of 2026-10-25`; the VPS `uv sync --frozen` installed it and
+`dnd-game-master` was restarted, so the Codex wizard (`backend/server.py` → `python -m backend.wizard_mcp_stdio`, which imports
+`mcp.server.fastmcp`) fails on the server. The Claude wizard (in-process SDK MCP) and play are unaffected.
 
 ## `dm-time.sh --elapsed` on a campaign without `precise_time` jumps to morning (found 2026-10-25)
 pratchett-dungeon had `time_of_day: "Вечер"` and no `precise_time`. `dm-time.sh "_" "<date>" --elapsed 0.25` started the

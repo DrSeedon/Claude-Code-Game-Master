@@ -33,6 +33,9 @@ Environment=HOME=/home/kesha
 # bundled CLI can lag behind the model, see .orchestra/kb/rules-web-app.md) and git, ssh, ffmpeg.
 Environment=PATH=/home/kesha/projects/dnd-game-master/.venv/bin:/home/kesha/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
+# The VPS uv (0.11.x) rewrites the tracked uv.lock on every "uv run" (TODO.md, found 2026-08-03); a dirty tree
+# would stop the master's commit-and-pull recipe and the next deploy's git pull --ff-only.
+Environment=UV_FROZEN=1
 # The npm-installed CLI lives under the read-only /usr: no self-update attempts.
 Environment=DISABLE_AUTOUPDATER=1
 # Safe online limits even if the env file lacks one: the screen server reads an unset cap as "no cap" and an unset
