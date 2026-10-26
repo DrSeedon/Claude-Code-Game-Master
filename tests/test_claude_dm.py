@@ -280,3 +280,46 @@ def test_campaign_name_validation_matches_creation():
     assert not _valid_campaign_name("a/b")          # separator
     assert not _valid_campaign_name(".hidden")      # leading dot
     assert not _valid_campaign_name("")             # empty
+
+
+def test_style_id_without_a_file_uses_the_campaign_narrator_text():
+    """pratchett-dungeon names its style "pratchett" and describes it in campaign_rules; the prompt used epic-heroic."""
+    from backend.claude_dm import _campaign_narrator
+
+    overview = {"narrator_style": "pratchett", "campaign_rules": {"narrator": "Terry Pratchett style, footnotes."}}
+    assert _campaign_narrator(overview) == "# Narrator Style: pratchett\n\nTerry Pratchett style, footnotes."
+    assert _campaign_narrator({"narrator_style": "pratchett", "campaign_rules": {"world_rules": []}}) == ""
+    assert _campaign_narrator({"campaign_rules": ["a list, not a mapping"]}) == ""
+
+
+def test_prompt_narrator_falls_back_to_campaign_text_before_epic_heroic(tmp_path, monkeypatch):
+    import json
+    import backend.claude_dm as claude_dm
+
+    root = tmp_path / "project"
+    (root / "backend").mkdir(parents=True)
+    styles = root / ".claude" / "additional" / "narrator-styles"
+    styles.mkdir(parents=True)
+    (styles / "epic-heroic.md").write_text("# Narrator Style: Epic Heroic", encoding="utf-8")
+    campaign = root / "world-state" / "campaigns" / "disc"
+    campaign.mkdir(parents=True)
+    (campaign / "campaign-overview.json").write_text(json.dumps(
+        {"narrator_style": "pratchett", "campaign_rules": {"narrator": "Sarcastic omniscient narrator."}}), encoding="utf-8")
+    monkeypatch.setattr(claude_dm, "__file__", str(root / "backend" / "claude_dm.py"))
+
+    prompt = claude_dm.load_system_prompt("disc")
+    assert "Sarcastic omniscient narrator." in prompt and "Epic Heroic" not in prompt
+
+    (campaign / "campaign-overview.json").write_text(json.dumps({"narrator_style": "pratchett"}), encoding="utf-8")
+    assert "Epic Heroic" in claude_dm.load_system_prompt("disc")
+    (campaign / "campaign-overview.json").write_text(json.dumps({"narrator_style": "bad id!"}), encoding="utf-8")
+    assert "Epic Heroic" in claude_dm.load_system_prompt("disc")   # a malformed id no longer crashes the prompt
+
+
+def test_screen_master_prompt_leaves_out_the_web_only_scene_art_tool():
+    with_art = load_system_prompt("dragon-quest")
+    without = load_system_prompt("dragon-quest", include_cinematic=False)
+    assert "mcp__cinematic__render_scene" not in without
+    assert "dm-roll" in without
+    if "mcp__cinematic__render_scene" in with_art:
+        assert len(with_art) > len(without)

@@ -2,7 +2,7 @@
 
 Play any campaign in a themed web page instead of terminal text: key art per act, live story and stats, option buttons, a text field, a microphone, a picture view with captions, and a feed of the Master's visible work (thinking, dice, saves). The terminal only carries a one-line reply.
 
-It is optional and per campaign. Everything is local: a small server on `127.0.0.1` and a Chromium app window.
+It is optional and per campaign. Everything is local: a small server on `127.0.0.1` and a Chromium app window. The hosted variant is described in "Online table".
 
 ## Quick start
 
@@ -38,7 +38,7 @@ The page updates through a Server-Sent Events stream; nothing reloads. While the
 |---|---|
 | `dm-screen.sh doctor` | Check requirements. |
 | `dm-screen.sh enable` | Turn the mode on for the active campaign (applies the `html-screen` custom rule). |
-| `dm-screen.sh act --image art.png --title "..." [--kicker --place --date --style classic\|severe\|soft --lang en\|ru --captions captions.json --labels labels.json]` | Start a new act: copies the art, derives the theme from it. |
+| `dm-screen.sh act --image art.png --title "..." [--kicker --place --date --style classic\|severe\|soft --lang en\|ru --captions captions.json --labels labels.json]` | Start a new act: copies the art, derives the theme from it. A flag left out keeps the current act's value; the captions stay only with the same picture. |
 | `dm-screen.sh turn --file turn.json` | Show a turn (also `--file -` for stdin). |
 | `dm-screen.sh panels --file panels.json` | Replace the side panels of the current turn in place (no new turn, no story animation). |
 | `dm-screen.sh activity think\|roll\|save\|world\|info "text"` | Add a line to the live feed by hand. |
@@ -72,7 +72,7 @@ In panel chips `{money}` is replaced by the hero's live purse. The header shows 
 ```json
 {"cards": [{"zone": "tl", "title": "MAXIM", "text": "26, a clerk's son", "dot": [330, 150]}]}
 ```
-Zones: `tl` (top-left row), `tr` (top-right column), `bottom` (bottom row). They never overlap. `dot` is a point on the picture in image pixels; a leader line is drawn from it.
+Zones: `tl` (top-left row), `tr` (top-right column), `bottom` (bottom row). They never overlap. `dot` is a point on the 1672x941 stage the page scales the art to (for art of another size, scale image pixels to that width); a leader line is drawn from it.
 
 `labels.json` maps skill keys to display names: `{"trade": "Trade"}`.
 
@@ -152,6 +152,40 @@ Every click, typed line or voice phrase is appended to `inbox.jsonl`; `dm-screen
 ## Clients
 
 The screen is a presentation layer over the same engine and is independent of the AI client. Claude Code receives player actions through the Monitor tool on `dm-screen.sh listen` and mirrors tool calls into the feed with a `PostToolUse` Bash hook registered in `.claude/settings.json`. Codex and Grok Build have no such adapter yet; they can follow `screen/inbox.jsonl` themselves (not done).
+
+## Online table
+
+The same screen runs online at https://dnd-play.seedon.ru (owner decision 2026-10-26): one shared table behind a password, the campaign chosen in advance, a Claude Agent SDK master on Sonnet 5.5. Install and operation: `ops/play/README.md`.
+
+- `dnd-play.service` on the VPS runs `python -m backend.screen_driver`. The driver runs the screen server on `127.0.0.1:18116`, collects player actions, sends them to the master as `[screen #N] who (source): text` lines (its own notices start with `[system] `; names and texts are kept to one line) and expects one published turn per message. Actions delivered before a restart or a failed turn and never answered go to the master again once. While the driver runs, `dm-screen.sh listen` and `wait` refuse its screen and the web game master refuses its campaign.
+- The master is a full Claude Code session in the repository, limited by its contract `.claude/additional/infrastructure/screen-driver-contract.md`: it plays, switches the online campaign when the players ask, and may fix, test, commit and push a tool that blocks play. It never starts or waits for the screen and never spends credits itself.
+- nginx on the VPS checks the password, limits request rates and sets the security headers; `dnd-play.seedon.ru` reaches it through the RU mirror. Speech plays only when a player presses 🔊; sound generation is off.
+
+Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit also sets the online values below as defaults). For the screen server 0 means no cap, which is the laptop default. Under a credit cap the page hides its Auto speech switch.
+
+| Variable | Online | Meaning |
+|---|---|---|
+| `DM_SCREEN_DAILY_CREDITS` | 15000 | ElevenLabs credits a day |
+| `DM_SCREEN_TURN_CREDITS` | 1500 | the most one turn may cost |
+| `DM_SCREEN_SOUND_GENERATION` | 0 | 0: sounds only from the library and free sources (default 1) |
+| `DM_SCREEN_MAX_PENDING` | 10 | `/api/action` answers 429 while more actions wait for the master |
+| `DM_SCREEN_DAILY_VOICE_MB` | 200 | microphone megabytes a day |
+| `DM_SCREEN_PUBLIC_URL` | `https://dnd-play.seedon.ru/` | shown by status and start |
+| `DM_SCREEN_SPEND_FILE` | `world-state/usage/screen-spend.json` (set by the driver) | one daily ledger for every campaign of the table; default `<screen>/spend.json` |
+| `DM_PLAY_MODEL`, `DM_PLAY_EFFORT` | `claude-sonnet-5-5`, `medium` | the master |
+| `DM_PLAY_MAX_TURNS_PER_HOUR`, `_PER_DAY` | 30, 200 | master turns |
+| `DM_PLAY_TURN_TIMEOUT` | 600 | seconds before a master turn is interrupted |
+| `DM_PLAY_CONFIG` | `world-state/online-play.json` | the table state file |
+
+| Command (on the VPS, in the repository) | Purpose |
+|---|---|
+| `bash tools/dm-play.sh status` | driver state, campaign, session, turns this hour and today, last error |
+| `bash tools/dm-play.sh switch <campaign>` | play another campaign (it needs `campaign-overview.json`); the driver starts a fresh master session |
+| `bash tools/dm-play.sh restart-screen` | restart only the screen server, after a screen code fix |
+| `bash tools/dm-play.sh new-session` | a fresh master session on the same campaign, when the stored one keeps failing |
+| `bash tools/dm-play.sh pause` / `resume` | stop and resume passing actions to the master; the screen stays up |
+
+State lives in `world-state/online-play.json` (campaign, port, paused, screen restarts) and `world-state/online-play-status.json` (written by the driver). Logs: `journalctl -u dnd-play` (driver and master), the screen log above (`dm-screen.sh log`), and the nginx access logs, which carry no query strings because the screen token travels as `?token=`.
 
 ## Security
 

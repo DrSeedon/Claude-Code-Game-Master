@@ -34,3 +34,17 @@ def test_corrupt_or_incomplete_runtime_session_is_ignored(tmp_path):
 
     path.write_text(json.dumps({"version": 1, "session_id": "only-id"}))
     assert load_runtime_session(campaign_dir) is None
+
+
+def test_named_session_file_lives_beside_the_web_one(tmp_path):
+    screen_dir = tmp_path / "campaign" / "screen"
+    save_runtime_session(screen_dir, runtime_id="claude", model_name="claude-sonnet-5-5", session_id="gm-1",
+                         filename="gm-session.json")
+
+    assert (screen_dir / "gm-session.json").stat().st_mode & 0o777 == 0o600
+    assert not (screen_dir / ".runtime-session.json").exists()
+    assert load_runtime_session(screen_dir) is None
+    assert load_runtime_session(screen_dir, "gm-session.json").session_id == "gm-1"
+
+    clear_runtime_session(screen_dir, "gm-session.json")
+    assert load_runtime_session(screen_dir, "gm-session.json") is None

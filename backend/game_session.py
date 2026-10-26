@@ -15,6 +15,8 @@ from backend.event_log import append_event, read_current_session_events
 from backend.live_broker import broker
 from backend.media import store_generated_image
 from backend.usage_log import record_usage
+from backend.runtime.turn_lock import try_campaign_turn_lock
+from lib.screen.online import live_campaign
 from backend.runtime import (
     AgentEvent,
     ProviderBuildContext,
@@ -33,6 +35,7 @@ _registry: RuntimeRegistry | None = None
 HIBERNATE_IDLE_SECONDS = 5 * 60
 HANDOFF_MAX_EVENTS = 24
 HANDOFF_MAX_CHARACTERS = 12_000
+ONLINE_TABLE_BUSY = "Эта кампания сейчас идёт на онлайн-экране."
 
 
 def get_runtime_registry() -> RuntimeRegistry:
@@ -356,8 +359,16 @@ class GameSession:
         turn_started_monotonic: float,
     ) -> None:
         turn_usage: Mapping[str, Any] | None = None
+        turn_lock = None
         try:
             async with self._mutation_lock:
+                # The online screen driver plays campaigns from another process: none of its campaign's turns while
+                # it runs (its delivery cursor and screen are its own), and the turn lock for the moment it starts.
+                turn_lock = None if live_campaign(self.project_root) == self.campaign else try_campaign_turn_lock(self.campaign_dir)
+                if turn_lock is None:
+                    stored = append_event(self.campaign_dir, "error", ONLINE_TABLE_BUSY)
+                    broker.publish(self.campaign, stored)
+                    return
                 if idle_for > HIBERNATE_IDLE_SECONDS:
                     await self.provider.close()
                     logger.info("[%s] hibernated after %.0fs idle", self.campaign, idle_for)
@@ -452,23 +463,26 @@ class GameSession:
             stored = append_event(self.campaign_dir, "error", str(exc))
             broker.publish(self.campaign, stored)
         finally:
+            if turn_lock is not None:
+                turn_lock.release()
             self._persist_provider_session()
             self.running = False
             self._turn_started_at = None
             self._last_turn_end_at = time.monotonic()
-            if turn_usage is None:
+            if turn_usage is None and turn_lock is not None:
                 get_turn_usage = getattr(self.provider, "get_turn_usage", None)
                 if callable(get_turn_usage):
                     turn_usage = get_turn_usage()
             try:
-                record_usage(
-                    project_root=self.project_root,
-                    campaign=self.campaign,
-                    runtime=self.runtime_id,
-                    model_id=self.model_name,
-                    usage=turn_usage,
-                    duration_seconds=time.monotonic() - turn_started_monotonic,
-                )
+                if turn_lock is not None:  # a refused turn ran nothing
+                    record_usage(
+                        project_root=self.project_root,
+                        campaign=self.campaign,
+                        runtime=self.runtime_id,
+                        model_id=self.model_name,
+                        usage=turn_usage,
+                        duration_seconds=time.monotonic() - turn_started_monotonic,
+                    )
             except Exception:
                 logger.exception(
                     "[%s] token usage accounting failed; game turn result is preserved",

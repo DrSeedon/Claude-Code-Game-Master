@@ -2,6 +2,7 @@
 """dm-screen: build the act page, push turns, run the local server and follow player actions."""
 
 import argparse
+import filecmp
 import json
 import os
 import shutil
@@ -39,7 +40,7 @@ def _read(path):
 def _write(path, data):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(str(path) + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")   # NaN is not JSON for the page
     tmp.replace(path)
 
 
@@ -54,14 +55,25 @@ def server_info(sdir):
     return info
 
 
-def set_act(sdir, image, title, kicker="", place="", date="", style="classic", captions=None, labels=None, lang="en"):
+def set_act(sdir, image, title, kicker=None, place=None, date=None, style=None, captions=None, labels=None, lang=None):
+    """A new act. A field left out (None) keeps the current act's value; the captions only when the picture is the
+    same, because they point at things in it. Retitling with the shown art.png itself is fine."""
     from . import content, eventlog, theme
 
-    cards = content.validate_captions(captions or [])
     sdir.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(image, sdir / "art.png")
-    built = theme.build_theme(theme.extract_palette(sdir / "art.png"), style)
-    previous = _read(sdir / "act.json") or {}
+    art, previous = sdir / "art.png", _read(sdir / "act.json") or {}
+    shown = art.is_file() and os.path.samefile(image, art)
+    same_art = shown or (art.is_file() and filecmp.cmp(image, art, shallow=False))
+
+    def keep(value, key, default):
+        return value if value is not None else previous.get(key, default)
+
+    cards = content.validate_captions(captions if captions is not None else (previous.get("captions") or []) if same_art else [])
+    kicker, place, date = keep(kicker, "kicker", ""), keep(place, "place", ""), keep(date, "date", "")
+    style, lang, labels = keep(style, "style", "classic"), keep(lang, "lang", "en"), keep(labels, "labels", {})
+    if not shown:
+        shutil.copyfile(image, art)
+    built = theme.build_theme(theme.extract_palette(art), style)
     act = {"id": previous.get("id", 0) + 1, "title": title, "kicker": kicker, "place": place, "date": date,
            "style": style, "lang": lang, "captions": cards, "labels": labels or {}, "theme": built, "theme_css": theme.theme_css(built)}
     _write(sdir / "act.json", act)
@@ -70,13 +82,49 @@ def set_act(sdir, image, title, kicker="", place="", date="", style="classic", c
     return act
 
 
-def set_turn(sdir, data):
+WAIT_CURSOR = "wait-cursor.json"
+
+
+def read_cursor(sdir):
+    """The last player action delivered to the master (0 when nothing was delivered yet)."""
+    try:
+        return int((_read(Path(sdir) / WAIT_CURSOR) or {}).get("last", 0))
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
+def write_cursor(sdir, last):
+    _write(Path(sdir) / WAIT_CURSOR, {"last": int(last)})
+
+
+def next_batch(sdir, after, settle=1.5, max_events=6, timeout=0, poll=0.3):
+    """Player actions newer than `after`, oldest first and at most `max_events`. Blocks until one arrives, then waits
+    `settle` seconds so a second player or a correction comes in the same batch; [] on timeout. Never moves the cursor."""
+    from . import inbox
+
+    deadline = time.monotonic() + timeout if timeout else None
+    while True:
+        if inbox.read_events(sdir, after_id=after):
+            time.sleep(settle)
+            return inbox.read_events(sdir, after_id=after)[:max_events]
+        if deadline and time.monotonic() >= deadline:
+            return []
+        time.sleep(poll)
+
+
+def set_turn(sdir, data, answered=None):
+    """Publish a turn. `answered` is the last action it answers: by default the delivery cursor when there is one (an
+    action that came while the master wrote stays waiting), else the newest action in the inbox."""
     from . import content, eventlog, inbox
 
     checked = content.validate_turn(data)
     previous = _read(sdir / "turn.json") or {}
-    events = inbox.read_events(sdir)
-    turn = {"id": previous.get("id", 0) + 1, "answered": events[-1]["id"] if events else 0, **checked}
+    if answered is None and (sdir / WAIT_CURSOR).is_file():
+        answered = read_cursor(sdir)
+    elif answered is None:
+        events = inbox.read_events(sdir)
+        answered = events[-1]["id"] if events else 0
+    turn = {"id": previous.get("id", 0) + 1, "answered": int(answered), **checked}
     _write(sdir / "turn.json", turn)
     eventlog.log(sdir, "turn", snapshot=eventlog.world_snapshot(sdir.parent), **turn)
     return turn
@@ -205,45 +253,48 @@ def stop(sdir):
     return True
 
 
-def listen(sdir, from_start):
+def online_driver(sdir):
+    """The online driver's state when a live driver plays this screen (world-state/online-play-status.json), else None."""
+    from . import server
+
+    master = server.master_status(sdir)
+    return master if master and master["state"] != "offline" else None
+
+
+def listen(sdir, from_start, poll=0.3):
+    """Print actions as they arrive and move the delivery cursor with them (old actions count as delivered)."""
     from . import inbox
 
     events = inbox.read_events(sdir)
     last = 0 if from_start else (events[-1]["id"] if events else 0)
+    write_cursor(sdir, last)
     while True:
         for event in inbox.read_events(sdir, after_id=last):
             print(inbox.format_line(event), flush=True)
             last = event["id"]
-        time.sleep(0.3)
-
-
-WAIT_CURSOR = "wait-cursor.json"
+            write_cursor(sdir, last)
+        time.sleep(poll)
 
 
 def wait_for_action(sdir, after=None, timeout=0, settle=1.5, poll=0.3):
     """Block until the next player action, print it (with any that follow within `settle` seconds) and return 0.
 
     For agents without a persistent monitor: run it as a background command, answer when it exits, run it again.
-    The cursor in <screen>/wait-cursor.json makes a restart neither miss nor repeat an action. Returns 2 on timeout.
+    The cursor in <screen>/wait-cursor.json makes a restart neither miss nor repeat an action; the shown turn's
+    'answered' is only the starting point when there is no cursor yet. Returns 2 on timeout.
     """
     from . import inbox
 
     if after is None:
-        after = max((_read(sdir / WAIT_CURSOR) or {}).get("last", 0), (_read(sdir / "turn.json") or {}).get("answered", 0))
-    deadline = time.monotonic() + timeout if timeout else None
-    while True:
-        events = inbox.read_events(sdir, after_id=after)
-        if events:
-            time.sleep(settle)           # two players, or a correction right after: deliver them together
-            events = inbox.read_events(sdir, after_id=after)
-            for event in events:
-                print(inbox.format_line(event), flush=True)
-            _write(sdir / WAIT_CURSOR, {"last": events[-1]["id"]})
-            return 0
-        if deadline and time.monotonic() >= deadline:
-            print("no player action yet: run wait again", flush=True)
-            return 2
-        time.sleep(poll)
+        after = read_cursor(sdir) if (sdir / WAIT_CURSOR).is_file() else (_read(sdir / "turn.json") or {}).get("answered", 0)
+    events = next_batch(sdir, after, settle=settle, timeout=timeout, poll=poll)
+    if not events:
+        print("no player action yet: run wait again", flush=True)
+        return 2
+    for event in events:
+        print(inbox.format_line(event), flush=True)
+    write_cursor(sdir, events[-1]["id"])
+    return 0
 
 
 def _parse_age(text):
@@ -537,14 +588,14 @@ def speak_once(sdir, text, speaker_name):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="dm-screen")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    a = sub.add_parser("act", help="start a new act: key art, captions, theme from the art")
+    a = sub.add_parser("act", help="start a new act: key art, captions, theme from the art; a field left out keeps the current act's value (captions only with the same picture)")
     a.add_argument("--image", required=True)
     a.add_argument("--title", required=True)
-    a.add_argument("--kicker", default="")
-    a.add_argument("--place", default="")
-    a.add_argument("--date", default="")
-    a.add_argument("--style", default="classic", choices=["classic", "severe", "soft"])
-    a.add_argument("--lang", default="en", choices=["en", "ru"], help="interface language of the page")
+    a.add_argument("--kicker")
+    a.add_argument("--place")
+    a.add_argument("--date")
+    a.add_argument("--style", choices=["classic", "severe", "soft"], help="default: the current act's, else classic")
+    a.add_argument("--lang", choices=["en", "ru"], help="interface language of the page (default: the current act's, else en)")
     a.add_argument("--captions", help="JSON file: {\"cards\": [...]}")
     a.add_argument("--labels", help="JSON file: skill key to display name")
     t = sub.add_parser("turn", help="show a new turn (story blocks, question, options, panels)")
@@ -631,8 +682,8 @@ def main(argv=None):
         return 0 if all(ok for name, ok, _ in results if "microphone" not in name and "hook" not in name) else 1
     sdir = screen_dir()
     if args.cmd == "act":
-        cards = json.loads(Path(args.captions).read_text(encoding="utf-8"))["cards"] if args.captions else []
-        labels = json.loads(Path(args.labels).read_text(encoding="utf-8")) if args.labels else {}
+        cards = json.loads(Path(args.captions).read_text(encoding="utf-8"))["cards"] if args.captions else None
+        labels = json.loads(Path(args.labels).read_text(encoding="utf-8")) if args.labels else None
         act = set_act(sdir, args.image, args.title, args.kicker, args.place, args.date, args.style, cards, labels, args.lang)
         print(f"act {act['id']} ready: accent {act['theme']['accent']}, style {act['style']}")
         ensure_window(sdir)
@@ -648,6 +699,8 @@ def main(argv=None):
         print(f"activity {activity.append_activity(sdir, args.kind, args.text)['id']}")
     elif args.cmd == "start":
         print(start(sdir, args.port, not args.no_open, args.new_window, args.replace))
+        if os.environ.get("DM_SCREEN_PUBLIC_URL"):
+            print("public:", os.environ["DM_SCREEN_PUBLIC_URL"])
     elif args.cmd == "restart":
         had_pages = connected_pages(server_info(sdir)) if server_info(sdir) else 0
         stop(sdir)
@@ -670,6 +723,11 @@ def main(argv=None):
     elif args.cmd == "status":
         info = server_info(sdir)
         print(f"running on http://127.0.0.1:{info['port']}/" if info else "not running")
+        if info and os.environ.get("DM_SCREEN_PUBLIC_URL"):
+            print("public:", os.environ["DM_SCREEN_PUBLIC_URL"])
+    elif args.cmd in ("listen", "wait") and online_driver(sdir):
+        raise SystemExit(f"the online table driver answers this screen's actions (bash tools/dm-play.sh status): {args.cmd} would move "
+                         "its delivery cursor and take them away from it")
     elif args.cmd == "listen":
         listen(sdir, args.from_start)
     elif args.cmd == "wait":

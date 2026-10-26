@@ -1,6 +1,14 @@
-"""Local web server for the play screen: page, live event stream, player actions, microphone."""
+"""Local web server for the play screen: page, live event stream, player actions, microphone.
+
+Online limits come from the environment (0 or unset = no limit, the laptop default): DM_SCREEN_DAILY_CREDITS and
+DM_SCREEN_TURN_CREDITS (speech and sound credits), DM_SCREEN_SOUND_GENERATION=0 (library and free sounds only),
+DM_SCREEN_MAX_PENDING (actions waiting for the master) and DM_SCREEN_DAILY_VOICE_MB (microphone uploads a day).
+The daily ledger is <screen>/spend.json unless DM_SCREEN_SPEND_FILE names one (the online driver shares one file
+across campaigns, so a switch does not reset the day). A credit cap also turns the page's Auto speech off.
+"""
 
 import json
+import os
 import re
 import secrets
 import traceback
@@ -8,19 +16,26 @@ import select
 import socket
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, audio as audio_module, eventlog, inbox, speech as speech_module, voice
+from . import activity, audio as audio_module, cli, eventlog, inbox, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
 QUIET_PATHS = {"/api/state", "/api/events", "/api/clients", "/art.png"}
 MAX_UI_EVENTS, MAX_UI_BYTES, MAX_LOG_BODY = 50, 4000, 256 * 1024
 _AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$|^ambient-[\w-]{1,60}\.mp3$")
+_LENGTH = re.compile(r"[0-9]{1,12}")
+_RANGE = re.compile(r"bytes=([0-9]*)-([0-9]*)")
 POLL_SECONDS = 0.3
 PING_SECONDS = 15
+QUOTA_SECONDS = 60
+SPEND, SPEND_DAYS = "spend.json", 14
+MASTER_STATUS = "online-play-status.json"
+_SPEND_LOCK = threading.Lock()
 
 
 def _read_json(path):
@@ -28,6 +43,117 @@ def _read_json(path):
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return None
+
+
+def _env_number(name):
+    """A limit from the environment; unset, bad or negative means no limit (0)."""
+    try:
+        value = max(0.0, float(os.environ.get(name) or 0))
+    except ValueError:
+        return 0
+    return int(value) if value.is_integer() else value
+
+
+def spend_path(screen_dir):
+    """The daily ledger: <screen>/spend.json, or DM_SCREEN_SPEND_FILE (the online table shares one across campaigns)."""
+    return Path(os.environ["DM_SCREEN_SPEND_FILE"]) if os.environ.get("DM_SCREEN_SPEND_FILE") else Path(screen_dir) / SPEND
+
+
+def spent_today(screen_dir, key):
+    """What today (local date) has used: 'credits' really spent on speech and sounds, 'voice_bytes' uploaded."""
+    day = (_read_json(spend_path(screen_dir)) or {}).get(datetime.now().date().isoformat())
+    return day.get(key, 0) if isinstance(day, dict) else 0
+
+
+def add_spend(screen_dir, key, amount, cap=0):
+    """Add to today's ledger. With a `cap`, check and add are one step: over the cap nothing is added, False returns."""
+    path, today = spend_path(screen_dir), datetime.now().date().isoformat()
+    with _SPEND_LOCK:
+        data = _read_json(path)
+        data = data if isinstance(data, dict) else {}
+        day = data.get(today) if isinstance(data.get(today), dict) else {}
+        if cap and day.get(key, 0) + amount > cap:
+            return False
+        data[today] = {**day, key: day.get(key, 0) + amount}
+        data = {d: data[d] for d in sorted(data)[-SPEND_DAYS:]}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        tmp.replace(path)
+    return True
+
+
+def _ledger_size(path):
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def _ledger_since(path, offset):
+    """Credits the speaker's own ledger (speech.Speaker.spent) recorded after byte `offset`."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            tail = f.read().decode("utf-8", "replace")
+    except FileNotFoundError:
+        return 0
+    total = 0
+    for line in tail.splitlines():
+        try:
+            total += json.loads(line)["credits"]
+        except (ValueError, KeyError, TypeError):
+            continue
+    return total
+
+
+def _alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except PermissionError:
+        return True
+    except (ProcessLookupError, ValueError, TypeError, OverflowError):
+        return False
+    return True
+
+
+def _status_file(screen_dir):
+    campaign = Path(screen_dir).parent
+    return campaign.parent.parent / MASTER_STATUS if campaign.parent.name == "campaigns" else None
+
+
+def master_status(screen_dir):
+    """The online master's state for the page, when world-state/online-play-status.json says it plays this campaign."""
+    path = _status_file(screen_dir)
+    status = _read_json(path) if path else None
+    if not isinstance(status, dict) or status.get("campaign") != Path(screen_dir).parent.name:
+        return None
+    state = status.get("state") if not status.get("pid") or _alive(status["pid"]) else "offline"
+    return {"state": state, "last_error": status.get("last_error")}
+
+
+def pending_actions(screen_dir):
+    """Actions not given to the master yet: newer than the delivery cursor, or than the shown turn when there is none."""
+    screen_dir = Path(screen_dir)
+    handled = cli.read_cursor(screen_dir) if (screen_dir / cli.WAIT_CURSOR).is_file() else (_read_json(screen_dir / "turn.json") or {}).get("answered", 0)
+    return len(inbox.read_events(screen_dir, after_id=handled))
+
+
+def byte_range(header, size):
+    """(start, end) of a single 'bytes=' range, None to send the whole file, False when it cannot be satisfied."""
+    found = _RANGE.fullmatch((header or "").strip())
+    if not found or not any(found.groups()):
+        return None
+    first, last = found.groups()
+    if not first:                          # the last N bytes
+        if int(last) == 0:
+            return False
+        start, end = max(0, size - int(last)), size - 1
+    elif last and int(last) < int(first):
+        return None                        # malformed: ignored, the whole file goes
+    else:
+        start, end = int(first), min(int(last), size - 1) if last else size - 1
+    return (start, end) if start < size else False
 
 
 class ScreenServer(ThreadingHTTPServer):
@@ -47,7 +173,7 @@ class ScreenServer(ThreadingHTTPServer):
 
 def _signature(screen_dir):
     files = [screen_dir / n for n in ("act.json", "turn.json", activity.ACTIVITY, inbox.INBOX)] + [TEMPLATE]   # a new page build reloads open pages
-    files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"]
+    files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"] + [f for f in [_status_file(screen_dir)] if f]
     sig = []
     for f in files:
         try:
@@ -58,11 +184,15 @@ def _signature(screen_dir):
     return tuple(sig)
 
 
-def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_on=False):
+def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_on=False, auto_speech=True):
     events = inbox.read_events(screen_dir)
-    return {"build": TEMPLATE.stat().st_mtime_ns, "act": _read_json(screen_dir / "act.json"), "turn": _read_json(screen_dir / "turn.json"),
-            "views": views_provider(), "clock": clock_provider(), "speech": speech_on, "activity": activity.read_activity(screen_dir, tail=40),
-            "inbox_last": events[-1]["id"] if events else 0}
+    state = {"build": TEMPLATE.stat().st_mtime_ns, "act": _read_json(screen_dir / "act.json"), "turn": _read_json(screen_dir / "turn.json"),
+             "views": views_provider(), "clock": clock_provider(), "speech": speech_on, "auto_speech": auto_speech, "activity": activity.read_activity(screen_dir, tail=40),
+             "inbox_last": events[-1]["id"] if events else 0}
+    master = master_status(screen_dir)
+    if master:
+        state["master"] = master
+    return state
 
 
 def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber=None, host="127.0.0.1", clock_provider=None, speaker=None, director=None):
@@ -71,11 +201,50 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
     views_provider = views_provider or (lambda: {})
     clock_provider = clock_provider or (lambda: None)
 
+    daily_credits, turn_credits = _env_number("DM_SCREEN_DAILY_CREDITS"), _env_number("DM_SCREEN_TURN_CREDITS")
+    sound_generation = os.environ.get("DM_SCREEN_SOUND_GENERATION", "1").strip() != "0"
+    max_pending = int(_env_number("DM_SCREEN_MAX_PENDING"))
+    voice_cap = _env_number("DM_SCREEN_DAILY_VOICE_MB") * 1024 * 1024
+    render_lock, quota_lock, quota_cache = threading.Lock(), threading.Lock(), {"at": None, "value": None}
+    action_lock = threading.Lock()
+    # Under a credit budget speech plays only on a press of the speaker button: the page hides its Auto switch.
+    auto_speech = not (daily_credits or turn_credits)
+
     def note(kind, **data):
         eventlog.log(screen_dir, kind, **data)
 
     def speech_on():
         return speaker is not None and getattr(speaker, "available", lambda: True)()
+
+    def quota(fresh=False):
+        """The account quota, asked at most once a minute unless something was just spent."""
+        with quota_lock:
+            if fresh or quota_cache["at"] is None or time.monotonic() - quota_cache["at"] >= QUOTA_SECONDS:
+                try:
+                    value = speaker.quota()
+                except Exception:
+                    value = None
+                quota_cache.update(at=time.monotonic(), value=value)
+            return quota_cache["value"]
+
+    def estimate(turn):
+        need = speaker.plan(turn)["credits"]
+        if director is not None and sound_generation:
+            need += director.plan(turn)["credits"]
+        return need
+
+    def over_budget(need):
+        """The refusal (a JSON body for 402) when a render would break the per-turn or the daily credit limit."""
+        if not need:
+            return None
+        if turn_credits and need > turn_credits:
+            return {"error": f"this turn would cost about {need} credits, more than the {turn_credits:g} allowed per turn",
+                    "limit": "turn_credits", "need": need, "cap": turn_credits}
+        today = spent_today(screen_dir, "credits")
+        if daily_credits and today + need > daily_credits:
+            return {"error": f"today's speech budget is spent: {today:g} of {daily_credits:g} credits used, this turn needs about {need}",
+                    "limit": "daily_credits", "need": need, "spent": today, "cap": daily_credits}
+        return None
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -91,7 +260,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             supplied = self.headers.get("X-Screen-Token") or parse_qs(urlparse(self.path).query).get("token", [""])[0]
             return self._host_ok() and secrets.compare_digest(supplied, token)
 
-        def _send(self, status, body, content_type="application/json; charset=utf-8"):
+        def _send(self, status, body, content_type="application/json; charset=utf-8", headers=None):
             path = urlparse(self.path).path
             if (path not in QUIET_PATHS and not path.startswith("/audio/")) or status >= 400:
                 note("http", method=self.command, path=path, status=status, ms=round((time.monotonic() - getattr(self, "_t0", time.monotonic())) * 1000),
@@ -102,6 +271,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             try:
                 self.wfile.write(body)
@@ -141,7 +312,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if not self._authorized():
                 return self._deny()
             if path == "/api/state":
-                return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on()))
+                return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech))
             if path == "/api/speech/plan":
                 return self._plan()
             if path == "/api/audio":
@@ -165,6 +336,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")     # nginx must pass every event at once
             self.end_headers()
             last, idle = None, 0.0
             with self.server.clients_lock:
@@ -174,7 +346,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     sig = _signature(screen_dir)
                     if sig != last:
                         last, idle = sig, 0.0
-                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider, speech_on()), ensure_ascii=False)
+                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech), ensure_ascii=False)
                         self.wfile.write(f"event: state\ndata: {payload}\n\n".encode())
                     elif idle >= PING_SECONDS:
                         idle = 0.0
@@ -208,9 +380,12 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if not self._authorized():
                 return self._deny()
             path = urlparse(self.path).path
-            length = int(self.headers.get("Content-Length") or 0)
+            raw = (self.headers.get("Content-Length") or "").strip()
+            if not _LENGTH.fullmatch(raw):         # never read a body of unknown size: a negative one would block the thread
+                return self._send(400, {"error": "a Content-Length header with the body size is required"}, headers={"Connection": "close"})
+            length = int(raw)
             if length > (MAX_LOG_BODY if path == "/api/log" else MAX_AUDIO):
-                return self._send(413, {"error": "too large"})
+                return self._send(413, {"error": "too large"}, headers={"Connection": "close"})
             body = self.rfile.read(length)
             if path == "/api/action":
                 return self._action(body)
@@ -228,7 +403,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             path = screen_dir / speech_module.AUDIO_DIR / name
             if not _AUDIO_NAME.fullmatch(name) or not path.is_file():
                 return self._send(404, {"error": "no such audio"})
-            self._send(200, path.read_bytes(), "audio/mpeg")
+            self._file(path, "audio/mpeg")
 
         def _library(self, name):
             if not self._authorized():
@@ -238,7 +413,21 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             path = director.library.dir / "files" / name
             if not path.is_file():
                 return self._send(404, {"error": "no such sound"})
-            self._send(200, path.read_bytes(), audio_module.CONTENT_TYPES[name.rsplit(".", 1)[1]])
+            self._file(path, audio_module.CONTENT_TYPES[name.rsplit(".", 1)[1]])
+
+        def _file(self, path, content_type):
+            """A file with single byte-range support: Safari and iOS play media only from 206 answers."""
+            size = path.stat().st_size
+            span = byte_range(self.headers.get("Range"), size)
+            if span is False:
+                return self._send(416, {"error": "range not satisfiable"}, headers={"Content-Range": f"bytes */{size}", "Accept-Ranges": "bytes"})
+            start, end = span or (0, size - 1)
+            with open(path, "rb") as f:
+                f.seek(start)
+                data = f.read(end - start + 1)
+            if span:
+                return self._send(206, data, content_type, {"Content-Range": f"bytes {start}-{end}/{size}", "Accept-Ranges": "bytes"})
+            self._send(200, data, content_type, {"Accept-Ranges": "bytes"})
 
         def _sounds(self):
             """The turn's sounds that cost nothing: the library and free sources, never a generation."""
@@ -262,40 +451,42 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if speaker is None or not turn:
                 return self._send(503, {"error": "speech is not available"})
             try:
-                quota = speaker.quota()
-            except Exception:
-                quota = None
-            try:
                 plan = speaker.plan(turn)
                 if director is not None:
                     sounds = director.plan(turn)
-                    plan = {**plan, "speech_credits": plan["credits"], "sound_credits": sounds["credits"], "credits": plan["credits"] + sounds["credits"],
+                    sound_credits = sounds["credits"] if sound_generation else 0
+                    plan = {**plan, "speech_credits": plan["credits"], "sound_credits": sound_credits, "credits": plan["credits"] + sound_credits,
                             "sounds": sounds["cues"], "sounds_found": sounds["found"]}
-                return self._send(200, {"plan": plan, "quota": quota})
             except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
                 return self._speech_error(exc)
+            body = {"plan": plan, "quota": quota()}
+            if daily_credits or turn_credits:
+                body["budget"] = {"daily": daily_credits or None, "turn": turn_credits or None, "spent_today": spent_today(screen_dir, "credits")}
+            return self._send(200, body)
 
         def _render(self):
             turn = self._turn()
             if speaker is None or not turn:
                 return self._send(503, {"error": "speech is not available"})
-            try:
-                segments = speaker.render(turn)
+            ledger = Path(getattr(speaker, "dir", screen_dir)) / speech_module.AUDIO_DIR / speech_module.LEDGER
+            with render_lock:       # one render at a time: a second press on the same turn waits, then plays from the cache
                 try:
-                    quota = speaker.quota()
-                except Exception:
-                    quota = None
-            except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
-                return self._speech_error(exc)
+                    refusal = over_budget(estimate(turn)) if daily_credits or turn_credits else None
+                    if refusal:
+                        return self._send(402, refusal)
+                    offset = _ledger_size(ledger)
+                    try:
+                        segments = speaker.render(turn)
+                        sounds = director.resolve(turn, generate=sound_generation) if director is not None else None
+                    finally:
+                        spent = _ledger_since(ledger, offset)
+                        if spent:
+                            add_spend(screen_dir, "credits", spent)
+                except (speech_module.SpeechUnavailable, speech_module.SpeechError) as exc:
+                    return self._speech_error(exc)
             for seg in segments:
                 seg["url"] = "/audio/" + seg["file"]
-            sounds = director.resolve(turn, generate=True) if director is not None else None
-            if sounds and (sounds["sfx"] or sounds["music"] != "keep" or sounds["ambience"] != "keep"):
-                try:
-                    quota = speaker.quota()
-                except Exception:
-                    pass
-            self._send(200, {"turn": turn["id"], "segments": segments, "audio": sounds, "quota": quota})
+            self._send(200, {"turn": turn["id"], "segments": segments, "audio": sounds, "quota": quota(fresh=bool(spent))})
 
         def _ui_log(self, body):
             try:
@@ -317,8 +508,11 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
         def _action(self, body):
             try:
                 data = json.loads(body or b"{}")
-                event = inbox.append_event(screen_dir, data.get("who", ""), data.get("source", "text"), data.get("text", ""))
-            except (ValueError, json.JSONDecodeError) as exc:
+                with action_lock:       # the pending check and the append are one step for parallel posts
+                    if max_pending and pending_actions(screen_dir) >= max_pending:
+                        return self._send(429, {"error": f"{max_pending} actions are already waiting for the master", "limit": "pending"})
+                    event = inbox.append_event(screen_dir, data.get("who", ""), data.get("source", "text"), data.get("text", ""))
+            except (ValueError, json.JSONDecodeError, AttributeError) as exc:
                 return self._send(400, {"error": str(exc)})
             note("action", id=event["id"], who=event["who"], source=event["source"], text=event["text"])
             self._send(200, {"ok": True, "id": event["id"]})
@@ -326,6 +520,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
         def _voice(self, body):
             if not body:
                 return self._send(400, {"error": "empty recording"})
+            if not add_spend(screen_dir, "voice_bytes", len(body), cap=voice_cap):   # reserved before the upload goes out
+                return self._send(429, {"error": "today's microphone limit is reached: type the action instead", "limit": "voice_mb"})
             started = time.monotonic()
             try:
                 result = transcriber(body, self.headers.get("Content-Type", "audio/webm"))

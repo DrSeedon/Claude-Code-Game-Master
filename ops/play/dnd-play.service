@@ -1,0 +1,89 @@
+# /etc/systemd/system/dnd-play.service
+# The online HTML screen table, https://dnd-play.seedon.ru (owner decision 2026-10-26). backend.screen_driver runs
+# the screen server on 127.0.0.1:18116 and a Claude Agent SDK master (the system /usr/bin/claude, Sonnet 5.5) that
+# answers the players' actions with screen turns. Runbook: ops/play/README.md.
+#
+# Owner amendment 2026-10-26: the master is a full Claude Code session in the repository (Bash, edits, project
+# settings, bypassPermissions); its limits live in .claude/additional/infrastructure/screen-driver-contract.md.
+# OS isolation applies only outside the repository. Modelled on ai-table-gm.service (V-42), which runs the same
+# CLI as kesha; differences are noted where they occur. systemd has no trailing comments: each note is its own line.
+
+[Unit]
+Description=DnD online screen table (screen server and Claude SDK master, dnd-play.seedon.ru)
+Documentation=file:/home/kesha/projects/dnd-game-master/ops/play/README.md
+After=network-online.target
+Wants=network-online.target
+# A crash loop stops after 5 failures in 10 minutes instead of burning the subscription
+# (then: systemctl reset-failed dnd-play, fix, start).
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+# No sd_notify in the driver, so no watchdog (ai-table-gm is Type=notify with WatchdogSec).
+Type=exec
+# As kesha, like ai-table-gm: the subscription OAuth state (~/.claude/.credentials.json) belongs to kesha, is
+# refreshed in place by the CLI and shared with Orchestra; a copy would fork the refresh token. kesha also owns
+# the repository clone, so the master's commits keep the ownership the deploy rules require.
+User=kesha
+Group=kesha
+WorkingDirectory=/home/kesha/projects/dnd-game-master
+Environment=HOME=/home/kesha
+# .venv/bin first: the project PostToolUse hook runs "python3 -m lib.screen.cli hook" and must get the venv
+# python. ~/.local/bin has uv (the master runs "uv run ..."). /usr/bin has the system claude CLI (the SDK's
+# bundled CLI can lag behind the model, see .orchestra/kb/rules-web-app.md) and git, ssh, ffmpeg.
+Environment=PATH=/home/kesha/projects/dnd-game-master/.venv/bin:/home/kesha/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+# The npm-installed CLI lives under the read-only /usr: no self-update attempts.
+Environment=DISABLE_AUTOUPDATER=1
+# Safe online limits even if the env file lacks one: the screen server reads an unset cap as "no cap" and an unset
+# DM_SCREEN_SOUND_GENERATION as "generate" (the laptop defaults). The env file below overrides these.
+Environment=DM_SCREEN_DAILY_CREDITS=15000 DM_SCREEN_TURN_CREDITS=1500 DM_SCREEN_SOUND_GENERATION=0
+Environment=DM_SCREEN_MAX_PENDING=10 DM_SCREEN_DAILY_VOICE_MB=200
+# Caps and the model (ops/play/dnd-play.env.example), no secrets; the keys stay in the project .env. No leading
+# "-": without its caps file the unit does not start.
+EnvironmentFile=/etc/dnd-play/dnd-play.env
+ExecStart=/home/kesha/projects/dnd-game-master/.venv/bin/python -m backend.screen_driver
+SyslogIdentifier=dnd-play
+Restart=on-failure
+RestartSec=10
+# SIGTERM goes to the driver alone, which stops its screen server and the CLI in order; whatever is still
+# running after 30 s is killed.
+KillMode=mixed
+TimeoutStopSec=30
+
+# A guest on this VPS, below the room, the bots and Orchestra (as ai-table-gm, owner 2026-10-08).
+Nice=5
+CPUWeight=50
+# The CLI, the driver and the screen server together; ai-table-gm has 4G for its CLI alone.
+MemoryMax=6G
+OOMScoreAdjust=600
+
+# Isolation outside the repository (owner 2026-10-26). No new privileges: no sudo for the master.
+NoNewPrivileges=yes
+# ~/.ssh is hidden: kesha's own key opens "ssh kesha@localhost" (outside this sandbox, with NOPASSWD sudo) and
+# tunnel_laptop the owner's laptop. Only what "git push" to github.com needs stays (the github.com entry of the config
+# names id_ed25519_github); the other config entries find no key. Runbook step 6 checks both.
+TemporaryFileSystem=/home/kesha/.ssh:ro
+BindReadOnlyPaths=/home/kesha/.ssh/id_ed25519_github /home/kesha/.ssh/known_hosts -/home/kesha/.ssh/config
+# Own /tmp: the DM hooks compile /tmp/dm-rules.md, which must never collide with other agents on this host.
+PrivateTmp=yes
+ProtectSystem=strict
+# The home is readable (~/.gitconfig for git push, uv's interpreters) but not writable, except:
+# the repository (campaigns, screen files, git), the CLI state (as ai-table-gm), uv's cache and data.
+# A leading "-" skips a path that does not exist (~/.config/claude is absent on this VPS, 2026-10-26).
+ProtectHome=read-only
+ReadWritePaths=/home/kesha/projects/dnd-game-master /home/kesha/.claude /home/kesha/.claude.json -/home/kesha/.cache -/home/kesha/.local/share/uv -/home/kesha/.config/claude
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# AF_NETLINK beyond ai-table-gm: the master runs arbitrary tools (interface lookups); ai-table-gm has no tools.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+# Not set, on purpose (V-42): MemoryDenyWriteExecute, because the claude CLI JIT-compiles.
+
+# Output goes to the journal: journalctl -u dnd-play.
+
+[Install]
+WantedBy=multi-user.target

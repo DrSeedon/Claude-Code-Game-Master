@@ -116,3 +116,65 @@ def test_the_voice_script_may_add_tags_and_join_paragraphs_but_not_change_words(
 def test_a_rewritten_shortened_or_incomplete_voice_script_is_refused(lines):
     with pytest.raises(ValueError):
         content.validate_turn(_scripted(*lines))
+
+
+@pytest.mark.parametrize("good", [
+    "<h1>Глава</h1>", "<h2>Сцена</h2>", "<h3>Подсцена</h3>", "<p class=\"lead\">Вступление</p>", "<div class=\"quest\"><b>ЗАДАНИЕ</b> найти багаж</div>",
+    "<ul><li>а</li></ul>", "<ol><li>б</li></ol>", "<p>a<br>b<br/>c</p>", "<blockquote><em>x</em> <strong>y</strong> <span>z</span> <i>w</i></blockquote>",
+    "<p>Тролль &amp; гном, 2 &gt; 1, &lt;3</p>", "Просто текст без тегов", "<p>javascript: это просто слово в тексте</p>",
+])
+def test_allowed_markup_passes_unchanged(good):
+    assert content.validate_turn(turn(blocks=[good]))["blocks"] == [good]
+
+
+@pytest.mark.parametrize("bad,named", [
+    ("<img src=x>", "<img>"), ("<svg><circle r=1></circle></svg>", "<svg>"), ("<a href='#'>x</a>", "<a>"), ("<math><mi>x</mi></math>", "<math>"),
+    ("<video src=x></video>", "<video>"), ("<input autofocus>", "<input>"), ("<details open>x</details>", "<details>"),
+    ("<p style=\"color:red\">x</p>", "style"), ("<p id=\"x\">x</p>", "id"), ("<p data-x=\"1\">x</p>", "data-x"), ("<p class>x</p>", "class"),
+    ("<p class=\"Lead\">x</p>", "class"), ("<p class=\"&#106;avascript:x\">x</p>", "javascript"), ("<a href=\"&#106;avascript:alert(1)\">x</a>", "<a>"),
+    ("<p/onclick=alert(1)>x</p>", "onclick"), ("<p>a</p><!-- <script>alert(1)</script> -->", "comment"), ("<!-- note -->", "comment"),
+    ("<!DOCTYPE html>", "DOCTYPE"), ("<?xml x?>", "xml"), ("<![CDATA[x]]>", "CDATA"),
+])
+def test_anything_outside_the_allowlist_is_refused_with_its_name(bad, named):
+    with pytest.raises(ValueError, match=named):
+        content.validate_turn(turn(blocks=["<p>ок</p>", bad]))
+
+
+@pytest.mark.parametrize("bad", [
+    "<p>hi</p><img src=x onerror=alert(1)",        # the page joins blocks: the next block would close this tag
+    "<p class=\"lead", "<p>a < b</p>", "</p foo=\"<img src=x onerror=alert(1)>\">", "<scr<script>ipt>alert(1)</script>", "<p\x00>x</p>",
+])
+def test_a_tag_the_parser_did_not_fully_understand_is_refused(bad):
+    with pytest.raises(ValueError):
+        content.validate_turn(turn(blocks=[bad, "<p>следующий абзац</p>"]))
+
+
+def test_the_error_says_which_block_is_wrong():
+    with pytest.raises(ValueError, match="block 2: <img>"):
+        content.validate_turn(turn(blocks=["<p>a</p>", "<p>b</p>", "<img src=x>"]))
+
+
+@pytest.mark.parametrize("dot", ["330,150", '" onmouseover="alert(1)', [1, 2, 3], [1], [float("nan"), 5], [float("inf"), 5], [-1, 5], [5000, 5],
+                                 [5, 2000], [True, 5], ["1", "2"], {"x": 1}])
+def test_a_caption_dot_must_be_two_numbers_inside_the_art(dot):
+    with pytest.raises(ValueError):
+        content.validate_captions([{"zone": "tl", "title": "МАКСИМ", "dot": dot}])
+
+
+def test_a_caption_without_a_dot_or_with_a_tuple_dot_is_fine():
+    assert content.validate_captions([{"zone": "tr", "title": "Т", "kind": "note"}]) == [{"zone": "tr", "title": "Т", "kind": "note"}]
+    assert content.validate_captions([{"zone": "tl", "title": "Т", "dot": (1672, 0.5)}])[0]["dot"] == [1672, 0.5]
+
+
+@pytest.mark.parametrize("bar", [{"label": "HP", "value": "nan", "max": 20}, {"label": "HP", "value": 3, "max": "inf"},
+                                 {"label": "HP", "value": 1e400, "max": 20}, {"label": "HP", "value": 3, "max": 0},
+                                 {"label": "HP", "value": 3, "max": -5}])
+def test_bars_need_finite_numbers_and_a_positive_max(bar):
+    """NaN or Infinity in turn.json makes /api/state invalid JSON and freezes every open page."""
+    with pytest.raises(ValueError, match="finite"):
+        content.validate_panels([{"title": "HP", "bars": [bar]}])
+
+
+def test_good_bars_still_pass():
+    assert content.validate_panels([{"title": "HP", "bars": [{"label": "a", "value": "7", "max": 10}]}])[0]["bars"] == [
+        {"label": "a", "value": 7.0, "max": 10.0}]

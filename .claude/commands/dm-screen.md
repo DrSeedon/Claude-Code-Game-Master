@@ -2,6 +2,8 @@
 
 Turn the HTML play screen on for the active campaign and open it. Full guide: `docs/screen-mode.md`.
 
+Online table: when the session is driven by the online screen driver (`backend.screen_driver`), skip these steps; follow `.claude/additional/infrastructure/screen-driver-contract.md` instead.
+
 ## Steps
 
 1. Check requirements and enable the mode:

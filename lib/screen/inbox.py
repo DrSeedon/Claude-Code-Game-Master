@@ -2,12 +2,20 @@
 
 import fcntl
 import json
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 INBOX = "inbox.jsonl"
 SOURCES = {"button": "button", "voice": "voice", "text": "text"}
 MAX_TEXT = 1000
+
+
+def one_line(value):
+    """One line of plain text: no line breaks, control or format characters. Each action is one line of the
+    master's message, so a newline in a name or a text would let a player forge a line of their own."""
+    return " ".join("".join(ch for ch in str(value) if unicodedata.category(ch) not in ("Cc", "Cf")
+                            or ch.isspace()).split())
 
 
 def append_jsonl(screen_dir, filename, fields):
@@ -35,10 +43,10 @@ def read_jsonl(screen_dir, filename, after_id=0):
 def append_event(screen_dir, who, source, text):
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
-    text = " ".join(str(text).split())[:MAX_TEXT]
+    text = one_line(text)[:MAX_TEXT]
     if not text:
         raise ValueError("empty action")
-    return append_jsonl(screen_dir, INBOX, {"who": str(who)[:40] or "Everyone", "source": source, "text": text})
+    return append_jsonl(screen_dir, INBOX, {"who": one_line(who)[:40] or "Everyone", "source": source, "text": text})
 
 
 def read_events(screen_dir, after_id=0):
@@ -46,4 +54,5 @@ def read_events(screen_dir, after_id=0):
 
 
 def format_line(event):
-    return f"[screen #{event['id']}] {event['who']} ({SOURCES[event['source']]}): {event['text']}"
+    """Records written before the who/text clean-up go through it here too."""
+    return f"[screen #{event['id']}] {one_line(event['who'])} ({SOURCES[event['source']]}): {one_line(event['text'])}"

@@ -19,8 +19,10 @@ source "$SCRIPT_DIR/additional/infrastructure/common-module.sh"
 PROJECT_ROOT="$(find_project_root "$SCRIPT_DIR")"
 [ -z "$PROJECT_ROOT" ] && exit 0
 
-ACTIVE=$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")
+# DM_ACTIVE_CAMPAIGN scopes one process (web game, online screen driver), as in tools/common.sh.
+ACTIVE="${DM_ACTIVE_CAMPAIGN:-$(cat "$PROJECT_ROOT/world-state/active-campaign.txt" 2>/dev/null || echo "")}"
 [ -z "$ACTIVE" ] && exit 0
+case "$ACTIVE" in .*|*..*|*/*|*\\*) exit 0 ;; esac
 
 CAMPAIGN_DIR="$PROJECT_ROOT/world-state/campaigns/$ACTIVE"
 [ -d "$CAMPAIGN_DIR" ] || exit 0

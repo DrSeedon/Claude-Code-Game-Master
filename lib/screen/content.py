@@ -1,20 +1,71 @@
 """Validation of what the DM pushes to the screen: refuse anything that could run code in the page."""
 
+import math
 import re
+from html.parser import HTMLParser
 
 from . import audio, speech
 
 MAX_OPTIONS = 6
 MAX_LINE = 2000
 ZONES = {"tl", "tr", "bottom"}
-_DANGEROUS = re.compile(r"<\s*(script|style|iframe|object|embed|link|meta|form|base)\b|\son\w+\s*=|javascript:|data:text/html",
-                        re.IGNORECASE)
+STAGE = (1672, 941)        # caption dots are in the page's art coordinates (16:9, 1672 wide)
+ALLOWED_TAGS = {"h1", "h2", "h3", "p", "b", "i", "em", "strong", "ul", "ol", "li", "div", "br", "span", "blockquote"}
+_CLASS = re.compile(r"[a-z0-9 _-]{1,60}")
+_NAME = re.compile(r"[a-z][a-z0-9]*")
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0e-\x1f\x7f]")
 _TAG = re.compile(r"<[^>]+>")
 
 
+class _Allowlist(HTMLParser):
+    """Fails on the first tag, attribute or construct outside the allowlist; counts the tags it understood."""
+
+    def __init__(self, where):
+        super().__init__(convert_charrefs=True)
+        self.where, self.tags = where, 0
+
+    def _tag(self, tag, attrs):
+        allowed = ", ".join(sorted(ALLOWED_TAGS))
+        if not _NAME.fullmatch(tag) or tag not in ALLOWED_TAGS:
+            raise ValueError(f"{self.where}: <{tag}> is not allowed; use only {allowed}")
+        for name, value in attrs:
+            if name != "class" or value is None or not _CLASS.fullmatch(value):
+                raise ValueError(f"{self.where}: attribute {name}={value!r} on <{tag}> is not allowed; "
+                                 "only class=\"...\" with lowercase letters, digits, spaces, _ and -")
+        self.tags += 1
+
+    def handle_starttag(self, tag, attrs):
+        self._tag(tag, attrs)
+
+    def handle_startendtag(self, tag, attrs):
+        self._tag(tag, attrs)
+
+    def handle_endtag(self, tag):
+        self._tag(tag, [])
+
+    def handle_comment(self, data):
+        raise ValueError(f"{self.where}: HTML comments are not allowed")
+
+    def handle_decl(self, decl):
+        raise ValueError(f"{self.where}: <!{decl[:30]}> is not allowed")
+
+    def unknown_decl(self, data):
+        raise ValueError(f"{self.where}: <![{data[:30]}> is not allowed")
+
+    def handle_pi(self, data):
+        raise ValueError(f"{self.where}: <?{data[:30]}> is not allowed")
+
+
 def _check_html(text, where):
-    if _DANGEROUS.search(text):
-        raise ValueError(f"{where}: scripts, styles, frames and event handlers are not allowed")
+    """Allowlist: the tags in ALLOWED_TAGS, no attribute but a plain class. The page joins the blocks, so every '<'
+    must open a tag the parser fully understood: an unclosed tag or a raw '<' could swallow the next block."""
+    if _CONTROL.search(text):
+        raise ValueError(f"{where}: control characters are not allowed")
+    parser = _Allowlist(where)
+    parser.feed(text)
+    parser.close()
+    if text.count("<") != parser.tags:
+        raise ValueError(f"{where}: a '<' that does not open a complete allowed tag (an unclosed tag, or a raw '<' in text: write &lt;)")
     return text
 
 
@@ -35,8 +86,10 @@ def _validate_panel(panel):
         for bar in panel["bars"]:
             if not {"label", "value"} <= set(bar):
                 raise ValueError("bar needs label and value")
-            bars.append({"label": _check_plain(str(bar["label"]), "bar label"), "value": float(bar["value"]),
-                         "max": float(bar.get("max", 20))})
+            value, high = float(bar["value"]), float(bar.get("max", 20))
+            if not (math.isfinite(value) and math.isfinite(high)) or high <= 0:   # NaN would break the page's JSON
+                raise ValueError(f"bar {bar['label']!r}: value and max must be finite numbers, max above 0")
+            bars.append({"label": _check_plain(str(bar["label"]), "bar label"), "value": value, "max": high})
         out["bars"] = bars
     if "steps" in panel:
         out["steps"] = [{"label": _check_plain(str(s["label"]), "step"), "current": bool(s.get("current"))}
@@ -131,7 +184,7 @@ def validate_turn(data):
     options = data.get("options", [])
     if len(options) > MAX_OPTIONS:
         raise ValueError(f"at most {MAX_OPTIONS} options")
-    turn = {"blocks": [_check_html(str(b), "block") for b in blocks],
+    turn = {"blocks": [_check_html(str(b), f"block {i}") for i, b in enumerate(blocks)],
             "question": _check_plain(str(data.get("question", "")), "question"),
             "options": [_check_plain(str(o), "option") for o in options],
             "panels": validate_panels(data.get("panels", []))}
@@ -146,5 +199,12 @@ def validate_captions(cards):
         if card.get("zone") not in ZONES or not card.get("title"):
             raise ValueError("caption needs a zone (tl, tr, bottom) and a title")
         _check_plain(str(card["title"]) + str(card.get("text", "")), "caption")
+        if card.get("dot") is not None:
+            dot = card["dot"]
+            if not (isinstance(dot, (list, tuple)) and len(dot) == 2
+                    and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and 0 <= v <= high
+                            for v, high in zip(dot, STAGE))):
+                raise ValueError(f"caption dot must be [x, y] with 0 <= x <= {STAGE[0]} and 0 <= y <= {STAGE[1]}")
+            card = {**card, "dot": list(dot)}
         out.append(card)
     return out

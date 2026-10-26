@@ -52,14 +52,18 @@ class RuntimeSessionState:
         )
 
 
-def runtime_session_path(campaign_dir: Path) -> Path:
-    return Path(campaign_dir) / RUNTIME_SESSION_FILENAME
+def runtime_session_path(campaign_dir: Path, filename: str = RUNTIME_SESSION_FILENAME) -> Path:
+    """``filename`` lets another owner (the online screen master) keep its own token beside the web one."""
+
+    return Path(campaign_dir) / filename
 
 
-def load_runtime_session(campaign_dir: Path) -> RuntimeSessionState | None:
+def load_runtime_session(
+    campaign_dir: Path, filename: str = RUNTIME_SESSION_FILENAME
+) -> RuntimeSessionState | None:
     """Load a valid resume token or return ``None`` for absent/corrupt state."""
 
-    path = runtime_session_path(campaign_dir)
+    path = runtime_session_path(campaign_dir, filename)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -82,6 +86,7 @@ def save_runtime_session(
     runtime_id: str,
     model_name: str,
     session_id: str,
+    filename: str = RUNTIME_SESSION_FILENAME,
 ) -> RuntimeSessionState:
     """Atomically persist the current provider conversation identifier."""
 
@@ -93,9 +98,9 @@ def save_runtime_session(
         session_id=session_id,
         updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
-    path = runtime_session_path(campaign_dir)
+    path = runtime_session_path(campaign_dir, filename)
     fd, temporary_name = tempfile.mkstemp(
-        prefix=f"{RUNTIME_SESSION_FILENAME}.",
+        prefix=f"{filename}.",
         suffix=".tmp",
         dir=campaign_dir,
     )
@@ -118,10 +123,10 @@ def save_runtime_session(
     return state
 
 
-def clear_runtime_session(campaign_dir: Path) -> None:
+def clear_runtime_session(campaign_dir: Path, filename: str = RUNTIME_SESSION_FILENAME) -> None:
     """Forget provider memory without touching WorldGraph or the event log."""
 
     try:
-        runtime_session_path(campaign_dir).unlink()
+        runtime_session_path(campaign_dir, filename).unlink()
     except FileNotFoundError:
         pass

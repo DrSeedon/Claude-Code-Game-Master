@@ -16,6 +16,7 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 ## rules
 
 ### Setup (once per session)
+- Online table: when the session is driven by the online screen driver (`backend.screen_driver`), skip this Setup and every waiting step below; the driver runs the server and delivers the actions, and `.claude/additional/infrastructure/screen-driver-contract.md` replaces them.
 - Start the screen: `bash tools/dm-screen.sh start` (local server on 127.0.0.1, opens its own app window). It needs `DEEPGRAM_API_KEY` in the project `.env` only for the microphone button.
 - Follow player actions with the Monitor tool on `bash tools/dm-screen.sh listen` (persistent). Each notification line looks like `[screen #N] Name (button|voice|text): action`.
 - Without a Monitor tool, run `bash tools/dm-screen.sh wait --timeout 6900` as a background command. It exits with the next action (and any that follow within a moment); play the turn, then start it again at once. Exit code 2 means nothing came: start it again. A saved cursor makes a restart neither miss nor repeat an action.
@@ -26,8 +27,9 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 1. Generate key art for the act (see the global image-generation notes: Codex imagegen, no text inside the picture).
 2. `bash tools/dm-screen.sh act --image <png> --title "..." --kicker "..." --place "..." --date "..." --style classic|severe|soft --captions captions.json --labels labels.json`
    - The theme (colors) is derived from the art; the style changes shape and type. Each act gets its own look.
-   - `captions.json`: `{"cards":[{"zone":"tl|tr|bottom","title":"...","text":"...","dot":[x,y]}]}` (names, place, objects; `dot` is a point in image pixels). Captions show in the picture view and can be switched on and off by the players.
+   - `captions.json`: `{"cards":[{"zone":"tl|tr|bottom","title":"...","text":"...","dot":[x,y]}]}` (names, place, objects; `dot` is a point on the 1672x941 stage the page scales the art to, whatever the art's own size: scale image pixels to that width). Captions show in the picture view and can be switched on and off by the players.
    - `labels.json` maps skill keys to display names.
+   - A flag left out keeps the current act's value (language, style, kicker, place, date, labels); the captions stay only when the picture is the same file content.
 
 ### Every turn
 1. A player action arrives through the listener. Optionally show your thinking with `bash tools/dm-screen.sh activity think "short text"`.
@@ -49,7 +51,7 @@ Couch play with a mouse and a microphone on a second screen, or any campaign tha
 - Everything the screen does is logged: `bash tools/dm-screen.sh log --errors --since 1h`, `--kind tts,stt,turn`, `--summary`. Read it before guessing when something looks wrong.
 
 ### Two players
-- Actions carry the speaker (a character name or "Оба"). Never decide for a player who has not acted; wait for both when the scene needs both.
+- Actions carry the speaker (a character name or the page's all-players label). Never decide for a player who has not acted; wait for both when the scene needs both.
 
 ### Voice
 - The microphone records in the page, the server cleans the audio and sends it to Deepgram (nova-3, Russian), the page shows what was understood and sends it after four seconds unless the player edits or cancels it.

@@ -83,8 +83,9 @@ def test_hook_never_raises_on_garbage(sdir, monkeypatch):
 
 
 def test_act_stores_interface_language(sdir, art):
-    assert cli.set_act(sdir, art, "Act", lang="ru")["lang"] == "ru"
     assert cli.set_act(sdir, art, "Act")["lang"] == "en"
+    assert cli.set_act(sdir, art, "Act", lang="ru")["lang"] == "ru"
+    assert cli.set_act(sdir, art, "Act")["lang"] == "ru"           # left out: the current act's
 
 
 def test_doctor_reports_each_requirement(monkeypatch):
@@ -299,3 +300,168 @@ def test_wait_delivers_actions_that_arrive_together(tmp_path, capsys):
 
     assert screen_cli.wait_for_action(tmp_path, after=0, timeout=1, settle=0.05, poll=0.05) == 0
     assert capsys.readouterr().out.count("[screen #") == 2
+
+
+def test_cursor_reads_zero_until_written_and_survives_garbage(tmp_path):
+    assert cli.read_cursor(tmp_path) == 0
+    cli.write_cursor(tmp_path, 5)
+    assert cli.read_cursor(tmp_path) == 5 and json.loads((tmp_path / "wait-cursor.json").read_text()) == {"last": 5}
+    (tmp_path / "wait-cursor.json").write_text('{"last": "x"}')
+    assert cli.read_cursor(tmp_path) == 0
+
+
+def test_next_batch_is_oldest_first_limited_and_leaves_the_cursor_alone(tmp_path):
+    for n in range(8):
+        inbox.append_event(tmp_path, "Ринсвинд", "text", f"действие {n + 1}")
+
+    batch = cli.next_batch(tmp_path, 0, settle=0, max_events=6)
+
+    assert [e["id"] for e in batch] == [1, 2, 3, 4, 5, 6] and not (tmp_path / "wait-cursor.json").exists()
+    assert [e["id"] for e in cli.next_batch(tmp_path, 6, settle=0)] == [7, 8]
+    assert cli.next_batch(tmp_path, 8, settle=0, timeout=0.2, poll=0.05) == []
+
+
+def test_next_batch_blocks_until_an_action_arrives_and_gathers_the_ones_right_after(tmp_path):
+    import threading
+
+    threading.Timer(0.15, lambda: inbox.append_event(tmp_path, "Ринсвинд", "voice", "бежим")).start()
+    threading.Timer(0.25, lambda: inbox.append_event(tmp_path, "Двацветок", "text", "а я фотографирую")).start()
+
+    batch = cli.next_batch(tmp_path, 0, settle=0.4, timeout=3, poll=0.05)
+
+    assert [e["text"] for e in batch] == ["бежим", "а я фотографирую"]
+
+
+def test_an_action_sent_while_the_master_writes_is_delivered_next_and_stays_waiting(tmp_path, capsys):
+    from lib.screen import server
+
+    inbox.append_event(tmp_path, "Ринсвинд", "button", "1. Бежать")
+    assert cli.wait_for_action(tmp_path, timeout=2, settle=0.05, poll=0.05) == 0          # delivered to the master
+    capsys.readouterr()
+    inbox.append_event(tmp_path, "Двацветок", "text", "подождите, я сфотографирую")       # arrives while the turn is written
+
+    turn = cli.set_turn(tmp_path, {"blocks": ["<p>Вы бежите.</p>"], "question": "?", "options": []})
+
+    state = server.build_state(tmp_path, dict)
+    assert turn["answered"] == 1 and state["inbox_last"] == 2 and state["inbox_last"] > state["turn"]["answered"]   # the page still waits
+    assert cli.wait_for_action(tmp_path, timeout=2, settle=0.05, poll=0.05) == 0
+    assert capsys.readouterr().out.strip() == "[screen #2] Двацветок (text): подождите, я сфотографирую"
+
+
+def test_wait_trusts_the_cursor_over_the_shown_turn(tmp_path, capsys):
+    inbox.append_event(tmp_path, "Ринсвинд", "text", "первое")
+    inbox.append_event(tmp_path, "Ринсвинд", "text", "второе, пришло во время записи хода")
+    cli.write_cursor(tmp_path, 1)
+    (tmp_path / "turn.json").write_text(json.dumps({"id": 3, "answered": 2}))      # stamped with the newest action
+
+    assert cli.wait_for_action(tmp_path, timeout=1, settle=0.05, poll=0.05) == 0
+    assert "[screen #2]" in capsys.readouterr().out
+
+
+def test_set_turn_takes_an_explicit_answered_id(tmp_path):
+    inbox.append_event(tmp_path, "Ринсвинд", "text", "x")
+    cli.write_cursor(tmp_path, 1)
+
+    assert cli.set_turn(tmp_path, {"blocks": ["<p>x</p>"]}, answered=0)["answered"] == 0
+    assert cli.set_turn(tmp_path, {"blocks": ["<p>x</p>"]})["answered"] == 1
+
+
+def test_listen_moves_the_cursor_as_it_prints(tmp_path, monkeypatch, capsys):
+    inbox.append_event(tmp_path, "Ринсвинд", "text", "старое")
+    naps = []
+
+    class Done(Exception):
+        pass
+
+    def nap(seconds):
+        naps.append(seconds)
+        if len(naps) == 1:
+            assert cli.read_cursor(tmp_path) == 1          # old actions count as delivered
+            inbox.append_event(tmp_path, "Двацветок", "voice", "новое")
+        else:
+            raise Done
+
+    monkeypatch.setattr(cli.time, "sleep", nap)
+    with pytest.raises(Done):
+        cli.listen(tmp_path, from_start=False)
+
+    assert capsys.readouterr().out.strip() == "[screen #2] Двацветок (voice): новое" and cli.read_cursor(tmp_path) == 2
+
+
+def test_status_shows_the_public_address_when_set(sdir, monkeypatch, capsys):
+    import os
+
+    sdir.mkdir(parents=True)
+    (sdir / "server.json").write_text(json.dumps({"pid": os.getpid(), "port": 18116, "token": "t"}))
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+    monkeypatch.setenv("DM_SCREEN_PUBLIC_URL", "https://dnd-play.seedon.ru/")
+
+    cli.main(["status"])
+
+    assert capsys.readouterr().out.splitlines() == ["running on http://127.0.0.1:18116/", "public: https://dnd-play.seedon.ru/"]
+
+
+def test_retitling_with_the_shown_art_keeps_every_other_field(sdir, art):
+    """The online contract retitles an act with screen/art.png itself: no SameFileError, nothing reset to defaults."""
+    cards = [{"zone": "tl", "title": "РИНСВИНД", "dot": [100, 200]}]
+    first = cli.set_act(sdir, art, "Глава первая", kicker="Глава первая", place="Анк-Морпорк", date="24 Жнивня",
+                        style="soft", captions=cards, labels={"stealth": "Скрытность"}, lang="ru")
+
+    second = cli.set_act(sdir, sdir / "art.png", "Глава вторая")
+
+    assert second["id"] == 2 and second["title"] == "Глава вторая"
+    keep = ("kicker", "place", "date", "style", "lang", "captions", "labels")
+    assert {k: second[k] for k in keep} == {k: first[k] for k in keep}
+
+
+def test_a_new_picture_drops_the_old_captions_but_keeps_the_rest(sdir, art, tmp_path):
+    cli.set_act(sdir, art, "Акт 1", style="severe", lang="ru", captions=[{"zone": "tl", "title": "МАКСИМ"}], labels={"a": "А"})
+    other = tmp_path / "other.png"
+    Image.new("RGB", (64, 36), (230, 90, 20)).save(other)
+
+    second = cli.set_act(sdir, other, "Акт 2")
+
+    assert second["captions"] == [] and (second["style"], second["lang"], second["labels"]) == ("severe", "ru", {"a": "А"})
+    same = tmp_path / "copy.png"
+    same.write_bytes(other.read_bytes())
+    assert cli.set_act(sdir, same, "Акт 3", captions=[{"zone": "tr", "title": "X"}])["captions"][0]["title"] == "X"
+    assert cli.set_act(sdir, same, "Акт 4")["captions"][0]["title"] == "X"      # the same picture by content
+
+
+def test_a_turn_with_nan_never_reaches_the_file(sdir):
+    cli.set_turn(sdir, {"blocks": ["<p>x</p>"]})
+    with pytest.raises(ValueError):
+        cli._write(sdir / "turn.json", {"bars": float("nan")})
+
+    assert json.loads((sdir / "turn.json").read_text())["id"] == 1
+
+
+def _online_screen(tmp_path, state="idle", pid=None):
+    import os
+
+    sdir = tmp_path / "world-state" / "campaigns" / "pratchett-dungeon" / "screen"
+    sdir.mkdir(parents=True)
+    (tmp_path / "world-state" / "online-play-status.json").write_text(json.dumps(
+        {"pid": pid or os.getpid(), "campaign": "pratchett-dungeon", "state": state, "last_error": None}))
+    return sdir
+
+
+@pytest.mark.parametrize("command", [["listen"], ["listen", "--from-start"], ["wait", "--timeout", "0.1"]])
+def test_listen_and_wait_refuse_while_the_online_driver_plays_the_screen(tmp_path, monkeypatch, command):
+    sdir = _online_screen(tmp_path)
+    inbox.append_event(sdir, "Ринсвинд", "text", "x")
+    cli.write_cursor(sdir, 0)                      # the driver's cursor: nobody else may move it
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+
+    with pytest.raises(SystemExit, match="online table driver"):
+        cli.main(command)
+
+    assert cli.read_cursor(sdir) == 0
+
+
+def test_wait_works_again_once_the_driver_is_gone(tmp_path, monkeypatch, capsys):
+    sdir = _online_screen(tmp_path, pid=99999999)
+    inbox.append_event(sdir, "Ринсвинд", "text", "x")
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+
+    assert cli.main(["wait", "--timeout", "1"]) == 0 and "[screen #1]" in capsys.readouterr().out

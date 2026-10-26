@@ -8,7 +8,7 @@ from pathlib import Path
 from lib.narrator_style import render_narrator_style
 
 
-def load_system_prompt(campaign_name: str | None = None) -> str:
+def load_system_prompt(campaign_name: str | None = None, include_cinematic: bool = True) -> str:
     """Build the DM system prompt for a specific campaign.
 
     Combines the compiled DM rules (dm-slots + the campaign's enabled modules),
@@ -20,6 +20,8 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
     Args:
         campaign_name: Campaign to build the prompt for. None → fall back to the
             global active campaign (legacy / CLI use).
+        include_cinematic: False leaves out the scene-art contract (its MCP tool
+            exists only in the web game; the online screen master has none).
 
     Returns:
         str: DM rules + narrator style + campaign rules.
@@ -74,9 +76,11 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
                 with open(overview_path) as f:
                     overview = json.load(f)
                 rendered = render_narrator_style(project_root, overview.get("narrator_style"))
+                if not rendered:
+                    rendered = _campaign_narrator(overview)
                 if rendered:
                     narrator_style = f"\n---\n{rendered}\n"
-            except (json.JSONDecodeError, IOError):
+            except (ValueError, IOError):  # JSONDecodeError and a malformed style id are ValueErrors
                 pass
 
     if not narrator_style:
@@ -100,7 +104,7 @@ def load_system_prompt(campaign_name: str | None = None) -> str:
     # generation; Claude receives the equivalent in-process MCP tool.
     cinematic_context = (
         _cinematic_context(project_root, campaign_name)
-        if campaign_name
+        if campaign_name and include_cinematic
         else ""
     )
 
@@ -127,6 +131,22 @@ Be descriptive, engaging, and fair. Follow D&D 5e rules. Make the game fun!
 """
 
     return system_prompt
+
+
+def _campaign_narrator(overview: dict) -> str:
+    """The campaign's own narrator text (campaign_rules.narrator) for a style id that has no file.
+
+    Imported and hand-made campaigns name their style ("pratchett") and describe it in
+    campaign_rules instead of shipping a narrator-styles file; without this the prompt
+    fell back to epic-heroic, the opposite voice.
+    """
+    rules = overview.get("campaign_rules")
+    text = rules.get("narrator") if isinstance(rules, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    style = overview.get("narrator_style")
+    name = style.strip() if isinstance(style, str) and style.strip() else "Campaign"
+    return f"# Narrator Style: {name}\n\n{text.strip()}"
 
 
 def _campaign_context(project_root: Path, campaign_name: str) -> str:
