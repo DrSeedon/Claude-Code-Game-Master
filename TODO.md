@@ -11,6 +11,11 @@ commit by SHA until GitHub Support purges it. `.env.*` is ignored except `.env.e
 runs again; code expressions such as `password = parse_qs(...)` no longer count as literals. Still open: the keys were
 public for two days, so the owner revokes the Deepgram key and that ElevenLabs key and issues new ones (then laptop
 `.env` → VPS `.env`), and asks GitHub Support to purge the orphaned commit and cached views.
+This repository is a fork of `Sstobo/Claude-Code-Game-Master` (a network of 33): checked after the force push, the old
+commits still serve `.env.bak` by SHA through this repository and through the upstream's URLs alike (the public push
+events list the SHA). Forks share one object store, so deleting and recreating this fork would not remove them; only
+the GitHub Support "remove sensitive data" request does (all eight pre-rewrite SHAs from the Codex DM hooks commit up
+to the untrack commit).
 The guard crash itself (found 2026-10-25, fixed 2026-10-27): `value_findings` and `pattern_findings` read every tracked
 path, and `.agents/skills/*` are tracked symlinks to directories, so both tests died with `IsADirectoryError`.
 
