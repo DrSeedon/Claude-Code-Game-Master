@@ -47,3 +47,9 @@ def test_smoke_script_with_action(make_table, monkeypatch, capsys):
 def test_smoke_script_without_password(monkeypatch, capsys):
     monkeypatch.delenv("DM_E2E_PASSWORD", raising=False)
     assert load_script().main(["--url", "http://127.0.0.1:1"]) == 2
+
+
+def test_a_network_failure_is_a_status_not_a_traceback():
+    client = load_script().Client("http://127.0.0.1:9", timeout=2)        # nothing listens on the discard port
+    status, _, body = client.request("GET", "/api/state")
+    assert status == 0 and body == b""

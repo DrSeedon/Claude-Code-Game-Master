@@ -36,13 +36,17 @@ class Client:
         self.opener = urllib.request.build_opener(NoRedirect, urllib.request.HTTPCookieProcessor(self.jar))
 
     def request(self, method, path, data=None, headers=None, timeout=None):
-        """(status, headers, body bytes); a redirect or an error status is an answer here, not an exception."""
+        """(status, headers, body bytes); a redirect or an error status is an answer here, not an exception, and a
+        network failure (a timeout through the mirror) is status 0, so a long wait polls on instead of ending in a
+        traceback."""
         request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers or {})
         try:
             with self.opener.open(request, timeout=timeout or self.timeout) as response:
                 return response.status, response.headers, response.read()
         except urllib.error.HTTPError as err:
             return err.code, err.headers, err.read()
+        except (urllib.error.URLError, OSError):
+            return 0, {}, b""
 
     def cookie_names(self):
         return {c.name for c in self.jar}
