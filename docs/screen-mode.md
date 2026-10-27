@@ -159,7 +159,7 @@ The same screen runs online at https://dnd-play.seedon.ru (owner decision 2026-1
 
 - `dnd-play.service` on the VPS runs `python -m backend.screen_driver`. The driver runs the screen server on `127.0.0.1:18116`, collects player actions, sends them to the master as `[screen #N] who (source): text` lines (its own notices start with `[system] `; names and texts are kept to one line) and expects one published turn per message. Actions delivered before a restart or a failed turn and never answered go to the master again once. While the driver runs, `dm-screen.sh listen` and `wait` refuse its screen and the web game master refuses its campaign.
 - The master is a full Claude Code session in the repository, limited by its contract `.claude/additional/infrastructure/screen-driver-contract.md`: it plays, switches the online campaign when the players ask, and may fix, test, commit and push a tool that blocks play. It never starts or waits for the screen and never spends credits itself.
-- nginx on the VPS checks the password, limits request rates and sets the security headers; `dnd-play.seedon.ru` reaches it through the RU mirror. Speech plays only when a player presses 🔊; sound generation is off.
+- The password goes into the screen's own login page in the act's theme (owner 2026-10-27, no browser basic-auth box): `lib/screen/gate.py` checks it against a scrypt hash and sets a signed cookie for 30 days. nginx on the VPS asks the screen `GET /_auth` before every request and fails closed, limits request rates and sets the security headers; `dnd-play.seedon.ru` reaches it through the RU mirror. Speech plays only when a player presses 🔊; sound generation is off.
 
 Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit also sets the online values below as defaults). For the screen server 0 means no cap, which is the laptop default. Under a credit cap the page hides its Auto speech switch.
 
@@ -170,6 +170,7 @@ Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit al
 | `DM_SCREEN_SOUND_GENERATION` | 0 | 0: sounds only from the library and free sources (default 1) |
 | `DM_SCREEN_MAX_PENDING` | 10 | `/api/action` answers 429 while more actions wait for the master |
 | `DM_SCREEN_DAILY_VOICE_MB` | 200 | microphone megabytes a day |
+| `DM_SCREEN_LOGIN_FILE` | `/etc/dnd-play/login.json` (set by the unit) | turns the password gate on: `{"password": scrypt hash, "key": cookie key}` from `python -m lib.screen.gate config`; unset on the laptop |
 | `DM_SCREEN_PUBLIC_URL` | `https://dnd-play.seedon.ru/` | shown by status and start |
 | `DM_SCREEN_SPEND_FILE` | `world-state/usage/screen-spend.json` (set by the driver) | one daily ledger for every campaign of the table; default `<screen>/spend.json` |
 | `DM_PLAY_MODEL`, `DM_PLAY_EFFORT` | `claude-sonnet-5-5`, `medium` | the master |

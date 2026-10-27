@@ -1,7 +1,8 @@
 # play-158-220-127-161.sslip.io: the online HTML screen table on Contabo (owner decision 2026-10-26).
 # The public name https://dnd-play.seedon.ru goes through the RU mirror (89.23.102.244, vhost dnd-play-mirror),
 # which proxies to this vhost; this name also answers directly. Upstream: the screen server of dnd-play.service on
-# 127.0.0.1:18116. The password (basic auth) and the security headers live HERE, for both names.
+# 127.0.0.1:18116. The password gate (auth_request to the screen's lib/screen/gate.py) and the security headers live
+# HERE, for both names.
 # Installed as /etc/nginx/sites-available/dnd-play-sslip, linked from sites-enabled, so this file is included
 # inside the http block (zones and log_format below are http-level).
 #
@@ -16,6 +17,12 @@ limit_req_zone $binary_remote_addr zone=dnd_play_voice:1m rate=6r/m;
 limit_req_zone $binary_remote_addr zone=dnd_play_speech:1m rate=6r/m;
 limit_req_zone $binary_remote_addr zone=dnd_play_log:1m rate=60r/m;
 limit_conn_zone $binary_remote_addr zone=dnd_play_conn:1m;
+# Password tries: only POST /login counts (an empty key is not limited), so reloading the form costs nothing.
+map $request_method $dnd_play_login_key {
+    POST $binary_remote_addr;
+    default "";
+}
+limit_req_zone $dnd_play_login_key zone=dnd_play_login:1m rate=6r/m;
 
 # $uri, not $request, and no referer: the page sends the screen token as ?token= on /api/events and /audio/.
 log_format dnd_play '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
@@ -57,9 +64,14 @@ server {
     real_ip_header X-Forwarded-For;
     real_ip_recursive on;
 
-    # One shared password for the table; the file holds only a hash (README: htpasswd).
-    auth_basic "DnD";
-    auth_basic_user_file /etc/nginx/dnd-play.htpasswd;
+    # One shared password for the table, typed into the screen's own login page (owner 2026-10-27: no browser
+    # basic-auth box). Every request first asks the screen GET /_auth: 204 passes it, 401 sends the page to /login and
+    # any other call to a JSON 401; no answer or a broken gate file (/etc/dnd-play/login.json, README) is a 500, so
+    # the gate fails closed. Server-wide, so a new location is gated unless it says "auth_request off".
+    auth_request /_auth;
+    error_page 401 = @dnd_play_login;
+    # Relative redirects: a guest of dnd-play.seedon.ru must stay on that name, not get sent to this one.
+    absolute_redirect off;
 
     add_header X-Robots-Tag "noindex, nofollow" always;
     add_header X-Content-Type-Options nosniff always;
@@ -85,7 +97,7 @@ server {
 
     # The screen server accepts only Host 127.0.0.1:<port> or localhost:<port>.
     proxy_set_header Host 127.0.0.1:18116;
-    # The password stops at this hop.
+    # Nothing reads Authorization behind this hop.
     proxy_set_header Authorization "";
     proxy_http_version 1.1;
     # Server-Sent Events (/api/events, a ping every 15 s) and long speech renders.
@@ -97,6 +109,36 @@ server {
     location / {
         limit_req zone=dnd_play_all burst=60 nodelay;
         proxy_pass http://127.0.0.1:18116;
+    }
+
+    # The gate check: a bodiless GET whatever the request was (the screen answers /_auth only to GET).
+    location = /_auth {
+        internal;
+        auth_request off;
+        proxy_method GET;
+        proxy_pass_request_body off;
+        # A proxy_set_header here replaces the server-level ones, so Host is repeated.
+        proxy_set_header Host 127.0.0.1:18116;
+        proxy_set_header Authorization "";
+        proxy_set_header Content-Length "";
+        proxy_pass http://127.0.0.1:18116;
+    }
+
+    # The login page and the password form.
+    location = /login {
+        auth_request off;
+        limit_req zone=dnd_play_all burst=60 nodelay;
+        limit_req zone=dnd_play_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:18116;
+    }
+
+    location @dnd_play_login {
+        auth_request off;
+        if ($uri = "/") {
+            return 302 /login;
+        }
+        default_type application/json;
+        return 401 '{"error":"sign in first","login":true}';
     }
 
     location = /api/action {
@@ -124,11 +166,13 @@ server {
     }
 
     location @dnd_play_busy {
+        auth_request off;
         default_type application/json;
         return 429 '{"error":"too many requests, wait a minute","limit":"rate"}';
     }
 
     location @dnd_play_large {
+        auth_request off;
         default_type application/json;
         return 413 '{"error":"too large"}';
     }

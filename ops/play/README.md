@@ -4,7 +4,7 @@ The HTML screen online behind a password: one shared table, campaign `pratchett-
 
 ```
 guest -> dnd-play.seedon.ru (RU host 89.23.102.244, vhost dnd-play-mirror)
-      -> play-158-220-127-161.sslip.io (Contabo 158.220.127.161, vhost dnd-play-sslip: password, limits, headers)
+      -> play-158-220-127-161.sslip.io (Contabo 158.220.127.161, vhost dnd-play-sslip: password gate, limits, headers)
       -> 127.0.0.1:18116 (dnd-play.service: backend.screen_driver = screen server + master)
 ```
 
@@ -22,6 +22,7 @@ guest -> dnd-play.seedon.ru (RU host 89.23.102.244, vhost dnd-play-mirror)
 - On the RU host touch only `dnd-play-mirror` (its file and its link). Never a seedon.ru record at 158.220.127.161, never `dnd.seedon.ru`.
 - Git on the VPS only as `kesha`, never root. `sudo` works through a fresh SSH session (`ssh kesha@158.220.127.161 'sudo ...'`; from an Orchestra agent on the VPS use `ssh kesha@localhost`).
 - Keys are checked by name only; never print a value. The site password lives only in the laptop `.env` (`DND_PLAY_PASSWORD`); the servers keep its hash.
+- The password is typed into the screen's own login page (owner 2026-10-27), never a browser basic-auth box: nginx asks the screen `GET /_auth` before every request (`lib/screen/gate.py`) and fails closed.
 - Commands below run from the laptop repository root. `VPS=kesha@158.220.127.161`, `RU=root@89.23.102.244`.
 
 ## 1. Code on the VPS
@@ -93,10 +94,10 @@ Expected: the unit is active, the status shows the campaign and a state of `idle
 ```bash
 grep -q '^DND_PLAY_PASSWORD=' .env || printf '\nDND_PLAY_PASSWORD=%s\n' "$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 24)" >> .env
 uv run python -c 'from dotenv import dotenv_values; print(dotenv_values(".env")["DND_PLAY_PASSWORD"])' \
-| openssl passwd -6 -stdin | sed 's/^/guest:/' \
-| ssh $VPS 'sudo sh -c "umask 027; cat > /etc/nginx/dnd-play.htpasswd" && sudo chgrp www-data /etc/nginx/dnd-play.htpasswd && sudo wc -l /etc/nginx/dnd-play.htpasswd'
+| uv run python -m lib.screen.gate config \
+| ssh $VPS 'sudo sh -c "umask 027; cat > /etc/dnd-play/login.json.new && chgrp kesha /etc/dnd-play/login.json.new && mv /etc/dnd-play/login.json.new /etc/dnd-play/login.json" && sudo stat -c "%U:%G %a" /etc/dnd-play/login.json'
 ```
-The login is `guest`. nginx reads the file on every request: to rotate, change `DND_PLAY_PASSWORD` and run this step again.
+Expected: `root:kesha 640`. The gate file (`DM_SCREEN_LOGIN_FILE` in the unit) holds the password's scrypt hash and the key that signs the 30-day login cookie; the screen server reads it as `kesha`, so the master can read it too (it is already inside). The screen reads it on every request: to rotate, change `DND_PLAY_PASSWORD` and run this step again; the new key signs every device out. Until the file exists the gate answers 500 and nobody gets in.
 
 ## 8. Contabo vhost: port 80, certificate, then 443
 ```bash
@@ -120,21 +121,25 @@ If `nginx -t` fails, `rm /etc/nginx/sites-enabled/dnd-play-mirror` at once: ever
 ## 10. Checks
 ```bash
 PW=$(uv run python -c 'from dotenv import dotenv_values; print(dotenv_values(".env")["DND_PLAY_PASSWORD"])')
-auth() { printf 'user = "guest:%s"\n' "$PW" | curl -K - "$@"; }
-for u in https://play-158-220-127-161.sslip.io/ https://dnd-play.seedon.ru/; do
-  curl -s -o /dev/null -w "$u no auth -> %{http_code}\n" "$u"     # 401
-  auth -s -o /dev/null -w "$u with auth -> %{http_code}\n" "$u"    # 200
+JAR=$(mktemp)
+for u in https://play-158-220-127-161.sslip.io https://dnd-play.seedon.ru; do
+  curl -s -o /dev/null -w "$u/ signed out -> %{http_code} %{redirect_url}\n" "$u/"                  # 302 $u/login
+  curl -s -o /dev/null -w "$u/api/state signed out -> %{http_code}\n" "$u/api/state"               # 401
+  curl -s -o /dev/null -w "$u/_auth -> %{http_code}\n" "$u/_auth"                                  # 404 (internal)
+  curl -s -o /dev/null -w "$u wrong password -> %{http_code}\n" --data-urlencode password=wrong "$u/login"   # 401
+  printf '%s' "$PW" | curl -s -o /dev/null -c "$JAR" -w "$u password -> %{http_code}\n" --data-urlencode password@- "$u/login"   # 303
+  curl -s -o /dev/null -b "$JAR" -w "$u/ signed in -> %{http_code}\n" "$u/"                        # 200
 done
 curl -s -o /dev/null -w '%{http_code}\n' http://dnd-play.seedon.ru/   # 301
-# realm "DnD" proves the answer came from the play vhost, not from a wildcard
-curl -s -D - -o /dev/null https://dnd-play.seedon.ru/ | grep -i '^www-authenticate'
-auth -s -D - -o /dev/null https://dnd-play.seedon.ru/ | grep -iE '^(content-security-policy|x-robots-tag)'
+# the form proves the answer came from the screen behind the play vhost, not from a wildcard
+curl -s https://dnd-play.seedon.ru/login | grep -c 'action="/login"'   # 1
+curl -s -b "$JAR" -D - -o /dev/null https://dnd-play.seedon.ru/ | grep -iE '^(content-security-policy|x-robots-tag)'
 # Server-Sent Events through both hops: "event: state" at once, ": ping" every 15 s (curl stops after 40 s)
-TOKEN=$(auth -s https://dnd-play.seedon.ru/ | grep -o 'data-token="[^"]*"' | cut -d'"' -f2)
-auth -sN --max-time 40 "https://dnd-play.seedon.ru/api/events?token=$TOKEN" | grep -E '^(event: state|: ping)'
-unset PW TOKEN
+TOKEN=$(curl -s -b "$JAR" https://dnd-play.seedon.ru/ | grep -o 'data-token="[^"]*"' | cut -d'"' -f2)
+curl -s -b "$JAR" -N --max-time 40 "https://dnd-play.seedon.ru/api/events?token=$TOKEN" | grep -E '^(event: state|: ping)'
+rm -f "$JAR"; unset PW TOKEN JAR
 ```
-Last, in a browser: open https://dnd-play.seedon.ru/, log in, press an option. The page shows the Master thinking, a turn arrives, and `bash tools/dm-play.sh status` on the VPS counts it.
+Last, in a browser: open https://dnd-play.seedon.ru/, sign in on the login page, press an option. The page shows the Master thinking, a turn arrives, and `bash tools/dm-play.sh status` on the VPS counts it.
 
 ## Operating
 - **Status:** `ssh $VPS 'cd ~/projects/dnd-game-master && bash tools/dm-play.sh status'` (state, campaign, session, turns this hour and today, last error).

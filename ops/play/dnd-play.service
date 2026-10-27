@@ -42,6 +42,9 @@ Environment=DISABLE_AUTOUPDATER=1
 # DM_SCREEN_SOUND_GENERATION as "generate" (the laptop defaults). The env file below overrides these.
 Environment=DM_SCREEN_DAILY_CREDITS=15000 DM_SCREEN_TURN_CREDITS=1500 DM_SCREEN_SOUND_GENERATION=0
 Environment=DM_SCREEN_MAX_PENDING=10 DM_SCREEN_DAILY_VOICE_MB=200
+# The password gate (lib/screen/gate.py, README step 7): here, not in the env file, so it cannot be dropped by an
+# edit. Without the file the gate answers 500 and nginx lets nobody in.
+Environment=DM_SCREEN_LOGIN_FILE=/etc/dnd-play/login.json
 # Caps and the model (ops/play/dnd-play.env.example), no secrets; the keys stay in the project .env. No leading
 # "-": without its caps file the unit does not start.
 EnvironmentFile=/etc/dnd-play/dnd-play.env

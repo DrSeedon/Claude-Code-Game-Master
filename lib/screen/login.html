@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="{{LANG}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><link rel="icon" href="data:,">
+<title>{{TITLE}}</title>
+<style>
+:root{--bg:#0d0b0a;--panel-rgb:28,22,18;--text:#ece5df;--muted:#a9a19a;--accent:#d9ad8c;--accent2:#d9d28c;--line:217,173,140;--radius:14px;--font:'Cormorant Garamond','PT Serif',Georgia,serif;--spacing:.1em}
+{{THEME_CSS}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);display:grid;place-items:center;overflow:hidden;padding:16px}
+#bg{position:fixed;inset:-48px;background:center/cover no-repeat;filter:blur(26px) saturate(1.2);opacity:.9;animation:fade 1.4s ease both}
+#shade{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,.08),rgba(0,0,0,.72) 80%)}
+.card{position:relative;width:min(100%,440px);padding:34px 34px 26px;background:rgba(var(--panel-rgb),.66);border:1px solid rgba(var(--line),.38);border-radius:var(--radius);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 28px 80px rgba(0,0,0,.55);animation:rise .7s both}
+.card.shake{animation:rise .7s both,shake .45s .15s}
+.kicker{display:flex;align-items:center;gap:.8em;letter-spacing:.35em;color:var(--accent);font-size:12px}
+.kicker i{width:.65em;height:.65em;border-radius:50%;background:#6fcf7f;box-shadow:0 0 .8em #6fcf7f;animation:glow 2.4s ease-in-out infinite}
+h1{margin:.5em 0 .3em;font-size:34px;line-height:1.12;font-weight:600;letter-spacing:var(--spacing);color:var(--accent)}
+.lead{margin:0 0 22px;padding-bottom:20px;border-bottom:1px solid rgba(var(--line),.3);color:var(--muted);font-size:16px;line-height:1.45}
+label{display:block;margin-bottom:8px;letter-spacing:.22em;font-size:12px;color:var(--accent);text-transform:uppercase}
+input[type=password]{width:100%;font:inherit;font-size:18px;color:var(--text);background:rgba(0,0,0,.38);border:1px solid rgba(var(--line),.4);border-radius:calc(var(--radius) * .7);padding:12px 14px;outline:none;transition:border-color .15s,box-shadow .15s}
+input[type=password]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--line),.18)}
+.err{margin:12px 0 0;color:#ff9e8c;font-size:15px}.err:empty{display:none}
+button{margin-top:16px;width:100%;font:inherit;font-size:17px;color:var(--text);background:rgba(var(--line),.18);border:1px solid var(--accent);border-radius:calc(var(--radius) * .7);padding:12px;cursor:pointer;transition:background .15s,transform .15s}
+button:hover{background:rgba(var(--line),.34);transform:translateY(-1px)}
+.note{margin:16px 0 0;color:var(--muted);font-size:13px;text-align:center}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+@keyframes fade{from{opacity:0}}
+@keyframes glow{50%{box-shadow:0 0 .2em #6fcf7f}}
+</style></head>
+<body>
+<div id="bg" style="{{BG_STYLE}}"></div><div id="shade"></div>
+<form class="card{{CARD_CLASS}}" method="post" action="/login">
+  <div class="kicker"><i></i>{{KICKER}}</div>
+  <h1>{{TITLE}}</h1>
+  <p class="lead">{{LEAD}}</p>
+  <input type="text" name="username" value="guest" autocomplete="username" hidden>
+  <label for="pw">{{LABEL}}</label>
+  <input type="password" id="pw" name="password" autocomplete="current-password" autofocus required>
+  <p class="err" role="alert">{{ERROR}}</p>
+  <button type="submit">{{BUTTON}}</button>
+  <p class="note">{{NOTE}}</p>
+</form>
+</body></html>

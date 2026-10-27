@@ -5,6 +5,8 @@ DM_SCREEN_TURN_CREDITS (speech and sound credits), DM_SCREEN_SOUND_GENERATION=0 
 DM_SCREEN_MAX_PENDING (actions waiting for the master) and DM_SCREEN_DAILY_VOICE_MB (microphone uploads a day).
 The daily ledger is <screen>/spend.json unless DM_SCREEN_SPEND_FILE names one (the online driver shares one file
 across campaigns, so a switch does not reset the day). A credit cap also turns the page's Auto speech off.
+DM_SCREEN_LOGIN_FILE turns on the password gate (lib/screen/gate.py): GET /login and POST /login, and GET /_auth
+for nginx's auth_request.
 """
 
 import json
@@ -21,12 +23,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, audio as audio_module, cli, eventlog, inbox, speech as speech_module, voice
+from . import activity, audio as audio_module, cli, eventlog, gate, inbox, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
 QUIET_PATHS = {"/api/state", "/api/events", "/api/clients", "/art.png"}
-MAX_UI_EVENTS, MAX_UI_BYTES, MAX_LOG_BODY = 50, 4000, 256 * 1024
+MAX_UI_EVENTS, MAX_UI_BYTES, MAX_LOG_BODY, MAX_LOGIN_BODY = 50, 4000, 256 * 1024, 4096
 _AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$|^ambient-[\w-]{1,60}\.mp3$")
 _LENGTH = re.compile(r"[0-9]{1,12}")
 _RANGE = re.compile(r"bytes=([0-9]*)-([0-9]*)")
@@ -207,6 +209,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
     voice_cap = _env_number("DM_SCREEN_DAILY_VOICE_MB") * 1024 * 1024
     render_lock, quota_lock, quota_cache = threading.Lock(), threading.Lock(), {"at": None, "value": None}
     action_lock = threading.Lock()
+    login_file = os.environ.get("DM_SCREEN_LOGIN_FILE", "").strip()
     # Under a credit budget speech plays only on a press of the speaker button: the page hides its Auto switch.
     auto_speech = not (daily_credits or turn_credits)
 
@@ -298,6 +301,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
 
         def _get(self):
             path = urlparse(self.path).path
+            if login_file and path in ("/_auth", "/login"):
+                return self._gate(path)
             if path == "/":
                 return self._page() if self._host_ok() else self._deny()
             if path.startswith("/audio/"):
@@ -330,6 +335,31 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     .replace("{{TOKEN}}", token)
                     .replace("{{TITLE}}", _escape(act.get("title", "Игровой экран"))))
             self._send(200, html.encode(), "text/html; charset=utf-8")
+
+        def _gate(self, path):
+            if not self._host_ok():
+                return self._deny()
+            config = gate.load(login_file)
+            signed_in = config is not None and gate.cookie_ok(config["key"], gate.read_cookie(self.headers.get("Cookie")))
+            if path == "/_auth":
+                # nginx auth_request: 204 lets the request through, 401 sends it to the login page, a broken gate file
+                # answers 500 and nginx then lets nobody in. Not logged: it comes before every request.
+                self.send_response(204 if signed_in else 401 if config else 500)
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                return self.end_headers()
+            if signed_in:
+                return self._send(303, b"", "text/plain; charset=utf-8", headers={"Location": "/"})
+            self._send(200 if config else 500, gate.login_page(screen_dir, None if config else "broken"), "text/html; charset=utf-8")
+
+        def _login(self, body):
+            config = gate.load(login_file)
+            password = parse_qs(body.decode("utf-8", "replace")).get("password", [""])[0]
+            if config is not None and password and gate.verify_password(password, config["password"]):
+                note("login", ok=True)
+                return self._send(303, b"", "text/plain; charset=utf-8", headers={"Location": "/", "Set-Cookie": gate.set_cookie(config["key"])})
+            note("login", ok=False)
+            self._send(401 if config else 500, gate.login_page(screen_dir, "wrong" if config else "broken"), "text/html; charset=utf-8")
 
         def _stream(self):
             self.send_response(200)
@@ -377,16 +407,19 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                 self._crash(exc)
 
         def _post(self):
-            if not self._authorized():
-                return self._deny()
             path = urlparse(self.path).path
+            login = bool(login_file) and path == "/login"
+            if not (self._host_ok() if login else self._authorized()):
+                return self._deny()
             raw = (self.headers.get("Content-Length") or "").strip()
             if not _LENGTH.fullmatch(raw):         # never read a body of unknown size: a negative one would block the thread
                 return self._send(400, {"error": "a Content-Length header with the body size is required"}, headers={"Connection": "close"})
             length = int(raw)
-            if length > (MAX_LOG_BODY if path == "/api/log" else MAX_AUDIO):
+            if length > (MAX_LOGIN_BODY if login else MAX_LOG_BODY if path == "/api/log" else MAX_AUDIO):
                 return self._send(413, {"error": "too large"}, headers={"Connection": "close"})
             body = self.rfile.read(length)
+            if login:
+                return self._login(body)
             if path == "/api/action":
                 return self._action(body)
             if path == "/api/voice":

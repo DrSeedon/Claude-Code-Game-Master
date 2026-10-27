@@ -1,9 +1,9 @@
 # dnd-play.seedon.ru: RU mirror of the online screen table on Contabo (158.220.127.161), owner decision 2026-10-26.
 # Same pattern as dnd-table-mirror: the company domain points to this RU IP, never to the German one. The upstream
 # is the Contabo vhost play-158-220-127-161.sslip.io (ops/play/nginx-dnd-play-sslip), which checks the password and
-# sends the security headers. This hop passes the guest's Authorization header through unchanged (nginx forwards
-# client headers by default) and appends the guest's address to X-Forwarded-For for the limits there. The screen
-# does not check Origin, so there is no Origin mapping.
+# sends the security headers. This hop passes the guest's login cookie and the password form through unchanged (nginx
+# forwards client headers and Set-Cookie by default) and appends the guest's address to X-Forwarded-For for the limits
+# there. The screen does not check Origin, so there is no Origin mapping.
 # Installed as /etc/nginx/sites-available/dnd-play-mirror, linked from sites-enabled (included inside http).
 # On this host touch only this file and its link.
 

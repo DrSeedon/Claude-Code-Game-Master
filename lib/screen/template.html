@@ -259,7 +259,7 @@ function connect(){const es=new EventSource('/api/events?token='+encodeURICompon
   es.addEventListener('state',e=>{$('live').classList.add('on');onState(JSON.parse(e.data))});
   es.onerror=()=>{$('live').classList.remove('on');uiLog('sse',{event:'error'});probe()}}
 let probing=false;
-function probe(){if(probing)return;probing=true;const tick=()=>fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>{probing=false;if(r.status===403)reloadWanted=true;else if(r.ok)setTimeout(()=>{if(!$('live').classList.contains('on'))reloadWanted=true},2500);else setTimeout(()=>{probing=false;probe()},2000)}).catch(()=>setTimeout(tick,2000));tick()}
+function probe(){if(probing)return;probing=true;const tick=()=>fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>{probing=false;if(r.status===403||r.status===401)reloadWanted=true;else if(r.ok)setTimeout(()=>{if(!$('live').classList.contains('on'))reloadWanted=true},2500);else setTimeout(()=>{probing=false;probe()},2000)}).catch(()=>setTimeout(tick,2000));tick()}
 fetch('/api/state',{headers:{'X-Screen-Token':TOKEN}}).then(r=>r.json()).then(onState).catch(e=>document.body.setAttribute('data-err',String(e&&e.stack||e)));
 if(!location.search.includes('nosse'))connect();
 
