@@ -130,3 +130,26 @@ def activities_from_hook(payload, lang="en"):
         if event:
             events.append(event)
     return events
+
+
+_SCENE_MOVE = re.compile(r"tools/dm-scene\.sh\b|tools/dm-session\.sh\s+move\b")
+_ACT_SET = re.compile(r"tools/dm-screen\.sh\s+act\b")
+
+
+def act_nudge(payload, act, online):
+    """A reminder for the Master when it moved the scene but left the act (header and picture) where it was: the
+    rule alone was not enough (playtest 2026-10-27: two moves to new places, no new act). None otherwise."""
+    if not isinstance(payload, dict) or payload.get("tool_name") != "Bash":
+        return None
+    tool_input = payload.get("tool_input")
+    command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    if not _SCENE_MOVE.search(command) or _ACT_SET.search(command):
+        return None
+    act = act if isinstance(act, dict) else {}
+    art = ('order its picture with `bash tools/dm-art.sh --prompt "<English scene description>"` (one to five minutes), '
+           if online else "generate its key art (the html-screen rule), ")
+    return (f"Screen: the scene moved, but the act on the screen still shows the place {act.get('place') or '(none)'!r} "
+            f"under the title {act.get('title') or '(none)'!r}. If the story now stays somewhere else, start a new act "
+            f"before you publish this turn: {art}then `bash tools/dm-screen.sh act --image <png> --title \"...\" "
+            f"--kicker \"...\" --place \"...\" --date \"...\"`. A short stop in the same place keeps the act.")
+

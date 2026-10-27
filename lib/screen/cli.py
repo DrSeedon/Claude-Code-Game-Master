@@ -144,14 +144,16 @@ def set_panels(sdir, panels):
 
 
 def run_hook(payload_text):
-    """PostToolUse: never fail, never print, do nothing unless the screen server is running."""
+    """PostToolUse: never fail, do nothing unless the screen server is running. It prints only Claude Code's hook JSON
+    when the Master moved the scene without a new act (hook.act_nudge)."""
     try:
         from . import activity, eventlog, hook
 
         sdir = screen_dir()
         if not server_info(sdir):
             return
-        lang = (_read(sdir / "act.json") or {}).get("lang", "en")
+        act = _read(sdir / "act.json") or {}
+        lang = act.get("lang", "en")
         payload = json.loads(payload_text)
         shown = hook.activities_from_hook(payload, lang)
         if shown or "dm-" in json.dumps(payload.get("tool_input") or {}):
@@ -160,6 +162,9 @@ def run_hook(payload_text):
             eventlog.log(sdir, "tool", command=(payload.get("tool_input") or {}).get("command", ""), output=output[:1500], shown=[e["text"] for e in shown])
         for event in shown:
             activity.append_activity(sdir, event["kind"], event["text"])
+        nudge = hook.act_nudge(payload, act, online=bool(os.environ.get("DM_PLAY_TABLE")))
+        if nudge:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": nudge}}))
     except Exception:
         return
 

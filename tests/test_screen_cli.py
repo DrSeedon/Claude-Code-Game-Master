@@ -76,6 +76,29 @@ def test_hook_records_when_server_is_running(sdir, monkeypatch):
     assert "health" in (sdir / "activity.jsonl").read_text()
 
 
+def test_hook_reminds_the_master_of_the_act_after_a_scene_move(sdir, monkeypatch, capsys):
+    import os
+
+    sdir.mkdir(parents=True)
+    (sdir / "server.json").write_text(json.dumps({"pid": os.getpid(), "port": 1, "token": "t"}))
+    (sdir / "act.json").write_text(json.dumps({"id": 1, "title": "Глава вторая", "place": "Дырявый Котёл", "lang": "ru"}))
+    monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
+    monkeypatch.setenv("DM_PLAY_TABLE", "demo")
+
+    def run(command):
+        cli.run_hook(json.dumps({"tool_name": "Bash", "tool_input": {"command": command}, "tool_response": {"stdout": ""}}))
+        out = capsys.readouterr().out
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"] if out.strip() else None
+
+    nudge = run('bash tools/dm-scene.sh "Библиотека Университета"')
+    assert "Дырявый Котёл" in nudge and "tools/dm-art.sh" in nudge and "dm-screen.sh act" in nudge
+    assert run("bash tools/dm-session.sh move 'Болота'") is not None
+    assert run('bash tools/dm-scene.sh "x" && bash tools/dm-screen.sh act --image a.png --title T') is None   # done already
+    assert run("bash tools/dm-player.sh hp x -1") is None
+    monkeypatch.delenv("DM_PLAY_TABLE")                                     # at the laptop: no hub picture service
+    assert "dm-art.sh" not in run('bash tools/dm-scene.sh "x"')
+
+
 def test_hook_never_raises_on_garbage(sdir, monkeypatch):
     monkeypatch.setenv("DM_SCREEN_DIR", str(sdir))
 

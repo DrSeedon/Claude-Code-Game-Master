@@ -5,11 +5,17 @@
 # Clear inherited VIRTUAL_ENV to prevent uv warnings
 unset VIRTUAL_ENV
 
-# Detect Python executable - prefer uv, fallback to python3/python
+# Detect Python executable - prefer uv, then the project's own venv, fallback to python3/python
 find_python() {
+    local venv_python
+    venv_python="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.venv/bin/python"
     # Try to find uv first
     if command -v uv >/dev/null 2>&1; then
         echo "uv run python"
+    # A shell without uv on PATH (a plain ssh session on the VPS) still gets the project's dependencies (python-dotenv
+    # and the rest); the system python3 lacks them (dm-screen.sh log failed there, 2026-10-27).
+    elif [ -x "$venv_python" ]; then
+        echo "$venv_python"
     elif command -v python3 >/dev/null 2>&1; then
         echo "python3"
     elif command -v python >/dev/null 2>&1; then

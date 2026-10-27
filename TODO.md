@@ -1,5 +1,12 @@
 # TODO — DM System
 
+## Online master skips the act change on a move (found 2026-10-27, demo table playtest)
+Two moves of the party to new lasting places (the University library, then a swamp camp) got `dm-scene.sh` and a turn
+but no new act and no picture: the screen kept the tavern header and art while the story moved on. The contract made
+it a judgement call. Fixed 2026-10-27: the contract says a move to a new lasting place is a new act, and the screen's
+PostToolUse hook (`lib/screen/hook.py` `act_nudge`) tells the master, right after `dm-scene.sh` or `dm-session.sh move`,
+which place the act still shows and how to start a new one with art. Verify on the next playtest.
+
 ## Online master escapes its sandbox through /proc/<pid>/root (found 2026-10-27, art service review)
 `dnd-play` runs the master as `kesha` with `~/.ssh` hidden (TemporaryFileSystem) and the home read-only, but any other
 `kesha` process (Orchestra, the hub tunnel, the Kesha bot) is visible in `/proc`, and `/proc/<pid>/root` of a process
@@ -153,5 +160,5 @@ The fuzzy name lookup resolved `Максим Астраханцев` to `fact:np
 - [ ] **Web rate-limit wait ignores units** — `backend/providers/claude_sdk.py::_rate_limit_info` reads "try again in 5 hours" as 5 seconds. Fix: parse s/m/h like `backend/screen_driver.usage_limit`.
 - [ ] **Web stale resume is not recognised** — `backend/providers/claude_sdk.py::_is_stale_resume_error` misses CLI 2.1.3xx "No conversation found with session ID", so the web game retries a dead id 3 times and fails the turn. Fix: add the phrase (the online provider already does).
 - [ ] **Web connect failure leaves the CLI running** — `ClaudeSDKProvider._connect` never disconnects a client whose `connect()` failed or timed out. Fix: disconnect in an `except` (the online provider already does).
-- [ ] **`/favicon.ico` logs a 403 on every page load** — `lib/screen/server.py`; answer 204/404 before the token check without logging.
+- [x] **`/favicon.ico` logs a 403 on every page load** — fixed 2026-10-27: the page declares an empty icon (`<link rel="icon" href="data:,">`), so browsers no longer ask.
 - [ ] **Failed online turns are redelivered after a restart** — `backend/screen_driver.py` puts the range `(turn.answered, cursor]` back under the RESTARTED notice, including actions whose turn failed and that players were asked to repeat. Fix if unwanted: record `failed_through` in the status file.

@@ -177,7 +177,7 @@ Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit al
 | `DM_SCREEN_SPEND_FILE` | `world-state/usage/screen-spend.json` (set by the driver) | one daily ledger for every table and campaign; default `<screen>/spend.json` |
 | `DM_PLAY_MODEL`, `DM_PLAY_EFFORT` | `claude-sonnet-5-5`, `medium` | the master |
 | `DM_PLAY_MAX_TURNS_PER_HOUR`, `_PER_DAY` | 30, 200 | master turns |
-| `DM_PLAY_TURN_TIMEOUT` | 600 | seconds before a master turn is interrupted |
+| `DM_PLAY_TURN_TIMEOUT` | 900 | seconds before a master turn is interrupted (a new act waits for its picture) |
 | `DM_PLAY_TABLE`, `DM_PLAY_PORT` | `play`/`demo` (the unit), 18116/18118 (`/etc/dnd-play/<table>.env`) | which table, and its port for a new config |
 | `DM_PLAY_CONFIG` | `world-state/online-<table>.json` | the table state file |
 
