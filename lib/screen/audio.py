@@ -180,8 +180,9 @@ class Library:
 
 
 def download(url, opener=urllib.request.urlopen):
-    request = urllib.request.Request(url, headers={"User-Agent": "dm-screen/1.0"})
-    with opener(request, timeout=60) as response:
+    # Wikimedia refuses anonymous clients: its policy wants a name and a contact in the User-Agent.
+    request = urllib.request.Request(url, headers={"User-Agent": "dm-screen/1.0 (https://github.com/DrSeedon/Claude-Code-Game-Master)"})
+    with opener(request, timeout=120) as response:
         return response.read()
 
 

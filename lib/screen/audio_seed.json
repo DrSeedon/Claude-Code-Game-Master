@@ -1,5 +1,5 @@
 {
- "_note": "Free sounds for 'dm-screen.sh audio seed'. CC0 needs no credit; CC BY 4.0 shows its credit in the page (hover the music button). Kevin MacLeod's comedy tracks (Investigations, Fluffing a Duck, Monkeys Spinning Monkeys, Sneaky Snitch, Call to Adventure) are left out: players know them from countless YouTube videos.",
+ "_note": "Free sounds for 'dm-screen.sh audio seed'. CC0 needs no credit; CC BY 4.0 shows its credit in the page (hover the music button). Kevin MacLeod's comedy tracks (Investigations, Fluffing a Duck, Monkeys Spinning Monkeys, Sneaky Snitch, Call to Adventure) are left out: players know them from countless YouTube videos. Classical pieces for historical campaigns (added 2026-10-27, War and Peace): Musopen recordings (CC0 or public domain) and U.S. military band recordings (works of the U.S. federal government, public domain), all from Wikimedia Commons.",
  "sounds": [
   {
    "title": "The Old Tower Inn",
@@ -344,6 +344,86 @@
    "source": "incompetech",
    "license": "CC BY 4.0",
    "attribution": "«Moorland» Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+   "title": "Nocturne Op. 9 No. 2 (Chopin)",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Nocturne_Op._9_no._2_in_E_flat_major.mp3",
+   "kind": "music",
+   "tags": [
+    "salon",
+    "piano",
+    "evening",
+    "calm",
+    "elegant",
+    "nineteenth-century"
+   ],
+   "source": "wikimedia",
+   "license": "CC0",
+   "attribution": "«Nocturne Op. 9 No. 2» by Frédéric Chopin, Musopen recording (commons.wikimedia.org, CC0)"
+  },
+  {
+   "title": "Moonlight Sonata, I. Adagio sostenuto (Beethoven)",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/4/48/Ludwig_van_Beethoven_-_sonata_no._14_in_c_sharp_minor_%27moonlight%27%2C_op._27_no._2_-_i._adagio_sostenuto.ogg",
+   "kind": "music",
+   "tags": [
+    "piano",
+    "somber",
+    "night",
+    "melancholy",
+    "drama",
+    "nineteenth-century"
+   ],
+   "source": "wikimedia",
+   "license": "Public domain",
+   "attribution": "«Moonlight Sonata, I. Adagio sostenuto» by Ludwig van Beethoven, Musopen recording (commons.wikimedia.org, public domain)"
+  },
+  {
+   "title": "Waltz of the Flowers (Tchaikovsky)",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/P.I._Tchaikovsky%27s_Waltz_of_the_Flowers_Performed_by_The_U.S._Army_Band%2C_c._2019.mp3",
+   "kind": "music",
+   "tags": [
+    "ball",
+    "waltz",
+    "dance",
+    "elegant",
+    "aristocratic",
+    "nineteenth-century"
+   ],
+   "source": "wikimedia",
+   "license": "Public domain",
+   "attribution": "«Waltz of the Flowers» by Pyotr Tchaikovsky, The U.S. Army Band (commons.wikimedia.org, public domain)"
+  },
+  {
+   "title": "Radetzky March (Strauss)",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/USMC_Band_-_Radetzky_March.mp3",
+   "kind": "music",
+   "tags": [
+    "march",
+    "military",
+    "army",
+    "parade",
+    "cheerful",
+    "nineteenth-century"
+   ],
+   "source": "wikimedia",
+   "license": "Public domain",
+   "attribution": "«Radetzky March» by Johann Strauss I, \"The President's Own\" U.S. Marine Band (commons.wikimedia.org, public domain)"
+  },
+  {
+   "title": "1812 Overture (Tchaikovsky)",
+   "url": "https://upload.wikimedia.org/wikipedia/commons/1/1f/1812_Overture.ogg",
+   "kind": "music",
+   "tags": [
+    "war",
+    "battle",
+    "epic",
+    "russia",
+    "napoleon",
+    "nineteenth-century"
+   ],
+   "source": "wikimedia",
+   "license": "Public domain",
+   "attribution": "«1812 Overture» by Pyotr Tchaikovsky, The U.S. Army Band (commons.wikimedia.org, public domain)"
   }
  ]
 }

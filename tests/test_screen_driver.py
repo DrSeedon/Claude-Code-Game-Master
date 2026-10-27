@@ -1097,9 +1097,10 @@ def test_new_session_starts_a_fresh_master_on_the_same_campaign(tmp_path):
     assert load_runtime_session(table.sdir(), GM_SESSION).session_id == "sess-alpha"
 
 
-def test_the_notices_never_ask_for_a_picture():
+def test_the_session_notices_keep_the_act_and_ask_for_library_music():
     for notice in (FRESH, SWITCHED):
-        assert "keep the current act" in notice and "without art" in notice and "and an act" not in notice
+        assert "keeps the current act" in notice and "tools/dm-art.sh" in notice
+        assert "audio.music" in notice and '"generate": false' in notice
 
 
 def test_a_crash_outside_the_campaign_check_is_logged_with_its_traceback(monkeypatch, caplog):

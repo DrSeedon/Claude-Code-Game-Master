@@ -46,7 +46,12 @@ SCREEN_CAPS = ("DM_SCREEN_DAILY_CREDITS", "DM_SCREEN_TURN_CREDITS", "DM_SCREEN_S
 
 PUBLISH = "Publish it now with bash tools/dm-screen.sh turn --file <json>."
 NOT_PUBLISHED = f"[system] The turn was not published. {PUBLISH}"
-STANDS = "Show where the story stands now: publish a turn (keep the current act; if the screen has none, play without art)."
+# The music line is here, not only in the contract: after a switch the master took the rule for fresh sessions only
+# and the table stayed silent (2026-10-27).
+STANDS = ("Show where the story stands now: publish a turn that keeps the current act (a campaign without one gets an act "
+          "with its picture from bash tools/dm-art.sh). Give this turn audio.music and audio.ambience from the library "
+          "(bash tools/dm-screen.sh audio find \"<cue>\" --kind music, \"generate\": false): the table is silent until "
+          "a turn sets them.")
 FRESH = "[system] A fresh session starts at the online table, campaign {name}. " + STANDS
 SWITCHED = "[system] The table switched to campaign {name}. " + STANDS
 CARRIED = "[system] The previous message hit a usage limit and got no answer. Answer these actions now."
