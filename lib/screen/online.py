@@ -1,11 +1,14 @@
-"""The online table: which campaign the shared screen plays (world-state/online-play.json) and the driver's status.
+"""The online tables: which campaign each shared screen plays (world-state/online-<table>.json) and its driver's status.
 
 The driver (backend.screen_driver) reads the config between master turns and writes the status. CLI: tools/dm-play.sh.
+A table is named by DM_PLAY_TABLE (default "play", the first table: world-state/online-play.json); owner 2026-10-27:
+a second table ("demo") plays a copy of a campaign for guests beside the owner's own.
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -14,17 +17,45 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_CAMPAIGN = "pratchett-dungeon"
 DEFAULT_PORT = 18116
-CONFIG = "world-state/online-play.json"
-STATUS = "online-play-status.json"   # beside campaigns/: lib/screen/server.py reads it from there
+TABLE = "play"
+# No dashes: a config online-<table>.json can then never match the status pattern below.
+_TABLE_NAME = re.compile(r"[a-z][a-z0-9]{0,30}")
+STATUS_GLOB = "online-*-status.json"   # beside campaigns/: lib/screen/server.py reads them from there
 
 
-def config_path(root=PROJECT_ROOT):
-    path = Path(os.environ.get("DM_PLAY_CONFIG") or CONFIG)
+def table_name(table=None):
+    name = str(table or os.environ.get("DM_PLAY_TABLE") or TABLE).strip()
+    if not _TABLE_NAME.fullmatch(name):
+        raise ValueError(f"invalid table name {name!r}: lowercase letters and digits")
+    return name
+
+
+def default_port():
+    """A new table config's port: DM_PLAY_PORT (each further table needs its own), else 18116."""
+    try:
+        return int(os.environ.get("DM_PLAY_PORT") or DEFAULT_PORT)
+    except ValueError:
+        return DEFAULT_PORT
+
+
+def config_path(root=PROJECT_ROOT, table=None):
+    custom = os.environ.get("DM_PLAY_CONFIG") if table is None else None
+    path = Path(custom or f"world-state/online-{table_name(table)}.json")
     return path if path.is_absolute() else Path(root) / path
 
 
-def status_path(root=PROJECT_ROOT):
-    return Path(root) / "world-state" / STATUS
+def status_path(root=PROJECT_ROOT, table=None):
+    return Path(root) / "world-state" / f"online-{table_name(table)}-status.json"
+
+
+def table_names(root=PROJECT_ROOT):
+    """Every table with a config or a status file."""
+    names = set()
+    for path in (Path(root) / "world-state").glob("online-*.json"):
+        name = path.name[len("online-"):-len(".json")].removesuffix("-status")
+        if _TABLE_NAME.fullmatch(name):
+            names.add(name)
+    return sorted(names)
 
 
 def campaigns_dir(root=PROJECT_ROOT):
@@ -84,16 +115,16 @@ def normalize(raw, campaign=None):
         except (TypeError, ValueError):
             return default
 
-    config = {"campaign": str(raw.get("campaign") or campaign or DEFAULT_CAMPAIGN), "port": number("port", DEFAULT_PORT),
+    config = {"campaign": str(raw.get("campaign") or campaign or DEFAULT_CAMPAIGN), "port": number("port", default_port()),
               "paused": raw.get("paused") is True, "screen_restart": number("screen_restart", 0)}
     if raw.get("session_reset") is not None:   # only once `new-session` was used
         config["session_reset"] = number("session_reset", 0)
     return config
 
 
-def load_config(root=PROJECT_ROOT, campaign=None, create=False):
+def load_config(root=PROJECT_ROOT, campaign=None, create=False, table=None):
     """The table config; with `create`, a missing file is written with `campaign` (or the default campaign)."""
-    path = config_path(root)
+    path = config_path(root, table)
     raw = read_json(path)
     config = normalize(raw, campaign)
     if raw is None and create:
@@ -107,8 +138,8 @@ def update_config(root=PROJECT_ROOT, **changes):
     return config
 
 
-def read_status(root=PROJECT_ROOT):
-    return read_json(status_path(root))
+def read_status(root=PROJECT_ROOT, table=None):
+    return read_json(status_path(root, table))
 
 
 def write_status(status, root=PROJECT_ROOT):
@@ -125,15 +156,33 @@ def driver_alive(status):
     return True
 
 
-def live_campaign(root=PROJECT_ROOT):
-    """The campaign a running driver plays now, else None (the web game master leaves it alone meanwhile)."""
-    status = read_status(root)
+def _live(status):
     return status.get("campaign") if status and status.get("state") != "offline" and driver_alive(status) else None
+
+
+def live_campaign(root=PROJECT_ROOT):
+    """The campaign this table's running driver plays now, else None."""
+    return _live(read_status(root))
+
+
+def live_campaigns(root=PROJECT_ROOT):
+    """The campaigns running drivers play now on any table (the web game master leaves them alone meanwhile)."""
+    return {name for path in (Path(root) / "world-state").glob(STATUS_GLOB) if (name := _live(read_json(path)))}
+
+
+def other_table_with(campaign, root=PROJECT_ROOT):
+    """Another table set to play `campaign` (its config) or playing it now (its status), else None."""
+    own = table_name()
+    for table in table_names(root):
+        if table != own and campaign in (load_config(root, table=table)["campaign"] if config_path(root, table).is_file() else None,
+                                         _live(read_status(root, table))):
+            return table
+    return None
 
 
 def status_lines(root=PROJECT_ROOT):
     config, status = load_config(root), read_status(root)
-    lines = [f"config: campaign {config['campaign']}, port {config['port']}, paused {'yes' if config['paused'] else 'no'}, "
+    lines = [f"table {table_name()}: campaign {config['campaign']}, port {config['port']}, paused {'yes' if config['paused'] else 'no'}, "
              f"screen restarts {config['screen_restart']}"]
     if not status:
         return lines + ["driver: no status yet (not started)"]
@@ -155,9 +204,11 @@ def status_lines(root=PROJECT_ROOT):
 
 
 def main(argv=None, root=PROJECT_ROOT):
-    ap = argparse.ArgumentParser(prog="dm-play", description="the online screen table (driver: backend.screen_driver)")
+    ap = argparse.ArgumentParser(prog="dm-play", description="the online screen tables (driver: backend.screen_driver)")
+    ap.add_argument("--table", help=f"which table (default: DM_PLAY_TABLE, else {TABLE!r}); 'tables' lists them")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="the driver's state and the table config")
+    sub.add_parser("tables", help="every table: campaign, state, port")
     sw = sub.add_parser("switch", help="play another campaign; the driver switches after the current turn")
     sw.add_argument("campaign")
     sub.add_parser("restart-screen", help="restart the screen server (after a fix in lib/screen)")
@@ -165,13 +216,29 @@ def main(argv=None, root=PROJECT_ROOT):
     sub.add_parser("pause", help="stop answering actions; the screen stays up")
     sub.add_parser("resume", help="answer actions again")
     args = ap.parse_args(argv)
+    try:
+        if args.table:
+            os.environ["DM_PLAY_TABLE"] = table_name(args.table)
+            os.environ.pop("DM_PLAY_CONFIG", None)   # the named table's own file
+        table_name()
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.cmd == "status":
         print("\n".join(status_lines(root)))
+    elif args.cmd == "tables":
+        for table in table_names(root) or [TABLE]:
+            config, status = load_config(root, table=table), read_status(root, table)
+            state = (status.get("state") if driver_alive(status) else "offline") if status else "not started"
+            print(f"{table}: campaign {config['campaign']}, port {config['port']}, {state}")
     elif args.cmd == "switch":
         try:
             name = check_campaign(args.campaign, root)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if busy := other_table_with(name, root):
+            print(f"error: table {busy!r} plays {name}; two masters must never share a campaign (copy it instead)", file=sys.stderr)
             return 1
         update_config(root, campaign=name)
         print(f"switch to {name} requested: the driver ends the current turn, then starts a fresh session there")

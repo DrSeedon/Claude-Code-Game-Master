@@ -1,0 +1,26 @@
+# /etc/apparmor.d/dnd-play-master: the online table master, dnd-play@<table>.service (AppArmorProfile=dnd-play-master).
+# Why (TODO.md, found 2026-10-27): the master runs as kesha, and every other kesha process (Orchestra, the hub tunnel,
+# the bots) shows in /proc. /proc/<pid>/root of a process outside the unit is the host filesystem, so the unit's
+# hidden home and ~/.ssh were one path away. AppArmor mediates the ptrace access that /proc/<pid>/root, environ, mem
+# and fd need, and signals: this profile grants both only among its own processes. Files, network and IPC stay open;
+# the unit's mount sandbox decides what exists.
+# Install: sudo install -m 644 ops/play/apparmor-dnd-play-master /etc/apparmor.d/dnd-play-master &&
+#          sudo apparmor_parser -r /etc/apparmor.d/dnd-play-master
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile dnd-play-master flags=(attach_disconnected) {
+  file,
+  network,
+  unix,
+  dbus,
+  mqueue,
+  # The driver stops its children; systemd stops the unit.
+  signal (send, receive) peer=dnd-play-master,
+  signal (receive) peer=unconfined,
+  # Its own processes only: no /proc/<pid>/root, environ or fd of anything else.
+  ptrace (read, trace, readby, tracedby) peer=dnd-play-master,
+  # journald and an admin's ps may still read the master's own /proc entries.
+  ptrace (readby) peer=unconfined,
+}

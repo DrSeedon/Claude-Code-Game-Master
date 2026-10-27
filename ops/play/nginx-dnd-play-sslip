@@ -1,14 +1,22 @@
-# play-158-220-127-161.sslip.io: the online HTML screen table on Contabo (owner decision 2026-10-26).
-# The public name https://dnd-play.seedon.ru goes through the RU mirror (89.23.102.244, vhost dnd-play-mirror),
-# which proxies to this vhost; this name also answers directly. Upstream: the screen server of dnd-play.service on
-# 127.0.0.1:18116. The password gate (auth_request to the screen's lib/screen/gate.py) and the security headers live
-# HERE, for both names.
+# The online HTML screen tables on Contabo, one 443 server per table (owner decisions 2026-10-26 and 2026-10-27):
+#   play-158-220-127-161.sslip.io -> dnd-play@play (127.0.0.1:18116), public name https://dnd-play.seedon.ru (the owner's)
+#   demo-158-220-127-161.sslip.io -> dnd-play@demo (127.0.0.1:18118), public name https://dnd-demo.seedon.ru (guests)
+# The public names go through the RU mirror (89.23.102.244, vhost dnd-play-mirror), which proxies to these; the sslip
+# names also answer directly. The password gate, the security headers and the proxy live in the shared snippet
+# /etc/nginx/snippets/dnd-play-table.conf (ops/play/nginx-dnd-play-table.conf), included by each table's server.
 # Installed as /etc/nginx/sites-available/dnd-play-sslip, linked from sites-enabled, so this file is included
-# inside the http block (zones and log_format below are http-level).
+# inside the http block (zones, maps and log_format below are http-level). The limit zones are shared: one guest's
+# rate counts across both tables.
 #
-# Two phases (ops/play/README.md): the 443 server needs its certificate, so first install this file WITHOUT the
-# lines from "# ---- 443 BEGIN" to "# ---- 443 END", issue the certificate with certbot (webroot /var/www/html,
-# like table-158-220-127-161.sslip.io), then install the whole file.
+# A new table's 443 server needs its certificate, so first install this file WITHOUT that table's lines from
+# "# ---- <table> 443 BEGIN" to "# ---- <table> 443 END", issue the certificate with certbot (webroot /var/www/html,
+# like table-158-220-127-161.sslip.io), then install the whole file (ops/play/README.md).
+
+# Each table's screen server port, by the server that took the request.
+map $server_name $dnd_play_port {
+    play-158-220-127-161.sslip.io 18116;
+    demo-158-220-127-161.sslip.io 18118;
+}
 
 # Per-client limits. The client is the guest, not the mirror: see set_real_ip_from below.
 limit_req_zone $binary_remote_addr zone=dnd_play_all:1m rate=10r/s;
@@ -31,7 +39,7 @@ log_format dnd_play '$remote_addr - $remote_user [$time_local] "$request_method 
 server {
     listen 80;
     listen [::]:80;
-    server_name play-158-220-127-161.sslip.io;
+    server_name play-158-220-127-161.sslip.io demo-158-220-127-161.sslip.io;
     access_log /var/log/nginx/dnd-play-access.log dnd_play;
 
     location ^~ /.well-known/acme-challenge/ {
@@ -44,7 +52,7 @@ server {
     }
 }
 
-# ---- 443 BEGIN: enable only after certbot issued /etc/letsencrypt/live/play-158-220-127-161.sslip.io/
+# ---- play 443 BEGIN: enable only after certbot issued /etc/letsencrypt/live/play-158-220-127-161.sslip.io/
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
@@ -58,123 +66,24 @@ server {
     access_log /var/log/nginx/dnd-play-access.log dnd_play;
     error_log /var/log/nginx/dnd-play-error.log warn;
 
-    # dnd-play.seedon.ru arrives from the RU mirror, which appends the guest's address to X-Forwarded-For.
-    # Only that hop is trusted, so a guest cannot forge an address; direct clients keep their own.
-    set_real_ip_from 89.23.102.244;
-    real_ip_header X-Forwarded-For;
-    real_ip_recursive on;
-
-    # One shared password for the table, typed into the screen's own login page (owner 2026-10-27: no browser
-    # basic-auth box). Every request first asks the screen GET /_auth: 204 passes it, 401 sends the page to /login and
-    # any other call to a JSON 401; no answer or a broken gate file (/etc/dnd-play/login.json, README) is a 500, so
-    # the gate fails closed. Server-wide, so a new location is gated unless it says "auth_request off".
-    auth_request /_auth;
-    error_page 401 = @dnd_play_login;
-    # Relative redirects: a guest of dnd-play.seedon.ru must stay on that name, not get sent to this one.
-    absolute_redirect off;
-
-    add_header X-Robots-Tag "noindex, nofollow" always;
-    add_header X-Content-Type-Options nosniff always;
-    add_header Referrer-Policy same-origin always;
-    add_header Permissions-Policy "microphone=(self), camera=(), geolocation=()" always;
-    # lib/screen/template.html has an inline <script> and <style> and writes inline style attributes; art, audio
-    # and API calls come from this origin only.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" always;
-
-    # Microphone recordings: the screen server accepts up to 8 MiB.
-    client_max_body_size 8m;
-    limit_conn dnd_play_conn 20;
-    limit_req_status 429;
-    limit_conn_status 429;
-    # Refusals show in the access log as 429; at the default error level they would also write the request line,
-    # token included, into the error log.
-    limit_req_log_level info;
-    limit_conn_log_level info;
-    # The page reads the JSON "error" of a failed call, so nginx's own refusals answer in that shape; "limit": "rate"
-    # tells them from the screen server's own 429s (pending actions, the microphone day).
-    error_page 429 = @dnd_play_busy;
-    error_page 413 = @dnd_play_large;
-
-    # The screen server accepts only Host 127.0.0.1:<port> or localhost:<port>.
-    proxy_set_header Host 127.0.0.1:18116;
-    # Nothing reads Authorization behind this hop.
-    proxy_set_header Authorization "";
-    proxy_http_version 1.1;
-    # Server-Sent Events (/api/events, a ping every 15 s) and long speech renders.
-    proxy_buffering off;
-    proxy_read_timeout 3600s;
-    proxy_send_timeout 3600s;
-    # Request buffering stays on: the screen server reads Content-Length and never a chunked body.
-
-    location / {
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    # The gate check: a bodiless GET whatever the request was (the screen answers /_auth only to GET).
-    location = /_auth {
-        internal;
-        auth_request off;
-        proxy_method GET;
-        proxy_pass_request_body off;
-        # A proxy_set_header here replaces the server-level ones, so Host is repeated.
-        proxy_set_header Host 127.0.0.1:18116;
-        proxy_set_header Authorization "";
-        proxy_set_header Content-Length "";
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    # The login page and the password form.
-    location = /login {
-        auth_request off;
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        limit_req zone=dnd_play_login burst=5 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    location @dnd_play_login {
-        auth_request off;
-        if ($uri = "/") {
-            return 302 /login;
-        }
-        default_type application/json;
-        return 401 '{"error":"sign in first","login":true}';
-    }
-
-    location = /api/action {
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        limit_req zone=dnd_play_action burst=5 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    location = /api/voice {
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        limit_req zone=dnd_play_voice burst=3 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    location = /api/speech/render {
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        limit_req zone=dnd_play_speech burst=3 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    location = /api/log {
-        limit_req zone=dnd_play_all burst=60 nodelay;
-        limit_req zone=dnd_play_log burst=30 nodelay;
-        proxy_pass http://127.0.0.1:18116;
-    }
-
-    location @dnd_play_busy {
-        auth_request off;
-        default_type application/json;
-        return 429 '{"error":"too many requests, wait a minute","limit":"rate"}';
-    }
-
-    location @dnd_play_large {
-        auth_request off;
-        default_type application/json;
-        return 413 '{"error":"too large"}';
-    }
+    include /etc/nginx/snippets/dnd-play-table.conf;
 }
-# ---- 443 END
+# ---- play 443 END
+
+# ---- demo 443 BEGIN: enable only after certbot issued /etc/letsencrypt/live/demo-158-220-127-161.sslip.io/
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name demo-158-220-127-161.sslip.io;
+
+    ssl_certificate /etc/letsencrypt/live/demo-158-220-127-161.sslip.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/demo-158-220-127-161.sslip.io/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    access_log /var/log/nginx/dnd-demo-access.log dnd_play;
+    error_log /var/log/nginx/dnd-demo-error.log warn;
+
+    include /etc/nginx/snippets/dnd-play-table.conf;
+}
+# ---- demo 443 END

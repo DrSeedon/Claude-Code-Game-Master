@@ -2,8 +2,9 @@
 
 The driver owns the screen server (a child process), collects the players' actions from the screen inbox and sends
 them to the master in batches; the master answers each message with a screen turn (dm-screen.sh turn). Between
-batches it follows world-state/online-play.json (pause, campaign switch, screen restart, see lib/screen/online.py)
-and writes world-state/online-play-status.json, which the page shows. Run: python -m backend.screen_driver.
+batches it follows world-state/online-<table>.json (pause, campaign switch, screen restart, see lib/screen/online.py)
+and writes world-state/online-<table>-status.json, which the page shows. The table is DM_PLAY_TABLE (default "play");
+each table is its own unit, port and campaign. Run: python -m backend.screen_driver.
 """
 
 from __future__ import annotations
@@ -187,7 +188,8 @@ def build_prompt(root, campaign, sdir, base_prompt=None, context=None):
 
 def spawn_screen_server(root, sdir, campaign, port):
     """The screen server for one campaign; it reads its keys and caps itself (project .env, DM_SCREEN_* env). The
-    daily spend ledger is the table's, not the campaign's: a campaign switch must not reset the day's budget."""
+    daily spend ledger is shared by every table and campaign: a switch must not reset the day's budget, and a second
+    table must not double it."""
     sdir.mkdir(parents=True, exist_ok=True)
     spend = os.environ.get("DM_SCREEN_SPEND_FILE") or str(Path(root) / "world-state" / "usage" / "screen-spend.json")
     with open(sdir / "server.log", "ab") as log:
@@ -216,7 +218,7 @@ class ScreenDriver:
         self.prompt_builder = prompt_builder or build_prompt
         self.clock = clock
         self.campaign = None
-        self.port = online.DEFAULT_PORT
+        self.port = online.default_port()
         self.paused = False
         self.screen_restart_seen = 0
         self.provider = None
@@ -304,6 +306,8 @@ class ScreenDriver:
             logger.warning("removed %s from the environment: the master thinks on the subscription", ", ".join(removed))
         config = online.load_config(self.root, campaign=self.campaign_arg, create=True)
         campaign = online.check_campaign(config["campaign"], self.root)
+        if busy := online.other_table_with(campaign, self.root):   # two masters writing one campaign
+            raise online.CampaignError(f"table {busy!r} plays {campaign}: give this table another campaign (a copy)")
         self.port, self.paused, self.screen_restart_seen = config["port"], config["paused"], config["screen_restart"]
         self.session_reset_seen = config.get("session_reset", 0)
         previous = online.read_status(self.root) or {}
@@ -311,8 +315,8 @@ class ScreenDriver:
         self.turn_times = [float(t) for t in previous.get("turn_times") or [] if isinstance(t, (int, float)) and now - t < 86400]
         self.last_turn_at = previous.get("last_turn_at")
         s = self.settings
-        logger.info("driver pid %s: campaign %s, port %s, model %s, effort %s, caps %s/hour %s/day, turn timeout %ss",
-                    os.getpid(), campaign, self.port, s.model, s.effort, s.max_turns_hour, s.max_turns_day, s.turn_timeout)
+        logger.info("driver pid %s: table %s, campaign %s, port %s, model %s, effort %s, caps %s/hour %s/day, turn timeout %ss",
+                    os.getpid(), online.table_name(), campaign, self.port, s.model, s.effort, s.max_turns_hour, s.max_turns_day, s.turn_timeout)
         logger.info("screen limits: %s", ", ".join(f"{key}={os.environ.get(key, 'unset')}" for key in SCREEN_CAPS))
         async with self.child_lock:
             await self.open_campaign(campaign, fresh=False)
@@ -455,7 +459,7 @@ class ScreenDriver:
         self.write_status()
 
     async def reconcile(self):
-        """Between turns: pause, the campaign switch and a fresh session from world-state/online-play.json."""
+        """Between turns: pause, the campaign switch and a fresh session from world-state/online-<table>.json."""
         raw = online.read_json(online.config_path(self.root))
         if raw is None:
             return
@@ -473,6 +477,8 @@ class ScreenDriver:
             return
         try:
             name = online.check_campaign(target, self.root)
+            if busy := online.other_table_with(name, self.root):   # a hand edit past dm-play.sh switch's check
+                raise online.CampaignError(f"table {busy!r} plays {name}")
         except ValueError as exc:
             if self.bad_campaign != target:
                 logger.error("[%s] switch refused: %s", self.campaign, exc)
@@ -713,7 +719,7 @@ class ScreenDriver:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="screen_driver", description=__doc__.splitlines()[0])
-    ap.add_argument("--campaign", help=f"campaign for a new world-state/online-play.json (default {online.DEFAULT_CAMPAIGN})")
+    ap.add_argument("--campaign", help=f"campaign for a new world-state/online-<table>.json (default {online.DEFAULT_CAMPAIGN})")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(levelname)s %(name)s: %(message)s")
     driver = ScreenDriver(campaign=args.campaign)

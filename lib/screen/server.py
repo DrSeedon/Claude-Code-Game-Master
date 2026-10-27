@@ -36,7 +36,7 @@ POLL_SECONDS = 0.3
 PING_SECONDS = 15
 QUOTA_SECONDS = 60
 SPEND, SPEND_DAYS = "spend.json", 14
-MASTER_STATUS = "online-play-status.json"
+MASTER_STATUS = "online-*-status.json"   # one per online table (lib/screen/online.py)
 _SPEND_LOCK = threading.Lock()
 
 
@@ -119,19 +119,24 @@ def _alive(pid):
     return True
 
 
-def _status_file(screen_dir):
+def _status_files(screen_dir):
     campaign = Path(screen_dir).parent
-    return campaign.parent.parent / MASTER_STATUS if campaign.parent.name == "campaigns" else None
+    return sorted(campaign.parent.parent.glob(MASTER_STATUS)) if campaign.parent.name == "campaigns" else []
 
 
 def master_status(screen_dir):
-    """The online master's state for the page, when world-state/online-play-status.json says it plays this campaign."""
-    path = _status_file(screen_dir)
-    status = _read_json(path) if path else None
-    if not isinstance(status, dict) or status.get("campaign") != Path(screen_dir).parent.name:
-        return None
-    state = status.get("state") if not status.get("pid") or _alive(status["pid"]) else "offline"
-    return {"state": state, "last_error": status.get("last_error")}
+    """The online master's state for the page, when a table's world-state/online-<table>-status.json says it plays this
+    campaign (a live table's word wins over a stopped one's)."""
+    found = None
+    for path in _status_files(screen_dir):
+        status = _read_json(path)
+        if not isinstance(status, dict) or status.get("campaign") != Path(screen_dir).parent.name:
+            continue
+        state = status.get("state") if not status.get("pid") or _alive(status["pid"]) else "offline"
+        found = {"state": state, "last_error": status.get("last_error")}
+        if state != "offline":
+            break
+    return found
 
 
 def pending_actions(screen_dir):
@@ -175,7 +180,7 @@ class ScreenServer(ThreadingHTTPServer):
 
 def _signature(screen_dir):
     files = [screen_dir / n for n in ("act.json", "turn.json", activity.ACTIVITY, inbox.INBOX)] + [TEMPLATE]   # a new page build reloads open pages
-    files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"] + [f for f in [_status_file(screen_dir)] if f]
+    files += [screen_dir.parent / "world.json", screen_dir.parent / "campaign-overview.json"] + _status_files(screen_dir)
     sig = []
     for f in files:
         try:

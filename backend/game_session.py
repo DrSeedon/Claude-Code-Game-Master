@@ -16,7 +16,7 @@ from backend.live_broker import broker
 from backend.media import store_generated_image
 from backend.usage_log import record_usage
 from backend.runtime.turn_lock import try_campaign_turn_lock
-from lib.screen.online import live_campaign
+from lib.screen.online import live_campaigns
 from backend.runtime import (
     AgentEvent,
     ProviderBuildContext,
@@ -364,7 +364,7 @@ class GameSession:
             async with self._mutation_lock:
                 # The online screen driver plays campaigns from another process: none of its campaign's turns while
                 # it runs (its delivery cursor and screen are its own), and the turn lock for the moment it starts.
-                turn_lock = None if live_campaign(self.project_root) == self.campaign else try_campaign_turn_lock(self.campaign_dir)
+                turn_lock = None if self.campaign in live_campaigns(self.project_root) else try_campaign_turn_lock(self.campaign_dir)
                 if turn_lock is None:
                     stored = append_event(self.campaign_dir, "error", ONLINE_TABLE_BUSY)
                     broker.publish(self.campaign, stored)

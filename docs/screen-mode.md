@@ -153,13 +153,15 @@ Every click, typed line or voice phrase is appended to `inbox.jsonl`; `dm-screen
 
 The screen is a presentation layer over the same engine and is independent of the AI client. Claude Code receives player actions through the Monitor tool on `dm-screen.sh listen` and mirrors tool calls into the feed with a `PostToolUse` Bash hook registered in `.claude/settings.json`. Codex and Grok Build have no such adapter yet; they can follow `screen/inbox.jsonl` themselves (not done).
 
-## Online table
+## Online tables
 
-The same screen runs online at https://dnd-play.seedon.ru (owner decision 2026-10-26): one shared table behind a password, the campaign chosen in advance, a Claude Agent SDK master on Sonnet 5.5. Install and operation: `ops/play/README.md`.
+The same screen runs online behind a password, with the campaign chosen in advance and a Claude Agent SDK master on Sonnet 5.5 (owner decisions 2026-10-26 and 2026-10-27). Each table is its own systemd instance, config, port, password and public name: `play` at https://dnd-play.seedon.ru plays the owner's campaign, `demo` at https://dnd-demo.seedon.ru a copy for guests. Install and operation: `ops/play/README.md`.
 
-- `dnd-play.service` on the VPS runs `python -m backend.screen_driver`. The driver runs the screen server on `127.0.0.1:18116`, collects player actions, sends them to the master as `[screen #N] who (source): text` lines (its own notices start with `[system] `; names and texts are kept to one line) and expects one published turn per message. Actions delivered before a restart or a failed turn and never answered go to the master again once. While the driver runs, `dm-screen.sh listen` and `wait` refuse its screen and the web game master refuses its campaign.
-- The master is a full Claude Code session in the repository, limited by its contract `.claude/additional/infrastructure/screen-driver-contract.md`: it plays, switches the online campaign when the players ask, and may fix, test, commit and push a tool that blocks play. It never starts or waits for the screen and never spends credits itself.
-- The password goes into the screen's own login page in the act's theme (owner 2026-10-27, no browser basic-auth box): `lib/screen/gate.py` checks it against a scrypt hash and sets a signed cookie for 30 days. nginx on the VPS asks the screen `GET /_auth` before every request and fails closed, limits request rates and sets the security headers; `dnd-play.seedon.ru` reaches it through the RU mirror. Speech plays only when a player presses 🔊; sound generation is off.
+- `dnd-play@<table>.service` on the VPS runs `python -m backend.screen_driver` with `DM_PLAY_TABLE=<table>`. The driver runs the table's screen server (`127.0.0.1:18116` for `play`, `18118` for `demo`), collects player actions, sends them to the master as `[screen #N] who (source): text` lines (its own notices start with `[system] `; names and texts are kept to one line) and expects one published turn per message. Actions delivered before a restart or a failed turn and never answered go to the master again once. While a driver runs, `dm-screen.sh listen` and `wait` refuse its screen and the web game master refuses its campaign. Two tables never play one campaign.
+- The table's state is `world-state/online-<table>.json` (campaign, port, paused, restarts) and `world-state/online-<table>-status.json` (written by the driver; the page finds its master by campaign). `bash tools/dm-play.sh tables` lists them; `--table <t>` (or `DM_PLAY_TABLE`) picks one for the other commands.
+- The master is a full Claude Code session in the repository, limited by its contract `.claude/additional/infrastructure/screen-driver-contract.md`: it plays, switches its table's campaign when the players ask, and may fix, test, commit and push a tool that blocks play. It never starts or waits for the screen and never spends credits itself. Its sandbox shows only the repository, the CLI state, uv and the GitHub key of kesha's home, hides `/opt`, and an AppArmor profile (`ops/play/apparmor-dnd-play-master`) keeps it out of other processes' `/proc` entries.
+- Act art comes from the MultiCode hub, the route of the Kesha bot (owner 2026-10-27): the master runs `bash tools/dm-art.sh --prompt "..."`, and `dnd-play-art.service` (`backend/screen_art.py`, which alone holds the hub key and token) returns a PNG for `dm-screen.sh act --image`. Music and ambience come from the library: the master sets `audio.music` and `audio.ambience` from library matches on a fresh session and when the scene changes.
+- The password goes into the screen's own login page in the act's theme (owner 2026-10-27, no browser basic-auth box): `lib/screen/gate.py` checks it against a scrypt hash and sets a signed cookie for 30 days. nginx on the VPS asks the screen `GET /_auth` before every request and fails closed, limits request rates and sets the security headers; the seedon.ru names reach it through the RU mirror. Speech plays only when a player presses 🔊; sound generation is off.
 
 Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit also sets the online values below as defaults). For the screen server 0 means no cap, which is the laptop default. Under a credit cap the page hides its Auto speech switch.
 
@@ -170,23 +172,25 @@ Caps come from the environment (`/etc/dnd-play/dnd-play.env` online; the unit al
 | `DM_SCREEN_SOUND_GENERATION` | 0 | 0: sounds only from the library and free sources (default 1) |
 | `DM_SCREEN_MAX_PENDING` | 10 | `/api/action` answers 429 while more actions wait for the master |
 | `DM_SCREEN_DAILY_VOICE_MB` | 200 | microphone megabytes a day |
-| `DM_SCREEN_LOGIN_FILE` | `/etc/dnd-play/login.json` (set by the unit) | turns the password gate on: `{"password": scrypt hash, "key": cookie key}` from `python -m lib.screen.gate config`; unset on the laptop |
-| `DM_SCREEN_PUBLIC_URL` | `https://dnd-play.seedon.ru/` | shown by status and start |
-| `DM_SCREEN_SPEND_FILE` | `world-state/usage/screen-spend.json` (set by the driver) | one daily ledger for every campaign of the table; default `<screen>/spend.json` |
+| `DM_SCREEN_LOGIN_FILE` | `/etc/dnd-play/<table>-login.json` (set by the unit) | turns the password gate on: `{"password": scrypt hash, "key": cookie key}` from `python -m lib.screen.gate config`; unset on the laptop |
+| `DM_SCREEN_PUBLIC_URL` | the table's address (`/etc/dnd-play/<table>.env`) | shown by status and start |
+| `DM_SCREEN_SPEND_FILE` | `world-state/usage/screen-spend.json` (set by the driver) | one daily ledger for every table and campaign; default `<screen>/spend.json` |
 | `DM_PLAY_MODEL`, `DM_PLAY_EFFORT` | `claude-sonnet-5-5`, `medium` | the master |
 | `DM_PLAY_MAX_TURNS_PER_HOUR`, `_PER_DAY` | 30, 200 | master turns |
 | `DM_PLAY_TURN_TIMEOUT` | 600 | seconds before a master turn is interrupted |
-| `DM_PLAY_CONFIG` | `world-state/online-play.json` | the table state file |
+| `DM_PLAY_TABLE`, `DM_PLAY_PORT` | `play`/`demo` (the unit), 18116/18118 (`/etc/dnd-play/<table>.env`) | which table, and its port for a new config |
+| `DM_PLAY_CONFIG` | `world-state/online-<table>.json` | the table state file |
 
 | Command (on the VPS, in the repository) | Purpose |
 |---|---|
-| `bash tools/dm-play.sh status` | driver state, campaign, session, turns this hour and today, last error |
-| `bash tools/dm-play.sh switch <campaign>` | play another campaign (it needs `campaign-overview.json`); the driver starts a fresh master session |
+| `bash tools/dm-play.sh tables` | every table: campaign, port, state |
+| `bash tools/dm-play.sh [--table <t>] status` | driver state, campaign, session, turns this hour and today, last error |
+| `bash tools/dm-play.sh switch <campaign>` | play another campaign (it needs `campaign-overview.json` and no other table may play it); the driver starts a fresh master session |
 | `bash tools/dm-play.sh restart-screen` | restart only the screen server, after a screen code fix |
 | `bash tools/dm-play.sh new-session` | a fresh master session on the same campaign, when the stored one keeps failing |
 | `bash tools/dm-play.sh pause` / `resume` | stop and resume passing actions to the master; the screen stays up |
 
-State lives in `world-state/online-play.json` (campaign, port, paused, screen restarts) and `world-state/online-play-status.json` (written by the driver). Logs: `journalctl -u dnd-play` (driver and master), the screen log above (`dm-screen.sh log`), and the nginx access logs, which carry no query strings because the screen token travels as `?token=`.
+State lives in `world-state/online-<table>.json` (campaign, port, paused, screen restarts) and `world-state/online-<table>-status.json` (written by the driver). Logs: `journalctl -u dnd-play@<table>` (driver and master), the screen log above (`dm-screen.sh log`), and the nginx access logs, which carry no query strings because the screen token travels as `?token=`.
 
 ## Security
 

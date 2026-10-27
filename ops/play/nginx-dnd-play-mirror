@@ -1,6 +1,7 @@
-# dnd-play.seedon.ru: RU mirror of the online screen table on Contabo (158.220.127.161), owner decision 2026-10-26.
-# Same pattern as dnd-table-mirror: the company domain points to this RU IP, never to the German one. The upstream
-# is the Contabo vhost play-158-220-127-161.sslip.io (ops/play/nginx-dnd-play-sslip), which checks the password and
+# dnd-play.seedon.ru and dnd-demo.seedon.ru: RU mirror of the online screen tables on Contabo (158.220.127.161), owner
+# decisions 2026-10-26 (the table) and 2026-10-27 (a second, guest table). Same pattern as dnd-table-mirror: the company
+# domain points to this RU IP, never to the German one. Each name's upstream is its table's Contabo vhost,
+# <table>-158-220-127-161.sslip.io (ops/play/nginx-dnd-play-sslip, the map below), which checks the password and
 # sends the security headers. This hop passes the guest's login cookie and the password form through unchanged (nginx
 # forwards client headers and Set-Cookie by default) and appends the guest's address to X-Forwarded-For for the limits
 # there. The screen does not check Origin, so there is no Origin mapping.
@@ -8,19 +9,25 @@
 # On this host touch only this file and its link.
 
 # $uri, not $request: the page sends the screen token as ?token= on /api/events and /audio/.
-log_format dnd_play_mirror '$remote_addr - [$time_local] "$request_method $uri $server_protocol" '
+log_format dnd_play_mirror '$remote_addr $host [$time_local] "$request_method $uri $server_protocol" '
                            '$status $body_bytes_sent $request_time "$http_user_agent"';
+
+# Public name -> its table's Contabo name (TLS name and Host upstream).
+map $host $dnd_play_upstream {
+    dnd-play.seedon.ru play-158-220-127-161.sslip.io;
+    dnd-demo.seedon.ru demo-158-220-127-161.sslip.io;
+}
 
 server {
     listen 80;
-    server_name dnd-play.seedon.ru;
+    server_name dnd-play.seedon.ru dnd-demo.seedon.ru;
     access_log /var/log/nginx/dnd-play-mirror-access.log dnd_play_mirror;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name dnd-play.seedon.ru;
+    server_name dnd-play.seedon.ru dnd-demo.seedon.ru;
 
     ssl_certificate /etc/letsencrypt/live/seedon.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/seedon.ru/privkey.pem;
@@ -35,7 +42,7 @@ server {
     location / {
         proxy_pass https://158.220.127.161;
         proxy_ssl_server_name on;
-        proxy_ssl_name play-158-220-127-161.sslip.io;
+        proxy_ssl_name $dnd_play_upstream;
         # The guests' password crosses this hop: verify the Contabo certificate (dnd-table-mirror does not).
         proxy_ssl_verify on;
         # Let's Encrypt chains are 5 deep since the 2026 roots (leaf, YE1, Root YE, ISRG Root X2, ISRG Root X1);
@@ -45,7 +52,7 @@ server {
         # about 1 request in 20 failed verification with session reuse on.
         proxy_ssl_session_reuse off;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
-        proxy_set_header Host play-158-220-127-161.sslip.io;
+        proxy_set_header Host $dnd_play_upstream;
 
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

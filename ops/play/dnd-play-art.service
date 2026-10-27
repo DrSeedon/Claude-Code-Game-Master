@@ -1,0 +1,90 @@
+# /etc/systemd/system/dnd-play-art.service
+# Act art for the online screen tables: screen_art.py serve on 127.0.0.1:18117 draws one picture per request
+# through the MultiCode hub (Orchestra's stdio MCP server app.hub_image_mcp, the route the Kesha bot uses).
+#
+# Why a separate unit: the masters in dnd-play@.service (dnd-play@play, dnd-play@demo) are full Claude Code
+# sessions (Bash, bypassPermissions) that password-holding guests reach through prompts, and they can write the
+# whole repository. The hub ssh key and the MultiCode token open the owner's hub account, so they live only here;
+# dnd-play@.service hides them (InaccessiblePaths for the token directory, ~/.ssh is hidden there) and a master
+# only sends a prompt: bash tools/dm-art.sh --prompt "...".
+# Nothing this unit runs or trusts is master-writable: the code is a root-owned copy of backend/screen_art.py
+# (stdlib only, run by the system python in isolated mode), installed by the runbook (ops/play/README.md):
+#   sudo install -D -m 644 -o root -g root backend/screen_art.py /opt/dnd-play-art/screen_art.py
+# and re-installed after every change to backend/screen_art.py. The spend ledger is in its StateDirectory, out of
+# the repository; the repository is only written into (art-incoming), through symlink-refusing dir fds.
+# The service caps the spend (DM_ART_DAILY_LIMIT per day, one generation at a time).
+# systemd has no trailing comments: each note is its own line.
+
+[Unit]
+Description=DnD online screen table act art (MultiCode hub images, 127.0.0.1:18117)
+Documentation=file:/home/kesha/projects/dnd-game-master/ops/play/README.md
+After=network-online.target orchestra-hub-tunnel.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+# As kesha: the hub key, the token file and the Orchestra checkout belong to kesha.
+User=kesha
+Group=kesha
+# Not the repository: nothing is looked up relative to a master-writable directory.
+WorkingDirectory=/opt/dnd-play-art
+Environment=HOME=/home/kesha
+# No repository .venv and no ~/.local/bin on PATH (both writable by the master, or by uv for anyone); /usr/bin has
+# ssh and codex.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=DM_ART_PORT=18117 DM_ART_DAILY_LIMIT=10 DM_ART_TIMEOUT=300
+# The repository the pictures go into (world-state/campaigns/<c>/screen/art-incoming), and the spend ledger in
+# the StateDirectory below (/var/lib/dnd-play-art, created by systemd owned by User=kesha, mode 0700).
+Environment=DM_ART_ROOT=/home/kesha/projects/dnd-game-master
+Environment=DM_ART_LEDGER=/var/lib/dnd-play-art/art-spend.json
+StateDirectory=dnd-play-art
+StateDirectoryMode=0700
+# The hub call, as Kesha's MCP config. Paths only: the token and the key stay in their files.
+# Orchestra's own venv interpreter (a system python3.12), never "uv run": uv's cache is writable by other kesha processes.
+Environment=DM_ART_PYTHON=/home/kesha/orchestra/.venv/bin/python
+Environment=DM_ART_ORCHESTRA_DIR=/home/kesha/orchestra
+Environment=DM_ART_HUB_MCP_BASE=http://127.0.0.1:14606
+Environment=DM_ART_HUB_TOKEN_FILE=/home/kesha/orchestra/data/secrets/multicode-oauth.token
+Environment=DM_ART_HUB_SSH=claude-astrahancev-maxim-911aird@hub.aimulticast.org
+Environment=DM_ART_HUB_SSH_KEY=/home/kesha/.ssh/multicode_hub_vps
+Environment=DM_ART_HUB_BASE_DIR=/home/claude-astrahancev-maxim-911aird/.t3
+# Local Codex (built-in image tool only) when the hub is out: off by default. To enable, set 1 here.
+Environment=DM_ART_CODEX_FALLBACK=0 DM_ART_CODEX=/usr/bin/codex
+# -I: no PYTHON* variables, no user site, no script or working directory on sys.path.
+ExecStart=/usr/bin/python3 -I /opt/dnd-play-art/screen_art.py serve
+SyslogIdentifier=dnd-play-art
+Restart=on-failure
+RestartSec=10
+# A running generation is abandoned on stop; its hub leftovers are cleaned with python -m app.hub_image --cleanup.
+KillMode=control-group
+TimeoutStopSec=20
+
+Nice=5
+CPUWeight=50
+MemoryMax=1G
+OOMScoreAdjust=600
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# ~/.ssh stays visible (read-only): the hub key and known_hosts are needed for the image fetch.
+ProtectHome=read-only
+# Writable only what it writes: the repository (art-incoming copies; its root, because the master can swap any
+# directory below it for a symlink that systemd would follow at the next start), Orchestra's data (the hub workspace
+# state and data/generated-images), ~/.codex only for the fallback. The StateDirectory is added by systemd itself.
+ReadWritePaths=/home/kesha/projects/dnd-game-master /home/kesha/orchestra/data -/home/kesha/.codex
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+# Output goes to the journal: journalctl -u dnd-play-art (one JSON line per request, no secrets).
+
+[Install]
+WantedBy=multi-user.target

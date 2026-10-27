@@ -254,7 +254,7 @@ def stop(sdir):
 
 
 def online_driver(sdir):
-    """The online driver's state when a live driver plays this screen (world-state/online-play-status.json), else None."""
+    """The online driver's state when a live driver of any table plays this screen (world-state/online-*-status.json), else None."""
     from . import server
 
     master = server.master_status(sdir)

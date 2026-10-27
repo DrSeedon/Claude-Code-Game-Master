@@ -1,5 +1,23 @@
 # TODO — DM System
 
+## Online master escapes its sandbox through /proc/<pid>/root (found 2026-10-27, art service review)
+`dnd-play` runs the master as `kesha` with `~/.ssh` hidden (TemporaryFileSystem) and the home read-only, but any other
+`kesha` process (Orchestra, the hub tunnel, the Kesha bot) is visible in `/proc`, and `/proc/<pid>/root` of a process
+outside the unit is the host's filesystem: from inside the unit's mount namespace as uid 1001,
+`/proc/<orchestra pid>/root/home/kesha/.ssh/` lists all 20 files and `.../orchestra/data/secrets/` its 6 entries
+(verified 2026-10-27). Yama `ptrace_scope=1` only limits attach; `ProtectProc=invisible` hides other users, not the same
+uid; `PrivatePIDs` needs systemd 257 (the VPS has 255). So a guest who talks the master into it reaches kesha's keys
+(GitHub, the laptop tunnel, the MultiCode hub) and every secret kesha can read. Fix in progress 2026-10-27: an AppArmor
+profile for the unit with no ptrace or signal rights over other profiles (blocks `/proc/<pid>/root`, environ, kill),
+plus a home allowlist (TemporaryFileSystem over `/home/kesha`, bind only what the master needs) and InaccessiblePaths
+for `/opt/kesha-bot` and `/opt/cog-second-brain`. Done in the code 2026-10-27 (`ops/play/apparmor-dnd-play-master`,
+`dnd-play@.service`: `ProtectHome=tmpfs` with an allowlist, `InaccessiblePaths=-/opt`, the master's own cache dir);
+probed on the VPS in a transient unit: `/proc/<orchestra pid>/root`, `environ` and `kill` are denied, claude, git push,
+uv and the venv work. Left: `~/.claude` (other agents' transcripts) stays readable, because the CLI needs it; the shared
+`~/.cache/uv` was writable by the master from 2026-10-26 to the move to `dnd-play@` (checked 2026-10-27: no entry that
+existed before the master started was modified; `uv cache clean` would remove any doubt, the owner's call because
+Orchestra shares that cache).
+
 ## Live keys leaked in a tracked `.env.bak` (found 2026-10-27 by GitGuardian)
 The Codex DM hooks commit (now `fb997a4`, pushed to public `main` 2026-10-25) carried `.env.bak` with
 `DEEPGRAM_API_KEY` (the live key, same value as the laptop and VPS `.env`) and an older `ELEVENLABS_API_KEY` (not the

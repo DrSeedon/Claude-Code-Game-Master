@@ -852,7 +852,7 @@ def test_nginx_rate_limits_are_not_shown_as_pending_actions_and_keep_auto_speech
 
     text = server.TEMPLATE.read_text(encoding="utf-8")
     assert "if(r.status===402&&SP.auto)setAuto(false)" in text and "lim&&SP.auto" not in text
-    assert '"limit":"rate"' in (server.TEMPLATE.parents[2] / "ops" / "play" / "nginx-dnd-play-sslip").read_text(encoding="utf-8")
+    assert '"limit":"rate"' in (server.TEMPLATE.parents[2] / "ops" / "play" / "nginx-dnd-play-table.conf").read_text(encoding="utf-8")
     if not shutil.which("node"):
         pytest.skip("node is not installed")
     script = _template_js(["limitText"]) + """
