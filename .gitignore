@@ -29,7 +29,7 @@ world-state/campaigns/*
 world-state/active-campaign.txt
 world-state/usage/*
 world-state/audio-library/
-world-state/online-play*.json
+world-state/online-*.json
 
 # Source Material (User-provided documents for import)
 source-material/*
