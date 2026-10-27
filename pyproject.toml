@@ -114,6 +114,13 @@ dev = [
     "pytest-timeout>=2.4.0",
     "ruff>=0.1.0",
 ]
+# Browser end-to-end tests of the play screen (tests/e2e); not installed by a default `uv sync`.
+e2e = [
+    "playwright>=1.49.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "modules"]
+markers = [
+    "e2e: browser end-to-end tests, run only with DM_SCREEN_E2E=1 and the e2e dependency group",
+]
