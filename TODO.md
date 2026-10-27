@@ -1,17 +1,25 @@
 # TODO — DM System
 
-## `tests/test_secret_guard.py` crashes on tracked directory symlinks (found 2026-10-25)
-`value_findings` and `pattern_findings` call `path.read_bytes()` on every tracked path. `.agents/skills/cinematic-scene`
-and `.agents/skills/dm` are tracked symlinks (mode 120000) to `codex-skills/*` directories, so both tests die with
-`IsADirectoryError` instead of scanning. Fix direction: skip symlinks (`path.is_symlink()`) and directories before
-reading, or read the link target text for mode-120000 entries.
+## Live keys leaked in a tracked `.env.bak` (found 2026-10-27 by GitGuardian)
+The Codex DM hooks commit (now `fb997a4`, pushed to public `main` 2026-10-25) carried `.env.bak` with
+`DEEPGRAM_API_KEY` (the live key, same value as the laptop and VPS `.env`) and an older `ELEVENLABS_API_KEY` (not the
+current one). `.gitignore` covered `.env` and `.env.*.local`, not `.env.bak`; the secret guard that would have failed
+on it was already crashing (last paragraph), and the 7 known failures hid it. Done 2026-10-27: on the owner's order
+(«срочно историю ита перезатри чтобы ключи не были в паблике») `main` was rewritten from that commit on without
+`.env.bak` and force-pushed; the old commit's SHA is kept out of the repository text because GitHub serves an orphaned
+commit by SHA until GitHub Support purges it. `.env.*` is ignored except `.env.example`; the guard skips symlinks and
+runs again; code expressions such as `password = parse_qs(...)` no longer count as literals. Still open: the keys were
+public for two days, so the owner revokes the Deepgram key and that ElevenLabs key and issues new ones (then laptop
+`.env` → VPS `.env`), and asks GitHub Support to purge the orphaned commit and cached views.
+The guard crash itself (found 2026-10-25, fixed 2026-10-27): `value_findings` and `pattern_findings` read every tracked
+path, and `.agents/skills/*` are tracked symlinks to directories, so both tests died with `IsADirectoryError`.
 
 ## Wizard MCP tests fail on the laptop's `mcp` 2.x (found 2026-10-25)
 Five `tests/test_wizard.py::TestWizardMCPTools` tests fail on the owner's laptop checkout: the installed `mcp` package is
 2.x (`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, `'Server' object has no attribute 'request_handlers'`).
 The wizard code targets the 1.x API. Fix direction: pin `mcp<2` in `pyproject.toml` (and refresh `uv.lock`), or port the
 wizard tools to `mcp.server.mcpserver.MCPServer` per the mcp v2 migration guide.
-**2026-10-26: now live on the VPS.** `uv.lock` pins `mcp` 2.3.0 since `the Codex DM hooks commit of 2026-10-25`; the VPS `uv sync --frozen` installed it and
+**2026-10-26: now live on the VPS.** `uv.lock` pins `mcp` 2.3.0 since `fb997a4` (the Codex DM hooks commit); the VPS `uv sync --frozen` installed it and
 `dnd-game-master` was restarted, so the Codex wizard (`backend/server.py` → `python -m backend.wizard_mcp_stdio`, which imports
 `mcp.server.fastmcp`) fails on the server. The Claude wizard (in-process SDK MCP) and play are unaffected.
 
@@ -95,7 +103,7 @@ Workaround that works: Codex imagegen, see ~/.claude/docs/image-generation-codex
 
 ## Full test suite has 7 failures unrelated to the screen (found 2026-10-25)
 - `tests/test_wizard.py::TestWizardMCPTools` (5 tests): `mcp` is 2.x in `.venv`, where `mcp.server.fastmcp` no longer exists (`FastMCP` became `MCPServer`). Fix direction: pin `mcp<2` or migrate `backend/wizard_mcp*.py`. Fails on a clean `HEAD` checkout as well.
-- `tests/test_secret_guard.py` (2 tests): `value_findings`/`pattern_findings` call `read_bytes()` on every tracked path and crash with `IsADirectoryError` on `.agents/skills/cinematic-scene` (a staged directory entry). Fix direction: skip non-regular files in the guard, and check why that path is staged as a directory.
+- `tests/test_secret_guard.py` (2 tests): fixed 2026-10-27, see the `.env.bak` leak entry at the top.
 
 ## `dm-inventory.sh update "<name>"` can match a fact node instead of the hero (found 2026-10-25)
 The fuzzy name lookup resolved `Максим Астраханцев` to `fact:npc-001` (a `dm-note` fact whose text starts with the heroes' names): `--gold 9500` was written into that fact's `data.money` and the player's purse stayed unchanged. Fix direction: resolve only `player:*` and `npc:*` nodes in `lib/inventory_manager.py` and fail loudly on any other type; until then use `dm-player.sh gold` for the player. Triggered case: War and Peace, payment for the first order.

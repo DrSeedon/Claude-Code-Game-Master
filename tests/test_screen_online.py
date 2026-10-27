@@ -144,7 +144,8 @@ def test_live_campaign_needs_a_running_driver_that_is_not_offline(tmp_path):
 
 
 def test_the_online_ops_files_trip_no_secret_pattern():
-    """ops/play is tracked: an assignment-looking line such as 'password: %{http_code' fails the secret guard."""
+    """ops/play is tracked: an assignment-looking line (the word password, a colon, a curl format variable) fails the
+    secret guard."""
     from test_secret_guard import ASSIGNMENT, PLACEHOLDER
 
     found = []

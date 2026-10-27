@@ -39,6 +39,9 @@ source-material/*
 .env
 .env.local
 .env.*.local
+# Every .env copy (a tracked .env.bak leaked live keys, found 2026-10-27); only the example is tracked.
+.env.*
+!.env.example
 *.key
 *.pem
 

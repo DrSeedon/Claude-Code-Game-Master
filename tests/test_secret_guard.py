@@ -36,7 +36,10 @@ def tracked_files(root: Path) -> list[Path]:
         check=True,
         capture_output=True,
     )
-    return [root / name.decode("utf-8", errors="surrogateescape") for name in result.stdout.split(b"\0") if name]
+    paths = [root / name.decode("utf-8", errors="surrogateescape") for name in result.stdout.split(b"\0") if name]
+    # A tracked symlink (.agents/skills/* point at directories) holds only a path; reading it crashed the whole guard
+    # with IsADirectoryError, which hid a tracked .env.bak with live keys (found 2026-10-27).
+    return [path for path in paths if not path.is_symlink() and path.is_file()]
 
 
 def secret_values(root: Path) -> list[tuple[str, bytes]]:
@@ -86,6 +89,7 @@ def pattern_findings(root: Path) -> list[tuple[str, int, str]]:
             if (
                 PLACEHOLDER.search(value)
                 or value.startswith("_")
+                or "(" in value or "[" in value          # code: password = parse_qs(...)[0], not a literal
                 or value.lower() in {"test-password", "secret", "password"}
             ):
                 continue
