@@ -1,5 +1,12 @@
 # TODO — DM System
 
+## `dm-campaign-custom-rules.sh` calls `uv` directly (found 2026-10-27, War and Peace moved online)
+`.claude/additional/infrastructure/dm-campaign-custom-rules.sh` (line ~106 and ~176) runs `uv run python` itself instead
+of `tools/common.sh`'s `$PYTHON_CMD`. In a plain ssh shell on the VPS `uv` is not on PATH: `remove html-screen` printed
+success and `apply` failed with "uv: command not found", leaving the campaign without its html-screen rule until rerun
+with `~/.local/bin` on PATH; and that `uv run` (no UV_FROZEN) rewrote the tracked `uv.lock` (restored with git checkout).
+Fix direction: source `tools/common.sh` and use `$PYTHON_CMD`; make `remove`+`apply` fail together.
+
 ## Online master skips the act change on a move (found 2026-10-27, demo table playtest)
 Two moves of the party to new lasting places (the University library, then a swamp camp) got `dm-scene.sh` and a turn
 but no new act and no picture: the screen kept the tavern header and art while the story moved on. The contract made
