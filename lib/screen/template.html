@@ -153,7 +153,8 @@ function applyTheme(t){if(!t)return;const r=document.documentElement.style,m={'-
 let bgFlip=false;
 function setBackground(url){const next=$(bgFlip?'bgA':'bgB'),prev=$(bgFlip?'bgB':'bgA');next.style.backgroundImage=`url(${url})`;next.classList.add('on');prev.classList.remove('on');bgFlip=!bgFlip}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function swapAct(act){document.body.classList.add('swapping');await sleep(450);renderAct(act);await sleep(60);document.body.classList.remove('swapping')}
+// the new act's place and date show at once: the state that announced the act arrived before the swap finished
+async function swapAct(act){S.actSwap=act.id;document.body.classList.add('swapping');await sleep(450);renderAct(act);showClock(S.last||{});await sleep(60);document.body.classList.remove('swapping')}
 function renderAct(act){
   S.actId=act.id;labels=act.labels||{};S.lang=act.lang||'en';applyTheme(act.theme);applyLang(S.lang);
   setBackground(`/art.png?v=${act.id}`);$('art').src=`/art.png?v=${act.id}`;
@@ -190,10 +191,17 @@ function buildPanels(panels){
 }
 
 // ---- heroes: updated in place, numbers flash and bars glide ----
+// a sheet keeps hp as {current,max} or as a number beside hp_max; party NPCs carry all-10 placeholder abilities that are not shown
+function sheetHp(s){const h=s.hp;return h&&typeof h==='object'?{hp:h.current,hpMax:h.max}:{hp:h,hpMax:s.hp_max}}
+function hpPct(h){return h.hpMax?Math.max(0,Math.min(100,100*h.hp/h.hpMax)):100}
+function realStats(st){return st&&ABIL_KEYS.some(k=>st[k]!==10)?st:null}
+// the options stay dimmed while an action is unanswered, unless the online master is down: then players may act again
+function nextWaiting(st,waiting){const m=st.master&&st.master.state;if(m==='error'||m==='offline')return false;
+  return st.turn?(waiting||(st.inbox_last>(st.turn.answered||0))):waiting}
 function heroList(v){
   const out=[];const c=v&&v.character;
-  if(c)out.push({id:c.id||'pc',name:c.name,sub:[c.race,c.class].filter(Boolean).join(' · ')+(c.level?` · ${t('lvl')} ${c.level}`:''),hp:c.hp&&c.hp.current,hpMax:c.hp&&c.hp.max,ac:c.ac,stats:c.stats,skills:c.skills,money:c.money&&c.money.formatted});
-  for(const p of (v&&v.npcs&&v.npcs.party)||[]){const s=p.character_sheet||{};out.push({id:p.id,name:p.name,sub:[s.race,s.class].filter(Boolean).join(' · ')+(s.level?` · ${t('lvl')} ${s.level}`:''),hp:s.hp,hpMax:s.hp_max,ac:s.ac,stats:s.stats,skills:s.skills})}
+  if(c)out.push({id:c.id||'pc',name:c.name,sub:[c.race,c.class].filter(Boolean).join(' · ')+(c.level?` · ${t('lvl')} ${c.level}`:''),...sheetHp(c),ac:c.ac,stats:realStats(c.stats),skills:c.skills,money:c.money&&c.money.formatted});
+  for(const p of (v&&v.npcs&&v.npcs.party)||[]){const s=p.character_sheet||{};out.push({id:p.id,name:p.name,sub:[s.race,s.class].filter(Boolean).join(' · ')+(s.level?` · ${t('lvl')} ${s.level}`:''),...sheetHp(s),ac:s.ac,stats:realStats(s.stats),skills:s.skills})}
   return out;
 }
 function renderSide(){
@@ -212,7 +220,7 @@ function renderSide(){
   }
   for(const h of heroes){const el=S.heroes[h.id];if(!el)continue;
     setText(el.querySelector('[data-f=hp]'),h.hp??'?');setText(el.querySelector('[data-f=hpMax]'),h.hpMax??'?');setText(el.querySelector('[data-f=ac]'),h.ac??'—');if(h.money)setText(el.querySelector('[data-f=money]'),h.money);
-    el.querySelector('.bar i').style.width=(h.hpMax?Math.max(0,Math.min(100,100*h.hp/h.hpMax)):100)+'%';
+    el.querySelector('.bar i').style.width=hpPct(h)+'%';
     if(h.stats)for(const k of ABIL_KEYS){const b=el.querySelector(`[data-s=${k}]`),m=el.querySelector(`[data-m=${k}]`);if(b){setText(b,h.stats[k]);setText(m,mod(h.stats[k]))}}
     const sk=Object.entries(h.skills||{}).map(([k,v])=>`<span class="chip">${esc(skillName(k))} <b>+${esc(typeof v==='object'?v.total:v)}</b></span>`).join('');
     const holder=el.querySelector('[data-f=skills]');if(holder.dataset.h!==sk){holder.innerHTML=sk;holder.dataset.h=sk}}
@@ -241,16 +249,17 @@ const busyNow=()=>(rec&&rec.state==='recording')||$('say').classList.contains('o
 setInterval(()=>{if(reloadWanted&&!busyNow()){uiLog('reload',{reason:'code or server changed'});flushLog();setTimeout(()=>location.reload(),150)}},1500);
 function showClock(st){$('place').textContent=S.actPlace||(st.clock&&st.clock.location)||'';$('date').textContent=(st.clock&&st.clock.text)||S.actDate||''}
 function onState(st){
+  S.last=st;
   if(S.build&&st.build&&st.build!==S.build)reloadWanted=true;
   else S.build=st.build||S.build;
   S.views=st.views;S.master=st.master||null;
-  if(st.act&&st.act.id!==S.actId){uiLog('act',{id:st.act.id,from:S.actId});if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
+  if(st.act&&st.act.id!==S.actId&&st.act.id!==S.actSwap){uiLog('act',{id:st.act.id,from:S.actId});if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   S.speech=!!st.speech;$('speak').classList.toggle('off',!S.speech);
   if(st.auto_speech===false){$('autoBtn').style.display='none';if(SP.auto)setAuto(false)}
   if(st.turn&&st.turn.id!==S.turnId){uiLog('turn',{id:st.turn.id,from:S.turnId,blocks:st.turn.blocks.length,options:(st.turn.options||[]).length});const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);loadSounds(st.turn.id,!(fresh&&SP.auto&&S.speech));if(fresh&&SP.auto&&S.speech)speak()}
   else if(st.turn&&JSON.stringify(st.turn.panels||[])!==S.panelsKey){S.panelsKey=JSON.stringify(st.turn.panels||[]);S.panelsHtml=buildPanels(st.turn.panels||[]);renderSide()}
   else renderSide();
-  if(st.turn){S.waiting=S.waiting||(st.inbox_last>(st.turn.answered||0))}
+  S.waiting=nextWaiting(st,S.waiting);
   document.body.classList.toggle('waiting',S.waiting);
   showClock(st);
   renderWho();renderFeed(st.activity||[]);
