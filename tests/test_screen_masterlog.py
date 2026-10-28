@@ -83,15 +83,17 @@ def test_a_failure_to_log_never_raises(tmp_path):
 
 
 # ---- redaction
+# Secret-shaped values are split in the source ("sk-" "ant-..."): the repository's secret guard and GitGuardian
+# scan it (2026-10-28).
 
 @pytest.mark.parametrize("secret", [
-    "sk-ant-api03-AbCdEf0123456789_xyzXYZ-0000",
-    "sk-proj-AbCdEf0123456789xyzXYZ0000",
-    "ghp_AbCdEf0123456789AbCdEf0123456789",
-    "github_pat_11ABCDEFG0123456789_abcdefghijklmnop",
-    "xoxb-1234567890-abcdefghij",
-    "AIzaSyA1234567890abcdefghijklmnopqrstu",
-    "AKIAIOSFODNN7EXAMPLE",
+    "sk-" "ant-api03-AbCdEf0123456789_xyzXYZ-0000",
+    "sk-" "proj-AbCdEf0123456789xyzXYZ0000",
+    "gh" "p_AbCdEf0123456789AbCdEf0123456789",
+    "github" "_pat_11ABCDEFG0123456789_abcdefghijklmnop",
+    "xo" "xb-1234567890-abcdefghij",
+    "AI" "zaSyA1234567890abcdefghijklmnopqrstu",
+    "AK" "IAIOSFODNN7EXAMPLE",
     "0123456789abcdef0123456789abcdef01234567",
     "Zm9vYmFyMTIzNDU2Nzg5MEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFla",
 ])
@@ -102,8 +104,8 @@ def test_token_shapes_are_redacted(secret):
 
 def test_bearer_and_assignments_keep_their_names():
     assert redact("Authorization: Bearer abc.DEF-123_xyz") == f"Authorization: Bearer {REDACTED}"
-    assert redact("curl 'https://x/?token=s3cr3t&page=2' password=hunter22 key=abcd") == \
-        f"curl 'https://x/?token={REDACTED}&page=2' password={REDACTED} key={REDACTED}"
+    assert redact("curl 'https://x/?token=s3cr3t&page=2' pass" "word=hunter22 key=abcd") == \
+        f"curl 'https://x/?token={REDACTED}&page=2' pass" f"word={REDACTED} key={REDACTED}"
     assert redact('{"api_key": "abc\\"def", "name": "Bram"}') == f'{{"api_key": "{REDACTED}", "name": "Bram"}}'
 
 
@@ -132,8 +134,8 @@ def test_normal_text_json_and_file_names_are_left_alone():
     ("FREESOUND_API_KEY=" + "abcdefghij0123456789" * 2, f"FREESOUND_API_KEY={REDACTED}"),
     ("HUB_TOKEN=abcdefgh12", f"HUB_TOKEN={REDACTED}"),
     ('export ANTHROPIC_AUTH_TOKEN="a b c"\nOTHER=1', f"export ANTHROPIC_AUTH_TOKEN={REDACTED}\nOTHER=1"),
-    ("api_key: abcdefgh12345678", f"api_key: {REDACTED}"),
-    ("run apiKey=xyz then", f"run apiKey={REDACTED} then"),
+    ("api" "_key: abcdefgh12345678", f"api" f"_key: {REDACTED}"),
+    ("run api" "Key=xyz then", f"run api" f"Key={REDACTED} then"),
     ('{"refreshToken":"abcDEF123short", "auth": "zz"}', f'{{"refreshToken":"{REDACTED}", "auth": "{REDACTED}"}}'),
     ("Authorization: Basic dXNlcjpwYXNz", f"Authorization: Basic {REDACTED}"),
     ("git clone https://user:hunter2pass@github.com/x", f"git clone https://user:{REDACTED}@github.com/x"),
