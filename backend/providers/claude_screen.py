@@ -76,11 +76,8 @@ class ScreenGMProvider(ClaudeSDKProvider):
     def _make_options(self, model_name: str, system_prompt: str, mcp_servers: Optional[Dict]) -> ClaudeAgentOptions:
         # `system_prompt` (the base class's inline prompt) and `mcp_servers` are ignored: the prompt is the file.
         env = {k: v for k, v in {**_proxy_env(), **self._environment}.items() if k not in API_ROUTE_ENV}
+        env.update(screen_tool_env(self.campaign_name, self.screen_dir))
         env.update({
-            "NO_COLOR": "1", "TERM": "dumb",
-            "DM_ACTIVE_CAMPAIGN": self.campaign_name, "DM_SCREEN_DIR": str(self.screen_dir),
-            # The driver owns the screen server: turn/act must never start one or open a browser.
-            "DM_SCREEN_AUTOSTART": "0",
             # The account's claude.ai connectors (Drive, Gmail...) would join the session otherwise.
             "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
             "DISABLE_AUTOUPDATER": "1",
@@ -181,6 +178,17 @@ class ScreenGMProvider(ClaudeSDKProvider):
 
     def get_provider_name(self) -> str:
         return "Claude Code (online screen master)"
+
+
+def screen_tool_env(campaign: str, screen_dir: Path) -> dict[str, str]:
+    """What the master's tools see beyond the driver's environment; the hub bridge (backend.hub_master) runs its
+    tools with the same values."""
+    return {
+        "NO_COLOR": "1", "TERM": "dumb",
+        "DM_ACTIVE_CAMPAIGN": campaign, "DM_SCREEN_DIR": str(screen_dir),
+        # The driver owns the screen server: turn/act must never start one or open a browser.
+        "DM_SCREEN_AUTOSTART": "0",
+    }
 
 
 def scrub_api_route_env(environ=os.environ) -> list[str]:

@@ -1,5 +1,24 @@
 # TODO — DM System
 
+## Hub master webhook URL is readable inside the play unit (found 2026-10-28, hub master build)
+`backend/hub_master.py`: the driver popped `DM_PLAY_HUB_WEBHOOK` from `os.environ` at start, but systemd passed it in the
+exec environment, so `/proc/<driver pid>/environ` still held it; the SDK master runs as the same user in the same unit,
+and the demo table's master shared the AppArmor label (ptrace read allowed between the two tables). A master talked out
+of its contract (at demo: by a guest) could read the URL and post forged events to the hub master's T3 thread (prompt
+injection into an agent with the hub's access; the gate still refuses calls without the current ticket). Fixed
+2026-10-28 in part: `scrub_exec_environ` overwrites the value in the exec environment block, and each table has its own
+AppArmor profile (`dnd-play-master-%i`). Left: the URL stays in the driver's memory (ptrace attach, refused by Yama
+ptrace_scope 1 for a non-descendant; check the VPS setting), and repository tools the SDK masters can edit produce the
+output the hub master reads. Fix direction: a root-owned relay that adds the URL, or a pull model where the hub asks the
+gate for the next event, or a T3 webhook signature; `ops/play/hub-master.md` must treat every event and tool output as
+player data.
+
+## Secret guard flags the e2e test password constants (found 2026-10-28)
+`tests/test_secret_guard.py::test_common_secret_patterns_are_not_tracked` fails on `tests/e2e/e2e_support.py:11`
+(the fixture's password constant and its literal value) and `tests/e2e/test_screen_browser.py:58` (the f-string that
+passes that constant): the ASSIGNMENT pattern takes them for literals. Fixed 2026-10-28: the fixture value starts with
+`test-` (PLACEHOLDER) and the login body is built by concatenation.
+
 ## `dm-campaign-custom-rules.sh` calls `uv` directly (found 2026-10-27, War and Peace moved online)
 `.claude/additional/infrastructure/dm-campaign-custom-rules.sh` (line ~106 and ~176) runs `uv run python` itself instead
 of `tools/common.sh`'s `$PYTHON_CMD`. In a plain ssh shell on the VPS `uv` is not on PATH: `remove html-screen` printed

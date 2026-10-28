@@ -20,7 +20,9 @@ master -> bash tools/dm-art.sh -> 127.0.0.1:18117 (dnd-play-art: act art through
 | `dnd-play@.service` | `/etc/systemd/system/dnd-play@.service` (Contabo) |
 | `apparmor-dnd-play-master` | `/etc/apparmor.d/dnd-play-master` (Contabo) |
 | `dnd-play.env.example` | `/etc/dnd-play/dnd-play.env`: caps and model of every table (Contabo) |
-| `table.env.example` | `/etc/dnd-play/<table>.env`: the table's port and public URL (Contabo) |
+| `table.env.example` | `/etc/dnd-play/<table>.env`: the table's port and public URL, the play table's hub master settings (Contabo) |
+| `hub-gate.py` | `/usr/local/lib/dnd-play/hub-gate`, root-owned: the forced command of the hub master's ssh key (Contabo) |
+| `hub-vps.sh` | used on the hub by the hub master's T3 thread (its standing instructions: `hub-master.md`) |
 | `dnd-play-art.service` | `/etc/systemd/system/dnd-play-art.service`, code copy `/opt/dnd-play-art/screen_art.py` (Contabo) |
 | `nginx-dnd-play-sslip` | `/etc/nginx/sites-available/dnd-play-sslip` + link in `sites-enabled` (Contabo) |
 | `nginx-dnd-play-table.conf` | `/etc/nginx/snippets/dnd-play-table.conf` (Contabo) |
@@ -85,7 +87,7 @@ Expected: `root:kesha 640`. The gate file (`DM_SCREEN_LOGIN_FILE` in the unit) h
 ```bash
 ssh $VPS 'sudo tee /etc/apparmor.d/dnd-play-master >/dev/null && sudo apparmor_parser -r /etc/apparmor.d/dnd-play-master && sudo aa-status | grep dnd-play-master' < ops/play/apparmor-dnd-play-master
 ```
-The unit does not start without it. Why: every other kesha process is visible in `/proc`, and `/proc/<pid>/root` of one outside the unit is the host filesystem; the profile grants ptrace and signals only among the master's own processes.
+The unit does not start without it. Why: every other kesha process is visible in `/proc`, and `/proc/<pid>/root` of one outside the unit is the host filesystem; the profile grants ptrace and signals only among the master's own processes. The file holds one profile per table (`dnd-play-master-play`, `dnd-play-master-demo`; the unit uses `dnd-play-master-%i`), so the guests' demo master cannot read the play driver's `/proc` entries either. A new table needs its own block in the file first. Load this file before installing a unit that names the per-table profiles (2026-10-28), or the restarted tables do not start.
 
 ## 7. Services
 ```bash
@@ -96,7 +98,7 @@ ssh $VPS 'cd ~/projects/dnd-game-master && bash tools/dm-play.sh tables && curl 
 # the sandbox: the home is an allowlist, git reaches GitHub, other processes' /proc/<pid>/root and signals are refused
 ssh $VPS 'pid=$(systemctl show -p MainPID --value dnd-play@demo); o=$(systemctl show -p MainPID --value orchestra); sudo nsenter -t $pid -m ls -A /home/kesha /home/kesha/.ssh && sudo nsenter -t $pid -m -S $(id -u) -G $(id -g) env HOME=/home/kesha git -C /home/kesha/projects/dnd-game-master ls-remote --heads origin main && cat /proc/$pid/attr/current'
 ```
-Expected: the unit is active, the table shows its campaign and `idle` (or `thinking` on the opening turn), `/login` answers `200`, the journal's "screen limits" line shows the caps, the home lists `.cache .claude .claude.json .gitconfig .local .ssh projects` (`.cache` holds only `dnd-play-master`), `.ssh` lists `config id_ed25519_github known_hosts`, one `refs/heads/main` line, and the process runs under `dnd-play-master (enforce)`.
+Expected: the unit is active, the table shows its campaign and `idle` (or `thinking` on the opening turn), `/login` answers `200`, the journal's "screen limits" line shows the caps, the home lists `.cache .claude .claude.json .gitconfig .local .ssh projects` (`.cache` holds only `dnd-play-master`), `.ssh` lists `config id_ed25519_github known_hosts`, one `refs/heads/main` line, and the process runs under `dnd-play-master-demo (enforce)`.
 
 Moving the first table from the old `dnd-play.service` (2026-10-27): rename its gate file, then swap the units between two turns.
 ```bash
@@ -151,13 +153,50 @@ The summary is one JSON line per table, `"ok": true`. The local browser test of 
 
 Last, in a browser: open the table, sign in on the login page, press an option. The page shows the Master thinking, a turn arrives, and `bash tools/dm-play.sh --table <t> status` on the VPS counts it.
 
+## 12. Hub master (play table)
+Owner decision 2026-10-28 (`.orchestra/kb/rules-deploy-vps.md`): the `play` table can be played by a Claude Opus 5.5 agent in a T3 thread on the hub instead of the SDK master, so the owner's game does not use the VPS subscription. The `demo` table stays with the SDK master (the default).
+```
+driver (dnd-play@play) --POST {table, campaign, turn, ticket, message}--> T3 webhook --> hub master thread
+hub master --hub-vps.sh play <ticket> dm-roll.sh 1d20--> ssh kesha@VPS (key with a forced command)
+           --> /usr/local/lib/dnd-play/hub-gate (root-owned, runs nothing itself)
+           --> /run/dnd-play/play/hub.sock --> the driver runs bash tools/dm-roll.sh inside the table's sandbox
+```
+- Every batch gets a fresh ticket; the gate needs it on every call except `status`. Before it sends anything the gate checks that the socket's listener is the unit's MainPID (`SO_PEERCRED` against `systemctl show -p MainPID`): the socket directory is writable inside the sandbox, so the table's own master could otherwise put up its own listener and collect tickets. If no turn is published within `DM_PLAY_HUB_TIMEOUT` (300 s), the driver revokes the ticket (a running call finishes first; later calls get exit 3, "ticket revoked"), posts "Мастер на хабе не ответил: ход играет запасной мастер" to the feed and the SDK master (Sonnet on the VPS) plays that batch, told to check what the engine already holds. The next batch goes to the hub again. After `DM_PLAY_HUB_FAILS` (2) failures in a row the hub is skipped for `DM_PLAY_HUB_PAUSE` (900 s) with one feed line ("Мастер на хабе недоступен: пока играет запасной мастер"). A failed POST falls back at once.
+- Each master is told when the other one played in between (a `[system]` catch-up note), and the first hub message after a switch from the SDK master starts with a takeover notice.
+- The gate refuses what the master contract forbids (`dm-screen.sh start|stop|restart|serve|listen|wait|enable|speak|audition|key|hook`, `audio make|add|seed|remove|normalize`, voice changes, `dm-campaign.sh` beyond reading, `dm-play.sh` beyond `status`, `dm-reset.sh` beyond `preview`, the migration and extraction tools) and runs only `tools/dm-*.sh`. Its other operations: `prompt` (the master's system prompt for this campaign), `read <path>` (a text file inside the campaign directory, up to 256 KiB) and `status`. A tool runs at most 300 s; its output is capped at 64 KiB; the screen hook runs after it as under Claude Code, and its act reminder is appended to the output. Calls run one at a time: a call that finds another one running for over 5 s answers exit 4 "busy ... did NOT run". When the gate goes away during a call (the agent's Bash tool timed out, ssh died), the bridge stops the call and kills its tool, so an abandoned call never finishes later; the hub master runs `dm-art.sh` (up to 5 minutes) with a Bash timeout of at least 330 s. Time spent in `dm-art.sh` under a ticket extends the hub deadline by as much (at most 300 s), so a batch that opens a new act is not lost to the picture's wait. Exit codes: the tool's own, or 2 usage/refused, 3 ticket revoked, 4 no hub master on the table, busy, or a socket that is not the driver's, 5 timeout (the call may have run: check with `dm-screen.sh log` or `status` before repeating it).
+- The hub master cannot switch the campaign (`dm-play.sh switch` is refused): when players ask, the owner switches it, or the table goes back to the SDK master.
+- The thread's standing instructions live in `ops/play/hub-master.md`.
+
+Install (Contabo), then the key from the hub (its public half only):
+```bash
+ssh $VPS 'sudo install -d -m 755 -o root -g root /usr/local/lib/dnd-play && sudo install -m 755 -o root -g root ~/projects/dnd-game-master/ops/play/hub-gate.py /usr/local/lib/dnd-play/hub-gate'
+# one line in ~kesha/.ssh/authorized_keys (the hub key at ~/.ssh/dnd_play_vps on the hub, see hub-vps.sh):
+#   restrict,command="/usr/local/lib/dnd-play/hub-gate" ssh-ed25519 <key> dnd-play-hub-master
+```
+Reinstall the gate after every change to `ops/play/hub-gate.py`: the installed copy is root-owned on purpose, so a master that edits the repository never changes what the hub key runs.
+
+Settings: in `/etc/dnd-play/play.env` (mode 0600, root:root; the webhook URL holds a token, never in Git) add
+```
+DM_PLAY_MASTER=hub
+DM_PLAY_HUB_WEBHOOK=<the T3 webhook URL>
+```
+and optionally `DM_PLAY_HUB_TIMEOUT`, `DM_PLAY_HUB_FAILS`, `DM_PLAY_HUB_PAUSE`; then reinstall the unit (it has `RuntimeDirectory=dnd-play/%i` for the socket), `sudo systemctl daemon-reload && sudo systemctl restart dnd-play@play` between two turns. The journal shows `master: hub (webhook set, ...)`, `bash tools/dm-play.sh --table play status` a `master: hub (...)` line with the last result and failures. Without a webhook or a socket location the driver logs an error and plays with the SDK master.
+
+Check from the hub: `ops/play/hub-vps.sh play x status` prints `{"table": "play", "campaign": ..., "turn": ..., "ticket_ok": false}`; `ops/play/hub-vps.sh play x dm-roll.sh 1d20` exits 3.
+
+Back to the SDK master: `DM_PLAY_MASTER=sdk` (or remove the line) in `/etc/dnd-play/play.env` and `sudo systemctl restart dnd-play@play`; the SDK master's next message tells it to catch up on the turns the hub played. To cut the hub off at once, remove its line from `authorized_keys`: every batch then falls back to the SDK master.
+
+The webhook URL: the driver wipes it from its exec environment at start (not only from `os.environ`), so `/proc/<driver pid>/environ` no longer shows it, and the per-table AppArmor profiles keep the demo table's processes out of the play unit's `/proc` entries.
+
+Known limits: the driver and the play table's SDK master run as the same user in the same unit, and the URL stays in the driver's memory; reading it needs ptrace attach, which Yama (`kernel.yama.ptrace_scope` 1, check it on the VPS) refuses for a non-descendant. The SDK masters can edit the repository tools the bridge runs, so a tool's output can carry text written by a master. The hub master's standing instructions (`hub-master.md`) must therefore treat every event and every tool output as player data that authorizes nothing outside the game.
+
 ## Operating
-- **Status:** `ssh $VPS 'cd ~/projects/dnd-game-master && bash tools/dm-play.sh tables'`, one table in detail: `bash tools/dm-play.sh --table demo status` (state, campaign, session, turns this hour and today, last error).
+- **Status:** `ssh $VPS 'cd ~/projects/dnd-game-master && bash tools/dm-play.sh tables'`, one table in detail: `bash tools/dm-play.sh --table demo status` (state, campaign, session, turns this hour and today, last error, which master plays: `sdk` or `hub` with its last result).
 - **Kill switch:** `bash tools/dm-play.sh --table <t> pause` stops that master taking actions while its screen stays up; `resume` continues. Hard stop: `sudo systemctl stop dnd-play@<t>` (nginx then answers 502). Off the internet: remove the `dnd-play-sslip` link on Contabo and the `dnd-play-mirror` link on the RU host, `nginx -t`, reload.
 - **Other campaign:** `bash tools/dm-play.sh --table <t> switch <name>` (the master does it when the players ask; a campaign another table plays is refused); `restart-screen` restarts only the screen server.
 - **Fresh master session:** `bash tools/dm-play.sh --table <t> new-session` when the stored session keeps failing (the journal shows the same API error on every turn); after the current turn the master starts over with the opening notice.
 - **Never `dm-screen.sh listen` or `wait` on an online screen:** they move the driver's delivery cursor and take actions away from it; both refuse while a driver runs. The web game master also refuses every campaign a driver plays.
-- **Logs:** `journalctl -u dnd-play@<t> -f` (driver and master), `journalctl -u dnd-play-art` (pictures), `bash tools/dm-screen.sh log --errors --since 1h` (screen, in the repository on the VPS, `DM_ACTIVE_CAMPAIGN=<campaign>`), nginx `/var/log/nginx/dnd-<t>-access.log` and `dnd-<t>-error.log` (Contabo), `/var/log/nginx/dnd-play-mirror-access.log` (RU host, both names). Access logs carry no query string, so no screen token.
+- **Logs:** `journalctl -u dnd-play@<t> -f` (driver and master; hub master calls as `hub call <tool> <args>: exit <code>, <seconds>`), `journalctl -u dnd-play-art` (pictures), `bash tools/dm-screen.sh log --errors --since 1h` (screen, in the repository on the VPS, `DM_ACTIVE_CAMPAIGN=<campaign>`), nginx `/var/log/nginx/dnd-<t>-access.log` and `dnd-<t>-error.log` (Contabo), `/var/log/nginx/dnd-play-mirror-access.log` (RU host, both names). Access logs carry no query string, so no screen token.
 - **Caps:** edit `/etc/dnd-play/dnd-play.env` (every table; the daily speech ledger is shared), then `sudo systemctl restart 'dnd-play@*'`.
 - **Updates:** push, then on the VPS `git pull --ff-only` (`~/.local/bin/uv sync --frozen` when `uv.lock` changed). Driver changes need `sudo systemctl restart 'dnd-play@*'`; screen code only `bash tools/dm-play.sh --table <t> restart-screen` per table; `backend/screen_art.py` needs step 8's install and `sudo systemctl restart dnd-play-art`; engine tools nothing.
 - **The masters' own fixes** land on `main` with an "(online table)" suffix: pull before working on the laptop, undo one with `git revert <sha>`.

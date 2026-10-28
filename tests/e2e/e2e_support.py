@@ -8,7 +8,7 @@ from pathlib import Path
 from lib.screen import inbox, server
 
 TOKEN = "e2e-token"
-PASSWORD = "e2e-table-password"
+PASSWORD = "test-table-pass"
 BROWSER_ARGS = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"]
 
 

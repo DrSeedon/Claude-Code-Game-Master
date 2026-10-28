@@ -175,14 +175,20 @@ def test_the_unit_fails_closed_and_hides_the_ssh_keys():
                 "DM_SCREEN_MAX_PENDING=10", "DM_SCREEN_DAILY_VOICE_MB=200"):
         assert cap in defaults
     # the home is an allowlist and other processes' /proc/<pid>/root is closed by the AppArmor profile
-    assert "ProtectHome=tmpfs" in lines and "AppArmorProfile=dnd-play-master" in lines and "InaccessiblePaths=-/opt" in lines
+    assert "ProtectHome=tmpfs" in lines and "AppArmorProfile=dnd-play-master-%i" in lines and "InaccessiblePaths=-/opt" in lines
     binds = [path for line in lines if line.startswith(("BindPaths=", "BindReadOnlyPaths=")) for path in line.split("=", 1)[1].split()]
     assert sorted(p.lstrip("-") for p in binds if "/.ssh/" in p) == ["/home/kesha/.ssh/config", "/home/kesha/.ssh/id_ed25519_github",
                                                                       "/home/kesha/.ssh/known_hosts"]
     assert not [p for p in binds if p.lstrip("-") in ("/home/kesha", "/home/kesha/.ssh", "/home/kesha/projects", "/home/kesha/orchestra",
                                                        "/home/kesha/.cache")]                 # other programs install from ~/.cache/uv
     profile = (ROOT / "ops" / "play" / "apparmor-dnd-play-master").read_text(encoding="utf-8")
-    assert "profile dnd-play-master " in profile and "ptrace (read, trace, readby, tracedby) peer=dnd-play-master," in profile
+    # One label per table: the guests' demo master must not read the play driver's /proc entries (its environ).
+    for table in ("play", "demo"):
+        label = f"dnd-play-master-{table}"
+        assert f"profile {label} " in profile and f"ptrace (read, trace, readby, tracedby) peer={label}," in profile
+        assert f"signal (send, receive) peer={label}," in profile
+    rules = [line.strip() for line in profile.splitlines() if line.strip().startswith(("ptrace", "signal"))]
+    assert not [rule for rule in rules if "peer=dnd-play-master," in rule or "peer=dnd-play-master-*" in rule]
     assert not [line for line in profile.splitlines() if line.strip().startswith(("ptrace", "signal (send")) and "unconfined" in line
                 and "readby" not in line]
 

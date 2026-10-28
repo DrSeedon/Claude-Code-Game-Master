@@ -180,6 +180,20 @@ def other_table_with(campaign, root=PROJECT_ROOT):
     return None
 
 
+def master_line(status):
+    """Who plays the table: the SDK master on the VPS, or the hub master (backend/hub_master.py) with its record."""
+    hub = status.get("hub") if isinstance(status.get("hub"), dict) else None
+    if status.get("master") != "hub" or hub is None:
+        return f"master: {status.get('master')}"
+    parts = [f"last {hub.get('last_result') or 'none yet'}", f"last hub turn {hub.get('last_turn_at') or 'never'}"]
+    if hub.get("fails"):
+        parts.append(f"{hub['fails']} failures in a row")
+    if isinstance(hub.get("paused_until"), (int, float)):
+        parts.append("paused (the SDK master plays) until "
+                     + datetime.fromtimestamp(hub["paused_until"], timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
+    return "master: hub (" + ", ".join(parts) + ")"
+
+
 def status_lines(root=PROJECT_ROOT):
     config, status = load_config(root), read_status(root)
     lines = [f"table {table_name()}: campaign {config['campaign']}, port {config['port']}, paused {'yes' if config['paused'] else 'no'}, "
@@ -193,6 +207,8 @@ def status_lines(root=PROJECT_ROOT):
     lines.append(f"turns: {status.get('turns_hour', 0)} this hour, {status.get('turns_day', 0)} today, last {status.get('last_turn_at') or 'never'}")
     if status.get("last_error"):
         lines.append(f"last error: {status['last_error']}")
+    if status.get("master"):
+        lines.append(master_line(status))
     if isinstance(status.get("retry_at"), (int, float)):
         lines.append("usage limit: nothing goes to the master before "
                      + datetime.fromtimestamp(status["retry_at"], timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
@@ -230,7 +246,8 @@ def main(argv=None, root=PROJECT_ROOT):
         for table in table_names(root) or [TABLE]:
             config, status = load_config(root, table=table), read_status(root, table)
             state = (status.get("state") if driver_alive(status) else "offline") if status else "not started"
-            print(f"{table}: campaign {config['campaign']}, port {config['port']}, {state}")
+            master = f", master {status['master']}" if status and status.get("master") else ""
+            print(f"{table}: campaign {config['campaign']}, port {config['port']}, {state}{master}")
     elif args.cmd == "switch":
         try:
             name = check_campaign(args.campaign, root)

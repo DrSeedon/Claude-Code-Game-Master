@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,10 @@ from backend.providers.claude_screen import ScreenGMProvider, scrub_api_route_en
 from backend.runtime import AgentEvent
 from backend.runtime.session_store import load_runtime_session, save_runtime_session
 from backend.runtime.turn_lock import try_campaign_turn_lock
-from backend.screen_driver import (CARRIED, FAILED_LINE, FRESH, GM_SESSION, LIMIT_LINE, NOT_PUBLISHED, REST_LINE, RESTARTED,
-                                   SWITCHED, ScreenDriver, Settings, build_prompt, spawn_screen_server)
+from backend.hub_master import HubSettings
+from backend.screen_driver import (CARRIED, FAILED_LINE, FRESH, GM_SESSION, HUB_CATCH_UP, HUB_FAILED_LINE, HUB_FALLBACK,
+                                   HUB_PAUSED_LINE, LIMIT_LINE, NOT_PUBLISHED, REST_LINE, RESTARTED, SDK_CATCH_UP, SWITCHED,
+                                   TAKEOVER, ScreenDriver, Settings, build_prompt, spawn_screen_server)
 from lib.screen import activity, cli as screen_cli, inbox, online
 
 MODEL = "claude-sonnet-5-5"
@@ -108,7 +111,7 @@ class Table:
                                     "turn_timeout": 5.0, **settings})
         self.providers, self.children, self.prompts = [], [], []
 
-    def driver(self, campaign=None):
+    def driver(self, campaign=None, **hub):
         def provider_factory(name, sdir, prompt_file, resume):
             provider = FakeProvider(name, sdir, prompt_file, resume, self.script)
             self.providers.append(provider)
@@ -126,7 +129,7 @@ class Table:
             return path
 
         return ScreenDriver(self.root, campaign=campaign, settings=self.settings, provider_factory=provider_factory,
-                            spawn=spawn, prompt_builder=prompt_builder, clock=self.clock)
+                            spawn=spawn, prompt_builder=prompt_builder, clock=self.clock, **hub)
 
     def sdir(self, name="alpha"):
         return self.root / "world-state" / "campaigns" / name / "screen"
@@ -145,6 +148,8 @@ class Table:
 def no_config_override(monkeypatch):
     monkeypatch.delenv("DM_PLAY_CONFIG", raising=False)
     monkeypatch.delenv("DM_SCREEN_SPEND_FILE", raising=False)
+    for key in ("DM_PLAY_MASTER", "DM_PLAY_HUB_WEBHOOK", "DM_PLAY_HUB_SOCKET"):
+        monkeypatch.delenv(key, raising=False)
 
 
 def run(coro):
@@ -1158,3 +1163,336 @@ def test_a_cli_that_fails_before_working_is_still_retried(provider_factory, monk
         return [e.type async for e in provider.process_message("[screen #1] Катя (button): x", "", MODEL)]
 
     assert run(scenario()) == ["turn_end"] and len(clients) == 2
+
+
+# ---- the hub master (DM_PLAY_MASTER=hub, backend/hub_master.py)
+
+WEBHOOK = "https://hub.example/hooks/SECRET-TOKEN"
+
+
+class FakeBridge:
+    def __init__(self, hub, path, root, table, context):
+        self.hub, self.path, self.table, self.context = hub, path, table, context
+        self.ticket, self.tickets, self.revoked = None, [], 0
+        self.started = self.stopped = False
+
+    async def start(self):
+        self.started = True
+
+    async def stop(self):
+        self.stopped = True
+
+    def issue(self):
+        self.ticket = f"ticket-{len(self.tickets) + 1}"
+        self.tickets.append(self.ticket)
+        return self.ticket
+
+    def extension(self):
+        return self.hub.extension
+
+    async def revoke(self):
+        self.revoked += 1
+        self.ticket = None
+        if self.hub.on_revoke:      # the last running call of the hub master finishes inside revoke()
+            self.hub.on_revoke(self)
+
+
+def hub_publishes(hub, payload):
+    screen_cli.set_turn(hub.bridge.context()["sdir"], TURN)
+    return True, None
+
+
+def hub_silent(hub, payload):
+    return True, None
+
+
+def hub_down(hub, payload):
+    return False, "HTTP 502"
+
+
+class Hub:
+    """The hub side of a driver test: settings, a webhook poster that plays a script per batch, the bridge."""
+
+    def __init__(self, *plays, timeout=0.05, fails=2, pause=900.0, on_revoke=None, extension=0.0):
+        self.settings = HubSettings(master="hub", webhook=WEBHOOK, timeout=timeout, fails=fails, pause=pause,
+                                    socket=Path("/unused/hub.sock"), poll=0.01)
+        self.plays = list(plays) or [hub_publishes]
+        self.on_revoke = on_revoke
+        self.extension = extension
+        self.payloads, self.bridges, self.locked = [], [], []
+
+    @property
+    def bridge(self):
+        return self.bridges[-1]
+
+    def poster(self, url, payload):
+        assert url == WEBHOOK
+        self.payloads.append(payload)
+        self.locked.append(try_campaign_turn_lock(self.bridge.context()["sdir"].parent) is None)
+        play = self.plays.pop(0) if len(self.plays) > 1 else self.plays[0]
+        return play(self, payload)
+
+    def factory(self, path, root, table, context):
+        self.bridges.append(FakeBridge(self, path, root, table, context))
+        return self.bridge
+
+    def kwargs(self):
+        return {"hub": self.settings, "poster": self.poster, "bridge_factory": self.factory}
+
+
+async def hub_started(table, hub, previous=None, resume=None):
+    if previous is not None:
+        online.write_status(previous, table.root)
+    if resume:
+        save_runtime_session(table.sdir(), runtime_id="claude", model_name=MODEL, session_id=resume, filename=GM_SESSION)
+    driver = table.driver("alpha", **hub.kwargs())
+    await driver.start()
+    return driver
+
+
+def line(n, text):
+    return f"[screen #{n}] Катя (button): {text}"
+
+
+def test_hub_mode_the_hub_publishes_and_the_sdk_master_is_never_called(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_publishes)
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Осмотреться")
+        await driver.step()
+        table.act("2. Идти")
+        await driver.step()
+        status = table.status()
+        await driver.shutdown()
+        return status
+
+    status = run(scenario())
+    assert table.providers[0].messages == []
+    first, second = hub.payloads
+    assert {k: first[k] for k in ("table", "campaign", "turn", "ticket")} == {"table": "play", "campaign": "alpha", "turn": 0, "ticket": "ticket-1"}
+    assert first["message"].split("\n") == [TAKEOVER, HUB_CATCH_UP, FRESH.format(name="alpha"), line(1, "1. Осмотреться")]
+    assert second == {"table": "play", "campaign": "alpha", "turn": 1, "ticket": "ticket-2", "message": line(2, "2. Идти")}
+    assert hub.locked == [True, True] and hub.bridge.revoked == 0 and hub.bridge.started and hub.bridge.stopped
+    assert status["master"] == "hub" and status["state"] == "idle" and status["turns_day"] == 2
+    assert status["hub"]["fails"] == 0 and status["hub"]["last_result"] == "published" and status["hub"]["last_turn_at"]
+    assert status["hub"]["paused_until"] is None and table.feed() == []
+    assert json.loads((table.sdir() / "turn.json").read_text())["answered"] == 2
+    assert not (tmp_path / "world-state/usage/game-turns.jsonl").exists()   # a hub turn reports no usage
+
+
+def test_a_hub_timeout_revokes_the_ticket_and_the_sdk_master_plays_the_batch(tmp_path):
+    hub = Hub(hub_silent)
+    seen = []
+
+    def sdk(provider, message):
+        seen.append(hub.bridge.ticket)
+        return publish(provider)
+
+    table = Table(tmp_path, script=sdk)
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Осмотреться")
+        await driver.step()
+
+    run(scenario())
+    assert hub.bridge.revoked == 1 and seen == [None]
+    assert table.providers[0].messages == ["\n".join([HUB_FALLBACK, FRESH.format(name="alpha"), line(1, "1. Осмотреться")])]
+    assert table.feed() == [HUB_FAILED_LINE]
+    status = table.status()
+    assert status["state"] == "idle" and status["hub"]["fails"] == 1 and status["hub"]["last_result"] == "no turn in 0s"
+    assert json.loads((table.sdir() / "turn.json").read_text())["answered"] == 1
+
+
+def test_a_failed_post_falls_back_at_once(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_down, timeout=30)
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Осмотреться")
+        started = time.monotonic()
+        await driver.step()
+        return time.monotonic() - started
+
+    assert run(scenario()) < 5
+    assert table.providers[0].messages[0].startswith(HUB_FALLBACK + "\n")
+    status = table.status()
+    assert status["hub"]["last_result"] == "post failed: HTTP 502" and hub.bridge.revoked == 1
+    assert status["turns_day"] == 1     # the failed POST played nothing: only the SDK turn counts
+
+
+def test_two_hub_failures_pause_the_hub_then_it_plays_again(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_down, hub_silent, hub_publishes, pause=900)
+
+    async def scenario():
+        driver = await hub_started(table, hub, resume="s-old")
+        for n in (1, 2, 3):
+            table.act(f"{n}. Ход")
+            await driver.step()
+        paused = table.status()
+        table.clock.now += 901
+        table.act("4. Ход")
+        await driver.step()
+        return paused, table.status()
+
+    paused, after = run(scenario())
+    messages = table.providers[0].messages
+    assert len(hub.payloads) == 3 and len(messages) == 3
+    assert messages[0] == "\n".join([HUB_FALLBACK, line(1, "1. Ход")])
+    assert messages[1] == "\n".join([HUB_FALLBACK, line(2, "2. Ход")])
+    assert messages[2] == line(3, "3. Ход")     # straight to the SDK master during the pause
+    assert table.feed().count(HUB_FAILED_LINE) == 2 and table.feed().count(HUB_PAUSED_LINE) == 1
+    assert paused["hub"]["fails"] == 2 and paused["hub"]["paused_until"] == 1_800_000_900
+    assert hub.payloads[2]["message"] == "\n".join([HUB_CATCH_UP, line(4, "4. Ход")])
+    assert after["hub"]["fails"] == 0 and after["hub"]["paused_until"] is None and after["hub"]["last_result"] == "published"
+
+
+def test_catch_up_notes_go_to_whichever_master_missed_turns(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_publishes, hub_silent, hub_publishes, hub_publishes)
+
+    async def scenario():
+        driver = await hub_started(table, hub, previous={"master": "hub"}, resume="s-old")
+        for n in (1, 2, 3, 4):
+            table.act(f"{n}. Ход")
+            await driver.step()
+
+    run(scenario())
+    assert [p["message"] for p in hub.payloads] == ["\n".join([HUB_CATCH_UP, line(1, "1. Ход")]), line(2, "2. Ход"),
+                                                    "\n".join([HUB_CATCH_UP, line(3, "3. Ход")]), line(4, "4. Ход")]
+    assert table.providers[0].messages == ["\n".join([SDK_CATCH_UP, HUB_FALLBACK, line(2, "2. Ход")])]
+
+
+def test_the_takeover_notice_comes_only_after_another_master(tmp_path):
+    for previous, expected in (({"master": "sdk"}, True), ({}, True), ({"master": "hub"}, False)):
+        root = tmp_path / str(len(previous) and previous["master"])
+        root.mkdir()
+        table, hub = Table(root), Hub(hub_publishes)
+
+        async def scenario():
+            driver = await hub_started(table, hub, previous=previous, resume="s-old")
+            table.act("1. Ход")
+            await driver.step()
+
+        run(scenario())
+        assert hub.payloads[0]["message"].startswith(TAKEOVER + "\n") is expected, previous
+
+
+def test_a_resumed_sdk_session_catches_up_after_the_hub_played(tmp_path):
+    table = Table(tmp_path)
+
+    async def scenario():
+        online.write_status({"master": "hub"}, tmp_path)
+        driver = await started(table, resume="s-old")
+        table.act("1. Ход")
+        await driver.step()
+        table.act("2. Ход")
+        await driver.step()
+
+    run(scenario())
+    assert table.providers[0].messages == ["\n".join([SDK_CATCH_UP, line(1, "1. Ход")]), line(2, "2. Ход")]
+    status = table.status()
+    assert status["master"] == "sdk" and status["hub"] is None
+
+
+def test_a_turn_published_during_revoke_counts_for_the_hub(tmp_path):
+    table = Table(tmp_path)
+    hub = Hub(hub_silent, on_revoke=lambda bridge: screen_cli.set_turn(bridge.context()["sdir"], TURN))
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Ход")
+        await driver.step()
+
+    run(scenario())
+    assert hub.bridge.revoked == 1 and table.providers[0].messages == [] and table.feed() == []
+    assert table.status()["hub"]["fails"] == 0 and table.status()["hub"]["last_result"] == "published"
+
+
+def hub_publishes_late(hub, payload):
+    """The hub publishes after the base timeout, as after a picture for a new act."""
+    import threading
+
+    sdir = hub.bridge.context()["sdir"]
+    threading.Timer(0.3, screen_cli.set_turn, (sdir, TURN)).start()
+    return True, None
+
+
+@pytest.mark.parametrize("extension, hub_wins", [(2.0, True), (0.0, False)])
+def test_the_hubs_time_in_slow_tools_extends_its_deadline(tmp_path, extension, hub_wins):
+    table, hub = Table(tmp_path), Hub(hub_publishes_late, timeout=0.05, extension=extension)
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Новый акт")
+        await driver.step()
+        await asyncio.sleep(0.4)        # the late timer of the losing case lands before the next test
+
+    run(scenario())
+    assert (table.providers[0].messages == []) is hub_wins
+    assert (table.status()["hub"]["last_result"] == "published") is hub_wins
+
+
+def test_scrub_exec_environ_wipes_the_value_that_proc_environ_shows():
+    code = ("import os, sys; from backend.hub_master import scrub_exec_environ; "
+            "assert scrub_exec_environ('DM_PLAY_HUB_WEBHOOK'); assert 'DM_PLAY_HUB_WEBHOOK' not in os.environ; "
+            "sys.stdout.write(open('/proc/self/environ', 'rb').read().decode('latin-1'))")
+    if not Path("/proc/self/environ").exists():
+        pytest.skip("no /proc")
+    out = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parent.parent, capture_output=True,
+                         text=True, env={**os.environ, "DM_PLAY_HUB_WEBHOOK": WEBHOOK}, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert "SECRET-TOKEN" not in out.stdout and "PATH=" in out.stdout
+
+
+def test_the_webhook_leaves_the_environment_and_never_reaches_the_log(tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    monkeypatch.setenv("DM_PLAY_MASTER", "hub")
+    monkeypatch.setenv("DM_PLAY_HUB_WEBHOOK", WEBHOOK)
+    monkeypatch.setenv("DM_PLAY_HUB_SOCKET", "/unused/hub.sock")
+    table, hub = Table(tmp_path), Hub(hub_publishes)
+    scrubbed = []
+    real_scrub = driver_module.scrub_exec_environ
+    monkeypatch.setattr(driver_module, "scrub_exec_environ", lambda name: scrubbed.append(name) or real_scrub(name))
+
+    async def scenario():
+        driver = table.driver("alpha", poster=hub.poster, bridge_factory=hub.factory)
+        await driver.start()
+        assert "DM_PLAY_HUB_WEBHOOK" not in os.environ and scrubbed == ["DM_PLAY_HUB_WEBHOOK"]   # /proc's copy too
+        table.act("1. Ход")
+        await driver.step()
+        return driver
+
+    driver = run(scenario())
+    assert driver.hub.master == "hub" and driver.hub.webhook == WEBHOOK and len(hub.payloads) == 1
+    assert hub.bridge.path == Path("/unused/hub.sock")
+    assert "webhook set" in caplog.text and "SECRET-TOKEN" not in caplog.text
+    assert "SECRET-TOKEN" not in online.status_path(tmp_path).read_text()
+
+
+def test_a_usage_limit_of_the_sdk_master_does_not_stop_the_hub(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_publishes, hub_silent)
+
+    async def scenario():
+        driver = await hub_started(table, hub, resume="s-old")
+        driver.retry_at = table.clock.now + 1000
+        table.act("1. Ход")
+        await driver.step()             # the hub plays during the SDK master's rest
+        table.act("2. Ход")
+        await driver.step()             # the hub fails: the lines wait for the reset, the SDK master is not called
+        return driver
+
+    driver = run(scenario())
+    assert len(hub.payloads) == 2 and table.providers[0].messages == []
+    assert driver.carry == [CARRIED, line(2, "2. Ход")] and table.status()["state"] == "resting"
+
+
+def test_sdk_mode_status_has_no_hub(tmp_path):
+    table = Table(tmp_path)
+
+    async def scenario():
+        driver = await started(table)
+        assert driver.bridge is None and driver.hub.master == "sdk"
+
+    run(scenario())
+    assert table.status()["master"] == "sdk" and table.status()["hub"] is None

@@ -5,6 +5,9 @@ them to the master in batches; the master answers each message with a screen tur
 batches it follows world-state/online-<table>.json (pause, campaign switch, screen restart, see lib/screen/online.py)
 and writes world-state/online-<table>-status.json, which the page shows. The table is DM_PLAY_TABLE (default "play");
 each table is its own unit, port and campaign. Run: python -m backend.screen_driver.
+
+With DM_PLAY_MASTER=hub (owner decision 2026-10-28, backend/hub_master.py) a batch goes to the hub master first, a T3
+thread on the hub that plays through the gate; a batch it has not published in time goes to the SDK master.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.hub_master import TOOL_TIMEOUT, WEBHOOK_ENV, HubBridge, HubSettings, post_event, scrub_exec_environ
 from backend.providers.claude_screen import ScreenGMProvider, scrub_api_route_env
 from backend.runtime.session_store import clear_runtime_session, load_runtime_session, save_runtime_session
 from backend.runtime.turn_lock import CampaignTurnLock
@@ -61,6 +65,17 @@ RESTARTED = ("[system] These actions reached the master before, but no turn answ
 REST_LINE = "Мастер отдыхает: лимит ходов"
 LIMIT_LINE = "Мастер отдыхает: лимит подписки, скоро вернётся"
 FAILED_LINE = "Мастер споткнулся: ход не вышел, повторите действие"
+HUB_FAILED_LINE = "Мастер на хабе не ответил: ход играет запасной мастер"
+HUB_PAUSED_LINE = "Мастер на хабе недоступен: пока играет запасной мастер"
+# The hub master (DM_PLAY_MASTER=hub): what each master is told when the other one played in between.
+TAKEOVER = "[system] You take over this table from the VPS master. " + STANDS
+HUB_CATCH_UP = ("[system] The VPS master played the turns since your last answer (or the table's driver restarted). Catch "
+                "up first: run status and dm-screen.sh log --kind turn --tail 3 --json through the gate (dm-session.sh "
+                "context when the scene is unclear), then answer.")
+SDK_CATCH_UP = ("[system] Another master played the turns since your last answer. Catch up first: bash tools/dm-session.sh "
+                "context and bash tools/dm-screen.sh log --kind turn --tail 3 --json, then answer.")
+HUB_FALLBACK = ("[system] The hub master did not answer this batch in time, so it comes to you. The engine may already "
+                "hold part of it: check the world state before you apply anything.")
 
 
 def _env_number(environ, name, default, cast=int):
@@ -214,7 +229,7 @@ def _is_screen_server(pid):
 class ScreenDriver:
 
     def __init__(self, root=PROJECT_ROOT, campaign=None, settings=None, provider_factory=None, spawn=None,
-                 prompt_builder=None, clock=time.time):
+                 prompt_builder=None, clock=time.time, hub=None, poster=None, bridge_factory=None):
         self.root = Path(root)
         self.campaign_arg = campaign
         self.settings = settings or Settings.from_env()
@@ -251,6 +266,17 @@ class ScreenDriver:
         self.last_used = clock()
         self.bad_campaign = None
         self.stopping = False
+        self.hub = hub or HubSettings.from_env()
+        self.poster = poster or post_event
+        self.bridge_factory = bridge_factory or HubBridge
+        self.bridge = None
+        self.hub_fails = 0
+        self.hub_paused_until = 0.0
+        self.hub_last_result = None
+        self.hub_last_turn_at = None
+        self.hub_takeover = False
+        self.hub_behind = True      # the hub has not seen what happened before this driver started
+        self.sdk_behind = False     # the hub published turns the SDK master's session has not seen
 
     # ---- paths and small helpers
 
@@ -289,7 +315,11 @@ class ScreenDriver:
                 "turns_hour": self._turns_within(3600, now), "turns_day": len(self.turn_times),
                 "last_turn_at": self.last_turn_at, "last_error": self.last_error,
                 "turn_times": [round(t, 3) for t in self.turn_times],
-                "retry_at": round(self.retry_at, 3) if self.retry_at > now else None}
+                "retry_at": round(self.retry_at, 3) if self.retry_at > now else None,
+                "master": self.hub.master,
+                "hub": {"fails": self.hub_fails,
+                        "paused_until": round(self.hub_paused_until, 3) if self.hub_paused_until > now else None,
+                        "last_result": self.hub_last_result, "last_turn_at": self.hub_last_turn_at} if self.hub.hub else None}
 
     def write_status(self):
         try:
@@ -305,7 +335,13 @@ class ScreenDriver:
 
     # ---- start, campaign, child process
 
+    def _bridge_context(self):
+        return {"campaign": self.campaign, "sdir": self.sdir, "turn": turn_id(self.sdir)}
+
     async def start(self):
+        # Its URL holds a token: no child (the CLI, the screen server, tools) inherits it, and it is wiped from the
+        # exec environment too, which /proc/<driver pid>/environ shows to every process with ptrace read access.
+        scrub_exec_environ(WEBHOOK_ENV)
         removed = scrub_api_route_env()
         if removed:
             logger.warning("removed %s from the environment: the master thinks on the subscription", ", ".join(removed))
@@ -329,6 +365,20 @@ class ScreenDriver:
         retry_at = previous.get("retry_at")
         if isinstance(retry_at, (int, float)) and retry_at > now:
             self.retry_at, self.limit_streak = float(retry_at), 1   # a usage-limit rest outlives a restart
+        # The SDK master's resumed session missed what the hub played before this start.
+        self.sdk_behind = bool(self.persisted_session) and previous.get("master") == "hub"
+        if self.hub.hub:
+            self.hub_takeover = previous.get("master") != "hub"
+            before = previous.get("hub") if isinstance(previous.get("hub"), dict) else {}
+            paused = before.get("paused_until")
+            if isinstance(paused, (int, float)) and paused > now:   # a hub pause outlives a restart
+                self.hub_paused_until, self.hub_fails = float(paused), int(before.get("fails") or 0)
+            self.hub_last_turn_at = before.get("last_turn_at")
+            self.bridge = self.bridge_factory(self.hub.socket, self.root, online.table_name(), self._bridge_context)
+            await self.bridge.start()
+        logger.info("master: %s%s", self.hub.master, f" (webhook {'set' if self.hub.webhook else 'unset'}, timeout "
+                    f"{self.hub.timeout:.0f}s, pause {self.hub.pause:.0f}s after {self.hub.fails} failures, socket "
+                    f"{self.hub.socket})" if self.hub.hub else "")
         self.write_status()
 
     async def open_campaign(self, name, fresh, notice=FRESH):
@@ -358,6 +408,8 @@ class ScreenDriver:
         self.failed = False
         self.carry = [RESTARTED, *missed] if missed else []   # retry_at stays: a usage limit is the account's
         self.notices = [] if resume else [notice.format(name=name)]
+        if not resume:
+            self.sdk_behind = False     # a fresh session loads the context itself
         if missed:
             logger.warning("[%s] %d delivered actions got no turn: they go to the master again", name, len(missed))
 
@@ -439,6 +491,8 @@ class ScreenDriver:
         """The new campaign's prompt and provider come first: when that fails the old campaign has lost nothing."""
         logger.info("[%s] switching the table to %s", self.campaign, name)
         old = self.provider
+        if self.bridge is not None:     # a trailing hub call must not land in the new campaign
+            await self.bridge.revoke()
         async with self.child_lock:
             await self.open_campaign(name, fresh=True, notice=SWITCHED)
             await self.stop_child()
@@ -511,7 +565,7 @@ class ScreenDriver:
         if self.paused:
             self.set_state("paused")
             return await asyncio.sleep(self.settings.tick)
-        if now < self.retry_at:     # a usage limit: nothing goes to the master until its reset
+        if now < self.retry_at and not self.hub_ready(now):   # a usage limit: nothing goes to the SDK master until its reset
             self.set_state("resting")
             return await asyncio.sleep(self.settings.tick)
         if self.capped(now):
@@ -544,16 +598,40 @@ class ScreenDriver:
                 await asyncio.wait_for(self.provider.close(), 10)
             self.connected = False
 
+    def hub_ready(self, now=None):
+        return self.hub.hub and (self.clock() if now is None else now) >= self.hub_paused_until
+
     async def play(self, notices, events):
-        """One batch: cursor first (after a crash the batch goes again once, as unanswered), then one master message;
-        make sure a turn came out."""
+        """One batch: cursor first (after a crash the batch goes again once, as unanswered), then one master message
+        (the hub master first in hub mode); make sure a turn came out."""
         if events:
             screen_cli.write_cursor(self.sdir, events[-1]["id"])
         lines = [*notices, *(inbox.format_line(e) for e in events)]
         logger.info("[%s] batch %s%s", self.campaign, [e["id"] for e in events] or "-",
                     f" + {len(notices)} notice lines" if notices else "")
         before = turn_id(self.sdir)
-        result = await self.send("\n".join(lines))
+        if not self.hub_ready():
+            return await self.sdk_turn(self._sdk_message(lines), lines, before)
+        head = ([TAKEOVER] if self.hub_takeover else []) + ([HUB_CATCH_UP] if self.hub_behind else [])
+        if await self.hub_turn("\n".join([*head, *lines]), before):
+            return self._published("hub")
+        if self.stopping:
+            return
+        self._activity(HUB_FAILED_LINE)
+        if self.clock() < self.retry_at:    # the SDK master rests on a usage limit: the lines wait
+            self.carry = self._carried(lines)
+            return self.set_state("resting")
+        return await self.sdk_turn(self._sdk_message(lines, HUB_FALLBACK), lines, before)
+
+    def _sdk_message(self, lines, note=None):
+        head = ([SDK_CATCH_UP] if self.sdk_behind else []) + ([note] if note else [])
+        self.sdk_behind = False
+        return "\n".join([*head, *lines])
+
+    async def sdk_turn(self, message, lines, before):
+        """The SDK master's turn: one follow-up when nothing was published, then the failure line; a usage limit
+        carries the lines."""
+        result = await self.send(message)
         if turn_id(self.sdir) > before:
             return self._published()
         if result.rate_limited:
@@ -574,15 +652,92 @@ class ScreenDriver:
         self._activity(FAILED_LINE)
         self.set_state("error")
 
-    def _published(self):
+    async def hub_turn(self, message, before):
+        """One batch for the hub master under the campaign turn lock: POST the event with a fresh ticket, wait for
+        a published turn up to the hub timeout, else revoke the ticket. True when the hub published."""
+        stamp = self.clock()
+        self.turn_times.append(stamp)
+        self.last_turn_at = _now_iso()
+        self.set_state("thinking")
+        lock = CampaignTurnLock(self.campaign_dir)
+        await lock.acquire_async()
+        published, reason, started = False, None, time.monotonic()
+        try:
+            ticket = self.bridge.issue()
+            payload = {"table": online.table_name(), "campaign": self.campaign, "turn": before, "ticket": ticket,
+                       "message": message}
+            ok, error = await asyncio.to_thread(self.poster, self.hub.webhook, payload)
+            if not ok:
+                await self.bridge.revoke()      # a POST that timed out may still have reached the hub
+                with contextlib.suppress(ValueError):   # nothing was played: no turn for the caps
+                    self.turn_times.remove(stamp)
+                reason = f"post failed: {error}"
+            else:
+                self.hub_takeover = self.hub_behind = False
+                deadline = started + self.hub.timeout
+                while not self.stopping and time.monotonic() < deadline + self._hub_extension():
+                    if turn_id(self.sdir) > before:
+                        published = True
+                        break
+                    await asyncio.sleep(self.hub.poll)
+                if not published:
+                    await self.bridge.revoke()
+                    # A turn the last running call published counts: that call finished before revoke() returned.
+                    published = turn_id(self.sdir) > before
+                    reason = None if published else "stopped" if self.stopping else f"no turn in {self.hub.timeout:.0f}s"
+        except asyncio.CancelledError:
+            self.bridge.ticket = None
+            raise
+        except Exception as exc:
+            logger.exception("[%s] hub turn failed", self.campaign)
+            with contextlib.suppress(Exception):
+                await self.bridge.revoke()
+            reason = f"{type(exc).__name__}: {exc}"[:300]
+        finally:
+            lock.release()
+            self.last_used = self.clock()
+        duration = time.monotonic() - started
+        if published:
+            self.hub_fails, self.hub_last_result, self.hub_last_turn_at = 0, "published", _now_iso()
+            logger.info("[%s] hub master published turn %s in %.1fs", self.campaign, turn_id(self.sdir), duration)
+        else:
+            self._hub_failed(reason)
+        return published
+
+    def _hub_extension(self):
+        """The hub's time in slow tools (dm-art.sh) under this ticket, up to one tool timeout: a batch that opens
+        a new act waits 1-5 minutes for its picture before the turn can come."""
+        extension = getattr(self.bridge, "extension", None)
+        return min(max(float(extension()), 0.0), TOOL_TIMEOUT) if extension else 0.0
+
+    def _hub_failed(self, reason):
+        self.hub_fails += 1
+        self.hub_last_result = reason
+        logger.warning("[%s] hub master failed (%s, %d in a row): the SDK master plays this batch", self.campaign,
+                       reason, self.hub_fails)
+        if self.hub_fails >= self.hub.fails:
+            self.hub_paused_until = self.clock() + self.hub.pause
+            logger.warning("[%s] hub master paused for %.0fs after %d failures", self.campaign, self.hub.pause, self.hub_fails)
+            if self.hub_fails == self.hub.fails:    # one feed line per outage, not per probe after a pause
+                self._activity(HUB_PAUSED_LINE)
+
+    def _published(self, master="sdk"):
+        if master == "hub":
+            self.sdk_behind = True
+        else:
+            self.hub_behind = True
         self.failed = False
         self.set_state("idle")
+
+    @staticmethod
+    def _carried(lines):
+        header = RESTARTED if RESTARTED in lines else CARRIED
+        return [header, *[line for line in lines if line not in (CARRIED, RESTARTED)][-CARRY_MAX:]]
 
     def _rate_limited(self, result, lines):
         self.limit_streak += 1
         wait = float(result.retry_after) if result.retry_after else min(RATE_LIMIT_WAIT * 2 ** (self.limit_streak - 1), RATE_LIMIT_MAX)
-        header = RESTARTED if RESTARTED in lines else CARRIED
-        self.carry = [header, *[line for line in lines if line not in (CARRIED, RESTARTED)][-CARRY_MAX:]]
+        self.carry = self._carried(lines)
         self.retry_at = self.clock() + wait
         self.last_error = f"usage limit: {result.error}"
         logger.error("[%s] usage limit (%s): %d lines wait %.0fs", self.campaign, result.error, len(self.carry) - 1, wait)
@@ -719,6 +874,9 @@ class ScreenDriver:
                 await asyncio.wait_for(self.provider.close(), 10)
         with contextlib.suppress(BaseException):
             await self.stop_child()
+        if self.bridge is not None:
+            with contextlib.suppress(BaseException):
+                await self.bridge.stop()
         self.set_state("offline")
 
 

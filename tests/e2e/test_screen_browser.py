@@ -55,7 +55,7 @@ def test_gate_login_over_http(make_table):
     status, _, page = http_call(table.url, "POST", "/login", "password=nope", form)
     assert status == 401 and b'role="alert"' in page
 
-    status, response, _ = http_call(table.url, "POST", "/login", f"password={PASSWORD}", form)
+    status, response, _ = http_call(table.url, "POST", "/login", "password=" + PASSWORD, form)
     cookie = response.getheader("Set-Cookie", "")
     assert status == 303 and response.getheader("Location") == "/" and cookie.startswith("screen_login=")
     signed = {"Cookie": cookie.split(";")[0]}

@@ -52,11 +52,16 @@ Environment=DM_SCREEN_MAX_PENDING=10 DM_SCREEN_DAILY_VOICE_MB=200
 Environment=DM_PLAY_TABLE=%i
 Environment=DM_SCREEN_LOGIN_FILE=/etc/dnd-play/%i-login.json
 # Caps and the model shared by every table (ops/play/dnd-play.env.example), then the table's own port and public URL
-# (ops/play/table.env.example); no secrets, the keys stay in the project .env. No leading "-": without either file
-# the table does not start.
+# (ops/play/table.env.example); no secrets, the keys stay in the project .env (one exception: the play table's hub
+# webhook URL, /etc/dnd-play/play.env, mode 0600). No leading "-": without either file the table does not start.
 EnvironmentFile=/etc/dnd-play/dnd-play.env
 EnvironmentFile=/etc/dnd-play/%i.env
 ExecStart=/home/kesha/projects/dnd-game-master/.venv/bin/python -m backend.screen_driver
+# The hub master's bridge socket (DM_PLAY_MASTER=hub, owner 2026-10-28): /run/dnd-play/<table>/hub.sock, which the
+# root-owned gate /usr/local/lib/dnd-play/hub-gate (the hub key's forced command, as kesha) connects to. 0700: only
+# kesha reaches it. systemd sets RUNTIME_DIRECTORY and removes the directory when the unit stops.
+RuntimeDirectory=dnd-play/%i
+RuntimeDirectoryMode=0700
 SyslogIdentifier=dnd-play-%i
 Restart=on-failure
 RestartSec=10
@@ -76,9 +81,10 @@ OOMScoreAdjust=600
 NoNewPrivileges=yes
 # Every other kesha process is visible in /proc, and /proc/<pid>/root of one outside this unit is the host filesystem:
 # without this profile the hidden home below was one path away (TODO.md, 2026-10-27). The profile
-# (ops/play/apparmor-dnd-play-master) gives ptrace and signals only among the unit's own processes. No "-": the unit
-# does not start without the profile loaded.
-AppArmorProfile=dnd-play-master
+# (ops/play/apparmor-dnd-play-master) gives ptrace and signals only among the unit's own processes. One profile per
+# table, so one table's master cannot read another table's driver (its environment held the hub webhook). No "-": the
+# unit does not start without its profile loaded.
+AppArmorProfile=dnd-play-master-%i
 # The home is an allowlist (owner 2026-10-27: guests play at the demo table): kesha's home holds other projects,
 # backups with .env files and every ssh key (kesha's own opens "ssh kesha@localhost" with NOPASSWD sudo, tunnel_laptop
 # the owner's laptop). Visible: the repository (campaigns, screen files, git), the CLI state (as ai-table-gm) and
