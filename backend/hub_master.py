@@ -34,6 +34,8 @@ from backend.providers.claude_screen import API_ROUTE_ENV, screen_tool_env
 logger = logging.getLogger("dnd-play")
 
 WEBHOOK_ENV = "DM_PLAY_HUB_WEBHOOK"
+# The T3 webhook sits behind Cloudflare, which answers 403 to urllib's default "Python-urllib/3.x" (2026-10-28).
+USER_AGENT = "dnd-play-driver/1 (online table hub master)"
 MAX_REQUEST = 2 * 1024 * 1024
 MAX_ARGS = 64 * 1024
 MAX_STDIN = 1024 * 1024
@@ -110,7 +112,7 @@ def post_event(url, payload, timeout=20):
     """POST the payload as JSON; (True, None) on a 2xx answer, else (False, error). The error never holds the URL:
     its path is the webhook's token."""
     request = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), method="POST",
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = response.status
