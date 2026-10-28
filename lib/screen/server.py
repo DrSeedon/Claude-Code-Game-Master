@@ -6,7 +6,8 @@ DM_SCREEN_MAX_PENDING (actions waiting for the master) and DM_SCREEN_DAILY_VOICE
 The daily ledger is <screen>/spend.json unless DM_SCREEN_SPEND_FILE names one (the online driver shares one file
 across campaigns, so a switch does not reset the day). A credit cap also turns the page's Auto speech off.
 DM_SCREEN_LOGIN_FILE turns on the password gate (lib/screen/gate.py): GET /login and POST /login, and GET /_auth
-for nginx's auth_request.
+for nginx's auth_request. DM_SCREEN_MASTER_CONSOLE=1 serves the master console (lib/screen/masterlog.py: hidden rolls and
+plot notes, so off by default): GET /api/master?after=<id> and "master" events on the live stream.
 """
 
 import json
@@ -23,11 +24,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import activity, audio as audio_module, cli, eventlog, gate, inbox, speech as speech_module, voice
+from . import activity, audio as audio_module, cli, eventlog, gate, inbox, masterlog, speech as speech_module, voice
 
 TEMPLATE = Path(__file__).with_name("template.html")
 MAX_AUDIO = 8 * 1024 * 1024
-QUIET_PATHS = {"/api/state", "/api/events", "/api/clients", "/art.png"}
+QUIET_PATHS = {"/api/state", "/api/events", "/api/clients", "/api/master", "/art.png"}
+MASTER_LIMIT = 300
 MAX_UI_EVENTS, MAX_UI_BYTES, MAX_LOG_BODY, MAX_LOGIN_BODY = 50, 4000, 256 * 1024, 4096
 _AUDIO_NAME = re.compile(r"^[0-9a-f]{64}\.mp3$|^ambient-[\w-]{1,60}\.mp3$")
 _LENGTH = re.compile(r"[0-9]{1,12}")
@@ -191,11 +193,15 @@ def _signature(screen_dir):
     return tuple(sig)
 
 
-def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_on=False, auto_speech=True):
+def master_console_on():
+    return os.environ.get("DM_SCREEN_MASTER_CONSOLE", "").strip() == "1"
+
+
+def build_state(screen_dir, views_provider, clock_provider=lambda: None, speech_on=False, auto_speech=True, master_console=False):
     events = inbox.read_events(screen_dir)
     state = {"build": TEMPLATE.stat().st_mtime_ns, "act": _read_json(screen_dir / "act.json"), "turn": _read_json(screen_dir / "turn.json"),
              "views": views_provider(), "clock": clock_provider(), "speech": speech_on, "auto_speech": auto_speech, "activity": activity.read_activity(screen_dir, tail=40),
-             "inbox_last": events[-1]["id"] if events else 0}
+             "inbox_last": events[-1]["id"] if events else 0, "master_console": master_console}
     master = master_status(screen_dir)
     if master:
         state["master"] = master
@@ -215,6 +221,7 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
     render_lock, quota_lock, quota_cache = threading.Lock(), threading.Lock(), {"at": None, "value": None}
     action_lock = threading.Lock()
     login_file = os.environ.get("DM_SCREEN_LOGIN_FILE", "").strip()
+    console = master_console_on()
     # Under a credit budget speech plays only on a press of the speaker button: the page hides its Auto switch.
     auto_speech = not (daily_credits or turn_credits)
 
@@ -322,7 +329,9 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             if not self._authorized():
                 return self._deny()
             if path == "/api/state":
-                return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech))
+                return self._send(200, build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech, console))
+            if path == "/api/master":
+                return self._master_log()
             if path == "/api/speech/plan":
                 return self._plan()
             if path == "/api/audio":
@@ -366,6 +375,24 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             note("login", ok=False)
             self._send(401 if config else 500, gate.login_page(screen_dir, "wrong" if config else "broken"), "text/html; charset=utf-8")
 
+        def _master_log(self):
+            if not console:
+                return self._send(404, {"enabled": False, "error": "the master console is off (DM_SCREEN_MASTER_CONSOLE)"})
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                after = max(0, int(query.get("after", ["0"])[0] or 0))
+                limit = min(max(1, int(query.get("limit", [str(MASTER_LIMIT)])[0] or MASTER_LIMIT)), MASTER_LIMIT)
+            except ValueError:
+                return self._send(400, {"error": "after and limit are numbers"})
+            self._send(200, {"enabled": True, "entries": masterlog.read(screen_dir, after, limit)})
+
+        def _master_stat(self):
+            try:
+                st = masterlog.path(screen_dir).stat()
+                return (st.st_mtime_ns, st.st_size)
+            except FileNotFoundError:
+                return None
+
         def _stream(self):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -374,6 +401,11 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
             self.send_header("X-Accel-Buffering", "no")     # nginx must pass every event at once
             self.end_headers()
             last, idle = None, 0.0
+            # The master console: only entries newer than the stream's start (the page loads the history itself),
+            # found by a stat of the log and read from the last byte offset on.
+            mstat = self._master_stat() if console else None
+            moffset = mstat[1] if mstat else 0
+            mlast = masterlog.last_id(screen_dir) if console else 0
             with self.server.clients_lock:
                 self.server.clients += 1
             try:
@@ -381,8 +413,15 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
                     sig = _signature(screen_dir)
                     if sig != last:
                         last, idle = sig, 0.0
-                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech), ensure_ascii=False)
+                        payload = json.dumps(build_state(screen_dir, views_provider, clock_provider, speech_on(), auto_speech, console), ensure_ascii=False)
                         self.wfile.write(f"event: state\ndata: {payload}\n\n".encode())
+                    if console and (now := self._master_stat()) != mstat:
+                        mstat = now
+                        entries, moffset = masterlog.tail(screen_dir, moffset, mlast)
+                        if entries:
+                            mlast, idle = entries[-1]["id"], 0.0
+                            payload = json.dumps({"entries": entries}, ensure_ascii=False)
+                            self.wfile.write(f"event: master\ndata: {payload}\n\n".encode())
                     elif idle >= PING_SECONDS:
                         idle = 0.0
                         self.wfile.write(b": ping\n\n")

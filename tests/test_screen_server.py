@@ -869,3 +869,107 @@ def test_skill_values_from_the_world_are_escaped_in_the_side_panel():
     text = server.TEMPLATE.read_text(encoding="utf-8")
 
     assert "<b>+${esc(typeof v==='object'?v.total:v)}</b>" in text
+
+
+# ---- the master console (DM_SCREEN_MASTER_CONSOLE, lib/screen/masterlog.py)
+
+def _console_server(tmp_path, monkeypatch, enabled):
+    from lib.screen import masterlog
+
+    if enabled:
+        monkeypatch.setenv("DM_SCREEN_MASTER_CONSOLE", "1")
+    else:
+        monkeypatch.delenv("DM_SCREEN_MASTER_CONSOLE", raising=False)
+    (tmp_path / "turn.json").write_text(json.dumps({"id": 3, "blocks": ["<p>x</p>"], "question": "?", "options": ["a"]}))
+    for n in range(5):
+        masterlog.append(tmp_path, "text", f"слово {n}", "sdk")
+    httpd, token = server.make_server(tmp_path, port=0, token="T0KEN")
+    server.serve_in_thread(httpd)
+    return httpd
+
+
+def _read_named_event(response, name):
+    event = None
+    while True:
+        line = response.fp.readline().decode()
+        if not line:
+            raise AssertionError("stream closed")
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:") and event == name:
+            return json.loads(line[5:])
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_the_master_console_is_served_only_when_enabled(tmp_path, monkeypatch, enabled):
+    httpd = _console_server(tmp_path, monkeypatch, enabled)
+    port, auth = httpd.server_port, {"X-Screen-Token": "T0KEN"}
+    try:
+        assert call(port, "GET", "/api/master")[0] == 403
+        assert call(port, "GET", "/api/master", headers=auth, host="evil.example")[0] == 403
+        status, body = call(port, "GET", "/api/master?after=2", headers=auth)
+        state = json.loads(call(port, "GET", "/api/state", headers=auth)[1])
+        limited = json.loads(call(port, "GET", "/api/master?limit=2", headers=auth)[1]) if enabled else None
+        bad = call(port, "GET", "/api/master?after=x", headers=auth)[0]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    data = json.loads(body)
+    assert state["master_console"] is enabled
+    if enabled:
+        assert status == 200 and data["enabled"] is True and [e["text"] for e in data["entries"]] == ["слово 2", "слово 3", "слово 4"]
+        assert [e["id"] for e in limited["entries"]] == [4, 5] and bad == 400
+    else:
+        assert status == 404 and data["enabled"] is False and "entries" not in data and bad == 404
+
+
+def test_new_master_entries_are_pushed_over_the_event_stream(tmp_path, monkeypatch):
+    import time
+
+    from lib.screen import masterlog
+
+    httpd = _console_server(tmp_path, monkeypatch, True)
+    conn = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+    try:
+        conn.request("GET", "/api/events?token=T0KEN")
+        response = conn.getresponse()
+        assert _read_named_event(response, "state")["master_console"] is True
+        time.sleep(0.05)
+        masterlog.append(tmp_path, "tool", "bash tools/dm-roll.sh 1d20", "hub", name="Bash")
+        masterlog.append(tmp_path, "result", "17", "hub", error=False)
+        pushed = _read_named_event(response, "master")["entries"]
+        while len(pushed) < 2:
+            pushed += _read_named_event(response, "master")["entries"]
+    finally:
+        conn.close()
+        httpd.shutdown()
+        httpd.server_close()
+    assert [(e["id"], e["kind"], e["text"]) for e in pushed] == [(6, "tool", "bash tools/dm-roll.sh 1d20"), (7, "result", "17")]
+
+
+def test_a_disabled_console_pushes_nothing(tmp_path, monkeypatch):
+    import time
+
+    from lib.screen import masterlog
+
+    httpd = _console_server(tmp_path, monkeypatch, False)
+    conn = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+    seen = []
+    try:
+        conn.request("GET", "/api/events?token=T0KEN")
+        response = conn.getresponse()
+        _read_named_event(response, "state")
+        masterlog.append(tmp_path, "text", "секрет сюжета", "sdk")
+        time.sleep(0.8)         # the stream's polls see the log first, then the turn that ends the wait below
+        (tmp_path / "turn.json").write_text(json.dumps({"id": 4, "blocks": ["<p>y</p>"], "question": "?", "options": []}))
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            line = response.fp.readline().decode()
+            seen.append(line)
+            if line.startswith("data:") and '"id": 4' in line:
+                break
+    finally:
+        conn.close()
+        httpd.shutdown()
+        httpd.server_close()
+    assert not any(line.startswith("event: master") for line in seen) and "секрет" not in "".join(seen)

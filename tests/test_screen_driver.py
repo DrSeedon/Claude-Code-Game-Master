@@ -24,7 +24,7 @@ from backend.hub_master import HubSettings
 from backend.screen_driver import (CARRIED, FAILED_LINE, FRESH, GM_SESSION, HUB_CATCH_UP, HUB_FAILED_LINE, HUB_FALLBACK,
                                    HUB_PAUSED_LINE, LIMIT_LINE, NOT_PUBLISHED, REST_LINE, RESTARTED, SDK_CATCH_UP, SWITCHED,
                                    TAKEOVER, ScreenDriver, Settings, build_prompt, spawn_screen_server)
-from lib.screen import activity, cli as screen_cli, inbox, online
+from lib.screen import activity, cli as screen_cli, inbox, masterlog, online
 
 MODEL = "claude-sonnet-5-5"
 TURN = {"blocks": ["<p>Дождь стучит по крыше.</p>"], "question": "Что делаете?", "options": ["Ждать"]}
@@ -1496,3 +1496,115 @@ def test_sdk_mode_status_has_no_hub(tmp_path):
 
     run(scenario())
     assert table.status()["master"] == "sdk" and table.status()["hub"] is None
+
+
+# ---- the master console log (lib/screen/masterlog.py)
+
+def console(table, name="alpha"):
+    return [(e["kind"], e["master"], e["text"]) for e in masterlog.read(table.sdir(name), limit=0)]
+
+
+def test_the_sdk_master_console_shows_the_batch_words_calls_results_and_the_turn(tmp_path):
+    def script(provider, message):
+        bash = AgentEvent("tool_use", 'Bash: {"command": "bash tools/dm-roll.sh 1d20+3", "description": "roll"}',
+                          {"tool_name": "Bash", "short_name": "Bash"})
+        read = AgentEvent("tool_use", 'Read: {"file_path": "/x/world.json"}', {"tool_name": "Read", "short_name": "Read"})
+        return [AgentEvent("text_delta", "Бро"), AgentEvent("text", "Бросаю за Брама."), bash,
+                AgentEvent("tool_result", "🎲 1d20+3: 17", {"is_error": False}), read,
+                AgentEvent("tool_result", "no such file", {"is_error": True}), *publish(provider, "Готово.")]
+
+    table = Table(tmp_path, script=script)
+
+    async def scenario():
+        driver = await started(table, resume="s1")
+        table.act("1. Осмотреться")
+        await driver.step()
+
+    run(scenario())
+    assert console(table) == [
+        ("batch", "sdk", "[screen #1] Катя (button): 1. Осмотреться"),
+        ("text", "sdk", "Бросаю за Брама."),
+        ("tool", "sdk", "bash tools/dm-roll.sh 1d20+3"),
+        ("result", "sdk", "🎲 1d20+3: 17"),
+        ("tool", "sdk", 'Read: {"file_path": "/x/world.json"}'),
+        ("result", "sdk", "no such file"),
+        ("text", "sdk", "Готово."),
+        ("turn", "sdk", "Дождь стучит по крыше."),
+    ]
+    entries = masterlog.read(table.sdir(), limit=0)
+    assert [e.get("name") for e in entries if e["kind"] == "tool"] == ["Bash", "Read"]
+    assert [e["error"] for e in entries if e["kind"] == "result"] == [False, True]
+    assert entries[-1]["turn"] == 1
+
+
+def test_the_console_notes_a_follow_up_a_failure_a_timeout_a_limit_and_a_pause(tmp_path):
+    async def script(provider, message):
+        if "Ждать" in message:
+            await asyncio.sleep(30)
+        if "Бежать" in message:
+            return [AgentEvent("rate_limit", "usage limit reached", {"retry_after": 120})]
+        return [AgentEvent("text", "думаю")]
+
+    table = Table(tmp_path, script=script, turn_timeout=0.2)
+
+    async def scenario():
+        driver = await started(table, resume="s1")
+        table.act("1. Ждать")
+        await driver.step()
+        table.act("2. Бежать")
+        await driver.step()
+        online.main(["pause"], root=tmp_path)
+        await driver.step()
+        online.main(["resume"], root=tmp_path)
+        table.clock.now += 200
+        await driver.step()
+
+    run(scenario())
+    notes = [text for kind, master, text in console(table) if kind == "note"]
+    assert all(master == "driver" for kind, master, _ in console(table) if kind == "note")
+    assert notes[0] == driver_module.NOTE_TIMEOUT.format(seconds=0.2)
+    assert notes[1].startswith("Ход не опубликован (the turn ran over")
+    assert notes[2].startswith("Ход так и не вышел:")
+    assert notes[3] == driver_module.NOTE_LIMIT.format(minutes=2)
+    assert notes[4:6] == [driver_module.NOTE_PAUSED, driver_module.NOTE_RESUMED]
+
+
+def test_the_hub_console_shows_its_batch_without_the_ticket_and_the_fallback_notes(tmp_path):
+    hub = Hub(hub_silent)
+    table = Table(tmp_path)
+
+    async def scenario():
+        driver = await hub_started(table, hub)
+        table.act("1. Осмотреться")
+        await driver.step()
+
+    run(scenario())
+    log = console(table)
+    first = "\n".join([TAKEOVER, HUB_CATCH_UP, FRESH.format(name="alpha"), line(1, "1. Осмотреться")])
+    assert log[0] == ("batch", "hub", first)
+    assert log[1] == ("note", "driver", driver_module.NOTE_HUB_FAILED.format(reason="no turn in 0s"))
+    assert log[2] == ("batch", "sdk", "\n".join([HUB_FALLBACK, FRESH.format(name="alpha"), line(1, "1. Осмотреться")]))
+    assert log[-1] == ("turn", "sdk", "Дождь стучит по крыше.")
+    raw = (table.sdir() / masterlog.LOG).read_text(encoding="utf-8")
+    assert "ticket-1" not in raw and WEBHOOK not in raw and "SECRET-TOKEN" not in raw
+
+
+def test_a_hub_turn_is_logged_for_the_hub_and_a_pause_gets_a_note(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_down, hub_down, hub_publishes, pause=900)
+
+    async def scenario():
+        driver = await hub_started(table, hub, resume="s-old")
+        for n in range(1, 3):
+            table.act(f"{n}. Ход")
+            await driver.step()
+        table.clock.now += 901
+        table.act("3. Ход")
+        await driver.step()
+
+    run(scenario())
+    log = console(table)
+    assert ("note", "driver", driver_module.NOTE_HUB_FAILED.format(reason="post failed: HTTP 502")) in log
+    assert ("note", "driver", driver_module.NOTE_HUB_PAUSED.format(minutes=15, fails=2)) in log
+    (kind, master, text), last = log[-2], log[-1]
+    assert (kind, master) == ("batch", "hub") and text.endswith(line(3, "3. Ход"))
+    assert last == ("turn", "hub", "Дождь стучит по крыше.")

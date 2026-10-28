@@ -26,10 +26,12 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from backend.providers.claude_screen import API_ROUTE_ENV, screen_tool_env
+from lib.screen import masterlog
 
 logger = logging.getLogger("dnd-play")
 
@@ -52,6 +54,9 @@ SLOW_TOOLS = {"dm-art.sh"}    # their run time extends the hub deadline (a new a
 BUSY = ("busy: another call of this turn is still running, so this call did NOT run. Run the calls one at a time and "
         "run this one again when the other has finished.")
 CUT = "\n[... cut ...]\n"
+MAX_SAY = 4000               # characters of one `say`
+REVOKED_NOTE_EVERY = 10.0    # seconds between two console notes of ticket-refused calls (they need no ticket)
+SHOWN_STDIN = {("dm-screen.sh", "turn"), ("dm-screen.sh", "panels")}   # the console shows this stdin (turn JSON)
 REVOKED = ("ticket revoked: this turn went to the VPS master (the hub did not publish in time, or a newer event "
            "replaced it). Stop working on it and wait for the next event.")
 
@@ -226,6 +231,7 @@ class HubBridge:
         self.max_connections = max_connections
         self.lock_wait = lock_wait
         self.ticket = None
+        self.recent = deque(maxlen=8)   # earlier tickets: the master console never shows one
         self.slow_seconds = 0.0     # run time of SLOW_TOOLS under the current ticket
         self.slow_since = None
         self.lock = asyncio.Lock()
@@ -255,8 +261,35 @@ class HubBridge:
     def issue(self):
         """A new ticket for one turn; the previous one stops working."""
         self.ticket = secrets.token_urlsafe(18)
+        self.recent.append(self.ticket)
         self.slow_seconds = 0.0
         return self.ticket
+
+    def secrets(self):
+        """What the master console must never show: the current and the recent tickets."""
+        return [t for t in (self.ticket, *self.recent) if t]
+
+    def _log(self, kind, text, **extra):
+        """One master console entry of the hub master (lib/screen/masterlog.py); never raises."""
+        try:
+            sdir = self.context()["sdir"]
+        except Exception:
+            return
+        try:
+            if getattr(self, "_env_secrets", None) is None:
+                self._env_secrets = masterlog.env_secrets(env_file=self.root / ".env")
+        except Exception:
+            self._env_secrets = []
+        masterlog.append(sdir, kind, text, "hub", secrets=[*self.secrets(), *self._env_secrets], **extra)
+
+    def _log_revoked(self, argv):
+        """The note of a call refused for its ticket. Such a call needs no valid ticket, so anyone who can reach the
+        socket could flood the console with them: at most one note per REVOKED_NOTE_EVERY seconds."""
+        now = time.monotonic()
+        if now - getattr(self, "_revoked_noted", -REVOKED_NOTE_EVERY) < REVOKED_NOTE_EVERY:
+            return
+        self._revoked_noted = now
+        self._log("note", f"Вызов хаба отклонён (билет отозван): {shlex.join(argv)[:300]}")
 
     def extension(self):
         """Seconds the current ticket spent in SLOW_TOOLS (the running one included): the driver adds them to the
@@ -369,27 +402,51 @@ class HubBridge:
                                                      "ticket_ok": self.ticket_ok(ticket)}, ensure_ascii=False)}
         if not self.ticket_ok(ticket):      # a revoked call answers so at once, not busy after the lock wait
             logger.info("hub call %s refused: ticket revoked", op[:60])
+            self._log_revoked(argv)
             return {"code": 3, "output": REVOKED}
+        if op == "say":
+            # No lock: the master may speak while a slow tool runs. Nothing awaits between the ticket check above and
+            # the write, and revoke() clears the ticket before it waits, so a say never lands after a revoke.
+            return self._say(argv[1:], stdin)
         try:
             await asyncio.wait_for(self.lock.acquire(), self.lock_wait)
         except asyncio.TimeoutError:
             logger.info("hub call %s refused: busy", op[:60])
+            self._log("note", f"Вызов хаба не выполнен (занято): {shlex.join(argv)[:300]}")
             return {"code": 4, "output": BUSY}
         try:
             if not self.ticket_ok(ticket):  # the check that counts: revoke() may have come while this call waited
                 logger.info("hub call %s refused: ticket revoked", op[:60])
+                self._log_revoked(argv)
                 return {"code": 3, "output": REVOKED}
             started = time.monotonic()
             if op == "prompt":
+                self._log("tool", "prompt", name="Bash")
                 response = self._prompt()
             elif op == "read":
+                self._log("tool", shlex.join(argv), name="Bash")
                 response = self._read(argv[1:])
             else:
                 response = await self._tool(argv, stdin)
+            if not response.pop("refused", False):
+                self._log("result", response["output"], error=response["code"] != 0)
             logger.info("hub call %s: exit %s, %.1fs", shlex.join(argv)[:200], response["code"], time.monotonic() - started)
             return response
         finally:
             self.lock.release()
+
+    def _say(self, args, stdin):
+        """`say <text>` (or the text on stdin): the hub master's own words for the master console, since its T3
+        thread is invisible to the VPS."""
+        if len(args) > 1 or (args and stdin) or not (args or stdin):
+            return {"code": 2, "output": "usage: say <text> (one argument, or the text on stdin)"}
+        text = (args[0] if args else stdin).strip()
+        if not text:
+            return {"code": 2, "output": "say: empty text"}
+        if len(text) > MAX_SAY:
+            return {"code": 2, "output": f"say: over {MAX_SAY} characters ({len(text)}); split it"}
+        self._log("text", text)
+        return {"code": 0, "output": "ok"}
 
     def _prompt(self):
         path = Path(self.context()["sdir"]) / "gm-system-prompt.md"
@@ -440,17 +497,22 @@ class HubBridge:
         if argv[0] == "bash":
             argv = argv[1:]
         if not argv:
-            return {"code": 2, "output": "usage: <dm-tool.sh> [args...]"}
+            return {"code": 2, "output": "usage: <dm-tool.sh> [args...]", "refused": True}
         name, args = argv[0].removeprefix("tools/"), argv[1:]
+        refusal = None
         if not _TOOL_NAME.fullmatch(name) or not (self.root / "tools" / name).is_file():
-            return {"code": 2, "output": f"unknown tool {argv[0][:80]!r}: only tools/dm-*.sh, prompt, read <path>, status"}
-        if reason := deny_reason(name, args):
-            return {"code": 2, "output": f"refused: {reason}"}
-        if any("\0" in a for a in args) or sum(len(a.encode("utf-8")) for a in args) > MAX_ARGS:
-            return {"code": 2, "output": "refused: arguments with NUL or over 64 KiB"}
+            refusal = f"unknown tool {argv[0][:80]!r}: only tools/dm-*.sh, prompt, read <path>, say <text>, status"
+        elif reason := deny_reason(name, args):
+            refusal = f"refused: {reason}"
+        elif any("\0" in a for a in args) or sum(len(a.encode("utf-8")) for a in args) > MAX_ARGS:
+            refusal = "refused: arguments with NUL or over 64 KiB"
         data = stdin.encode("utf-8") if stdin is not None else None
-        if data is not None and len(data) > MAX_STDIN:
-            return {"code": 2, "output": "refused: stdin over 1 MiB"}
+        if refusal is None and data is not None and len(data) > MAX_STDIN:
+            refusal = "refused: stdin over 1 MiB"
+        if refusal:
+            self._log("note", f"Вызов хаба отклонён: {shlex.join(argv)[:300]}: {refusal}")
+            return {"code": 2, "output": refusal, "refused": True}
+        self._log("tool", self._shown(name, args, stdin, data), name="Bash")
         ctx = self.context()
         env = tool_env(ctx["campaign"], ctx["sdir"])
         slow = name in SLOW_TOOLS
@@ -464,6 +526,17 @@ class HubBridge:
                 self.slow_since = None
         output += await self._hook(name, args, output, env)
         return {"code": code, "output": output}
+
+    @staticmethod
+    def _shown(name, args, stdin, data):
+        """The call as the console shows it: the command line, a turn's JSON truncated, other stdin as its size."""
+        command = shlex.join([name, *args])
+        if data is None:
+            return command
+        words = [a for a in args if not a.startswith("-")]
+        if words and (name, words[0]) in SHOWN_STDIN:
+            return f"{command} <<JSON\n{stdin}"
+        return f"{command} <stdin: {len(data)} bytes>"
 
     async def _run(self, argv, data, env):
         proc = await asyncio.create_subprocess_exec(

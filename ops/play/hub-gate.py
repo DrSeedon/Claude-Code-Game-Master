@@ -61,7 +61,7 @@ def main():
     except ValueError as exc:
         return fail(2, f"cannot parse the command: {exc}")
     if len(words) < 3:
-        return fail(2, "usage: <table> <ticket> <tool|prompt|status|read> [args...]")
+        return fail(2, "usage: <table> <ticket> <tool|prompt|status|read|say> [args...]")
     table, ticket, argv = words[0], words[1], words[2:]
     if not TABLE.fullmatch(table):
         return fail(2, f"invalid table name {table[:40]!r}")

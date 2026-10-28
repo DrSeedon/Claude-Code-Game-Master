@@ -17,8 +17,9 @@ from pathlib import Path
 
 import pytest
 
+from backend import hub_master
 from backend.hub_master import CUT, REVOKED, HubBridge, HubSettings, deny_reason, post_event
-from lib.screen import hook, online
+from lib.screen import hook, masterlog, online
 
 REPO = Path(__file__).resolve().parent.parent
 GATE = REPO / "ops" / "play" / "hub-gate.py"
@@ -101,10 +102,12 @@ def test_settings_default_to_sdk_and_hub_needs_a_webhook_and_a_socket(caplog):
 class _Hook(BaseHTTPRequestHandler):
     status = 200
     seen = []
+    agents = []
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         type(self).seen.append((self.path, self.headers["Content-Type"], json.loads(body)))
+        type(self).agents.append(self.headers["User-Agent"])
         self.send_response(type(self).status)
         self.end_headers()
 
@@ -119,6 +122,8 @@ def test_post_event_sends_json_and_its_errors_never_name_the_url():
     try:
         assert post_event(url, {"message": "Привет"}) == (True, None)
         assert _Hook.seen[-1] == ("/hooks/SECRETTOKEN", "application/json", {"message": "Привет"})
+        # Cloudflare in front of the T3 webhook answers 403 to urllib's default agent (2026-10-28).
+        assert _Hook.agents[-1] == "dnd-play-driver/1 (online table hub master)"
         _Hook.status = 500
         ok, error = post_event(url, {"message": "x"})
         assert not ok and error == "HTTP 500"
@@ -607,7 +612,7 @@ def test_the_wrapper_quotes_every_argument_so_the_gate_gets_them_back(tmp_path):
     options = argv[:-2]
     assert options[options.index("-i") + 1] == str(tmp_path / ".ssh" / "dnd_play_vps")
     for option in ("IdentitiesOnly=yes", "BatchMode=yes", "ConnectTimeout=15", "ConnectionAttempts=3", "ServerAliveInterval=15",
-                   "ControlMaster=auto", f"ControlPath={tmp_path}/.ssh/cm-dnd-play-%C", "ControlPersist=600"):
+                   "ControlMaster=auto", f"ControlPath={tmp_path}/.ssh/cm-dnd-play-%h-%p", "ControlPersist=600"):
         assert options[options.index(option) - 1] == "-o", option
     assert stdin == ""
 
@@ -642,3 +647,119 @@ def test_status_lines_show_the_master(tmp_path, monkeypatch):
     assert "master: hub (last no turn in 300s, last hub turn 2026-10-28T10:00:00Z, 1 failures in a row)" in lines
     online.write_status({"pid": os.getpid(), "campaign": "alpha", "state": "idle", "master": "sdk", "hub": None}, tmp_path)
     assert "master: sdk" in online.status_lines(tmp_path)
+
+
+# ---- the master console (lib/screen/masterlog.py) and `say`
+
+def console_of(root):
+    return masterlog.read(root / "world-state" / "campaigns" / "alpha" / "screen", limit=0)
+
+
+def test_every_call_that_runs_is_logged_with_its_result_but_never_the_ticket(root, short_dir):
+    sock = short_dir / "hub.sock"
+
+    async def scenario(bridge):
+        ticket = bridge.issue()
+        await ask(sock, ticket, ["bash", "tools/dm-echo.sh", "a b"], stdin=f"leak {ticket}\n")
+        await ask(sock, ticket, ["dm-fail.sh"])
+        await ask(sock, ticket, ["dm-screen.sh", "turn", "--file", "-"], stdin='{"blocks": ["<p>Дождь</p>"]}')
+        await ask(sock, ticket, ["prompt"])
+        return ticket
+
+    ticket = with_bridge(root, sock, scenario)
+    log = [(e["kind"], e["master"], e["text"], e.get("error")) for e in console_of(root)]
+    assert log[0] == ("tool", "hub", f"dm-echo.sh 'a b' <stdin: {len(ticket) + 6} bytes>", None)
+    assert log[1][:2] == ("result", "hub") and log[1][2].endswith("leak [скрыто]\n") and log[1][3] is False
+    assert log[2:4] == [("tool", "hub", "dm-fail.sh", None), ("result", "hub", "broken\n", True)]
+    assert log[4] == ("tool", "hub", 'dm-screen.sh turn --file - <<JSON\n{"blocks": ["<p>Дождь</p>"]}', None)
+    assert log[5][:2] == ("result", "hub") and log[5][2].startswith("screen ran turn")
+    assert log[6] == ("tool", "hub", "prompt", None) and log[7][:2] == ("result", "hub") and log[7][3] is True
+    assert all(e.get("name") == "Bash" for e in console_of(root) if e["kind"] == "tool")
+    assert ticket not in (root / "world-state/campaigns/alpha/screen" / masterlog.LOG).read_text(encoding="utf-8")
+
+
+def test_refused_calls_are_console_notes_and_run_nothing(root, short_dir):
+    sock = short_dir / "hub.sock"
+
+    async def scenario(bridge):
+        ticket = bridge.issue()
+        await ask(sock, ticket, ["dm-screen.sh", "start"])
+        await ask(sock, ticket, ["evil.sh"])
+        await ask(sock, "wrong", ["dm-roll.sh", "1d20"])
+
+    with_bridge(root, sock, scenario)
+    log = [(e["kind"], e["text"]) for e in console_of(root)]
+    assert [kind for kind, _ in log] == ["note", "note", "note"]
+    assert "dm-screen.sh start" in log[0][1] and "belongs to the driver" in log[0][1]
+    assert "evil.sh" in log[1][1] and "unknown tool" in log[1][1]
+    assert "dm-roll.sh 1d20" in log[2][1] and "отозван" in log[2][1]
+
+
+def test_say_writes_the_hub_masters_words_with_the_current_ticket_only(root, short_dir):
+    sock = short_dir / "hub.sock"
+
+    async def scenario(bridge):
+        ticket = bridge.issue()
+        results = [await ask(sock, ticket, ["say", "Бросаю Внимательность за Брама."]),
+                   await ask(sock, ticket, ["say"], stdin="Длинная мысль\nв две строки\n"),
+                   await ask(sock, ticket, ["say", "a"], stdin="b"),
+                   await ask(sock, ticket, ["say", "a", "b"]),
+                   await ask(sock, ticket, ["say"]),
+                   await ask(sock, ticket, ["say", "я" * 4001]),
+                   await ask(sock, ticket, ["say", "я" * 4000]),
+                   await ask(sock, None, ["say", "без билета"])]
+        await bridge.revoke()
+        results.append(await ask(sock, ticket, ["say", "после отзыва"]))
+        return results
+
+    results = with_bridge(root, sock, scenario)
+    assert [r["code"] for r in results] == [0, 0, 2, 2, 2, 2, 0, 3, 3]
+    assert "4000" in results[5]["output"]
+    texts = [(e["master"], e["text"]) for e in console_of(root) if e["kind"] == "text"]
+    assert texts == [("hub", "Бросаю Внимательность за Брама."), ("hub", "Длинная мысль\nв две строки"), ("hub", "я" * 4000)]
+
+
+def test_say_does_not_wait_for_a_running_call(root, short_dir, monkeypatch):
+    sock, log = short_dir / "hub.sock", short_dir / "calls.log"
+    monkeypatch.setenv("LOG_FILE", str(log))
+
+    async def scenario(bridge):
+        ticket = bridge.issue()
+        running = asyncio.ensure_future(ask(sock, ticket, ["dm-sleep.sh", "1"]))
+        while not log.exists():
+            await asyncio.sleep(0.01)
+        said = await ask(sock, ticket, ["say", "пока ждём картинку"])
+        done_before = "end" in log.read_text()
+        await running
+        return said, done_before
+
+    said, done_before = with_bridge(root, sock, scenario, lock_wait=0.05)
+    assert said == {"code": 0, "output": "ok"} and not done_before
+    assert [e["kind"] for e in console_of(root)] == ["tool", "text", "result"]
+
+
+def test_ticket_refused_notes_are_throttled_so_a_flood_cannot_push_history_out(root, short_dir):
+    sock = short_dir / "hub.sock"
+
+    async def scenario(bridge):
+        bridge.issue()
+        for _ in range(20):
+            await ask(sock, "forged", ["dm-roll.sh", "1d20"])
+        bridge._revoked_noted -= hub_master.REVOKED_NOTE_EVERY + 1   # the window passed
+        await ask(sock, None, ["dm-roll.sh", "2d6"])
+
+    with_bridge(root, sock, scenario)
+    notes = [e["text"] for e in console_of(root) if e["kind"] == "note"]
+    assert len(notes) == 2 and "1d20" in notes[0] and "2d6" in notes[1]
+
+
+def test_the_bridge_redacts_the_project_env_keys_literally(root, short_dir):
+    sock = short_dir / "hub.sock"
+    (root / ".env").write_text("ELEVENLABS_API_KEY=plainlowercasekey1\n", encoding="utf-8")
+
+    async def scenario(bridge):
+        ticket = bridge.issue()
+        await ask(sock, ticket, ["say", "ключ plainlowercasekey1 в тексте"])
+
+    with_bridge(root, sock, scenario)
+    assert [e["text"] for e in console_of(root)] == ["ключ [скрыто] в тексте"]

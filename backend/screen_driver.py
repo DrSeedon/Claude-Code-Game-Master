@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
@@ -31,7 +32,7 @@ from backend.providers.claude_screen import ScreenGMProvider, scrub_api_route_en
 from backend.runtime.session_store import clear_runtime_session, load_runtime_session, save_runtime_session
 from backend.runtime.turn_lock import CampaignTurnLock
 from backend.usage_log import record_usage
-from lib.screen import activity, inbox, online
+from lib.screen import activity, inbox, masterlog, online
 from lib.screen import cli as screen_cli
 
 logger = logging.getLogger("dnd-play")
@@ -76,6 +77,16 @@ SDK_CATCH_UP = ("[system] Another master played the turns since your last answer
                 "context and bash tools/dm-screen.sh log --kind turn --tail 3 --json, then answer.")
 HUB_FALLBACK = ("[system] The hub master did not answer this batch in time, so it comes to you. The engine may already "
                 "hold part of it: check the world state before you apply anything.")
+# Notes of the master console (lib/screen/masterlog.py), in the owner's language.
+NOTE_HUB_FAILED = "Мастер на хабе не ответил ({reason}): ход играет запасной мастер"
+NOTE_HUB_PAUSED = "Мастер на хабе на паузе {minutes:.0f} мин после {fails} неудач подряд"
+NOTE_TIMEOUT = "Ход не уложился в {seconds:.0f} с и был прерван"
+NOTE_FOLLOW_UP = "Ход не опубликован ({reason}): мастеру напомнили"
+NOTE_FAILED = "Ход так и не вышел: {reason}"
+NOTE_LIMIT = "Лимит подписки: мастер отдыхает {minutes:.0f} мин, действия ждут"
+NOTE_CAP = "Лимит ходов: {hour} за час, {day} за день, действия ждут"
+NOTE_PAUSED = "Стол на паузе"
+NOTE_RESUMED = "Пауза снята"
 
 
 def _env_number(environ, name, default, cast=int):
@@ -155,6 +166,20 @@ def unanswered_lines(sdir):
     except (OSError, ValueError, KeyError, TypeError) as exc:   # a broken inbox: the loop reports it
         logger.warning("unanswered actions of %s not checked: %s", sdir, exc)
         return []
+
+
+def tool_call_text(event):
+    """(tool name, what the console shows): a Bash call shows its command line, any other tool "Name: <input json>"."""
+    name = str(event.metadata.get("tool_name") or event.content.split(":", 1)[0])
+    if event.metadata.get("short_name") == "Bash" or name == "Bash":
+        raw = event.content.split(":", 1)[1] if ":" in event.content else ""
+        try:
+            command = json.loads(raw).get("command")
+        except (ValueError, AttributeError):
+            command = None
+        if isinstance(command, str):
+            return "Bash", command
+    return name, event.content
 
 
 def _now_iso():
@@ -298,6 +323,30 @@ class ScreenDriver:
         except Exception:
             logger.exception("activity line failed")
 
+    def _log(self, kind, text, master="driver", **extra):
+        """One master console entry (lib/screen/masterlog.py): never the ticket or the webhook URL, never raises."""
+        if self.campaign is None:
+            return
+        if getattr(self, "_env_secrets", None) is None:   # the .env keys a master's `cat .env` / `env` would print
+            try:
+                self._env_secrets = masterlog.env_secrets(env_file=self.root / ".env")
+            except Exception:
+                self._env_secrets = []
+        secrets = [self.hub.webhook, *(getattr(self.bridge, "secrets", lambda: [getattr(self.bridge, "ticket", None)])()),
+                   *self._env_secrets]
+        masterlog.append(self.sdir, kind, text, master, secrets=secrets, **extra)
+
+    def _log_turn(self, master):
+        try:
+            turn = online.read_json(self.sdir / "turn.json") or {}
+            blocks = turn.get("blocks") if isinstance(turn.get("blocks"), list) else []
+            first = next((line for line in (" ".join(re.sub(r"<[^>]+>", " ", str(b)).split()) for b in blocks) if line), "")
+            number = int(turn.get("id") or 0)
+        except Exception:       # the console never breaks a turn
+            logger.exception("master console turn line skipped")
+            return
+        self._log("turn", first[:300], master, turn=number)
+
     def _turns_within(self, seconds, now=None):
         now = self.clock() if now is None else now
         return sum(1 for t in self.turn_times if now - t < seconds)
@@ -330,6 +379,10 @@ class ScreenDriver:
     def set_state(self, state):
         if state != self.state:
             logger.info("[%s] state %s -> %s", self.campaign, self.state, state)
+            if state == "paused":
+                self._log("note", NOTE_PAUSED)
+            elif self.state == "paused":
+                self._log("note", NOTE_RESUMED)
         self.state = state
         self.write_status()
 
@@ -573,6 +626,7 @@ class ScreenDriver:
                 logger.warning("[%s] turn cap reached (%s this hour, %s today): actions wait", self.campaign,
                                self._turns_within(3600, now), self._turns_within(86400, now))
                 self._activity(REST_LINE)
+                self._log("note", NOTE_CAP.format(hour=self._turns_within(3600, now), day=self._turns_within(86400, now)))
                 self.rest_posted = True
             self.set_state("resting")
             return await asyncio.sleep(self.settings.tick)
@@ -618,6 +672,7 @@ class ScreenDriver:
         if self.stopping:
             return
         self._activity(HUB_FAILED_LINE)
+        self._log("note", NOTE_HUB_FAILED.format(reason=self.hub_last_result or "no turn"))
         if self.clock() < self.retry_at:    # the SDK master rests on a usage limit: the lines wait
             self.carry = self._carried(lines)
             return self.set_state("resting")
@@ -640,6 +695,7 @@ class ScreenDriver:
             return
         reason = "timed out" if result.timed_out else "failed" if result.error else None
         follow = NOT_PUBLISHED if not reason else f"[system] The previous turn {reason} before a turn was published. {PUBLISH}"
+        self._log("note", NOTE_FOLLOW_UP.format(reason=result.error or "the master did not publish"))
         logger.warning("[%s] no turn published (%s): one follow-up", self.campaign, result.error or "the master did not publish")
         second = await self.send(follow)
         if turn_id(self.sdir) > before:
@@ -649,6 +705,7 @@ class ScreenDriver:
         self.failed = True
         self.last_error = second.error or result.error or "the master answered without publishing a turn"
         logger.error("[%s] still no turn after the follow-up: %s", self.campaign, self.last_error)
+        self._log("note", NOTE_FAILED.format(reason=self.last_error))
         self._activity(FAILED_LINE)
         self.set_state("error")
 
@@ -666,6 +723,7 @@ class ScreenDriver:
             ticket = self.bridge.issue()
             payload = {"table": online.table_name(), "campaign": self.campaign, "turn": before, "ticket": ticket,
                        "message": message}
+            self._log("batch", message, "hub")
             ok, error = await asyncio.to_thread(self.poster, self.hub.webhook, payload)
             if not ok:
                 await self.bridge.revoke()      # a POST that timed out may still have reached the hub
@@ -720,8 +778,10 @@ class ScreenDriver:
             logger.warning("[%s] hub master paused for %.0fs after %d failures", self.campaign, self.hub.pause, self.hub_fails)
             if self.hub_fails == self.hub.fails:    # one feed line per outage, not per probe after a pause
                 self._activity(HUB_PAUSED_LINE)
+            self._log("note", NOTE_HUB_PAUSED.format(minutes=self.hub.pause / 60, fails=self.hub_fails))
 
     def _published(self, master="sdk"):
+        self._log_turn(master)
         if master == "hub":
             self.sdk_behind = True
         else:
@@ -743,6 +803,7 @@ class ScreenDriver:
         logger.error("[%s] usage limit (%s): %d lines wait %.0fs", self.campaign, result.error, len(self.carry) - 1, wait)
         if self.limit_streak == 1:      # one feed line per rest, however many retries it takes
             self._activity(LIMIT_LINE)
+        self._log("note", NOTE_LIMIT.format(minutes=wait / 60))
         self.set_state("resting")
 
     async def send(self, message):
@@ -754,6 +815,7 @@ class ScreenDriver:
         self.set_state("thinking")
         lock = CampaignTurnLock(self.campaign_dir)
         await lock.acquire_async()
+        self._log("batch", message, "sdk")
         result = TurnResult()
         started = time.monotonic()
         task = asyncio.ensure_future(self._consume(provider, message, result))
@@ -765,6 +827,7 @@ class ScreenDriver:
                 result.timed_out = True
                 result.error = f"the turn ran over {self.settings.turn_timeout:.0f}s and was interrupted"
                 logger.error("[%s] %s", self.campaign, result.error)
+                self._log("note", NOTE_TIMEOUT.format(seconds=self.settings.turn_timeout))
                 await self._abort(task, provider)
         except asyncio.CancelledError:
             await self._abort(task, provider)
@@ -794,11 +857,17 @@ class ScreenDriver:
                 self._persist_session(provider)
                 if event.type == "text":
                     result.text.append(event.content)
+                    self._log("text", event.content, "sdk")
                 elif event.type == "tool_use":
                     logger.info("[%s] tool %s", self.campaign, event.content[:300])
+                    name, shown = tool_call_text(event)
+                    self._log("tool", shown, "sdk", name=name)
+                elif event.type == "tool_result":
+                    self._log("result", event.content, "sdk", error=bool(event.metadata.get("is_error")))
                 elif event.type == "error":
                     result.error = event.content
                     logger.error("[%s] master error: %s", self.campaign, event.content[:500])
+                    self._log("note", f"Ошибка мастера: {event.content}")
                     limited, wait = usage_limit(event.content, self.clock())
                     if limited:
                         result.rate_limited, result.retry_after = True, wait

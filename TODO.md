@@ -1,5 +1,12 @@
 # TODO — DM System
 
+## The play screen has no phone layout (found 2026-10-28, master console screenshots)
+`lib/screen/template.html`: at 390x844 the page keeps its desktop grid (`main` two columns, the footer's option and input
+rows in one line), so the side panel, the second option, the send button and the header's place and date are cut off
+past the right edge (`.playtest/console-phone-closed.png`). The master console itself opens as a full-screen drawer and
+its button is fixed top right, so it is usable. Fix direction: a `@media (max-width:760px),(orientation:portrait)` layout:
+one column (story, then a collapsible side panel), options wrapping under the question, the input row wrapping.
+
 ## Hub master webhook URL is readable inside the play unit (found 2026-10-28, hub master build)
 `backend/hub_master.py`: the driver popped `DM_PLAY_HUB_WEBHOOK` from `os.environ` at start, but systemd passed it in the
 exec environment, so `/proc/<driver pid>/environ` still held it; the SDK master runs as the same user in the same unit,
@@ -188,3 +195,4 @@ The fuzzy name lookup resolved `Максим Астраханцев` to `fact:np
 - [ ] **Web connect failure leaves the CLI running** — `ClaudeSDKProvider._connect` never disconnects a client whose `connect()` failed or timed out. Fix: disconnect in an `except` (the online provider already does).
 - [x] **`/favicon.ico` logs a 403 on every page load** — fixed 2026-10-27: the page declares an empty icon (`<link rel="icon" href="data:,">`), so browsers no longer ask.
 - [ ] **Failed online turns are redelivered after a restart** — `backend/screen_driver.py` puts the range `(turn.answered, cursor]` back under the RESTARTED notice, including actions whose turn failed and that players were asked to repeat. Fix if unwanted: record `failed_through` in the status file.
+- [ ] **The master console log is writable by the SDK master** — `<screen>/master-log.jsonl` (`lib/screen/masterlog.py`) sits in the campaign tree the sandboxed master can write as the same uid, so a prompt-injected master could append forged or unredacted entries (forged huge ids are already ignored, ticket-refused notes are throttled, 2026-10-28). Fix direction: keep the log in a driver-owned directory not bound into `dnd-play@.service`, served by the screen server from there.
