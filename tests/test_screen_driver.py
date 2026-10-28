@@ -1378,6 +1378,34 @@ def test_the_takeover_notice_comes_only_after_another_master(tmp_path):
         assert hub.payloads[0]["message"].startswith(TAKEOVER + "\n") is expected, previous
 
 
+def test_a_restart_after_hub_turns_sends_no_fresh_session_notice(tmp_path):
+    """Live 2026-10-28: with the hub playing, the SDK master never saves a session, so every restart opened a "fresh
+    session" and the hub published a recap turn after each deploy."""
+    table, hub = Table(tmp_path), Hub(hub_publishes)
+
+    async def scenario():
+        driver = await hub_started(table, hub, previous={"master": "hub"})
+        await driver.step()                 # nothing waits: no notice, no batch
+        quiet = list(hub.payloads)
+        table.act("1. Ход")
+        await driver.step()
+        return quiet
+
+    assert run(scenario()) == []
+    assert [p["message"] for p in hub.payloads] == ["\n".join([HUB_CATCH_UP, line(1, "1. Ход")])]
+
+
+def test_a_fresh_hub_table_still_announces_the_session(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_publishes)
+
+    async def scenario():
+        driver = await hub_started(table, hub, previous={"master": "sdk"})
+        await driver.step()
+
+    run(scenario())
+    assert hub.payloads[0]["message"] == "\n".join([TAKEOVER, HUB_CATCH_UP, FRESH.format(name="alpha")])
+
+
 def test_a_resumed_sdk_session_catches_up_after_the_hub_played(tmp_path):
     table = Table(tmp_path)
 

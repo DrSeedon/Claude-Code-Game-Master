@@ -418,8 +418,13 @@ class ScreenDriver:
         retry_at = previous.get("retry_at")
         if isinstance(retry_at, (int, float)) and retry_at > now:
             self.retry_at, self.limit_streak = float(retry_at), 1   # a usage-limit rest outlives a restart
-        # The SDK master's resumed session missed what the hub played before this start.
-        self.sdk_behind = bool(self.persisted_session) and previous.get("master") == "hub"
+        hub_played = previous.get("master") == "hub"
+        if self.hub.hub and hub_played and not self.persisted_session:
+            # The hub keeps its own thread: a driver restart is no fresh session for it, so no recap turn after every
+            # deploy (2026-10-28). An SDK master that takes a batch later starts with the catch-up note instead.
+            self.notices = []
+        # The SDK master's session (resumed, or fresh without its notice) missed what the hub played before this start.
+        self.sdk_behind = hub_played and (bool(self.persisted_session) or self.hub.hub)
         if self.hub.hub:
             self.hub_takeover = previous.get("master") != "hub"
             before = previous.get("hub") if isinstance(previous.get("hub"), dict) else {}
