@@ -99,6 +99,12 @@ def test_settings_default_to_sdk_and_hub_needs_a_webhook_and_a_socket(caplog):
     assert HubSettings.from_env({"DM_PLAY_MASTER": "hub", "DM_PLAY_HUB_WEBHOOK": "https://h/x", "DM_PLAY_HUB_SOCKET": "/s/h.sock"}).socket == Path("/s/h.sock")
 
 
+def test_the_sdk_master_is_the_fallback_unless_the_table_says_none():
+    assert HubSettings.from_env({}).sdk_fallback
+    assert HubSettings.from_env({"DM_PLAY_HUB_FALLBACK": "bogus"}).sdk_fallback
+    assert not HubSettings.from_env({"DM_PLAY_HUB_FALLBACK": " None "}).sdk_fallback
+
+
 class _Hook(BaseHTTPRequestHandler):
     status = 200
     seen = []

@@ -1,9 +1,11 @@
 # Hub master: standing instructions for the T3 master thread
 
-The owner's table (`play`, https://dnd-play.seedon.ru) can be played by a Claude agent in a T3 thread on the hub
-instead of the Sonnet master on the VPS (owner decision 2026-10-28, `.orchestra/kb/rules-deploy-vps.md`). This file is
-the thread's first message, sent once when the thread is created (README "Hub master"). Everything below the line is
-that message; `<WRAPPER>` is the absolute hub path of `ops/play/hub-vps.sh`.
+An online table can be played by a Claude agent in a T3 thread on the hub instead of the Sonnet master on the VPS
+(owner decisions 2026-10-28 and 2026-10-31, `.orchestra/kb/rules-deploy-vps.md`). Since 2026-10-31 both tables are:
+`play` (https://dnd-play.seedon.ru) and `demo` (https://dnd-demo.seedon.ru), each with its own thread on Sonnet 5.5, and
+with no SDK master left as a fallback (the VPS subscription stopped working). This file is the thread's first message,
+sent once when the thread is created (README "Hub master"). Everything below the line is that message; `<WRAPPER>` is
+the absolute hub path of `ops/play/hub-vps.sh`.
 
 The thread is a scratch thread (no repository): the project's hooks, its developer rules and its local `tools/` stay
 out of it, so the master cannot touch the laptop copy of a campaign by mistake.
@@ -45,7 +47,7 @@ ticket; the lines below it are the batch: `[screen #N] <who> (<source>): <text>`
   - `prompt` prints your full rules;
   - `read <path>` prints a text file inside the campaign folder;
   - `say '<text>'` (or the text on stdin, at most 4000 characters) writes your own words into the master console.
-- A call that answers `ticket revoked` means this batch went to the VPS master. Stop at once: make no more calls for
+- A call that answers `ticket revoked` means the driver gave up on this batch. Stop at once: make no more calls for
   that event and reply `ticket revoked`.
 
 ## Your rules
@@ -83,5 +85,6 @@ ticket; the lines below it are the batch: `[screen #N] <who> (<source>): <text>`
   - no other projects, threads, tasks, subagents or workflows;
   - no web.
 - Never print or quote secrets, the webhook address, keys or files outside the campaign.
-- Be quick: the driver waits 5 minutes for your turn, then the VPS master plays the batch and your ticket is revoked.
-  Keep the number of calls small. Batch reads where one call can do it, and skip a call whose answer you already have.
+- Be quick: the driver waits 5 minutes for your turn. Then your ticket is revoked and the batch fails: no other master
+  takes it, and the players are asked to repeat their action. Keep the number of calls small. Batch reads where one
+  call can do it, and skip a call whose answer you already have.

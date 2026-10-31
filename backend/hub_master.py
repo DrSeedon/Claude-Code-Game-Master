@@ -5,7 +5,7 @@ The driver (backend.screen_driver) POSTs each batch to the table's T3 webhook (p
 hub agent runs engine tools on the VPS through `ssh kesha@VPS` with a restricted key whose forced command is the
 root-owned gate (ops/play/hub-gate.py); the gate forwards each call over this module's unix socket (HubBridge), and the
 driver runs the tool inside the table's sandbox. The gate never runs repository code itself: the sandboxed masters
-can edit the repository. Runbook: ops/play/README.md, "Hub master (play table)".
+can edit the repository. Runbook: ops/play/README.md, "Hub master".
 """
 
 from __future__ import annotations
@@ -90,10 +90,15 @@ class HubSettings:
     pause: float = 900.0
     socket: Path | None = None
     poll: float = 1.0
+    fallback: str = "sdk"                            # "none": a batch the hub misses fails (no SDK master on the VPS)
 
     @property
     def hub(self):
         return self.master == "hub"
+
+    @property
+    def sdk_fallback(self):
+        return self.fallback == "sdk"
 
     @classmethod
     def from_env(cls, environ=os.environ):
@@ -108,9 +113,14 @@ class HubSettings:
             logger.error("DM_PLAY_MASTER=hub needs %s and a socket (DM_PLAY_HUB_SOCKET or RUNTIME_DIRECTORY): "
                          "the table plays with the sdk master", WEBHOOK_ENV)
             master = "sdk"
+        fallback = (environ.get("DM_PLAY_HUB_FALLBACK") or "sdk").strip().lower()
+        if fallback not in ("sdk", "none"):
+            logger.warning("DM_PLAY_HUB_FALLBACK=%r is neither sdk nor none: the SDK master stays the fallback", fallback)
+            fallback = "sdk"
         return cls(master=master, webhook=webhook, timeout=_env_number(environ, "DM_PLAY_HUB_TIMEOUT", cls.timeout),
                    fails=max(1, _env_number(environ, "DM_PLAY_HUB_FAILS", cls.fails, int)),
-                   pause=_env_number(environ, "DM_PLAY_HUB_PAUSE", cls.pause), socket=Path(socket) if socket else None)
+                   pause=_env_number(environ, "DM_PLAY_HUB_PAUSE", cls.pause), socket=Path(socket) if socket else None,
+                   fallback=fallback)
 
 
 def post_event(url, payload, timeout=20):

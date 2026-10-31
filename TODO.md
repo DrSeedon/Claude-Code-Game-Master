@@ -1,5 +1,14 @@
 # TODO — DM System
 
+## The VPS Claude subscription stopped working: SDK masters and the web game master fail (found 2026-10-31)
+From 2026-10-31 13:31 UTC every `/usr/bin/claude` session on the VPS answers «Claude Code can't use your Claude
+subscription, usually because a payment is past due». The demo table's SDK master (`backend/screen_driver.py`
+`sdk_turn`) failed all 11 batches (#8-18) in about a second each, and its follow-up failed too, so the feed filled with
+«Мастер споткнулся». Everything else on the VPS that thinks through that CLI is affected as well: the web game master
+(`backend/providers/claude_sdk.py`) and, outside this repository, Orchestra and the AI-table. Done here: both online
+tables moved to hub masters on Sonnet 5.5 with `DM_PLAY_HUB_FALLBACK=none` (owner decision 2026-10-31). Open: the
+subscription itself is the owner's; the web game master stays down until it works again or gets another runtime.
+
 ## The play screen has no phone layout (found 2026-10-28, master console screenshots)
 `lib/screen/template.html`: at 390x844 the page keeps its desktop grid (`main` two columns, the footer's option and input
 rows in one line), so the side panel, the second option, the send button and the header's place and date are cut off

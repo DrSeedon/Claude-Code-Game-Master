@@ -22,7 +22,7 @@ from backend.runtime.session_store import load_runtime_session, save_runtime_ses
 from backend.runtime.turn_lock import try_campaign_turn_lock
 from backend.hub_master import HubSettings
 from backend.screen_driver import (CARRIED, FAILED_LINE, FRESH, GM_SESSION, HUB_CATCH_UP, HUB_FAILED_LINE, HUB_FALLBACK,
-                                   HUB_PAUSED_LINE, LIMIT_LINE, NOT_PUBLISHED, REST_LINE, RESTARTED, SDK_CATCH_UP, SWITCHED,
+                                   HUB_DOWN_LINE, HUB_PAUSED_LINE, LIMIT_LINE, NOT_PUBLISHED, REST_LINE, RESTARTED, SDK_CATCH_UP, SWITCHED,
                                    TAKEOVER, ScreenDriver, Settings, build_prompt, spawn_screen_server)
 from lib.screen import activity, cli as screen_cli, inbox, masterlog, online
 
@@ -1213,9 +1213,9 @@ def hub_down(hub, payload):
 class Hub:
     """The hub side of a driver test: settings, a webhook poster that plays a script per batch, the bridge."""
 
-    def __init__(self, *plays, timeout=0.05, fails=2, pause=900.0, on_revoke=None, extension=0.0):
+    def __init__(self, *plays, timeout=0.05, fails=2, pause=900.0, on_revoke=None, extension=0.0, fallback="sdk"):
         self.settings = HubSettings(master="hub", webhook=WEBHOOK, timeout=timeout, fails=fails, pause=pause,
-                                    socket=Path("/unused/hub.sock"), poll=0.01)
+                                    socket=Path("/unused/hub.sock"), poll=0.01, fallback=fallback)
         self.plays = list(plays) or [hub_publishes]
         self.on_revoke = on_revoke
         self.extension = extension
@@ -1346,6 +1346,41 @@ def test_two_hub_failures_pause_the_hub_then_it_plays_again(tmp_path):
     assert paused["hub"]["fails"] == 2 and paused["hub"]["paused_until"] == 1_800_000_900
     assert hub.payloads[2]["message"] == "\n".join([HUB_CATCH_UP, line(4, "4. Ход")])
     assert after["hub"]["fails"] == 0 and after["hub"]["paused_until"] is None and after["hub"]["last_result"] == "published"
+
+
+def test_without_a_fallback_a_missed_batch_fails_and_the_hub_never_pauses(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_down, hub_silent, hub_silent, hub_publishes, pause=900, fallback="none")
+
+    async def scenario():
+        driver = await hub_started(table, hub, previous={"master": "hub"})
+        states = []
+        for n in (1, 2, 3, 4):
+            table.act(f"{n}. Ход")
+            await driver.step()
+            states.append(table.status())
+        return states
+
+    states = run(scenario())
+    assert table.providers[0].messages == [] and len(hub.payloads) == 4    # the 3rd batch still goes to the hub
+    assert [s["state"] for s in states] == ["error", "error", "error", "idle"]
+    assert states[2]["hub"]["fails"] == 3 and states[2]["hub"]["paused_until"] is None
+    assert states[3]["hub"]["fails"] == 0 and states[3]["hub"]["last_result"] == "published"
+    assert table.feed() == [HUB_DOWN_LINE] * 3
+    notes = [e["text"] for e in masterlog.read(table.sdir()) if e["kind"] == "note"]
+    assert len(notes) == 3 and "запасного мастера нет" in notes[0] and "post failed: HTTP 502" in notes[0]
+
+
+def test_without_a_fallback_a_hub_pause_from_before_the_restart_is_ignored(tmp_path):
+    table, hub = Table(tmp_path), Hub(hub_publishes, fallback="none")
+
+    async def scenario():
+        previous = {"master": "hub", "hub": {"paused_until": table.clock.now + 600, "fails": 2}}
+        driver = await hub_started(table, hub, previous=previous)
+        table.act("1. Ход")
+        await driver.step()
+
+    run(scenario())
+    assert len(hub.payloads) == 1 and table.providers[0].messages == [] and table.status()["state"] == "idle"
 
 
 def test_catch_up_notes_go_to_whichever_master_missed_turns(tmp_path):

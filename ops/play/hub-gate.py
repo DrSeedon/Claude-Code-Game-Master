@@ -1,7 +1,7 @@
 #!/usr/bin/python3 -I
 """The hub master's gate on the VPS (owner decision 2026-10-28): the forced command of the hub's ssh key.
 
-Installed root-owned as /usr/local/lib/dnd-play/hub-gate (ops/play/README.md, "Hub master (play table)"), outside the
+Installed root-owned as /usr/local/lib/dnd-play/hub-gate (ops/play/README.md, "Hub master"), outside the
 repository: the sandboxed table masters can edit the repository, so the gate runs no repository code and executes
 nothing itself (its one child is `systemctl show`, asking systemd for the table driver's pid). It reads SSH_ORIGINAL_COMMAND as `<table> <ticket> <op> [args...]`, forwards it with stdin to the
 table driver's bridge socket (backend/hub_master.py, run inside the table's sandbox) and prints the answer.

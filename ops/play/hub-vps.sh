@@ -1,6 +1,6 @@
 #!/bin/bash
 # The hub master's way to its online table (owner decision 2026-10-28): runs on the hub, calls the VPS gate
-# (ops/play/hub-gate.py, the forced command of the key) over ssh. Runbook: ops/play/README.md, "Hub master (play table)".
+# (ops/play/hub-gate.py, the forced command of the key) over ssh. Runbook: ops/play/README.md, "Hub master".
 #
 #   hub-vps.sh <table> <ticket> <tool|prompt|status|read|say> [args...]
 #   hub-vps.sh play "$TICKET" dm-roll.sh 1d20+3

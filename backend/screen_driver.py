@@ -68,6 +68,7 @@ LIMIT_LINE = "Мастер отдыхает: лимит подписки, ско
 FAILED_LINE = "Мастер споткнулся: ход не вышел, повторите действие"
 HUB_FAILED_LINE = "Мастер на хабе не ответил: ход играет запасной мастер"
 HUB_PAUSED_LINE = "Мастер на хабе недоступен: пока играет запасной мастер"
+HUB_DOWN_LINE = "Мастер на хабе не ответил: повторите действие"
 # The hub master (DM_PLAY_MASTER=hub): what each master is told when the other one played in between.
 TAKEOVER = "[system] You take over this table from the VPS master. " + STANDS
 HUB_CATCH_UP = ("[system] The VPS master played the turns since your last answer (or the table's driver restarted). Catch "
@@ -80,6 +81,7 @@ HUB_FALLBACK = ("[system] The hub master did not answer this batch in time, so i
 # Notes of the master console (lib/screen/masterlog.py), in the owner's language.
 NOTE_HUB_FAILED = "Мастер на хабе не ответил ({reason}): ход играет запасной мастер"
 NOTE_HUB_PAUSED = "Мастер на хабе на паузе {minutes:.0f} мин после {fails} неудач подряд"
+NOTE_HUB_DOWN = "Мастер на хабе не ответил ({reason}), запасного мастера нет: ход не вышел"
 NOTE_TIMEOUT = "Ход не уложился в {seconds:.0f} с и был прерван"
 NOTE_FOLLOW_UP = "Ход не опубликован ({reason}): мастеру напомнили"
 NOTE_FAILED = "Ход так и не вышел: {reason}"
@@ -658,7 +660,10 @@ class ScreenDriver:
             self.connected = False
 
     def hub_ready(self, now=None):
-        return self.hub.hub and (self.clock() if now is None else now) >= self.hub_paused_until
+        if not self.hub.hub:
+            return False
+        # Without a fallback (DM_PLAY_HUB_FALLBACK=none) the hub never pauses: every batch goes to it.
+        return not self.hub.sdk_fallback or (self.clock() if now is None else now) >= self.hub_paused_until
 
     async def play(self, notices, events):
         """One batch: cursor first (after a crash the batch goes again once, as unanswered), then one master message
@@ -676,6 +681,12 @@ class ScreenDriver:
             return self._published("hub")
         if self.stopping:
             return
+        if not self.hub.sdk_fallback:   # no SDK master on the VPS (2026-10-31): the batch fails, the players repeat it
+            self.failed = True
+            self.last_error = f"hub master: {self.hub_last_result or 'no turn'}"
+            self._activity(HUB_DOWN_LINE)
+            self._log("note", NOTE_HUB_DOWN.format(reason=self.hub_last_result or "no turn"))
+            return self.set_state("error")
         self._activity(HUB_FAILED_LINE)
         self._log("note", NOTE_HUB_FAILED.format(reason=self.hub_last_result or "no turn"))
         if self.clock() < self.retry_at:    # the SDK master rests on a usage limit: the lines wait
@@ -776,9 +787,9 @@ class ScreenDriver:
     def _hub_failed(self, reason):
         self.hub_fails += 1
         self.hub_last_result = reason
-        logger.warning("[%s] hub master failed (%s, %d in a row): the SDK master plays this batch", self.campaign,
-                       reason, self.hub_fails)
-        if self.hub_fails >= self.hub.fails:
+        logger.warning("[%s] hub master failed (%s, %d in a row): %s", self.campaign, reason, self.hub_fails,
+                       "the SDK master plays this batch" if self.hub.sdk_fallback else "no fallback, the batch fails")
+        if self.hub.sdk_fallback and self.hub_fails >= self.hub.fails:
             self.hub_paused_until = self.clock() + self.hub.pause
             logger.warning("[%s] hub master paused for %.0fs after %d failures", self.campaign, self.hub.pause, self.hub_fails)
             if self.hub_fails == self.hub.fails:    # one feed line per outage, not per probe after a pause
