@@ -388,8 +388,12 @@ class Speaker:
         try:
             result = self.api.tts(voice["voice_id"], body, config["output_format"])
         except SpeechError as exc:
-            self.log("tts", ok=False, cached=False, status=exc.status, error=str(exc), ms=round((time.monotonic() - started) * 1000), **facts)
-            raise
+            fb_id = ((config.get("fallback") or {}).get("female" if _looks_female(seg["speaker"]) else "male") or config.get("narrator") or {}).get("voice_id")
+            if exc.status == 404 and fb_id and fb_id != voice["voice_id"]:
+                result = self.api.tts(fb_id, body, config["output_format"])
+            else:
+                self.log("tts", ok=False, cached=False, status=exc.status, error=str(exc), ms=round((time.monotonic() - started) * 1000), **facts)
+                raise
         audio, info = result if isinstance(result, tuple) else (result, {})
         path = self.dir / AUDIO_DIR / seg["file"]
         path.parent.mkdir(parents=True, exist_ok=True)
