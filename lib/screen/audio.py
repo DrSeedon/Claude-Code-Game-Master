@@ -108,7 +108,8 @@ class Library:
 
     def find(self, kind, cue, tags=()):
         """The best stored sound for a cue: the same prompt wins outright, otherwise shared tags and words."""
-        wanted, tags = words(cue), {t.lower() for t in tags}
+        wanted = words(cue)
+        tags = {t.lower() for t in tags} | wanted
         best, best_score = None, 0
         for entry in self.entries():
             if entry.get("kind") != kind or not self.path(entry).is_file():
@@ -296,6 +297,8 @@ class Director:
                 entry = None
             if not entry:
                 missing.append(cue["cue"])
+                if kind == "ambience":
+                    out["ambience"] = None
                 continue
             if kind == "sfx":
                 out["sfx"].append(self._item(entry, cue))

@@ -98,6 +98,7 @@ def test_null_music_means_silence_and_missing_music_keeps_playing(director):
 
     assert d.resolve({"blocks": ["<p>a</p>"], "audio": {"music": None}})["music"] is None
     assert d.resolve({"blocks": ["<p>a</p>"], "audio": {}})["ambience"] == "keep"
+    assert d.resolve({"blocks": ["<p>a</p>"], "audio": {"ambience": cue("swamp frogs", "ambience")}}, generate=False)["ambience"] is None
 
 
 def test_not_enough_credits_skips_the_sound_and_keeps_the_turn(director):

@@ -47,11 +47,15 @@ def test_hook_turns_dice_into_roll_events():
     assert "17" in event["text"] and "SUCCESS" in event["text"]
 
 
-def test_hook_shows_friendly_state_changes_without_arguments():
+def test_hook_shows_friendly_state_changes_with_concrete_details():
     event = first(payload('bash tools/dm-player.sh hp "Максим" -3'), "ru")
 
-    assert event == {"kind": "save", "text": "Здоровье героя изменилось"}
-    assert first(payload('bash tools/dm-player.sh hp "Максим" -3'), "en")["text"] == "A hero's health changed"
+    assert event == {"kind": "save", "text": "Здоровье героя изменилось: Максим -3 HP"}
+    assert first(payload('bash tools/dm-player.sh hp "Максим" -3'), "en")["text"] == "A hero's health changed: Максим -3 HP"
+    assert first(payload("bash tools/dm-player.sh condition 'Стив Хуйс' add Poisoned"), "ru")["text"] == "Состояние героя изменилось: Стив Хуйс — +Отравлен"
+    assert first(payload("bash tools/dm-player.sh condition 'Стив Хуйс' remove Poisoned"), "ru")["text"] == "Состояние героя изменилось: Стив Хуйс — снято «Отравлен»"
+    assert first(payload("bash tools/dm-player.sh condition 'Стив Хуйс' list"), "ru") is None
+    assert first(payload("bash tools/dm-npc.sh hp 'Зоя Дубинушка' -4", "✓ Зоя Дубинушка HP: 20 → 16/20"), "ru")["text"] == "Здоровье спутника изменилось: Зоя Дубинушка -4 HP (20 → 16/20)"
 
 
 def test_hook_never_leaks_names_or_descriptions_of_new_npcs():
@@ -77,7 +81,7 @@ def test_hook_hides_machinery_and_secrets(command):
     ('bash tools/dm-plot.sh objective "С чёрного хода" complete 1', "Цель задания выполнена"),
     ('bash tools/dm-plot.sh objective "Q" add "новая цель"', "В задании появилась новая цель"),
     ('bash tools/dm-plot.sh complete "Q"', "Задание завершено"),
-    ('bash tools/dm-inventory.sh update Максим --gold +100 --reason "x"', "Вещи и товар перераспределены"),
+    ('bash tools/dm-inventory.sh update Максим --gold +100 --reason "x"', "Вещи и товар перераспределены: Максим (золото +100)"),
 ])
 def test_hook_describes_quests_and_inventory(command, expected):
     assert first(payload(command), "ru")["text"] == expected
@@ -128,5 +132,6 @@ def test_reading_a_value_is_not_a_change(command):
     assert first(payload(command), "ru") is None
 
 
-def test_changing_a_value_is_shown():
-    assert first(payload("bash tools/dm-player.sh gold +9500"), "ru")["text"] == "Кошелёк изменился"
+def test_changing_a_value_is_shown(tmp_path):
+    assert first(payload("bash tools/dm-player.sh gold +9500"), "ru")["text"] == "Кошелёк изменился: +9500"
+    assert activity.append_activity(tmp_path, "turn", "Ход 5")["kind"] == "turn"

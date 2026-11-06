@@ -4,7 +4,7 @@ from . import eventlog
 from .inbox import append_jsonl, read_jsonl
 
 ACTIVITY = "activity.jsonl"
-KINDS = {"think", "roll", "save", "world", "info"}
+KINDS = {"think", "roll", "save", "world", "info", "turn"}
 MAX_TEXT = 300
 
 

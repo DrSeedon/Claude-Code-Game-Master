@@ -49,7 +49,15 @@ main{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:1.2vw;
 #feedlist{flex:1;display:flex;flex-direction:column;gap:.15em;overflow-y:auto;overscroll-behavior:contain;min-height:0;min-width:0;padding-right:.4em}
 #feedlist>.fi{flex:none}#feedlist>.fi:first-child{margin-top:auto}
 .fi{display:flex;gap:.6em;align-items:baseline;animation:slide .5s both;color:var(--muted)}.fi:last-child{color:var(--text)}
-.fi .ic{width:1.5em;text-align:center}.fi.roll .t{color:var(--accent2)}.fi.save .t{color:var(--muted);font-style:italic}
+.fi .ic{width:1.5em;text-align:center}.fi.roll .t{color:var(--accent2);display:flex;flex-wrap:wrap;gap:.25em .6em;align-items:baseline}.fi.save .t{color:var(--text);opacity:.9}
+.rp{display:inline-flex;align-items:baseline;gap:.4em;padding:.05em .5em;border-radius:6px;border:1px solid transparent}
+.rp.ok{color:#7ee787;background:rgba(46,160,67,.16);border-color:rgba(126,231,135,.38)}
+.rp.fail{color:#ff7b72;background:rgba(248,81,73,.16);border-color:rgba(255,123,114,.38)}
+.rp.crit{color:#ffd866;background:linear-gradient(90deg,rgba(46,160,67,.28),rgba(255,216,102,.24));border-color:#ffd866;box-shadow:0 0 .7em rgba(255,216,102,.32);font-weight:600}
+.rp.fumble{color:#ff5555;background:linear-gradient(90deg,rgba(180,20,30,.36),rgba(255,85,85,.22));border-color:#ff5555;box-shadow:0 0 .7em rgba(255,85,85,.32);font-weight:600}
+.rv{font-size:.76em;font-weight:700;letter-spacing:.05em;padding:.04em .42em;border-radius:99px;background:rgba(0,0,0,.38);font-style:normal}
+.fi.turn{display:flex;align-items:center;gap:.8em;margin:.35em 0 .2em;color:var(--accent);font-size:.8em;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+.fi.turn::before,.fi.turn::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(var(--line),.75),var(--accent),rgba(var(--line),.75),transparent)}
 @keyframes slide{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
 .dice{display:inline-block;animation:tumble .9s ease-out both}
 @keyframes tumble{0%{transform:rotate(0) scale(.4);opacity:0}60%{transform:rotate(540deg) scale(1.25);opacity:1}100%{transform:rotate(720deg) scale(1)}}
@@ -160,11 +168,11 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 uiLog('load',{ua:navigator.userAgent,w:innerWidth,h:innerHeight,dpr:devicePixelRatio});
 const TOKEN=document.body.dataset.token, $=id=>document.getElementById(id);
 const I18N={
- ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',speak:'Озвучить ход',stopSpeak:'Остановить',auto:'Авто',autoTip:'Читать вслух каждый новый ход',speechOff:'Озвучка не настроена: нужен ключ ElevenLabs и голос рассказчика (dm-screen.sh voice narrator)',credits:'кредитов',left:'осталось',tapToPlay:'Браузер не разрешил автозапуск звука: нажмите 🔊',bg:'Музыка и звуки',bgOff:'Музыка и звуки выключены',paused:'Пауза: пока мышь над панелью или идёт правка',tooMany:'Мастер ещё не разобрал прошлые действия: дождитесь ответа',rateLimit:'Слишком часто: подождите минуту',voiceLimit:'Микрофон на сегодня исчерпан: напишите действие текстом',dailyLimit:'Озвучка на сегодня исчерпана: читаем глазами',turnLimit:'Этот ход слишком длинный для озвучки',noCredits:'Кончились кредиты озвучки',mRest:'Мастер отдыхает (лимит)',mPause:'Пауза',mError:'Мастер споткнулся, сейчас поправим',mOff:'Мастер не на связи',mc:'⌘ Мастер',mcTip:'Консоль мастера: что он получает, пишет и делает (M)',mcTitle:'✻ Мастер',mcSub:'что мастер получает, пишет и запускает',mcThink:'мастер думает…',mcNew:'↓ новое',mcLines:'строк',mcTurn:'ход',mcPublished:'опубликован',mcClose:'Закрыть (Esc)',mcEmpty:'Пока пусто: мастер ещё ничего не делал',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
- en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',speak:'Read this turn aloud',stopSpeak:'Stop',auto:'Auto',autoTip:'Read every new turn aloud',speechOff:'Speech is not set up: an ElevenLabs key and a narrator voice are needed (dm-screen.sh voice narrator)',credits:'credits',left:'left',tapToPlay:'The browser blocked autoplay: press 🔊',bg:'Music and sounds',bgOff:'Music and sounds are off',paused:'Paused while the mouse is over this panel or you are editing',tooMany:'The Master has not read the previous actions yet: wait for the answer',rateLimit:'Too many requests: wait a minute',voiceLimit:"Today's microphone limit is reached: type the action instead",dailyLimit:"Today's speech budget is spent: read along instead",turnLimit:'This turn is too long to voice',noCredits:'Out of speech credits',mRest:'The Master is resting (limit)',mPause:'Paused',mError:'The Master stumbled, fixing it',mOff:'The Master is offline',mc:'⌘ Master',mcTip:'The master console: what it is given, writes and runs (M)',mcTitle:'✻ Master',mcSub:'what the master is given, writes and runs',mcThink:'the master is thinking…',mcNew:'↓ new',mcLines:'lines',mcTurn:'turn',mcPublished:'published',mcClose:'Close (Esc)',mcEmpty:'Nothing yet: the master has not done anything',abil:['STR','DEX','CON','INT','WIS','CHA']}};
+ ru:{pic:'🖼 Картина',picBack:'📖 Вернуть текст',caps:'Подписи',on:'вкл',off:'выкл',feed:'ХОД МАСТЕРА',think:'Мастер думает',ph:'Своё действие: что говорите или делаете…',send:'Отправить',sendNow:'Отправить сейчас',edit:'Изменить',cancel:'Отмена',quests:'ЗАДАНИЯ',all:'Оба',sent:'Отправлено: ',fail:'Не отправилось: ',noMic:'Нет доступа к микрофону',speak:'Говорите, нажмите ещё раз, чтобы закончить',short:'Слишком коротко, скажите ещё раз',silence:'Тишина: ничего не услышал',notUnderstood:'Не распознал',noNet:'Нет связи с распознаванием',lvl:'ур.',ac:'КЗ',mic:'Сказать голосом',speak:'Озвучить ход',stopSpeak:'Остановить',auto:'Авто',autoTip:'Читать вслух каждый новый ход',speechOff:'Озвучка не настроена: нужен ключ ElevenLabs и голос рассказчика (dm-screen.sh voice narrator)',credits:'кредитов',left:'осталось',tapToPlay:'Браузер не разрешил автозапуск звука: нажмите 🔊',bg:'Музыка и звуки',bgOff:'Музыка и звуки выключены',paused:'Пауза: пока мышь над панелью или идёт правка',tooMany:'Мастер ещё не разобрал прошлые действия: дождитесь ответа',rateLimit:'Слишком часто: подождите минуту',voiceLimit:'Микрофон на сегодня исчерпан: напишите действие текстом',dailyLimit:'Озвучка на сегодня исчерпана: читаем глазами',turnLimit:'Этот ход слишком длинный для озвучки',noCredits:'Кончились кредиты озвучки',mRest:'Мастер отдыхает (лимит)',mPause:'Пауза',mError:'Мастер споткнулся, сейчас поправим',mOff:'Мастер не на связи',mc:'⌘ Мастер',mcTip:'Консоль мастера: что он получает, пишет и делает (M)',mcTitle:'✻ Мастер',mcSub:'что мастер получает, пишет и запускает',mcThink:'мастер думает…',mcNew:'↓ новое',mcLines:'строк',mcTurn:'ход',mcPublished:'опубликован',mcClose:'Закрыть (Esc)',mcEmpty:'Пока пусто: мастер ещё ничего не делал',rOk:'✓ УСПЕХ',rFail:'✗ ПРОВАЛ',rCrit:'★ КРИТ!',rFumble:'💀 СУПЕР ПРОЁБ!',abil:['СИЛ','ЛОВ','ТЕЛ','ИНТ','МДР','ХАР']},
+ en:{pic:'🖼 Picture',picBack:'📖 Back to text',caps:'Captions',on:'on',off:'off',feed:"MASTER'S WORK",think:'The Master is thinking',ph:'Your own action: what do you say or do…',send:'Send',sendNow:'Send now',edit:'Edit',cancel:'Cancel',quests:'QUESTS',all:'Everyone',sent:'Sent: ',fail:'Could not send: ',noMic:'No microphone access',speak:'Speak, press again to finish',short:'Too short, try again',silence:'Silence: heard nothing',notUnderstood:'Could not understand',noNet:'No connection to the speech service',lvl:'lvl',ac:'AC',mic:'Speak',speak:'Read this turn aloud',stopSpeak:'Stop',auto:'Auto',autoTip:'Read every new turn aloud',speechOff:'Speech is not set up: an ElevenLabs key and a narrator voice are needed (dm-screen.sh voice narrator)',credits:'credits',left:'left',tapToPlay:'The browser blocked autoplay: press 🔊',bg:'Music and sounds',bgOff:'Music and sounds are off',paused:'Paused while the mouse is over this panel or you are editing',tooMany:'The Master has not read the previous actions yet: wait for the answer',rateLimit:'Too many requests: wait a minute',voiceLimit:"Today's microphone limit is reached: type the action instead",dailyLimit:"Today's speech budget is spent: read along instead",turnLimit:'This turn is too long to voice',noCredits:'Out of speech credits',mRest:'The Master is resting (limit)',mPause:'Paused',mError:'The Master stumbled, fixing it',mOff:'The Master is offline',mc:'⌘ Master',mcTip:'The master console: what it is given, writes and runs (M)',mcTitle:'✻ Master',mcSub:'what the master is given, writes and runs',mcThink:'the master is thinking…',mcNew:'↓ new',mcLines:'lines',mcTurn:'turn',mcPublished:'published',mcClose:'Close (Esc)',mcEmpty:'Nothing yet: the master has not done anything',rOk:'✓ SUCCESS',rFail:'✗ FAIL',rCrit:'★ CRIT!',rFumble:'💀 FUMBLE!',abil:['STR','DEX','CON','INT','WIS','CHA']}};
 let L=I18N.en;const t=k=>L[k];
 function applyLang(lang){L=I18N[lang]||I18N.en;document.documentElement.lang=lang||'en';
- $('feedh').textContent=t('feed');$('txt').placeholder=t('ph');$('send').textContent=t('send');$('saygo').textContent=t('sendNow');$('sayedit').textContent=t('edit');$('saycancel').textContent=t('cancel');$('mic').title=t('mic');$('saypause').textContent=t('paused');$('autoBtn').textContent=t('auto');$('autoBtn').title=t('autoTip');$('speak').title=t('speak');$('mcBtn').textContent=t('mc');$('mcBtn').title=t('mcTip');$('mch').textContent=t('mcTitle');$('mcsub').textContent=t('mcSub');$('mcthinkt').textContent=t('mcThink');$('mcNew').textContent=t('mcNew');$('mcx').title=t('mcClose');$('mcempty').textContent=t('mcEmpty');setPicText();setCapsText()}
+ $('feedh').textContent=t('feed');$('txt').placeholder=t('ph');$('send').textContent=t('send');$('saygo').textContent=t('sendNow');$('sayedit').textContent=t('edit');$('saycancel').textContent=t('cancel');$('mic').title=t('mic');$('saypause').textContent=t('paused');$('autoBtn').textContent=t('auto')+': '+t(SP.auto?'on':'off');$('autoBtn').title=t('autoTip');$('speak').title=t('speak');$('mcBtn').textContent=t('mc');$('mcBtn').title=t('mcTip');$('mch').textContent=t('mcTitle');$('mcsub').textContent=t('mcSub');$('mcthinkt').textContent=t('mcThink');$('mcNew').textContent=t('mcNew');$('mcx').title=t('mcClose');$('mcempty').textContent=t('mcEmpty');setPicText();setCapsText()}
 const SP={auto:false,vol:1,run:0,audio:null,armed:false};
 const BG={on:true,music:null,amb:null,musicFile:null,ambFile:null,sfx:[],played:new Set(),timers:[],turn:null};
 try{SP.auto=localStorage.getItem('auto')==='1';SP.vol=parseFloat(localStorage.getItem('vol')||'1')}catch(e){}
@@ -190,7 +198,7 @@ let bgFlip=false;
 function setBackground(url){const next=$(bgFlip?'bgA':'bgB'),prev=$(bgFlip?'bgB':'bgA');next.style.backgroundImage=`url(${url})`;next.classList.add('on');prev.classList.remove('on');bgFlip=!bgFlip}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // the new act's place and date show at once: the state that announced the act arrived before the swap finished
-async function swapAct(act){S.actSwap=act.id;document.body.classList.add('swapping');await sleep(450);renderAct(act);showClock(S.last||{});await sleep(60);document.body.classList.remove('swapping')}
+async function swapAct(act){S.actSwap=act.id;document.body.classList.add('swapping');setLoop('amb',null);await sleep(450);renderAct(act);showClock(S.last||{});await sleep(60);document.body.classList.remove('swapping')}
 function renderAct(act){
   S.actId=act.id;labels=act.labels||{};S.lang=act.lang||'en';applyTheme(act.theme);applyLang(S.lang);
   setBackground(`/art.png?v=${act.id}`);$('art').src=`/art.png?v=${act.id}`;
@@ -216,7 +224,7 @@ const TS={x:0,y:0};
 story.addEventListener('touchstart',e=>{const p=e.touches[0];TS.x=p.clientX;TS.y=p.clientY},{passive:true});
 story.addEventListener('touchend',e=>{const p=e.changedTouches[0],dx=p.clientX-TS.x,dy=p.clientY-TS.y;if(Math.abs(dy)>40&&Math.abs(dy)>Math.abs(dx)*1.2)go(dy<0?1:-1)},{passive:true});
 function renderTurn(t){
-  S.turnId=t.id;
+  S.turnId=t.id;S.hlKey='';
   story.style.scrollBehavior='auto';story.scrollLeft=0;story.style.scrollBehavior='';
   story.innerHTML=t.blocks.map((b,i)=>b.replace(/^<(\w+)/,`<$1 style="animation-delay:${i*160}ms"`)).join('');
   setTimeout(pgUpd,900);
@@ -274,11 +282,35 @@ function questsHtml(){const q=((S.views&&S.views.quests)||[]).filter(x=>x.status
 // ---- the Master's visible work ----
 const ICON={think:'🧠',roll:'🎲',save:'💾',world:'🌍',info:'•'};
 const atBottom=el=>el.scrollHeight-el.scrollTop-el.clientHeight<24;
+function rollPart(raw){
+  const s=String(raw||'').replace(/^🎲\s*/,'').trim();
+  const clean=s.replace(/\s*—\s*(?:⚔\s*CRITICAL!?|💀\s*FUMBLE!?|✓\s*SUCCESS|✗\s*FAIL)\s*$/i,'').trim();
+  const dm=clean.match(/\[(\d+(?:,\s*\d+)*)\](?:\s*→\s*(\d+))?/),nat=dm?(dm[2]?+dm[2]:(!dm[1].includes(',')?+dm[1]:null)):null;
+  const tm=clean.match(/(?:vs\s+|\(\s*)(?:DC|КС|СЛ|AC|КЗ)\s*(\d+)/i),dc=tm?+tm[1]:null;
+  const eq=clean.match(/=\s*(-?\d+)/),tot=eq?+eq[1]:(dm&&dc!==null?nat:null);
+  let st='';
+  if(/CRITICAL/i.test(s)||nat===20)st='crit';
+  else if(/FUMBLE/i.test(s)||(nat===1&&(dc!==null||!/урон|damage|hp|лечен/i.test(clean))))st='fumble';
+  else if(/SUCCESS/i.test(s))st='ok';
+  else if(/FAIL/i.test(s))st='fail';
+  else if(dc!==null&&tot!==null)st=tot>=dc?'ok':'fail';
+  const bk=st==='crit'?'rCrit':st==='fumble'?'rFumble':st==='ok'?'rOk':st==='fail'?'rFail':'';
+  return{text:clean,st,badge:bk?t(bk):''};
+}
+function rollView(raw){
+  const parts=String(raw||'').replace(/^🎲\s*/,'').split(/\s+·\s+/).map(rollPart);
+  const rank={crit:4,fumble:3,fail:2,ok:1,'':0};
+  const st=parts.reduce((a,p)=>(rank[p.st]||0)>(rank[a]||0)?p.st:a,'');
+  return{st,parts};
+}
 function renderFeed(list){
   const box=$('feedlist'),stuck=atBottom(box),before=S.feedLast;
   for(const e of list){if(e.id<=S.feedLast)continue;S.feedLast=e.id;
     const d=document.createElement('div');d.className='fi '+e.kind;
-    d.innerHTML=`<span class="ic">${e.kind==='roll'?'<span class="dice">🎲</span>':ICON[e.kind]||'•'}</span><span class="t">${esc(e.kind==='roll'?e.text.replace(/^🎲\s*/,''):e.text)}</span>`;box.appendChild(d)}
+    if(e.kind==='turn'){d.innerHTML=`<span>${esc(e.text)}</span>`;box.appendChild(d);continue}
+    if(e.kind==='roll'){const rv=rollView(e.text);if(rv.st)d.classList.add(rv.st);
+      d.innerHTML=`<span class="ic"><span class="dice">🎲</span></span><span class="t">${rv.parts.map(p=>`<span class="rp ${p.st}"><span>${esc(p.text)}</span>${p.badge?`<b class="rv">${esc(p.badge)}</b>`:''}</span>`).join('')}</span>`;box.appendChild(d);continue}
+    d.innerHTML=`<span class="ic">${ICON[e.kind]||'•'}</span><span class="t">${esc(e.text)}</span>`;box.appendChild(d)}
   while(box.children.length>200)box.removeChild(box.firstChild);
   let th=box.querySelector('.think-now');const n=masterNote(S.master,S.waiting);
   if(!n){if(th)th.remove()}
@@ -347,7 +379,7 @@ function onState(st){
   S.views=st.views;S.master=st.master||null;
   if(st.act&&st.act.id!==S.actId&&st.act.id!==S.actSwap){uiLog('act',{id:st.act.id,from:S.actId});if(S.actId===null)renderAct(st.act);else swapAct(st.act)}
   S.speech=!!st.speech;$('speak').classList.toggle('off',!S.speech);
-  if(st.auto_speech===false){$('autoBtn').style.display='none';if(SP.auto)setAuto(false)}
+  if(st.auto_speech===false){$('autoBtn').style.display='none';if(SP.auto)setAuto(false)}else $('autoBtn').style.display='';
   if(st.turn&&st.turn.id!==S.turnId){uiLog('turn',{id:st.turn.id,from:S.turnId,blocks:st.turn.blocks.length,options:(st.turn.options||[]).length});const fresh=S.turnId!==null;stopSpeech();S.waiting=false;renderTurn(st.turn);loadSounds(st.turn.id,!(fresh&&SP.auto&&S.speech));if(fresh&&SP.auto&&S.speech)speak()}
   else if(st.turn&&JSON.stringify(st.turn.panels||[])!==S.panelsKey){S.panelsKey=JSON.stringify(st.turn.panels||[]);S.panelsHtml=buildPanels(st.turn.panels||[]);renderSide()}
   else renderSide();
@@ -383,7 +415,15 @@ $('send').onclick=()=>sendAction('text',$('txt').value);
 $('txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendAction('text',$('txt').value)});
 
 // ---- speech: the narrator and the characters read the turn ----
-function highlight(indices){[...story.children].forEach((el,i)=>el.classList.toggle('speaking',indices.includes(i)));
+function activeBlock(blocks,ratio){
+  if(!blocks||blocks.length<=1)return blocks||[];
+  const lens=blocks.map(b=>Math.max(1,((story.children[b]&&story.children[b].textContent)||'').length));
+  const total=lens.reduce((a,b)=>a+b,0),target=Math.max(0,Math.min(0.999,ratio||0))*total;
+  let sum=0;for(let k=0;k<blocks.length;k++){sum+=lens[k];if(target<=sum)return[blocks[k]]}
+  return[blocks[blocks.length-1]];
+}
+function highlight(indices){const key=(indices||[]).join(',');if(S.hlKey===key)return;S.hlKey=key;
+  [...story.children].forEach((el,i)=>el.classList.toggle('speaking',indices.includes(i)));
   const el=indices.length&&story.children[indices[0]];if(el){el.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'});setTimeout(pgUpd,600)}}
 function setSpeakUi(state){const b=$('speak');b.classList.toggle('on',state==='playing');b.classList.toggle('busy',state==='busy');b.textContent=state==='playing'?'⏹':state==='busy'?'…':'🔊';b.title=state==='playing'?t('stopSpeak'):t('speak')}
 function showQuota(q,credits){$('quota').textContent=q?`${q.left} ${t('left')}`:'';if(credits!=null)$('speak').title=`${t('speak')}: ≈${credits} ${t('credits')}`}
@@ -396,8 +436,10 @@ async function speak(){
   if(SP.run!==run||S.turnId!==turnId){return}
   if(j.audio)applySounds(j.audio,turnId);BG.timers.forEach(clearTimeout);BG.timers=[];BG.played=new Set();showQuota(j.quota,0);setSpeakUi('playing');uiLog('speech',{event:'play',segments:j.segments.length,quota:j.quota});let i=0;
   const next=()=>{if(SP.run!==run)return;if(i>=j.segments.length){stopSpeech();return}
-    const seg=j.segments[i++];highlight(seg.blocks);playSfx(seg.blocks,i===1);uiLog('speech',{event:'segment',speaker:seg.speaker,file:seg.file,chars:seg.text.length});const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
-    a.onplay=bgVol;a.onended=()=>{SP.audio=null;next()};a.onerror=()=>{uiLog('speech',{event:'audio_error',file:seg.file});next()};a.play().catch(err=>{uiLog('speech',{event:'blocked',message:String(err)});toast(t('tapToPlay'));stopSpeech()})};
+    const seg=j.segments[i++],first=i===1;uiLog('speech',{event:'segment',speaker:seg.speaker,file:seg.file,chars:seg.text.length});const a=new Audio(`/audio/${seg.file}?token=${encodeURIComponent(TOKEN)}`);a.volume=SP.vol;SP.audio=a;
+    a.onplay=()=>{bgVol();highlight(activeBlock(seg.blocks,0));playSfx(seg.blocks,first)};
+    a.ontimeupdate=()=>{if(SP.audio===a&&seg.blocks&&seg.blocks.length>1&&a.duration>0)highlight(activeBlock(seg.blocks,a.currentTime/a.duration))};
+    a.onended=()=>{SP.audio=null;next()};a.onerror=()=>{uiLog('speech',{event:'audio_error',file:seg.file});next()};a.play().catch(err=>{uiLog('speech',{event:'blocked',message:String(err)});toast(t('tapToPlay'));stopSpeech()})};
   next()}
 $('speak').onclick=()=>$('speak').classList.contains('on')?stopSpeech():speak();
 
@@ -434,7 +476,7 @@ function setBg(on){BG.on=on;$('bgBtn').classList.toggle('off',!on);try{localStor
 $('bgBtn').onclick=()=>setBg(!BG.on);
 addEventListener('pointerdown',()=>{for(const a of [BG.music,BG.amb])if(a&&a.paused&&BG.on)bgPlay(a)});
 try{BG.on=localStorage.getItem('bg')!=='0'}catch(e){}setBg(BG.on);
-function setAuto(on){uiLog('speech',{event:'auto',on});SP.auto=on;$('autoBtn').classList.toggle('on',on);$('autoBtn').classList.toggle('off',!on);try{localStorage.setItem('auto',on?'1':'0')}catch(e){}}
+function setAuto(on){uiLog('speech',{event:'auto',on});SP.auto=on;$('autoBtn').textContent=t('auto')+': '+t(on?'on':'off');$('autoBtn').classList.toggle('on',on);$('autoBtn').classList.toggle('off',!on);try{localStorage.setItem('auto',on?'1':'0')}catch(e){}}
 $('autoBtn').onclick=()=>{setAuto(!SP.auto);if(SP.auto&&S.speech&&!SP.audio)speak()};
 $('vol').value=SP.vol;$('vol').oninput=()=>{SP.vol=parseFloat($('vol').value);uiLog('speech',{event:'volume',value:SP.vol});if(SP.audio)SP.audio.volume=SP.vol;bgVol();try{localStorage.setItem('vol',String(SP.vol))}catch(e){}};
 setAuto(SP.auto);

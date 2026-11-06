@@ -222,8 +222,8 @@ def make_server(screen_dir, port=0, token=None, views_provider=None, transcriber
     action_lock = threading.Lock()
     login_file = os.environ.get("DM_SCREEN_LOGIN_FILE", "").strip()
     console = master_console_on()
-    # Under a credit budget speech plays only on a press of the speaker button: the page hides its Auto switch.
-    auto_speech = not (daily_credits or turn_credits)
+    # The Auto switch is shown by default; DM_SCREEN_AUTO_SPEECH=0 hides it on public demo tables.
+    auto_speech = os.environ.get("DM_SCREEN_AUTO_SPEECH", "1").strip() != "0"
 
     def note(kind, **data):
         eventlog.log(screen_dir, kind, **data)

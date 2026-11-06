@@ -828,20 +828,21 @@ def test_parallel_actions_cannot_overshoot_the_pending_cap(tmp_path, monkeypatch
     assert sorted(statuses) == [200] + [429] * 5 and len(inbox.read_events(tmp_path)) == 1
 
 
-def test_a_credit_budget_turns_the_pages_auto_speech_off(tmp_path, monkeypatch):
-    httpd = _serve(tmp_path)
-    try:
-        free = json.loads(call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})[1])
-    finally:
-        _stop(httpd)
+def test_auto_speech_stays_on_with_a_credit_budget_and_can_be_disabled_via_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DM_SCREEN_DAILY_CREDITS", "15000")
     httpd = _serve(tmp_path)
     try:
-        capped = json.loads(call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})[1])
+        budgeted = json.loads(call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})[1])
+    finally:
+        _stop(httpd)
+    monkeypatch.setenv("DM_SCREEN_AUTO_SPEECH", "0")
+    httpd = _serve(tmp_path)
+    try:
+        disabled = json.loads(call(httpd.server_port, "GET", "/api/state", headers={"X-Screen-Token": "T"})[1])
     finally:
         _stop(httpd)
 
-    assert free["auto_speech"] is True and capped["auto_speech"] is False
+    assert budgeted["auto_speech"] is True and disabled["auto_speech"] is False
     text = server.TEMPLATE.read_text(encoding="utf-8")
     assert "if(st.auto_speech===false){$('autoBtn').style.display='none';if(SP.auto)setAuto(false)}" in text
 

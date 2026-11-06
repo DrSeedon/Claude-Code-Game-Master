@@ -222,13 +222,24 @@ def format_enhanced(result, label=None, dc=None, ac=None):
     nat20 = result.get("natural_20", False)
     nat1 = result.get("natural_1", False)
 
+    label_has_target = False
+    if dc is None and ac is None and label:
+        m_dc = re.search(r"(?:^|[\s(])(?:DC|КС|СЛ)\s*(\d+)\b", label, re.IGNORECASE)
+        m_ac = re.search(r"(?:^|[\s(])(?:AC|КЗ|КБ)\s*(\d+)\b", label, re.IGNORECASE)
+        if m_dc:
+            dc = int(m_dc.group(1))
+            label_has_target = True
+        elif m_ac:
+            ac = int(m_ac.group(1))
+            label_has_target = True
+
     target = dc or ac
     target_label = "DC" if dc else ("AC" if ac else None)
 
     header = "🎲"
     if label:
         header += f" {label}"
-    if target_label:
+    if target_label and not label_has_target:
         tc = _dc_color(target)
         header += f" vs {target_label} {tc}{target}{RS}:"
     else:

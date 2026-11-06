@@ -137,3 +137,29 @@ def test_the_page_has_a_scrollable_console_feed_and_a_paged_story_wheel():
     script = page[page.index("// ---- the master console"):page.index("// ---- state from the server")]
     assert "innerHTML" not in script and "insertAdjacentHTML" not in script
     assert "https://" not in page.replace("https://x", "")    # no external resources
+
+
+def test_roll_feed_colors_and_badges_and_multi_block_speech_highlight():
+    if not shutil.which("node"):
+        pytest.skip("node is not installed")
+    script = _template_js(["rollPart", "rollView", "activeBlock"]) + """
+let L=I18N.ru;const t=k=>L[k];
+const story={children:[{textContent:'Короткий абзац.'},{textContent:'Длинный второй абзац на тридцать символов.'}]};
+console.log(JSON.stringify({
+  rolls:[
+    rollView('🎲 Внимательность Эльвиры: что в камышах (DC 12): [15] +5 = 20'),
+    rollView('🎲 Скрытность Эльвиры в камышах (DC 13): [10] +6 = 16'),
+    rollView('🎲 Атлетика (DC 15): [4] +2 = 6'),
+    rollView('🎲 Атака (AC 14): [20] +5 = 25 — ⚔ CRITICAL!'),
+    rollView('🎲 Ловкость (DC 12): [1] +4 = 5'),
+    rollView('🎲 Урон кинжалом: [1] +3 = 4')
+  ],
+  hl:[activeBlock([0,1],0),activeBlock([0,1],0.15),activeBlock([0,1],0.6),activeBlock([0,1],0.99)]
+}))"""
+    out = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+    assert [r["st"] for r in out["rolls"]] == ["ok", "ok", "fail", "crit", "fumble", ""]
+    assert out["rolls"][0]["parts"][0]["badge"] == "✓ УСПЕХ"
+    assert out["rolls"][2]["parts"][0]["badge"] == "✗ ПРОВАЛ"
+    assert out["rolls"][3]["parts"][0]["badge"] == "★ КРИТ!"
+    assert out["rolls"][4]["parts"][0]["badge"] == "💀 СУПЕР ПРОЁБ!"
+    assert out["hl"] == [[0], [0], [1], [1]]

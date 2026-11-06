@@ -115,7 +115,7 @@ def next_batch(sdir, after, settle=1.5, max_events=6, timeout=0, poll=0.3):
 def set_turn(sdir, data, answered=None):
     """Publish a turn. `answered` is the last action it answers: by default the delivery cursor when there is one (an
     action that came while the master wrote stays waiting), else the newest action in the inbox."""
-    from . import content, eventlog, inbox
+    from . import activity, content, eventlog, inbox
 
     checked = content.validate_turn(data)
     previous = _read(sdir / "turn.json") or {}
@@ -126,6 +126,10 @@ def set_turn(sdir, data, answered=None):
         answered = events[-1]["id"] if events else 0
     turn = {"id": previous.get("id", 0) + 1, "answered": int(answered), **checked}
     _write(sdir / "turn.json", turn)
+    last_act = activity.read_activity(sdir, tail=1)
+    if last_act and last_act[-1].get("kind") in ("roll", "save", "world", "think"):
+        lang = (_read(sdir / "act.json") or {}).get("lang", "en")
+        activity.append_activity(sdir, "turn", f"Ход {turn['id']}" if lang == "ru" else f"Turn {turn['id']}")
     eventlog.log(sdir, "turn", snapshot=eventlog.world_snapshot(sdir.parent), **turn)
     return turn
 
@@ -608,7 +612,7 @@ def main(argv=None):
     pn = sub.add_parser("panels", help="replace the side panels of the current turn without a new turn")
     pn.add_argument("--file", required=True, help="JSON list of panels, or - for stdin")
     n = sub.add_parser("activity", help="add a line to the Master's visible work feed")
-    n.add_argument("kind", choices=["think", "roll", "save", "world", "info"])
+    n.add_argument("kind", choices=["think", "roll", "save", "world", "info", "turn"])
     n.add_argument("text")
     s = sub.add_parser("start", help="run the local server and open the window")
     s.add_argument("--port", type=int, default=DEFAULT_PORT)
