@@ -16,6 +16,7 @@ def test_script_splits_narration_and_dialogue():
         "<p>Максим ставит ящики на стол.</p>",
         "<p><b>Аграфена Тихоновна:</b> «Ящик на стол. Без разговоров.»</p>",
         "<p>Дверь захлопывается.</p>",
+        "<p><b>Трактирщик:</b> «Комнаты наверху стоят денег. Но на лавке у печки бесплатно, если не храпеть».</p>",
     ]
 
     script = speech.script_from_blocks(blocks)
@@ -24,8 +25,9 @@ def test_script_splits_narration_and_dialogue():
         ("narrator", "Аграфена Тихоновна смотрит на воз. Максим ставит ящики на стол."),
         ("Аграфена Тихоновна", "Ящик на стол. Без разговоров."),
         ("narrator", "Дверь захлопывается."),
+        ("Трактирщик", "Комнаты наверху стоят денег. Но на лавке у печки бесплатно, если не храпеть."),
     ]
-    assert script[0]["blocks"] == [1, 2] and script[1]["blocks"] == [3] and script[2]["blocks"] == [4]
+    assert script[0]["blocks"] == [1, 2] and script[1]["blocks"] == [3] and script[2]["blocks"] == [4] and script[3]["blocks"] == [5]
 
 
 def test_script_skips_dice_headings_lists_and_ui_blocks():

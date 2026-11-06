@@ -43,7 +43,7 @@ AUDIO_DIR = "audio"
 CHUNK = 600
 _TAG = re.compile(r"<[^>]+>")
 _DIALOGUE = re.compile(r"\s*<p[^>]*>\s*<b>(?P<who>[^<]{1,60}?):</b>\s*(?P<rest>.*)</p>\s*$", re.S)
-_QUOTED = re.compile(r"^[«\"“](?P<line>.+)[»\"”]$", re.S)
+_QUOTED = re.compile(r"^[«\"“](?P<line>.+?)[»\"”](?P<tail>[.!?…]*)$", re.S)
 _SENTENCE = re.compile(r"(?<=[.!?…])\s+")
 _AUDIO_TAG = re.compile(r"\s*\[[^\[\]]{1,60}\]\s*")
 CASTS = ("male", "female")
@@ -107,7 +107,11 @@ def script_from_blocks(blocks, max_chars=CHUNK):
         quoted = _QUOTED.match(rest) if dialogue else None
         if quoted:
             flush()
-            segments.append({"speaker": dialogue.group("who").strip(), "text": quoted.group("line").strip(), "blocks": [index]})
+            line = quoted.group("line").strip()
+            tail = quoted.group("tail")
+            if tail and not line.endswith((".", "!", "?", "…")):
+                line += tail
+            segments.append({"speaker": dialogue.group("who").strip(), "text": line, "blocks": [index]})
             continue
         text = _plain(raw)
         if not text or text.startswith("🎲"):

@@ -1,5 +1,76 @@
 # TODO — DM System
 
+## Screen speech: Russian closing punctuation after `»` drops character voice and merges line into narrator (found 2026-11-06)
+- **Where:** `lib/screen/speech.py::script_from_blocks` (`_QUOTED`, line 46) and `lib/screen/content.py::check_verbatim`.
+- **What broke & triggering case:** In turn 9 of `pratchett-dungeon`, the master wrote standard Russian punctuation with the period outside the closing guillemet: `<p><b>Трактирщик:</b> «Комнаты наверху стоят денег. Деньги у вас закончились. Но на лавке у печки бесплатно, если не храпеть».</p>`. Because `_QUOTED = re.compile(r"^[«\"“](?P<line>.+)[»\"”]$", re.S)` requires the closing quote to be the very last character, `_QUOTED.match(rest)` returned `None`, causing `script_from_blocks` to treat the dialogue paragraph as narration (`speaker: "narrator"`) and read `"Трактирщик: «...»."` in the narrator's voice (`Sergey`) instead of the male NPC voice (`Nikolay`).
+- **Fix direction:** Allow trailing sentence punctuation (`[.!?…]*`) after the closing quote in `_QUOTED` (preserving that punctuation at the end of the extracted line) so `<p><b>Name:</b> «...».</p>` is extracted as a character segment for `Name`.
+- **Resolved (2026-11-06):** Updated `_QUOTED` and `script_from_blocks` in `lib/screen/speech.py` and added regression coverage in `tests/test_screen_speech.py` (`126 passed` in `test_screen_speech.py` + `test_screen_content.py`). Deployed to VPS and restarted `play`/`demo` screen servers.
+
+## AI-table V87 cleanup: final Git status exits 128 (found 2026-11-04)
+After all three clean, merged temporary worktrees were removed by `git worktree remove`
+and RC build dependencies were moved to main/node_modules, the cleanup runner's final
+`git -C /home/kesha/projects/ai-table-mvp status --porcelain` exited 128. Inspect the
+actual Git stderr and node_modules metadata before changing anything else. Production
+V87 and all 12 public authenticated socket checks already passed; runtime is unaffected.
+Resolved: the preparation runner's root `git status` refreshed `.git/index` as root:root
+0600 (mtime 2026-11-04 18:32:56 VPS time). Changed ownership of that one file back to
+kesha:kesha; main status is clean and HEAD/origin/main remain b590f4e4. Updated the release
+runner to execute every Git operation as kesha, including archive/show/status. No source
+content or production state changed. All three worktrees were already successfully removed.
+
+## AI-table socket closes between projection ACK and GM snapshot (found 2026-11-04)
+`server/ai_table/adapters/ws.py::ProjectionBroker.handle`, line 315 on V85: a client
+disconnecting immediately after its initial projection ACK can cause the subsequent
+`socket.send_json(self.gm.snapshot(surface))` to raise `RuntimeError: Cannot call "send"
+once a close message has been sent`. Triggered by the short-lived authenticated release
+probe on the public mirror; gameplay counters were unchanged. Fix direction: treat close
+during the initial side snapshots as normal disconnect, preserving final cleanup. The
+probe should also wait for the initial side snapshot/heartbeat before disconnecting.
+Fixed on `v86-ws-close`, commit `c26efe667d624d052fa5f87e3d61ad751c23cfc6`:
+the close-after-ACK regression goes from 1 failed / 2 passed to 3 passed; combined real
+HTTP/WS admission/reveal/gift regressions total 8 passed in 16.40 s. Unrelated RuntimeError
+still propagates, cleanup is checked. Fresh provenance gate ADMITTED. Branch pushed for
+CEO acceptance; production remains accepted V85. Evidence: `build/ai-table-live-gm/v85-release/V86.md`.
+
+## AI-table V85 external socket probe timed out (found 2026-11-04; independently cleared)
+After a successful local production swap (four authenticated sockets, 94 assets, unchanged
+game counters), the first public-name WebSocket probe timed out at the handshake. HTTP
+login had succeeded. Identify the host and compare the direct path with websocket-client
+proxy auto-discovery before changing nginx; production stays healthy locally. The public
+GM login page independently loads from the hub browser with its art/fonts and no errors.
+Resolution: primary mirror and sslip twin passed all four authenticated sockets; an
+independent stdlib TLS/RFC6455 client passed all four DuckDNS sockets with projection ACK,
+revision 63 and graceful close. No nginx change was needed. The original sync-client
+timeout remains a recorded verifier limitation, not a demonstrated production failure.
+
+## AI-table V85 rollout: human GM admission is not configured (found 2026-11-04)
+`server/ai_table/adapters/gm_console.py::register_gm_console` deliberately serves `/gm` as 404
+without `I1_GM_PASSWORD_FILE`. The live V51 unit has no such setting and `/etc/ai-table-i1/`
+has only the player passphrase, speech key and AI bearer. V85 is accepted and fast-forwarded
+to `main`/`origin/main` (`509d0049`); production is still `a91e940` until rollout rehearsal.
+Resolved with CEO's explicit provisioning decision on 2026-11-04: independent prod and
+staging GM passphrases configured, and a protected owner copy provided by SSH. Production
+now serves `509d0049`; all four surfaces on all three public names passed authenticated
+socket checks. No secret value is stored here. Evidence: `build/ai-table-live-gm/v85-release/`.
+
+## AI-table V85 release runner: staging backup sidecars block SQLite open (found 2026-11-04)
+The first old-build rehearsal stopped before any production swap: staging startup failed
+at `SqliteRoomRunRepository._connect`, `PRAGMA journal_mode=WAL`, with `unable to open
+database file`. Inspect the freshly copied DB and WAL/SHM ownership plus parent permissions;
+normalize the staging copy for `aitable-stg` before resuming. Root cause: sqlite3 connection
+context managers commit/rollback but do not close the connection; the root read-only guard
+held WAL/SHM files open until process exit. Fixed runner with `contextlib.closing` for every
+connection, preserving the same staging DB and resuming at the old-build start. The runner's
+exit cleanup stopped both staging units. Production remained V51 and was unaffected.
+
+## AI-table hub master: residual risks before and after its deploy (found 2026-11-02, AI-table V-51)
+`ops/ai-table/` (Severin's T3 thread): the first spoken line's delay is not measured (estimate 10–25 s, the VPS CLI
+master did about 2 s): measure `first_caption_s` on staging, N≥10, before prod. The webhook URL stays in the VPS GM's
+memory (Yama `ptrace_scope=1` blocks non-descendants; no AppArmor profile for the GM: the owner's call). If the hub's
+Claude account hits limits (as the dnd-play threads did on 2026-10-31), Severin is silent until the thread moves to
+another model; whether that move may be automatic is the owner's call. The staging key line (`hub-gate staging`) must
+be removed from `authorized_keys` after the rehearsal.
+
 ## The VPS Claude subscription stopped working: SDK masters and the web game master fail (found 2026-10-31)
 From 2026-10-31 13:31 UTC every `/usr/bin/claude` session on the VPS answers «Claude Code can't use your Claude
 subscription, usually because a payment is past due». The demo table's SDK master (`backend/screen_driver.py`
