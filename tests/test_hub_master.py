@@ -18,7 +18,16 @@ from pathlib import Path
 import pytest
 
 from backend import hub_master
-from backend.hub_master import CUT, REVOKED, HubBridge, HubSettings, deny_reason, post_event
+from backend.hub_master import (
+    CUT,
+    REVOKED,
+    SIGNATURE_HEADER,
+    HubBridge,
+    HubSettings,
+    deny_reason,
+    post_event,
+    sign_body,
+)
 from lib.screen import hook, masterlog, online
 
 REPO = Path(__file__).resolve().parent.parent
@@ -109,11 +118,13 @@ class _Hook(BaseHTTPRequestHandler):
     status = 200
     seen = []
     agents = []
+    signatures = []
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers["Content-Length"]))
         type(self).seen.append((self.path, self.headers["Content-Type"], json.loads(body)))
         type(self).agents.append(self.headers["User-Agent"])
+        type(self).signatures.append((self.headers.get(SIGNATURE_HEADER), body))
         self.send_response(type(self).status)
         self.end_headers()
 
@@ -130,14 +141,21 @@ def test_post_event_sends_json_and_its_errors_never_name_the_url():
         assert _Hook.seen[-1] == ("/hooks/SECRETTOKEN", "application/json", {"message": "Привет"})
         # Cloudflare in front of the T3 webhook answers 403 to urllib's default agent (2026-10-28).
         assert _Hook.agents[-1] == "dnd-play-driver/1 (online table hub master)"
+        # Every POST carries HMAC-SHA256 over the raw body bytes (with #secret or the URL token, 2026-11-06).
+        sig, raw_body = _Hook.signatures[-1]
+        assert sig == sign_body(raw_body, "SECRETTOKEN")
+        assert post_event(f"{url}#CUSTOMSECRET", {"message": "Со секретом"}) == (True, None)
+        assert _Hook.seen[-1][0] == "/hooks/SECRETTOKEN"
+        sig2, raw_body2 = _Hook.signatures[-1]
+        assert sig2 == sign_body(raw_body2, "CUSTOMSECRET")
         _Hook.status = 500
         ok, error = post_event(url, {"message": "x"})
         assert not ok and error == "HTTP 500"
     finally:
         httpd.shutdown()
         _Hook.status = 200
-    ok, error = post_event(url, {}, timeout=2)
-    assert not ok and error and "SECRETTOKEN" not in error and "127.0.0.1" not in error
+    ok, error = post_event(f"{url}#CUSTOMSECRET", {}, timeout=2)
+    assert not ok and error and "SECRETTOKEN" not in error and "CUSTOMSECRET" not in error and "127.0.0.1" not in error
 
 
 # ---- the bridge

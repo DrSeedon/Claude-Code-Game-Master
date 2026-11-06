@@ -27,7 +27,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.hub_master import TOOL_TIMEOUT, WEBHOOK_ENV, HubBridge, HubSettings, post_event, scrub_exec_environ
+from backend.hub_master import (
+    TOOL_TIMEOUT,
+    WEBHOOK_ENV,
+    HubBridge,
+    HubSettings,
+    post_event,
+    scrub_exec_environ,
+    webhook_parts,
+)
 from backend.providers.claude_screen import ScreenGMProvider, scrub_api_route_env
 from backend.runtime.session_store import clear_runtime_session, load_runtime_session, save_runtime_session
 from backend.runtime.turn_lock import CampaignTurnLock
@@ -334,7 +342,8 @@ class ScreenDriver:
                 self._env_secrets = masterlog.env_secrets(env_file=self.root / ".env")
             except Exception:
                 self._env_secrets = []
-        secrets = [self.hub.webhook, *(getattr(self.bridge, "secrets", lambda: [getattr(self.bridge, "ticket", None)])()),
+        secrets = [self.hub.webhook, *(webhook_parts(self.hub.webhook) if self.hub.webhook else ()),
+                   *(getattr(self.bridge, "secrets", lambda: [getattr(self.bridge, "ticket", None)])()),
                    *self._env_secrets]
         masterlog.append(self.sdir, kind, text, master, secrets=secrets, **extra)
 

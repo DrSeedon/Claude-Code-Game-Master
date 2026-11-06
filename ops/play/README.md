@@ -176,19 +176,19 @@ ssh $VPS 'sudo install -d -m 755 -o root -g root /usr/local/lib/dnd-play && sudo
 ```
 Reinstall the gate after every change to `ops/play/hub-gate.py`: the installed copy is root-owned on purpose, so a master that edits the repository never changes what the hub key runs.
 
-A new table master: launch a scratch T3 thread (GPT-6.1-Sol, medium; full-access, so it can run the wrapper) whose first message is `ops/play/hub-master.md` below its line, with `<WRAPPER>` replaced, followed by a setup section: create the webhook task (the template in `hub-master.md`, `bindToCurrentThread: true`, `allowEdits: true`, `maxDeliveryAgeMinutes: 5`), write the line `DM_PLAY_HUB_WEBHOOK=<webhookUrl>` into a 0600 file in its working directory, reply only with the task id and that path. The orchestrator then appends the file to the table's env over ssh stdin (`on-remote ssh $VPS 'sudo tee -a /etc/dnd-play/<table>.env >/dev/null' < <file>`) and deletes it, so the URL never appears in a command line or a chat.
+A new table master: launch a scratch T3 thread (GPT-6.1-Sol, medium; full-access, so it can run the wrapper) whose first message is `ops/play/hub-master.md` below its line, with `<WRAPPER>` replaced, followed by a setup section: create the webhook task (the template in `hub-master.md`, `bindToCurrentThread: true`, `allowEdits: true`, `maxDeliveryAgeMinutes: 5`, and `signature: {header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=", secret: "<secret>"}` so unauthenticated GET link-scanner probes are rejected before reaching the thread), write the line `DM_PLAY_HUB_WEBHOOK=<webhookUrl>#<secret>` into a 0600 file in its working directory, reply only with the task id and that path. The orchestrator then appends the file to the table's env over ssh stdin (`on-remote ssh $VPS 'sudo tee -a /etc/dnd-play/<table>.env >/dev/null' < <file>`) and deletes it, so the URL never appears in a command line or a chat.
 
-Settings: in `/etc/dnd-play/<table>.env` (mode 0600, root:root; the webhook URL holds a token, never in Git) add
+Settings: in `/etc/dnd-play/<table>.env` (mode 0600, root:root; the webhook URL holds a token and `#<secret>` the HMAC signing secret, never in Git) add
 ```
 DM_PLAY_MASTER=hub
-DM_PLAY_HUB_WEBHOOK=<the T3 webhook URL>
+DM_PLAY_HUB_WEBHOOK=<the T3 webhook URL>#<HMAC secret>
 DM_PLAY_HUB_FALLBACK=none
 ```
 and optionally `DM_PLAY_HUB_TIMEOUT`, `DM_PLAY_HUB_FAILS`, `DM_PLAY_HUB_PAUSE`; then reinstall the unit (it has `RuntimeDirectory=dnd-play/%i` for the socket), `sudo systemctl daemon-reload && sudo systemctl restart dnd-play@<table>` between two turns. The journal shows `master: hub (webhook set, ...)`, `bash tools/dm-play.sh --table play status` a `master: hub (...)` line with the last result and failures. Without a webhook or a socket location the driver logs an error and plays with the SDK master.
 
 Check from the hub: `ops/play/hub-vps.sh play x status` prints `{"table": "play", "campaign": ..., "turn": ..., "ticket_ok": false}`; `ops/play/hub-vps.sh play x dm-roll.sh 1d20` exits 3.
 
-Back to the SDK master (only while the VPS has a working subscription): `DM_PLAY_MASTER=sdk` (or remove the line) in `/etc/dnd-play/<table>.env` and `sudo systemctl restart dnd-play@<table>`; the SDK master's next message tells it to catch up on the turns the hub played. To cut the hub off at once, remove its line from `authorized_keys`: every batch then falls back to the SDK master, or fails with `DM_PLAY_HUB_FALLBACK=none`.
+Back to the SDK master (only while the VPS has a working subscription): `DM_PLAY_MASTER=sdk` (or remove the line) in `/etc/dnd-play/<table>.env` and `sudo systemctl restart dnd-play@<table>`; the SDK master's next message tells it to catch up on the turns the hub played. To cut the hub off at once, remove its line from `authorized_keys`: every batch then falls back to the SDK master, or fails with `DM_PLAY_HUB_FALLBACK=none`. `authorized_keys` is read only at login, so also close the wrapper's open master connection (`ControlPersist=600`, renewed by every batch) on the hub: `ssh -O exit -o ControlPath=$HOME/.ssh/cm-dnd-play-%h-%p kesha@158.220.127.161`, or kill the hub's sshd session on the VPS by PID.
 
 The webhook URL: the driver wipes it from its exec environment at start (not only from `os.environ`), so `/proc/<driver pid>/environ` no longer shows it, and the per-table AppArmor profiles keep the demo table's processes out of the play unit's `/proc` entries.
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import errno
+import hashlib
 import hmac
 import json
 import logging
@@ -36,6 +37,7 @@ from lib.screen import masterlog
 logger = logging.getLogger("dnd-play")
 
 WEBHOOK_ENV = "DM_PLAY_HUB_WEBHOOK"
+SIGNATURE_HEADER = "X-Hub-Signature-256"
 # The T3 webhook sits behind Cloudflare, which answers 403 to urllib's default "Python-urllib/3.x" (2026-10-28).
 USER_AGENT = "dnd-play-driver/1 (online table hub master)"
 MAX_REQUEST = 2 * 1024 * 1024
@@ -123,11 +125,27 @@ class HubSettings:
                    fallback=fallback)
 
 
+def webhook_parts(url):
+    """(request URL without fragment, HMAC signing secret: the #fragment when given, else the URL path's token)."""
+    clean, _, secret = str(url or "").partition("#")
+    return clean, (secret or clean.rstrip("/").rsplit("/", 1)[-1])
+
+
+def sign_body(body: bytes, secret: str) -> str:
+    """GitHub/T3 HMAC-SHA256 header value over the raw request body bytes."""
+    return "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+
 def post_event(url, payload, timeout=20):
-    """POST the payload as JSON; (True, None) on a 2xx answer, else (False, error). The error never holds the URL:
-    its path is the webhook's token."""
-    request = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), method="POST",
-                                     headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
+    """POST the payload as signed JSON; (True, None) on a 2xx answer, else (False, error). The error never holds the
+    URL: its path is the webhook's token (and #fragment its optional HMAC signing secret). Signing every POST lets the
+    T3 webhook reject unauthenticated GET link-scanner probes (2026-11-06)."""
+    target, secret = webhook_parts(url)
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        target, data=body, method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT,
+                 SIGNATURE_HEADER: sign_body(body, secret)})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = response.status

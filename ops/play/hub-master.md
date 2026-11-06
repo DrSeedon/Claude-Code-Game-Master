@@ -15,9 +15,10 @@ out of it, so the master cannot touch the laptop copy of a campaign by mistake.
 The thread itself creates its event source:
 - a T3 scheduled task of type webhook, bound to the thread (`bindToCurrentThread: true`);
 - `maxDeliveryAgeMinutes: 5`: an event the relay held longer has already gone to the VPS master;
+- `signature: {header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=", secret: "<secret>"}` so T3 rejects unauthenticated `GET` link-scanner probes before they reach the thread (2026-11-06);
 - the prompt template below.
 
-Its `webhookUrl` goes only into `DM_PLAY_HUB_WEBHOOK` in `/etc/dnd-play/play.env` on the VPS (mode 0600), never
+Its `<webhookUrl>#<secret>` goes only into `DM_PLAY_HUB_WEBHOOK` in `/etc/dnd-play/play.env` on the VPS (mode 0600), never
 into Git or a chat.
 
 ```

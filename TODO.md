@@ -1,5 +1,15 @@
 # TODO — DM System
 
+## Hub master webhook (`backend/hub_master.py`, `ops/play/hub-master.md`): unauthenticated `GET` link-scanner probes trigger empty `[table event] table= campaign= turn= ticket=` runs in a loop (found 2026-11-06)
+- **Where:** `backend/hub_master.py::post_event` & `HubSettings`, `backend/screen_driver.py::ScreenDriver.hub_turn`, `ops/play/hub-master.md`, and T3 scheduled task `scheduled-task:467a431b-4904-431d-b803-103dfb8ebf2a` (`"Стол play → мастер на хабе"`).
+- **What broke & triggering case:**
+  1. `scheduled-task:467a431b-4904-431d-b803-103dfb8ebf2a` was created with `signature: null` (`webhookSignature: "none"`, URL token only), and its `webhookUrl` was present in Turn 1 (`run:ordinal:1`) of the bound thread `mcp:85113e06-9116-4d95-af1c-34250e881ae9` where `schedule_task` was called.
+  2. Between `2026-11-06T06:41:47Z` and `08:23:48Z` (runs 20–28), an upstream link prefetcher/scanner (`User-Agent: Mozilla/5.0 (compatible)`, `Range: bytes: 0-22`, AWS IAD `3.224.234.70`, `23.23.253.54`, `98.91.77.46`) sent 9 `GET` requests with 0-byte body to the `webhookUrl`.
+  3. Because `signature` was `null`, T3 accepted the 0-byte `GET` requests with `missing=["body.table","body.campaign","body.turn","body.ticket","body.message"]` and posted 9 empty `[table event] table= campaign= turn= ticket=` messages into the hub master thread, each run re-sending the thread context and re-triggering the scanner.
+- **Fix direction:**
+  1. Sign every `post_event` request in `backend/hub_master.py` with `X-Hub-Signature-256: sha256=<hmac_sha256_hex>` using `DM_PLAY_HUB_SECRET` (or the webhook URL token when `DM_PLAY_HUB_SECRET` is unset), and scrub `DM_PLAY_HUB_SECRET` from `/proc/<pid>/environ` and master console logs alongside `DM_PLAY_HUB_WEBHOOK`.
+  2. Enable `signature: {"header": "x-hub-signature-256", "encoding": "hex", "prefix": "sha256="}` with a dedicated `webhook_secret` (`DM_PLAY_HUB_SECRET`) and rotate `webhook_token` on the online table webhook tasks (`play` and `demo`), so any `GET` probe or unsigned request is rejected at T3 (`rejected_signature`) before waking the master thread.
+
 ## Screen audio (`audio.py`) & speech highlight (`template.html`): stuck tavern rain ambience on missing replacement cue, low library recall without explicit tags, and `.speaking` highlight jumping ahead (found 2026-11-06)
 - **Where:** `lib/screen/audio.py::Director.resolve` (lines 287–299), `lib/screen/audio.py::Library.find` (lines 109–121), `lib/screen/server.py` (line 226), and `lib/screen/template.html` (`speak`, `swapAct`, `renderFeed`).
 - **What broke & triggering case:**
