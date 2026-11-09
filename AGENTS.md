@@ -1,11 +1,26 @@
 # DM System - Multi-client and Developer Rules
 
+> ⛔ **QUIET "LIKE MICE" MODE (2026-11-04 — MANDATORY OWNER RULE):**
+> Zero blunders, server overloads, multi-threaded downloads (Yandex.Disk / clouds / archives > 50 MB are strictly FORBIDDEN without explicit owner "yes"), heavy worker swarms, or API limit burn! Work as quietly, carefully, and incrementally as possible (clarified 2026-11-05: do not throttle lightweight agents — a Workflow stage of N parts runs N agents at once; gate heavy runs on our cgroup RAM and pids, not the hub-wide `loadavg`; at most 2 headless Chrome across all our projects; clean up all spawned processes). Do not create or keep any `hub-*` / `Мастер стола` / `AI-стол` hub-master T3 threads on the hub. Full regulations are in `~/agent-rules/global.md`.
+
 This is the core, sent on every turn of every agent. It must stay under 16 384 bytes. Anything needed only sometimes lives in `.orchestra/kb/rules-*.md` (never in `.claude/rules/`, which Claude Code loads in full) and is reached through the registry below.
 
 ## What this project is
 - The D&D DM engine: bash tools `tools/dm-*.sh` over Python in `lib/`, a WorldGraph (`world.json`) per campaign, optional gameplay `modules/`, DM rules in `.claude/additional/dm-slots/`. Played through Claude Code, Codex or Grok Build skills over the same engine.
 - The web game master on top of it: FastAPI backend in `backend/`, static frontend in `frontend/`, public at `https://dnd-game-master.duckdns.org` (VPS only).
-- The orchestrator for this repository also drives the AI-table MVP in `/home/kesha/projects/ai-table-mvp` (a D&D master for a physical table). Project focus is set by an Orchestra temporary rule (currently: AI-table is the active line, this web game master is maintenance-only, fixes for breakage); it is not restated here.
+- The orchestrator for this repository also drives the AI-table MVP in `/home/kesha/projects/ai-table-mvp` (a D&D master for a physical table). Project focus is set by an Orchestra temporary rule (currently: AI-table is the active line with priority on the Live Human GM mode and literal 1:1 concept UI port; this web game master is maintenance-only, fixes for breakage); it is not restated here.
+
+## Project leadership and multi-agent roles (CEO + CTO, owner decision updated 2026-11-09)
+- **Gemini 4 Argon (CEO & Chief Product / Art / Game Director — T3 thread `AI-стол и D&D-мастер`, `mcp:559b1d17-1cce-409b-9d5b-72a87c83e315` (T3 thread id; `91e833de-…` is its internal Antigravity id and cannot be addressed)):**
+  - Main project boss working directly with the owner (Maxim) on product strategy, game design, table UX, and visual direction across the D&D engine, online tables, and the AI-table MVP.
+  - Reviews and approves all screenshots, UI surfaces (`/table`, `/scene`, `/admin`, `/gm` Human-GM console, online play screen), concept slides, and generated art (using Codex `imagegen` (`gpt-image-2`) as priority #1), enforcing 1:1 visual parity with the approved concept deck (`https://sites.aimulticast.org/astrahancev/ai-table-concept/`), dual-side physical table readability, and Gamedesign Bible principles (`/mnt/claude-data/astrahancev-maxim-911aird/multicode/docs/gamedesign-bible/00-шпаргалка.md`).
+  - Coordinates tasks and role boundaries with the CTO thread and specialized workers.
+- **Claude Opus 5.5 on `xhigh` (CTO & Hands-On Technical Executive — T3 thread `ИИ-стол и живой мастер`, `200c8968-f34c-46df-a255-df2e3e59b653`, `effort: "xhigh"`, updated 2026-11-09 by owner order; `gpt-6.1-sol` is globally disabled):**
+  - Owns technical architecture, hands-on code implementation (`lib/`, `tools/`, `modules/`, `backend/`, `frontend/`, and `/home/kesha/projects/ai-table-mvp` on the VPS), VPS infrastructure, and I11 walker end-to-end verification; works directly by hand in its own thread without spawning coding sub-workers.
+  - Never sends intermediate step-by-step chat reports via `t3_thread_send` to the CEO thread (writes intermediate state silently to disk and notifies CEO only once when a full wave/milestone is complete with screenshots/artifacts, or on a fatal blocker).
+- **Severin AI-Table Voice GM (`AI-стол: Северин (хаб-мастер)`, `mcp:3c45592e-4bb9-4be1-946b-f59f71034110`, `Claude Sonnet 5.5` on `medium`):**
+  - Bound to webhook `scheduled-task:23f4d4d5-9db9-4228-959d-67f535f587aa` (`ai-table turn`) for the AI-table voice GM mode.
+- **Global hub rules:** always follow `~/agent-rules/global.md` (`~/.claude/rules/global.md` / `~/.codex/AGENTS.md`).
 
 ## Stack and tests
 - Python via `uv run python` (never `python3`) — in the repo since the initial commit (2026-02-08).

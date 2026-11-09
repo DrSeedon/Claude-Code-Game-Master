@@ -1,5 +1,14 @@
 # TODO — DM System
 
+## AI-table GM service stop emits a cgroup warning (observed 2026-11-07)
+During the explicitly authorized Severin restoration, journalctl reports `Failed to kill
+control group /system.slice/ai-table-gm.service, ignoring: Invalid argument` on stop,
+followed by successful deactivation and a successful restart. The same warning exists on
+the earlier November 4 stop. Current startup is healthy (hub bridge ready, exit 0,
+NRestarts 0). Preserve this as an environment/service-stop issue; do not restart Orchestra
+or change cgroups to investigate within this restoration. Evidence:
+`build/ai-table-live-gm/severin-restore-20261107/service-check.log`.
+
 ## Hub master webhook (`backend/hub_master.py`, `ops/play/hub-master.md`): unauthenticated `GET` link-scanner probes trigger empty `[table event] table= campaign= turn= ticket=` runs in a loop (found 2026-11-06)
 - **Where:** `backend/hub_master.py::post_event` & `HubSettings`, `backend/screen_driver.py::ScreenDriver.hub_turn`, `ops/play/hub-master.md`, and T3 scheduled task `scheduled-task:467a431b-4904-431d-b803-103dfb8ebf2a` (`"Стол play → мастер на хабе"`).
 - **What broke & triggering case:**
