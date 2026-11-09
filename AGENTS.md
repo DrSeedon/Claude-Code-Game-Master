@@ -6,6 +6,12 @@
 This is the core, sent on every turn of every agent. It must stay under 16 384 bytes. Anything needed only sometimes lives in `.orchestra/kb/rules-*.md` (never in `.claude/rules/`, which Claude Code loads in full) and is reached through the registry below.
 
 ## What this project is
+> **VPS-ONLY CHECKOUT MODE (2026-11-09 — MANDATORY OWNER RULE):**
+> By owner order («вынеси все свои проекты с хаба на впс синкуй чтобы на хабе не было ок. но все работало типо если доработки то на впс моем бы работал ок. а треды и так бы работали»), all repository code, `.git`, `.venv`, `build/`, and `world-state/` have been moved off the Multicast hub onto `orchestra-vps` (`158.220.127.161`):
+> - **D&D Game Master repo & builds on VPS:** `/home/kesha/projects/dnd-game-master` (`https://github.com/DrSeedon/Claude-Code-Game-Master.git`)
+> - **AI-table MVP repo on VPS:** `/home/kesha/projects/ai-table-mvp` (`https://github.com/DrSeedon/ai-table-mvp.git`) and live deploy `/opt/ai-table-i1/app`
+> - **What remains in this hub directory (`/mnt/claude-data/astrahancev-maxim-911aird/claude-code-game-master`):** ONLY a lightweight stub (`AGENTS.md`, `CLAUDE.md`, `.orchestra/kb/`, `.agents/skills/`, `skills/`, `ops/ai-table/hub-vps.sh`, `ops/play/hub-vps.sh`) so T3 threads (`AI-стол и D&D-мастер`, `ИИ-стол и живой мастер`, `AI-стол: Северин (хаб-мастер)`) and hub-master SSH bridges work seamlessly. **Never clone or build the project back onto the hub; run all code edits, git operations, and tests directly on `orchestra-vps` via `ssh orchestra-vps`!**
+
 - The D&D DM engine: bash tools `tools/dm-*.sh` over Python in `lib/`, a WorldGraph (`world.json`) per campaign, optional gameplay `modules/`, DM rules in `.claude/additional/dm-slots/`. Played through Claude Code, Codex or Grok Build skills over the same engine.
 - The web game master on top of it: FastAPI backend in `backend/`, static frontend in `frontend/`, public at `https://dnd-game-master.duckdns.org` (VPS only).
 - The orchestrator for this repository also drives the AI-table MVP in `/home/kesha/projects/ai-table-mvp` (a D&D master for a physical table). Project focus is set by an Orchestra temporary rule (currently: AI-table is the active line with priority on the Live Human GM mode and literal 1:1 concept UI port; this web game master is maintenance-only, fixes for breakage); it is not restated here.
